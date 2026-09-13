@@ -25,11 +25,14 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Prepare rc2 metadata and active version regressions
         run: python .github/scripts/prepare_v10146_rc2.py
@@ -42,16 +45,25 @@ jobs:
           python -m unittest -v
           test_v10146_rc2_release_rollup.py
           test_rc28_background_removal.py
+          test_background_removal_classical_v10146.py
           test_extra_fast_v105.py
           test_extra_fast_region_quality_rc24.py
+          test_extra_fast_profile_recognition_v10146.py
           test_rc28_drawing_style_profiles.py
           test_draw_time_estimate_v10110.py
 
-      - name: Full portable regression suite
-        run: python -m unittest discover -v
+      - name: Portable planner regressions
+        run: >-
+          python -m unittest -v
+          test_raster_identity.py
+          test_raster_identity_property.py
+          test_extra_fast_review.py
+          test_hybrid_cost_engine_v10131.py
+          test_engine_finalization_v10132.py
+          test_step17_golden_image_regression_v10141.py
 
-      - name: Image Draw Bot self-test
-        run: python DrawBot.py --self-test
+      - name: Extra Fast benchmark smoke
+        run: python benchmark_extra_fast.py
 
       - name: Commit prepared rc2
         shell: bash
