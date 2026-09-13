@@ -6,8 +6,8 @@ from Version import APP_VERSION, FILE_VERSION
 
 class BrowserHighDpiTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_gartic_large_144dpi_style_client_does_not_hit_one_million_guard(self):
         # Reproduces the field-log scale closely: 3862x2110 target client.

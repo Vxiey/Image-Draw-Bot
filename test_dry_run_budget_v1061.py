@@ -90,8 +90,8 @@ def make_plan():
 
 class DryRunBudgetV1061Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_budget_expiry_is_normal_dry_run_completion(self):
         clock = Clock()

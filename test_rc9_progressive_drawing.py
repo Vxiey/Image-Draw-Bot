@@ -28,6 +28,6 @@ class Rc9ProgressiveDrawingTests(unittest.TestCase):
             self.assertGreaterEqual(e['importance'],0.0);self.assertLessEqual(e['importance'],1.0)
             self.assertIn('structural_score',e);self.assertIn('optional',e)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.146-rc1')
 
 if __name__=='__main__':unittest.main()

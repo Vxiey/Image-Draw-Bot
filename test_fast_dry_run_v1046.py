@@ -42,7 +42,7 @@ class FastDryRunV1046Tests(unittest.TestCase):
         self.assertIn('Fast Dry run · ≤12s',text)
 
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
 if __name__=='__main__':unittest.main()

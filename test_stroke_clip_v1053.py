@@ -40,8 +40,8 @@ def plan_with_group(group):
 
 class StrokeClipV1053Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_clip_segment_to_polygon_keeps_only_inside_part(self):
         poly=((100,100),(120,100),(120,120),(100,120))

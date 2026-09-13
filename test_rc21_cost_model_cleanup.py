@@ -40,7 +40,7 @@ class Rc21CostModelCleanupTests(unittest.TestCase):
         self.assertIn('model.sequence_cost(',src)
         self.assertNotIn('from HybridCostModel import build_cost_model',src)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.146-rc1')
 
 
 if __name__=='__main__':unittest.main()

@@ -59,7 +59,7 @@ class Rc22LearnedCursorTravelTests(unittest.TestCase):
 
     def test_version(self):
         self.assertEqual(EXECUTION_MODEL_VERSION,4)
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
 
 
 if __name__=='__main__':unittest.main()

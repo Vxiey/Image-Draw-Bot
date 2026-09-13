@@ -1,3 +1,9 @@
+# Image Draw Bot v1.0.146-rc1 — Release Build Recovery
+
+- New RC line based on 1.0.145-rc29.
+- Windows release packaging fixes `DrawingStyleProfiles` PyInstaller argument ordering and adds a focused regression test.
+- Runtime drawing/planner behavior is intentionally unchanged from the validated rc29 baseline.
+
 # Image Draw Bot v1.0.145-rc29 — Stability & Planner Validation
 
 - Ignore stale preview plans with a monotonic preview generation ID so cancelled/settings-invalidated workers cannot overwrite a newer UI state.

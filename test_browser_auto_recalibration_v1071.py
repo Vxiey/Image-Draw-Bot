@@ -15,8 +15,8 @@ class Value:
 
 class BrowserAutoRecalibrationTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_window_translation_is_not_layout_reflow(self):
         old=make_layout_state((100,100,1100,800),96,(200,180,900,650),[(150,700),(180,700),(210,700)])

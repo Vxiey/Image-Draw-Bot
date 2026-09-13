@@ -41,8 +41,8 @@ class GarticEngineV2Tests(unittest.TestCase):
         self.assertLess(abs(paths[1][0][0] - paths[0][-1][0]), 20)
 
     def test_current_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
 
 if __name__ == '__main__':

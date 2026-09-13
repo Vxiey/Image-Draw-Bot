@@ -43,8 +43,8 @@ class DrawTimeEstimateV10110Tests(unittest.TestCase):
         self.assertIn('Estimated final draw time', status_line({'draw_time_estimate': meta}))
 
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
 
 if __name__ == '__main__':

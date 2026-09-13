@@ -68,7 +68,7 @@ class Rc14SequenceResumeTests(unittest.TestCase):
         self.assertIn('checkpoint_sequence_progress',src);self.assertIn('sequence_completed_counts',src)
         self.assertIn('sequence_new_completed%25==0',src);self.assertIn('Dynamic Replanner may safely reorder only the remaining work',src)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.146-rc1')
 
 
 if __name__=='__main__':unittest.main()

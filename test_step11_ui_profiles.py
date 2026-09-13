@@ -9,8 +9,8 @@ from Version import APP_VERSION, FILE_VERSION
 
 class Step11UIProfileTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_every_standard_profile_has_ui_metadata_and_defaults(self):
         self.assertEqual(set(PROFILES), set(PROFILE_UI))
