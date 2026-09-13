@@ -43,6 +43,6 @@ class Rc10PixelAccuracy2Tests(unittest.TestCase):
         self.assertLess(row['protected_detail_percent'],100.0)
         self.assertLess(row['edge_accuracy_percent'],100.0)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.146-rc1')
 
 if __name__=='__main__':unittest.main()

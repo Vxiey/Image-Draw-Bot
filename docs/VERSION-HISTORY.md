@@ -1,3 +1,9 @@
+# Image Draw Bot v1.0.146-rc1 — Release Build Recovery
+
+- New RC line based on 1.0.145-rc29.
+- Windows release packaging fixes `DrawingStyleProfiles` PyInstaller argument ordering and adds a focused regression test.
+- Runtime drawing/planner behavior is intentionally unchanged from the validated rc29 baseline.
+
 # Image Draw Bot v1.0.145-rc28 — Background Remover & PNG Workflow
 
 - Add **Remove BG** beside image import. It converts only border-connected background pixels to transparent alpha instead of deleting same-colour details inside the subject.

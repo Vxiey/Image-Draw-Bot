@@ -177,8 +177,8 @@ class HybridRenderer3Step29Tests(unittest.TestCase):
 
     def test_step29_version(self):
         from Version import APP_VERSION, FILE_VERSION
-        self.assertEqual(APP_VERSION,'1.0.145-rc29')
-        self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(FILE_VERSION,'1.0.146')
 
 
 if __name__ == '__main__':

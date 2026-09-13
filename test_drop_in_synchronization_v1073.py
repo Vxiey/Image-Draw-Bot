@@ -48,7 +48,7 @@ def make_app(activity=None, phase=READY_TO_DRAW):
 
 class DropInSynchronizationV1073Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc29');self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.146-rc1');self.assertEqual(FILE_VERSION,'1.0.146')
 
     def _queue_during(self, activity=None, phase=READY_TO_DRAW, label='one.png'):
         app=make_app(activity,phase)
