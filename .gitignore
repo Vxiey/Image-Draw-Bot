@@ -22,6 +22,8 @@ session-recovery*.json
 session-recovery*.png
 render-resume*.json
 *.dmp
+models/
+*.onnx
 
 # Local captures / exports
 *.gif
