@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-#define MyAppVersion "1.0.145-rc28"
+#define MyAppVersion "1.0.145-rc29"
 #endif
 
 [Setup]
@@ -10,7 +10,7 @@ SignedUninstaller=yes
 AppId={{6A4AD303-4F16-4ED7-A9AF-5B912352D83E}
 AppName=Image Draw Bot
 AppVersion={#MyAppVersion}
-VersionInfoVersion=1.0.144.0
+VersionInfoVersion=1.0.145.0
 AppPublisher=Image Draw Bot
 DefaultDirName={localappdata}\Programs\Image Draw Bot
 DefaultGroupName=Image Draw Bot
