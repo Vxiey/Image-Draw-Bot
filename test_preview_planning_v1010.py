@@ -10,7 +10,7 @@ from Version import APP_VERSION, FILE_VERSION
 
 class PreviewPlanningV1010Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(APP_VERSION,'1.0.146-rc2')
         self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_preview_area_downscales_large_canvas(self):

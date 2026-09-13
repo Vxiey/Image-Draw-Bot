@@ -49,6 +49,6 @@ class ExtraFastBudgetAccountingRc25Tests(unittest.TestCase):
         self.assertGreaterEqual(meta['brush_switches'],1)
         self.assertGreater(meta['selected_operation_cost']['brush_seconds'],0)
 
-    def test_version_stays_rc25(self): self.assertEqual(APP_VERSION,'1.0.146-rc1')
+    def test_version_stays_rc25(self): self.assertEqual(APP_VERSION,'1.0.146-rc2')
 
 if __name__=='__main__':unittest.main()

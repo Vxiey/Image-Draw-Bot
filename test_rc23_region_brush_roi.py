@@ -56,7 +56,7 @@ class Rc23RegionBrushRoiTests(unittest.TestCase):
         used=set(packed['used_brush_sizes'])
         self.assertIn(28,used);self.assertGreaterEqual(len(used),2);self.assertNotIn(1,used)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.146-rc1')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.146-rc2')
 
 
 if __name__=='__main__':unittest.main()

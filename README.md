@@ -24,15 +24,15 @@ It uses local image processing, deterministic render planning and safe mouse aut
 
 ## Download Image Draw Bot for Windows
 
-Download **Image Draw Bot v1.0.146-rc1** for Windows 10/11 x64. The installer and portable ZIP include Python.
+Download **Image Draw Bot v1.0.146-rc2** for Windows 10/11 x64. The installer and portable ZIP include Python.
 
 | Download | How to use it |
 | --- | --- |
-| [Windows installer — recommended](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc1/ImageDrawBot-1.0.146-rc1-Windows-x64-Setup.exe) | Run Setup, then open Image Draw Bot. |
-| [Portable Windows ZIP](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc1/ImageDrawBot-1.0.146-rc1-Windows-x64.zip) | Extract the complete ZIP and run `ImageDrawBot/ImageDrawBot.exe`. |
-| [SHA-256 checksums](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc1/ImageDrawBot-1.0.146-rc1-SHA256.txt) | Verify the published files. |
+| [Windows installer — recommended](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc2/ImageDrawBot-1.0.146-rc2-Windows-x64-Setup.exe) | Run Setup, then open Image Draw Bot. |
+| [Portable Windows ZIP](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc2/ImageDrawBot-1.0.146-rc2-Windows-x64.zip) | Extract the complete ZIP and run `ImageDrawBot/ImageDrawBot.exe`. |
+| [SHA-256 checksums](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc2/ImageDrawBot-1.0.146-rc2-SHA256.txt) | Verify the published files. |
 
-[All releases](https://github.com/Vxiey/Image-Draw-Bot/releases) · [Release notes](RELEASE-NOTES-v1.0.146-rc1.md) · [Getting started](docs/GETTING-STARTED.md) · [FAQ](docs/FAQ.md) · [Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
+[All releases](https://github.com/Vxiey/Image-Draw-Bot/releases) · [Release notes](RELEASE-NOTES-v1.0.146-rc2.md) · [Getting started](docs/GETTING-STARTED.md) · [FAQ](docs/FAQ.md) · [Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
 
 ## AutoDraw for Microsoft Paint, Gartic Phone and Skribbl.io
 
