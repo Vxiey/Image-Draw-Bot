@@ -95,7 +95,7 @@ class V109AdvancedColorTests(unittest.TestCase):
 
     def test_version(self):
         from Version import APP_VERSION,FILE_VERSION
-        self.assertEqual(APP_VERSION,'1.0.145-rc26');self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.145-rc29');self.assertEqual(FILE_VERSION,'1.0.145')
 
 
 if __name__=='__main__': unittest.main()

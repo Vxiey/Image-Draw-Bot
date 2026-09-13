@@ -71,7 +71,7 @@ class Rc17UnifiedExecutionCostEtaTests(unittest.TestCase):
         self.assertFalse(meta['is_projection'])
         self.assertEqual(meta['sequence_operation_model']['execution_cost_model'],'ExecutionCostModel')
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc26')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
 
 
 if __name__=='__main__':unittest.main()

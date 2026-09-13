@@ -92,6 +92,9 @@ def resolve_brush_width(image: Image.Image | None, *, target_size=None,
 
     # Microsoft Paint supports a wide size slider, but very large Pencil sizes
     # are destructive for automatic image recreation. Keep Auto conservative.
-    cap=6 if str(profile_key or '')=='microsoft-paint' else 8
+    key=str(profile_key or '').lower()
+    if key=='microsoft-paint':cap=6
+    elif key in ('gartic-phone','gartic-io'):cap=5
+    else:cap=8
     base=max(1,min(cap,int(base)))
     return AutoBrushDecision(base,classification,edge,color,target,reason)

@@ -59,7 +59,8 @@ def _key(options: dict[str, Any]) -> str:
     preset=_token(options.get("render_preset"),"manual")
     quality=_token(options.get("draw_quality"),"balanced")
     style=_token(options.get("render_style"),"auto")
-    return f"{base}|mode={mode}|preset={preset}|quality={quality}|style={style}"
+    style_profile=_token(options.get("drawing_style_resolved") or options.get("drawing_style"),"auto")
+    return f"{base}|mode={mode}|preset={preset}|quality={quality}|style={style}|drawing-style={style_profile}"
 
 
 def _load_raw(path: Path, *, accept_legacy_version: bool = False) -> dict[str, Any]:

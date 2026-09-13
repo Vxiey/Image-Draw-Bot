@@ -20,9 +20,16 @@ _MAX_LOG_BYTES = 2 * 1024 * 1024
 LOG_DIR = data_dir() / 'logs'
 CRASH_LOG = LOG_DIR / 'ImageDrawBot-crash.log'
 SESSION_LOG = LOG_DIR / 'ImageDrawBot-session.log'
+DEBUG_ERROR_LOG = LOG_DIR / 'ImageDrawBot-debug-errors.log'
 RUN_MARKER = LOG_DIR / 'ImageDrawBot-running.marker'
 PREVIOUS_RUN_UNCLEAN = False
 RUN_MARKER_OWNED = False
+
+_ERROR_MARKERS = (
+    ' error', 'error:', 'failed', 'failure', 'exception', 'traceback', 'crash',
+    'cuda error', 'gpu error', 'out of memory', 'oom', 'safety stop',
+    'calibration failed', 'could not', 'invalid image', 'target closed',
+)
 
 
 def _stamp():
@@ -42,13 +49,48 @@ def _rotate_if_large(path: Path, limit: int = _MAX_LOG_BYTES) -> None:
         return
 
 
-def log_event(message):
+def _looks_like_error(message: str) -> bool:
+    text=' ' + str(message or '').casefold()
+    return any(marker in text for marker in _ERROR_MARKERS)
+
+
+def _append_error(message, *, category='runtime'):
     try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        _rotate_if_large(DEBUG_ERROR_LOG)
+        with DEBUG_ERROR_LOG.open('a', encoding='utf-8') as stream:
+            stream.write(f'[{_stamp()}] [{category}] {message}\n')
+    except Exception:
+        # Debug logging is never allowed to break drawing.
+        pass
+
+
+def log_error(message, *, category='runtime', exc_info=None):
+    """Write one error to both the normal session log and consolidated error log."""
+    detail=str(message)
+    if exc_info:
+        try:
+            if exc_info is True:
+                detail += '\n' + traceback.format_exc()
+            elif isinstance(exc_info, tuple) and len(exc_info)==3:
+                detail += '\n' + ''.join(traceback.format_exception(*exc_info))
+            else:
+                detail += '\n' + str(exc_info)
+        except Exception:
+            pass
+    log_event(detail, force_error=True, error_category=category)
+
+
+def log_event(message, *, force_error=False, error_category='runtime'):
+    try:
+        text=str(message)
         with _LOG_LOCK:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
             _rotate_if_large(SESSION_LOG)
             with SESSION_LOG.open('a', encoding='utf-8') as stream:
-                stream.write(f'[{_stamp()}] {message}\n')
+                stream.write(f'[{_stamp()}] {text}\n')
+            if force_error or _looks_like_error(text):
+                _append_error(text, category=error_category)
     except Exception:
         pass
 
@@ -62,6 +104,7 @@ def install():
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         _rotate_if_large(CRASH_LOG)
         _rotate_if_large(SESSION_LOG)
+        _rotate_if_large(DEBUG_ERROR_LOG)
         _LOG_STREAM = CRASH_LOG.open('a', encoding='utf-8', buffering=1)
         _LOG_STREAM.write('\n' + '=' * 72 + '\n')
         _LOG_STREAM.write(f'[{_stamp()}] Image Draw Bot start\n')
@@ -78,6 +121,8 @@ def install():
 
     def exception_hook(exc_type, exc, tb):
         try:
+            rendered=''.join(traceback.format_exception(exc_type, exc, tb))
+            _append_error('Unhandled exception\n' + rendered, category='unhandled-main-thread')
             if _LOG_STREAM:
                 _LOG_STREAM.write(f'[{_stamp()}] Unhandled exception\n')
                 traceback.print_exception(exc_type, exc, tb, file=_LOG_STREAM)
@@ -97,8 +142,10 @@ def install():
 
         def thread_hook(args):
             try:
+                name = getattr(getattr(args, 'thread', None), 'name', '<unknown>')
+                rendered=''.join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+                _append_error(f'Unhandled thread exception: {name}\n{rendered}', category='unhandled-worker-thread')
                 if _LOG_STREAM:
-                    name = getattr(getattr(args, 'thread', None), 'name', '<unknown>')
                     _LOG_STREAM.write(f'[{_stamp()}] Unhandled thread exception: {name}\n')
                     traceback.print_exception(args.exc_type, args.exc_value, args.exc_traceback, file=_LOG_STREAM)
                     _LOG_STREAM.flush()
@@ -112,7 +159,7 @@ def install():
 
         threading.excepthook = thread_hook
 
-    log_event('Crash diagnostics enabled.')
+    log_event(f'Crash diagnostics enabled. Consolidated error log: {DEBUG_ERROR_LOG.name}.')
 
 
 def begin_run_marker():
@@ -124,9 +171,11 @@ def begin_run_marker():
         atomic_write_text(RUN_MARKER, f'pid={os.getpid()} started={_stamp()}\n')
         RUN_MARKER_OWNED = True
         log_event(f'Run marker claimed. previous_unclean={PREVIOUS_RUN_UNCLEAN}.')
+        if PREVIOUS_RUN_UNCLEAN:
+            _append_error('Previous Image Draw Bot run did not record a clean shutdown.', category='previous-unclean-run')
     except OSError as error:
         RUN_MARKER_OWNED = False
-        log_event(f'Run marker could not be created: {error}.')
+        log_error(f'Run marker could not be created: {error}.', category='startup')
 
 
 def previous_run_unclean():

@@ -44,7 +44,7 @@ def plan_with_group(group, edge_behavior='Hard Clip'):
 
 class EdgeBehaviorV1054Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc26')
+        self.assertEqual(APP_VERSION,'1.0.145-rc29')
         self.assertEqual(FILE_VERSION,'1.0.145')
 
     def test_modes_validate(self):

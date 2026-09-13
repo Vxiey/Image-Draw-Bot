@@ -12,6 +12,8 @@ from dataclasses import dataclass
 import math
 from typing import Any
 
+from CompletedDrawLearning import timing_sample_gate
+
 
 @dataclass(frozen=True)
 class DrawTimeEstimate:
@@ -453,13 +455,19 @@ def record_completed_draw(plan: dict[str, Any], actual_seconds: float, *, comple
     try:
         from DrawTimeCalibration import record_sample
         options = plan.get("options") if isinstance(plan.get("options"), dict) else {}
+        gate=timing_sample_gate(options, completed_paths=completed_paths, planned_paths=int(plan.get("count") or 0))
+        if not gate.get("allowed"):
+            return {"recorded": False, "reason": gate.get("reason", "timing sample rejected"), "sample_gate": gate}
         predicted_meta=plan.get("draw_time_estimate") or estimate_from_plan(plan)
         predicted = max(0.0, float(predicted_meta.get("preview_seconds") or plan.get("raw_execution_estimate_seconds") or plan.get("estimate") or 0.0))
         fill_actions = len(options.get("fill_regions") or ()) + (1 if (options.get("background_fill_plan") or {}).get("enabled") else 0)
         operation_counts=(options.get('adaptive_deadline_meta') or {}).get('operation_counts') or {}
         operation_runtime=options.get('runtime_operation_timing') or {}
-        return record_sample(options, predicted, actual_seconds, completed_paths=completed_paths, fill_actions=fill_actions,
+        result=record_sample(options, predicted, actual_seconds, completed_paths=completed_paths, fill_actions=fill_actions,
                              operation_counts=operation_counts, operation_runtime=operation_runtime)
+        if isinstance(result,dict):
+            result["sample_gate"]=gate
+        return result
     except Exception as error:
         return {"recorded": False, "reason": str(error)}
 

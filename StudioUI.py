@@ -22,6 +22,7 @@ from ShapePaths import SHAPE_MODEL_MODES
 from QuickSketchFillContour import QUICK_SKETCH_RENDER_STYLE, QUICK_SKETCH_STYLES, QUICK_SKETCH_FILL_PREFERENCES
 from HybridRenderer3 import HYBRID_RENDER_STYLE, HYBRID_MODES
 from SketchFillRenderer import SKETCH_FILL_RENDER_STYLE
+from DrawingStyleProfiles import DRAWING_STYLES
 
 BG = '#0b0f14'
 SIDEBAR = '#101722'
@@ -182,6 +183,7 @@ def build_ui(a, quality, speed):
         widget = menu(row, var, values, width=width)
         widget.pack(side='right', padx=(8, 0))
         tooltip(widget, explanation)
+        widget._setting_row = row
         return widget
 
     def numeric_row(parent, title, var, help_text='', width=82):
@@ -355,6 +357,13 @@ def build_ui(a, quality, speed):
     select_image_btn=btn(row, '🖼️  Select image', a.open_file, True, height=37); select_image_btn.pack(side='left', fill='x', expand=True)
     tooltip(select_image_btn,'Choose the source image. It starts drawing only when one-shot Drop-In Start is explicitly armed.')
     btn(row, '📋  Paste', a.paste_image, width=70, height=37).pack(side='left', padx=(6, 0))
+    image_tools = frame(step2); image_tools.pack(fill='x', pady=(7, 0))
+    bg_btn=btn(image_tools, '✂  Remove BG', a.remove_image_background, width=104, height=34);bg_btn.pack(side='left',fill='x',expand=True)
+    tooltip(bg_btn,'Auto-remove only border-connected background and convert it to transparency. Transparent pixels generate no drawing strokes.')
+    undo_bg=btn(image_tools, '↶  Undo', a.undo_background_removal, width=70, height=34);undo_bg.pack(side='left',padx=(6,0))
+    tooltip(undo_bg,'Restore the image from before background removal.')
+    png_btn=btn(image_tools, 'PNG', a.save_png_copy, width=58, height=34);png_btn.pack(side='left',padx=(6,0))
+    tooltip(png_btn,'Export the current image as a lossless RGBA PNG, preserving transparency.')
     url_row = frame(step2)
     url_row.pack(fill='x', pady=(7, 0))
     url_field = entry(url_row, a.url, 165); url_field.pack(side='left', fill='x', expand=True)
@@ -435,6 +444,8 @@ def build_ui(a, quality, speed):
     mode_switch.pack(fill='x', pady=(0, 7))
     preset_menu=setting_row(step4,'Drawing preset',a.render_preset,['Auto','Manual','Masterpiece','Extra fast'],'Extra fast draws closed contours, fills safe areas, then draws remaining detail. Calibrate Brush and Fill to enable buckets. Auto selects an engine; Masterpiece uses unlimited time.',width=160)
     preset_menu.configure(command=a.render_preset_changed)
+    style_profile_menu=setting_row(step4,'Drawing style profile',a.drawing_style,DRAWING_STYLES,
+        'Auto classifies the source. Pixel Art protects exact pixels; Logo prioritizes Fill + clean regions; Portrait protects faces/details; Photo/Shaded preserves tonal structure; Line Art protects thin contours; Cartoon/Illustration uses flat regions + outlines.',width=178)
     sketch_switch=control(ctk.CTkSwitch(step4,text='Black contour sketch',variable=a.outline,
         command=a.sketch_mode_changed,progress_color=ACCENT_DARK,text_color=TEXT))
     sketch_switch.pack(anchor='w',pady=(0,8))
@@ -445,7 +456,11 @@ def build_ui(a, quality, speed):
     timer_switch.pack(anchor='w',pady=(0,8))
     tooltip(timer_switch,'Gartic Phone only: watch the round pie timer for about 6 seconds at Start to estimate remaining time. Keep it visible. Uncertain readings stop Start; turn this off to use a manual time budget.')
     setting_row(step4, 'Quality preset', a.quality, list(quality), width=160)
-    numeric_row(step4, 'Brush width (px)', a.brush_px, 'Auto chooses a safe pixel baseline from the image/canvas; manual 1–50 px remains available.', width=84)
+    numeric_row(step4, 'Brush width', a.brush_px, 'Auto chooses from Gartic levels 1–5. Other profiles keep their normal pixel-width range.', width=84)
+    a.gartic_opacity_menu = setting_row(step4, 'Gartic opacity', a.gartic_opacity,
+        ['Auto','10%','20%','30%','40%','50%','60%','70%','80%','90%','100%'],
+        'Auto analyzes edges, color complexity and smooth shading. Low opacity is used only when it can improve tonal likeness.', width=118)
+    a.gartic_opacity_row = getattr(a.gartic_opacity_menu, '_setting_row', a.gartic_opacity_menu)
     focus_menu = setting_row(step4, 'Subject focus', a.subject_focus,
                              ['Off', 'Subject first', 'Subject only'],
                              'Pixel Accurate · 1 px pencil. No AI detection.', width=160)
@@ -1052,7 +1067,7 @@ def build_ui(a, quality, speed):
         (one_click,'browser-auto'),(a.browser_one_click_label,'browser-auto'),
         (a.browser_auto_button,'browser-auto'),(a.browser_auto_label,'browser-auto'),
         (a.app_tool_button,'nonpaint'),(a.app_tool_label,'nonpaint'),
-        (a.gartic_setup_button,'gartic'),(timer_switch,'gartic')])
+        (a.gartic_setup_button,'gartic'),(timer_switch,'gartic'),(a.gartic_opacity_row,'gartic')])
     a.refresh_ui_state = refresh_ui_state
     refresh_ui_state()
 

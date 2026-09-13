@@ -24,7 +24,7 @@ _OPTION_KEYS = {
     "quality", "speed", "precision", "mode", "shape_order", "shape_model",
     "max_stroke_cap", "progressive_rendering", "planning_watchdog",
     "time_budget_mode", "target_stroke_count", "target_stroke_custom",
-    "render_style", "draw_quality", "human_mode", "gpu_mode", "gpu_vram",
+    "drawing_style", "render_style", "draw_quality", "human_mode", "gpu_mode", "gpu_vram",
     "gpu_performance", "cpu_workers", "cpu_engine", "ram_budget",
     "ram_custom_mb", "planning_resolution", "background_fill",
     "background_simplification", "fill_engine", "color_grouping", "color_workflow", "stroke_optimizer", "adaptive_detail", "color_rendering",

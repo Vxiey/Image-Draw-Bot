@@ -56,6 +56,6 @@ class SketchFillV10131Tests(unittest.TestCase):
 
     def test_version(self):
         from Version import APP_VERSION,FILE_VERSION,BUILD_CHANNEL
-        self.assertEqual((APP_VERSION,FILE_VERSION,BUILD_CHANNEL),('1.0.145-rc26','1.0.145','rc'))
+        self.assertEqual((APP_VERSION,FILE_VERSION,BUILD_CHANNEL),('1.0.145-rc29','1.0.145','rc'))
 
 if __name__=='__main__':unittest.main()

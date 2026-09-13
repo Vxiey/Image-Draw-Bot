@@ -64,7 +64,7 @@ class Rc15CpuGpuPerformanceTests(unittest.TestCase):
         self.assertIn('gpu_memory_recovery_steps',src);self.assertIn('score_tile_rows',src)
         self.assertIn('score_vram_retries',src);self.assertNotIn('CUDA accuracy scoring exceeds allocation budget; using CPU scoring.',src)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc26')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
 
 
 if __name__=='__main__':unittest.main()

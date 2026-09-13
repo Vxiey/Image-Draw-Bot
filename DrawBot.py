@@ -111,7 +111,7 @@ from Version import APP_VERSION, BUILD_CHANNEL
 from VersionHistory import read_version_history
 from MobilePreview import MobilePreviewServer
 from CrashDiagnostics import (install as install_crash_diagnostics, begin_run_marker,
-                              log_event, previous_run_unclean, clean_exit)
+                              log_event, log_error, previous_run_unclean, clean_exit)
 
 install_crash_diagnostics()
 
@@ -2611,7 +2611,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         """
         from PIL import Image
         tuner=plan['options'].get('auto_tuner_meta') or {}
-        if dry_run or not isinstance(tuner,dict) or not tuner.get('active') or not hasattr(mouse,'snapshot_canvas'):
+        if dry_run or not hasattr(mouse,'snapshot_canvas'):
             return None
         source=plan['options'].get('_accuracy_original_source')
         if not isinstance(source,Image.Image):
@@ -2640,7 +2640,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 visual=meta.get('visual_accuracy_percent')
                 sim=meta.get('actual_vs_simulated_visual_percent')
                 cov=meta.get('actual_coverage_percent')
-                report('status',f"Real result verification: trust {trust}, Visual {float(visual or 0):.1f}%, Actual coverage {float(cov or 0):.1f}%, Actual vs simulated {float(sim or 0):.1f}%.")
+                report('status',f"Drawing Accuracy Score {float(visual or 0):.1f}/100 · trust {trust} · coverage {float(cov or 0):.1f}% · actual vs simulated {float(sim or 0):.1f}%.")
             return meta
         except Exception as error:
             plan['options']['post_draw_accuracy_meta']={'available':False,'feedback_trust':'none','reason':str(error)[:240],'capture_pixels_persisted':False,'image_pixels_persisted':False}
@@ -2760,6 +2760,17 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         report_draw_timer(force=True)
         if (plan['options'].get('paint_profile') or stroke_delivery.profile_key in ('gartic-phone','skribbl','skribbl-fast','sketchheads')) and not dry_run:
             report('status',f'{stroke_delivery.label}: <= {stroke_delivery.step_px:.0f}px interpolation, {stroke_delivery.min_path_delay*1000:.2f}ms path floor, palette settle={stroke_delivery.palette_click_delay*1000:.0f}ms, backend={stroke_delivery.drag_backend}.')
+        opacity_plan=plan['options'].get('gartic_opacity_plan') or {}
+        if opacity_plan and not resume_skip_prelude and int(opacity_plan.get('selected_percent',100) or 100)<100:
+            opacity_target=opacity_plan.get('target_position')
+            if opacity_target:
+                _opacity_started=clock();_opacity_percent=int(opacity_plan.get('selected_percent',100) or 100)
+                click_ui_control(tuple(map(int,opacity_target)),f'Gartic opacity {_opacity_percent}%')
+                _opacity_seconds=max(0.0,clock()-_opacity_started)
+                note_runtime_operation('opacity_change',_opacity_seconds)
+                plan['options']['gartic_opacity_runtime_meta']={'applied':True,'percent':_opacity_percent,'seconds':round(_opacity_seconds,5)}
+            else:
+                plan['options']['gartic_opacity_runtime_meta']={'applied':False,'percent':100,'seconds':0.0,'reason':'slider not verified'}
         brush_plan=plan['options'].get('browser_brush_plan') or {}
         if brush_plan and not resume_skip_prelude:
             target=brush_plan.get('target_position')
@@ -3817,6 +3828,17 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 log_event(f'Draw-time calibration save skipped: {estimate_error!r}')
         if (not dry_run) and (not plan['options'].get('correction_only_retry')) and speed_measure_completed and execution_measure_started is not None:
             try:
+                from CompletedDrawingAnalysis import record_completed_drawing
+                _actual_analysis=max(.001,(execution_measure_completed_at or clock())-execution_measure_started)
+                analysis_meta=record_completed_drawing(plan,_actual_analysis,completed_paths=done)
+                plan['options']['completed_drawing_analysis_meta']=analysis_meta
+                _score=analysis_meta.get('drawing_accuracy_score_0_100')
+                _score_label='unavailable' if _score is None else f'{float(_score):.1f}/100'
+                log_event(f"Completed Drawing Analysis saved: accuracy={_score_label} efficiency={analysis_meta.get('efficiency_score_0_100')} recommendations={len(analysis_meta.get('recommendations') or ())} file={analysis_meta.get('latest_json_path')}.")
+            except Exception as analysis_error:
+                log_event(f'Completed Drawing Analysis save skipped: {analysis_error!r}')
+        if (not dry_run) and (not plan['options'].get('correction_only_retry')) and speed_measure_completed and execution_measure_started is not None:
+            try:
                 from AutoTunerFeedback import record_completed_feedback
                 _actual_feedback=max(.001,(execution_measure_completed_at or clock())-execution_measure_started)
                 feedback_meta=record_completed_feedback(plan,_actual_feedback,completed_paths=done)
@@ -3862,6 +3884,8 @@ class DrawBotApp:
         self.target_client_rect = None
         self.target_dpi = None
         self.original = self.plan = None
+        self.background_removal_original = None
+        self.background_removal_meta = None
         self.color_session_cache = {}
         self.pending_render_resume = None
         self.canvas_anchor_detection = None
@@ -3873,6 +3897,8 @@ class DrawBotApp:
         self.photos = []
         self.hotkeys = []
         self.preview_after = None
+        # Monotonic generation protects the UI from late preview worker results.
+        self.preview_generation = 0
         # Preview rendering has its own debounce job. Keeping this separate from
         # preview generation prevents Canvas <Configure> storms from recursively
         # re-entering Tk while widgets are still laying themselves out.
@@ -4012,6 +4038,7 @@ class DrawBotApp:
         self.target_stroke_count = tk.StringVar(value='Auto')
         self.target_stroke_custom = tk.StringVar(value='2500')
         self.render_preset = tk.StringVar(value='Auto')
+        self.drawing_style = tk.StringVar(value='Auto')
         self.sketch_detail = tk.StringVar(value='Auto')
         self.read_gartic_timer = tk.BooleanVar(value=True)
         self.render_style = tk.StringVar(value='Auto')
@@ -4085,6 +4112,7 @@ class DrawBotApp:
         self.contrast = tk.DoubleVar(value=1.0)
         self.outline = tk.BooleanVar(value=False)
         self.brush_px = tk.StringVar(value='Auto')
+        self.gartic_opacity = tk.StringVar(value='Auto')
         self.max_seconds = tk.StringVar(value='180')
         self.area_text = tk.StringVar(value='Drawing area not selected')
         self.palette_text = tk.StringVar(value='Colors need calibration')
@@ -4178,7 +4206,7 @@ class DrawBotApp:
         names=(
             'quality','speed','precision','mode','shape_order','shape_model','max_stroke_cap',
             'progressive_rendering','planning_watchdog','time_budget_mode','target_stroke_count',
-            'target_stroke_custom','render_style','draw_quality','human_mode','gpu_mode','gpu_vram',
+            'target_stroke_custom','drawing_style','render_style','draw_quality','human_mode','gpu_mode','gpu_vram',
             'gpu_performance','cpu_workers','cpu_engine','ram_budget','ram_custom_mb','planning_resolution','resource_scheduler',
             'background_fill','fill_engine','background_simplification','color_grouping','color_workflow','stroke_optimizer','adaptive_detail','detail_zoom','visual_verification','color_rendering','color_fidelity','color_layers','profile_engine','edge_behavior',
             'custom_color_workflow','exact_color_limit','tool_strategy','portrait_focus','skip_white','contrast','outline',
@@ -6519,6 +6547,9 @@ class DrawBotApp:
             if hasattr(self,'portrait_focus') and type(data.get('portrait_focus')) is bool:self.portrait_focus.set(data['portrait_focus'])
             if type(data.get('skip_white')) is bool:self.skip_white.set(data['skip_white'])
             if hasattr(self,'render_preset'):self.render_preset.set(data.get('render_preset') if data.get('render_preset') in ('Auto','Manual','Masterpiece','Extra fast') else 'Auto')
+            if hasattr(self,'drawing_style'):
+                from DrawingStyleProfiles import DRAWING_STYLES
+                self.drawing_style.set(data.get('drawing_style') if data.get('drawing_style') in DRAWING_STYLES else 'Auto')
             if hasattr(self,'read_gartic_timer'):self.read_gartic_timer.set(data.get('read_gartic_timer',True) is not False)
             if type(data.get('outline')) is bool:self.outline.set(data['outline'])
             if hasattr(self,'sketch_detail'):self.sketch_detail.set(data.get('sketch_detail') if data.get('sketch_detail') in ('Auto','Simple','Balanced','Detailed') else 'Auto')
@@ -6551,9 +6582,10 @@ class DrawBotApp:
 
     def save_settings(self):
         if getattr(self,'profile_change_in_progress',False):return
-        data={'settings_schema':2,'quality':self.quality.get(),'speed':self.speed.get(),'precision':getattr(getattr(self,'precision',None),'get',lambda:'High')(),'mode':self.mode.get(),'shape_order':getattr(getattr(self,'shape_order',None),'get',lambda:'Fill first')(),'shape_model':getattr(getattr(self,'shape_model',None),'get',lambda:'Auto')(),'max_stroke_cap':getattr(getattr(self,'max_stroke_cap',None),'get',lambda:'Auto')(),'progressive_rendering':getattr(getattr(self,'progressive_rendering',None),'get',lambda:'Auto')(),'planning_watchdog':getattr(getattr(self,'planning_watchdog',None),'get',lambda:'Auto')(),'time_budget_mode':getattr(getattr(self,'time_budget_mode',None),'get',lambda:'Manual')(),'adaptive_deadline_renderer':bool(getattr(getattr(self,'adaptive_deadline_renderer',None),'get',lambda:True)()),'deadline_safety_reserve':getattr(getattr(self,'deadline_safety_reserve',None),'get',lambda:'Auto')(),'target_stroke_count':getattr(getattr(self,'target_stroke_count',None),'get',lambda:'Auto')(),'target_stroke_custom':getattr(getattr(self,'target_stroke_custom',None),'get',lambda:'2500')(),'render_style':getattr(getattr(self,'render_style',None),'get',lambda:'Auto')(),'draw_quality':getattr(getattr(self,'draw_quality',None),'get',lambda:'High likeness')(),'human_mode':'Off','gpu_mode':getattr(getattr(self,'gpu_mode',None),'get',lambda:'Auto')(),'gpu_vram':getattr(getattr(self,'gpu_vram',None),'get',lambda:'Auto')(),'gpu_performance':getattr(getattr(self,'gpu_performance',None),'get',lambda:'High throughput')(),'cpu_workers':getattr(getattr(self,'cpu_workers',None),'get',lambda:'Auto')(),'cpu_engine':getattr(getattr(self,'cpu_engine',None),'get',lambda:'Auto')(),'ram_budget':getattr(getattr(self,'ram_budget',None),'get',lambda:'Auto')(),'ram_custom_mb':getattr(getattr(self,'ram_custom_mb',None),'get',lambda:'4096')(),'planning_resolution':getattr(getattr(self,'planning_resolution',None),'get',lambda:'High')(),'resource_scheduler':getattr(getattr(self,'resource_scheduler',None),'get',lambda:'Auto')(),'profile_engine':getattr(getattr(self,'profile_engine',None),'get',lambda:'Auto')(),'edge_behavior':getattr(getattr(self,'edge_behavior',None),'get',lambda:'Auto')(),'background_fill':getattr(getattr(self,'background_fill',None),'get',lambda:'Balanced')(),'fill_engine':getattr(getattr(self,'fill_engine',None),'get',lambda:'Auto')(),'use_region_fill_engine':bool(getattr(getattr(self,'use_region_fill_engine',None),'get',lambda:True)()),'fill_aggressiveness':getattr(getattr(self,'fill_aggressiveness',None),'get',lambda:'Balanced')(),'background_simplification':getattr(getattr(self,'background_simplification',None),'get',lambda:'Balanced')(),'color_grouping':getattr(getattr(self,'color_grouping',None),'get',lambda:'Smart')(),'color_workflow':getattr(getattr(self,'color_workflow',None),'get',lambda:'Finish color first')(),'stroke_optimizer':getattr(getattr(self,'stroke_optimizer',None),'get',lambda:'Auto')(),'adaptive_detail':getattr(getattr(self,'adaptive_detail',None),'get',lambda:'Auto')(),'detail_zoom':getattr(getattr(self,'detail_zoom',None),'get',lambda:'Auto')(),'quick_sketch_style':getattr(getattr(self,'quick_sketch_style',None),'get',lambda:'Balanced')(),'quick_sketch_fill_preference':getattr(getattr(self,'quick_sketch_fill_preference',None),'get',lambda:'Safe Fill First')(),'hybrid_mode':getattr(getattr(self,'hybrid_mode',None),'get',lambda:'Auto Hybrid')(),'visual_verification':getattr(getattr(self,'visual_verification',None),'get',lambda:'Auto')(),'color_rendering':getattr(getattr(self,'color_rendering',None),'get',lambda:'Perceptual match')(),'color_fidelity':getattr(getattr(self,'color_fidelity',None),'get',lambda:'Faithful')(),'color_layers':getattr(getattr(self,'color_layers',None),'get',lambda:'Off')(),'custom_color_workflow':getattr(getattr(self,'custom_color_workflow',None),'get',lambda:'Calibrated palette')(),'exact_color_limit':getattr(getattr(self,'exact_color_limit',None),'get',lambda:'Auto')(),'preview_mode':getattr(getattr(self,'preview_mode',None),'get',lambda:'Manual')(),'preview_detail_level':getattr(getattr(self,'preview_detail_level',None),'get',lambda:'Detailed')(),'auto_clear_canvas':bool(getattr(getattr(self,'auto_clear_canvas',None),'get',lambda:False)()),'tool_strategy':getattr(getattr(self,'tool_strategy',None),'get',lambda:'Auto')(),'portrait_focus':getattr(getattr(self,'portrait_focus',None),'get',lambda:True)(),'skip_white':self.skip_white.get(),'contrast':self.contrast.get(),'corners':self.corners or self.saved_area,'outline':self.outline.get(),'brush_px':self.brush_px.get(),'max_seconds':self.max_seconds.get()}
+        data={'settings_schema':2,'quality':self.quality.get(),'speed':self.speed.get(),'precision':getattr(getattr(self,'precision',None),'get',lambda:'High')(),'mode':self.mode.get(),'shape_order':getattr(getattr(self,'shape_order',None),'get',lambda:'Fill first')(),'shape_model':getattr(getattr(self,'shape_model',None),'get',lambda:'Auto')(),'max_stroke_cap':getattr(getattr(self,'max_stroke_cap',None),'get',lambda:'Auto')(),'progressive_rendering':getattr(getattr(self,'progressive_rendering',None),'get',lambda:'Auto')(),'planning_watchdog':getattr(getattr(self,'planning_watchdog',None),'get',lambda:'Auto')(),'time_budget_mode':getattr(getattr(self,'time_budget_mode',None),'get',lambda:'Manual')(),'adaptive_deadline_renderer':bool(getattr(getattr(self,'adaptive_deadline_renderer',None),'get',lambda:True)()),'deadline_safety_reserve':getattr(getattr(self,'deadline_safety_reserve',None),'get',lambda:'Auto')(),'target_stroke_count':getattr(getattr(self,'target_stroke_count',None),'get',lambda:'Auto')(),'target_stroke_custom':getattr(getattr(self,'target_stroke_custom',None),'get',lambda:'2500')(),'drawing_style':getattr(getattr(self,'drawing_style',None),'get',lambda:'Auto')(),'render_style':getattr(getattr(self,'render_style',None),'get',lambda:'Auto')(),'draw_quality':getattr(getattr(self,'draw_quality',None),'get',lambda:'High likeness')(),'human_mode':'Off','gpu_mode':getattr(getattr(self,'gpu_mode',None),'get',lambda:'Auto')(),'gpu_vram':getattr(getattr(self,'gpu_vram',None),'get',lambda:'Auto')(),'gpu_performance':getattr(getattr(self,'gpu_performance',None),'get',lambda:'High throughput')(),'cpu_workers':getattr(getattr(self,'cpu_workers',None),'get',lambda:'Auto')(),'cpu_engine':getattr(getattr(self,'cpu_engine',None),'get',lambda:'Auto')(),'ram_budget':getattr(getattr(self,'ram_budget',None),'get',lambda:'Auto')(),'ram_custom_mb':getattr(getattr(self,'ram_custom_mb',None),'get',lambda:'4096')(),'planning_resolution':getattr(getattr(self,'planning_resolution',None),'get',lambda:'High')(),'resource_scheduler':getattr(getattr(self,'resource_scheduler',None),'get',lambda:'Auto')(),'profile_engine':getattr(getattr(self,'profile_engine',None),'get',lambda:'Auto')(),'edge_behavior':getattr(getattr(self,'edge_behavior',None),'get',lambda:'Auto')(),'background_fill':getattr(getattr(self,'background_fill',None),'get',lambda:'Balanced')(),'fill_engine':getattr(getattr(self,'fill_engine',None),'get',lambda:'Auto')(),'use_region_fill_engine':bool(getattr(getattr(self,'use_region_fill_engine',None),'get',lambda:True)()),'fill_aggressiveness':getattr(getattr(self,'fill_aggressiveness',None),'get',lambda:'Balanced')(),'background_simplification':getattr(getattr(self,'background_simplification',None),'get',lambda:'Balanced')(),'color_grouping':getattr(getattr(self,'color_grouping',None),'get',lambda:'Smart')(),'color_workflow':getattr(getattr(self,'color_workflow',None),'get',lambda:'Finish color first')(),'stroke_optimizer':getattr(getattr(self,'stroke_optimizer',None),'get',lambda:'Auto')(),'adaptive_detail':getattr(getattr(self,'adaptive_detail',None),'get',lambda:'Auto')(),'detail_zoom':getattr(getattr(self,'detail_zoom',None),'get',lambda:'Auto')(),'quick_sketch_style':getattr(getattr(self,'quick_sketch_style',None),'get',lambda:'Balanced')(),'quick_sketch_fill_preference':getattr(getattr(self,'quick_sketch_fill_preference',None),'get',lambda:'Safe Fill First')(),'hybrid_mode':getattr(getattr(self,'hybrid_mode',None),'get',lambda:'Auto Hybrid')(),'visual_verification':getattr(getattr(self,'visual_verification',None),'get',lambda:'Auto')(),'color_rendering':getattr(getattr(self,'color_rendering',None),'get',lambda:'Perceptual match')(),'color_fidelity':getattr(getattr(self,'color_fidelity',None),'get',lambda:'Faithful')(),'color_layers':getattr(getattr(self,'color_layers',None),'get',lambda:'Off')(),'custom_color_workflow':getattr(getattr(self,'custom_color_workflow',None),'get',lambda:'Calibrated palette')(),'exact_color_limit':getattr(getattr(self,'exact_color_limit',None),'get',lambda:'Auto')(),'preview_mode':getattr(getattr(self,'preview_mode',None),'get',lambda:'Manual')(),'preview_detail_level':getattr(getattr(self,'preview_detail_level',None),'get',lambda:'Detailed')(),'auto_clear_canvas':bool(getattr(getattr(self,'auto_clear_canvas',None),'get',lambda:False)()),'tool_strategy':getattr(getattr(self,'tool_strategy',None),'get',lambda:'Auto')(),'portrait_focus':getattr(getattr(self,'portrait_focus',None),'get',lambda:True)(),'skip_white':self.skip_white.get(),'contrast':self.contrast.get(),'corners':self.corners or self.saved_area,'outline':self.outline.get(),'brush_px':self.brush_px.get(),'max_seconds':self.max_seconds.get()}
         if getattr(self,'canvas_anchor_detection',None):data['canvas_anchor_detection']=self.canvas_anchor_detection
         if hasattr(self,'render_preset'):data['render_preset']=self.render_preset.get()
+        if hasattr(self,'drawing_style'):data['drawing_style']=self.drawing_style.get()
         if hasattr(self,'read_gartic_timer'):data['read_gartic_timer']=self.read_gartic_timer.get()
         if hasattr(self,'sketch_detail'):data['sketch_detail']=self.sketch_detail.get()
         if hasattr(self,'paint_simple'):data['paint_simple']=self.paint_simple.get()
@@ -6581,8 +6613,11 @@ class DrawBotApp:
             limit=int(self.max_seconds.get())
         except (TypeError,ValueError,tk.TclError) as error:
             raise ValueError('Brush width must be Auto or a whole number, and time limit must be a whole number.') from error
-        if (brush is not None and not 1<=brush<=50) or not 5<=limit<=3600:
-            raise ValueError('Brush width: Auto or 1–50 px. Time limit: 5–3600 seconds.')
+        _profile_key_for_brush=PROFILES[self.game.get()][0]
+        _brush_limit=5 if _profile_key_for_brush in ('gartic-phone','gartic-io') else 50
+        if (brush is not None and not 1<=brush<=_brush_limit) or not 5<=limit<=3600:
+            _label='Gartic level 1–5' if _brush_limit==5 else '1–50 px'
+            raise ValueError(f'Brush width: Auto or {_label}. Time limit: 5–3600 seconds.')
         auto_brush_width_meta=None
         quality=self.quality.get();speed=normalize_speed(self.speed.get());precision=self.precision.get();mode=self.mode.get();shape_order=getattr(getattr(self,'shape_order',None),'get',lambda:'Fill first')();shape_model=getattr(getattr(self,'shape_model',None),'get',lambda:'Auto')();max_stroke_cap=getattr(getattr(self,'max_stroke_cap',None),'get',lambda:'Auto')();progressive_rendering=getattr(getattr(self,'progressive_rendering',None),'get',lambda:'Auto')();planning_watchdog=getattr(getattr(self,'planning_watchdog',None),'get',lambda:'Auto')();time_budget_mode=getattr(getattr(self,'time_budget_mode',None),'get',lambda:'Manual')();target_stroke_count=getattr(getattr(self,'target_stroke_count',None),'get',lambda:'Auto')();target_stroke_custom=getattr(getattr(self,'target_stroke_custom',None),'get',lambda:'2500')();render_style=self.render_style.get();draw_quality=getattr(getattr(self,'draw_quality',None),'get',lambda:'High likeness')();human_mode='Off';gpu_mode=getattr(getattr(self,'gpu_mode',None),'get',lambda:'Auto')();gpu_vram=getattr(getattr(self,'gpu_vram',None),'get',lambda:'Auto')();gpu_performance=getattr(getattr(self,'gpu_performance',None),'get',lambda:'High throughput')();cpu_workers=getattr(getattr(self,'cpu_workers',None),'get',lambda:'Auto')();cpu_engine=getattr(getattr(self,'cpu_engine',None),'get',lambda:'Auto')();ram_budget=getattr(getattr(self,'ram_budget',None),'get',lambda:'Auto')();ram_custom_mb=getattr(getattr(self,'ram_custom_mb',None),'get',lambda:'4096')();planning_resolution=getattr(getattr(self,'planning_resolution',None),'get',lambda:'High')();resource_scheduler=getattr(getattr(self,'resource_scheduler',None),'get',lambda:'Auto')();profile_engine=getattr(getattr(self,'profile_engine',None),'get',lambda:'Manual settings')();edge_behavior=getattr(getattr(self,'edge_behavior',None),'get',lambda:'Auto')();background_fill=getattr(getattr(self,'background_fill',None),'get',lambda:'Balanced')();fill_engine=getattr(getattr(self,'fill_engine',None),'get',lambda:'Auto')();background_simplification=getattr(getattr(self,'background_simplification',None),'get',lambda:'Balanced')();color_grouping=getattr(getattr(self,'color_grouping',None),'get',lambda:'Smart')();color_workflow=getattr(getattr(self,'color_workflow',None),'get',lambda:'Finish color first')();stroke_optimizer=getattr(getattr(self,'stroke_optimizer',None),'get',lambda:'Auto')();adaptive_detail=getattr(getattr(self,'adaptive_detail',None),'get',lambda:'Auto')();detail_zoom=getattr(getattr(self,'detail_zoom',None),'get',lambda:'Auto')();quick_sketch_style=getattr(getattr(self,'quick_sketch_style',None),'get',lambda:'Balanced')();quick_sketch_fill_preference=getattr(getattr(self,'quick_sketch_fill_preference',None),'get',lambda:'Safe Fill First')();hybrid_mode=getattr(getattr(self,'hybrid_mode',None),'get',lambda:'Auto Hybrid')();visual_verification=getattr(getattr(self,'visual_verification',None),'get',lambda:'Auto')();color_rendering=getattr(getattr(self,'color_rendering',None),'get',lambda:'Perceptual match')();color_fidelity=getattr(getattr(self,'color_fidelity',None),'get',lambda:'Faithful')();color_layers=getattr(getattr(self,'color_layers',None),'get',lambda:'Off')();custom_color_workflow=getattr(getattr(self,'custom_color_workflow',None),'get',lambda:'Calibrated palette')();exact_color_limit=getattr(getattr(self,'exact_color_limit',None),'get',lambda:'Auto')();preview_mode=getattr(getattr(self,'preview_mode',None),'get',lambda:'Manual')();preview_detail_level=getattr(getattr(self,'preview_detail_level',None),'get',lambda:'Detailed')();tool_strategy=getattr(getattr(self,'tool_strategy',None),'get',lambda:'Auto')()
         use_region_fill_engine=bool(getattr(getattr(self,'use_region_fill_engine',None),'get',lambda:True)())
@@ -6766,7 +6801,7 @@ class DrawBotApp:
         except Exception:
             calibration_state={'profile_key':profile_key,'fingerprint':calibration_fingerprint}
         result={'detail':QUALITY[quality],'delay':SPEED[speed],'speed':speed,'precision':precision,'profile_name':self.game.get(),'profile_key':profile_key,'paint_profile':bool(paint_profile),'calibration_fingerprint':calibration_fingerprint,'calibration_state':calibration_state,
-                'lines':mode!=DOT_MODE,'drawing_mode':mode,'smart_paths':mode==SMART_PATH_MODE,'shape_order':shape_order,'shape_model':shape_model,'max_stroke_cap':max_stroke_cap,'progressive_rendering':progressive_rendering,'planning_watchdog':planning_watchdog,'planning_timeout_seconds':45 if mode==SHAPE_PATH_MODE else 75,'render_style':render_style,'draw_quality':draw_quality,'human_mode':human_mode,'gpu_mode':gpu_mode,'gpu_vram':gpu_vram,'gpu_performance':gpu_performance,'cpu_workers':cpu_workers,'cpu_engine':cpu_engine,'ram_budget':ram_budget,'ram_custom_mb':ram_custom_mb,'planning_resolution':planning_resolution,'resource_scheduler':resource_scheduler,'profile_engine':profile_engine,'profile_policy_meta':profile_policy_meta,'profile_polish_meta':profile_polish_meta,**allocation,'background_fill':background_fill,'fill_engine':fill_engine,'background_simplification':background_simplification,'color_grouping':color_grouping,'color_workflow':color_workflow,'stroke_optimizer':stroke_optimizer,'stroke_optimizer_resolved':resolve_stroke_optimizer(stroke_optimizer,drawing_mode=mode),'adaptive_detail':adaptive_detail,'detail_zoom':detail_zoom,'quick_sketch_style':quick_sketch_style,'quick_sketch_fill_preference':quick_sketch_fill_preference,'hybrid_mode':hybrid_mode,'visual_verification':visual_verification,'visual_verification_resolved':resolve_visual_verification(visual_verification,paint_profile=paint_profile,dry_run=False,test=False),'color_rendering':color_rendering,'color_fidelity':color_fidelity,'color_layers':color_layers,'custom_color_workflow':custom_color_workflow,'exact_color_limit':exact_color_limit,'exact_color_limit_resolved':resolve_exact_color_limit(exact_color_limit,draw_quality=draw_quality,preview=False),'exact_color_available':custom_rgb_available(PROFILES[self.game.get()][0]),'preview_mode':preview_mode,'preview_detail_level':preview_detail_level,'auto_clear_canvas':bool(getattr(getattr(self,'auto_clear_canvas',None),'get',lambda:False)()),'canvas_clear_strategy':'pending','canvas_clear_actions':[],'canvas_clear_restore_actions':[],'canvas_clear_estimate_seconds':0.0,'tool_strategy':tool_strategy,'subject_focus':self.subject_focus.get() if hasattr(self,'subject_focus') else 'Off','subject_region':getattr(self,'subject_region',None),'portrait_focus':bool(self.portrait_focus.get()),'skip_white':bool(self.skip_white.get()),'contrast':contrast,'outline':bool(self.outline.get()),'sketch_detail':getattr(getattr(self,'sketch_detail',None),'get',lambda:'Auto')(),'brush_px':brush,'brush_px_requested':brush_raw,'auto_brush_width_meta':auto_brush_width_meta,'canvas_edge_verification':'Auto','canvas_edge_margin_px':24,'canvas_edge_tolerance_px':4,'canvas_edge_search_px':24,'edge_behavior':edge_behavior,'edge_behavior_resolved':resolve_edge_behavior(edge_behavior, profile_name=self.game.get(), drawing_mode=mode, outline=bool(self.outline.get())),'max_seconds':effective_limit,'manual_max_seconds':limit,'time_budget_mode':time_budget_mode,'time_budget_seconds':effective_limit,'time_budget_active':time_budget_active,'adaptive_deadline_renderer':adaptive_deadline_renderer,'deadline_safety_reserve':deadline_safety_reserve,'target_stroke_count':target_stroke_count,'target_stroke_custom':target_stroke_custom,'target_stroke_count_resolved':target_cap,**target_meta,
+                'lines':mode!=DOT_MODE,'drawing_mode':mode,'smart_paths':mode==SMART_PATH_MODE,'shape_order':shape_order,'shape_model':shape_model,'max_stroke_cap':max_stroke_cap,'progressive_rendering':progressive_rendering,'planning_watchdog':planning_watchdog,'planning_timeout_seconds':45 if mode==SHAPE_PATH_MODE else 75,'drawing_style':getattr(getattr(self,'drawing_style',None),'get',lambda:'Auto')(),'render_style':render_style,'draw_quality':draw_quality,'human_mode':human_mode,'gpu_mode':gpu_mode,'gpu_vram':gpu_vram,'gpu_performance':gpu_performance,'cpu_workers':cpu_workers,'cpu_engine':cpu_engine,'ram_budget':ram_budget,'ram_custom_mb':ram_custom_mb,'planning_resolution':planning_resolution,'resource_scheduler':resource_scheduler,'profile_engine':profile_engine,'profile_policy_meta':profile_policy_meta,'profile_polish_meta':profile_polish_meta,**allocation,'background_fill':background_fill,'fill_engine':fill_engine,'background_simplification':background_simplification,'color_grouping':color_grouping,'color_workflow':color_workflow,'stroke_optimizer':stroke_optimizer,'stroke_optimizer_resolved':resolve_stroke_optimizer(stroke_optimizer,drawing_mode=mode),'adaptive_detail':adaptive_detail,'detail_zoom':detail_zoom,'quick_sketch_style':quick_sketch_style,'quick_sketch_fill_preference':quick_sketch_fill_preference,'hybrid_mode':hybrid_mode,'visual_verification':visual_verification,'visual_verification_resolved':resolve_visual_verification(visual_verification,paint_profile=paint_profile,dry_run=False,test=False),'color_rendering':color_rendering,'color_fidelity':color_fidelity,'color_layers':color_layers,'custom_color_workflow':custom_color_workflow,'exact_color_limit':exact_color_limit,'exact_color_limit_resolved':resolve_exact_color_limit(exact_color_limit,draw_quality=draw_quality,preview=False),'exact_color_available':custom_rgb_available(PROFILES[self.game.get()][0]),'preview_mode':preview_mode,'preview_detail_level':preview_detail_level,'auto_clear_canvas':bool(getattr(getattr(self,'auto_clear_canvas',None),'get',lambda:False)()),'canvas_clear_strategy':'pending','canvas_clear_actions':[],'canvas_clear_restore_actions':[],'canvas_clear_estimate_seconds':0.0,'tool_strategy':tool_strategy,'subject_focus':self.subject_focus.get() if hasattr(self,'subject_focus') else 'Off','subject_region':getattr(self,'subject_region',None),'portrait_focus':bool(self.portrait_focus.get()),'skip_white':bool(self.skip_white.get()),'contrast':contrast,'outline':bool(self.outline.get()),'sketch_detail':getattr(getattr(self,'sketch_detail',None),'get',lambda:'Auto')(),'brush_px':brush,'brush_px_requested':brush_raw,'auto_brush_width_meta':auto_brush_width_meta,'gartic_opacity':getattr(getattr(self,'gartic_opacity',None),'get',lambda:'Auto')(),'canvas_edge_verification':'Auto','canvas_edge_margin_px':24,'canvas_edge_tolerance_px':4,'canvas_edge_search_px':24,'edge_behavior':edge_behavior,'edge_behavior_resolved':resolve_edge_behavior(edge_behavior, profile_name=self.game.get(), drawing_mode=mode, outline=bool(self.outline.get())),'max_seconds':effective_limit,'manual_max_seconds':limit,'time_budget_mode':time_budget_mode,'time_budget_seconds':effective_limit,'time_budget_active':time_budget_active,'adaptive_deadline_renderer':adaptive_deadline_renderer,'deadline_safety_reserve':deadline_safety_reserve,'target_stroke_count':target_stroke_count,'target_stroke_custom':target_stroke_custom,'target_stroke_count_resolved':target_cap,**target_meta,
                 **anchor_options,
                 'render_preset':getattr(getattr(self,'render_preset',None),'get',lambda:'Manual')(),'unlimited_time':time_budget_mode=='Unlimited',
                 'read_gartic_timer':bool(getattr(getattr(self,'read_gartic_timer',None),'get',lambda:True)()),
@@ -7081,6 +7116,58 @@ class DrawBotApp:
         if path:
             self.load_source(path,Path(path).name,action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
 
+    def remove_image_background(self):
+        if self.activity:
+            self.status.set('Finish or stop the current operation before removing the background.')
+            return False
+        if self.original is None:
+            self.status.set('Load an image before removing its background.')
+            return False
+        source=self.original.copy()
+        if self.background_removal_original is None:
+            self.background_removal_original=source.copy()
+        self.status.set('Removing border-connected background…')
+        log_event(f'Background removal requested: size={source.size}.')
+        def work():
+            from BackgroundRemoval import remove_background
+            result=remove_background(source,mode='Auto',strength='Balanced',cancelled=self.stop.is_set)
+            if self.stop.is_set():raise InterruptedError()
+            self.events.put(('background_removed',result))
+        return bool(self.begin_worker('background-remove',work))
+
+    def undo_background_removal(self):
+        if self.activity:return False
+        previous=self.background_removal_original
+        if previous is None:
+            self.status.set('No background-removal change to undo.')
+            return False
+        self.original=previous.copy();self.background_removal_original=None;self.background_removal_meta=None
+        self.plan=None;DrawBotApp._clear_render_resume(self,'background removal undone')
+        self.file_label.set(image_label(self.original,'Background removal undone'))
+        self._mark_plan_stale('Background removal undone. Build preview to update ETA.')
+        self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40)
+        self._maybe_auto_preview(delay=500,reason='background-removal-undo')
+        log_event('Background removal undone.')
+        return True
+
+    def save_png_copy(self):
+        if self.activity:
+            self.status.set('Finish or stop the current operation before exporting PNG.')
+            return False
+        if self.original is None:
+            self.status.set('Load an image before exporting PNG.')
+            return False
+        path=filedialog.asksaveasfilename(title='Save PNG',defaultextension='.png',
+            filetypes=[('PNG image','*.png')])
+        if not path:return False
+        snapshot=self.original.copy();self.status.set('Saving PNG…')
+        def work():
+            from BackgroundRemoval import png_export_ready
+            png_export_ready(snapshot).save(path,format='PNG',optimize=True)
+            if self.stop.is_set():raise InterruptedError()
+            self.events.put(('png_saved',path))
+        return bool(self.begin_worker('png-export',work))
+
     def upscale_dialog(self):
         if self.activity or self.closing: return
         if self.original is None:
@@ -7278,8 +7365,8 @@ class DrawBotApp:
                     if _state is not None and getattr(_state,'state',None) not in ('COMPLETED','ABORTED'):
                         try:_state.transition('ABORTED',str(error))
                         except Exception:pass
-                import traceback
-                log_event(f'Worker {activity} failed after {time.monotonic()-started:.3f} s: {error!r}\n{traceback.format_exc()}')
+                log_error(f'Worker {activity} failed after {time.monotonic()-started:.3f} s: {error!r}',
+                          category=f'worker:{activity}', exc_info=True)
                 self.events.put(('status',f'Operation failed: {error}'))
             else:
                 log_event(f'Worker {activity} finished in {time.monotonic()-started:.3f} s.')
@@ -7288,10 +7375,11 @@ class DrawBotApp:
         self.worker=threading.Thread(target=work,daemon=True,name=f'imagedrawbot-{activity}')
         try:
             self.worker.start()
-        except Exception:
+        except Exception as error:
             self.worker=None
             self.set_busy(None)
             screen_window.restore()
+            log_error(f'Worker {activity} could not start: {error!r}', category='worker-start', exc_info=True)
             raise
         return True
 
@@ -7319,6 +7407,7 @@ class DrawBotApp:
 
     def _mark_plan_stale(self, message='Settings changed. Press Build preview or Start Drawing when ready.'):
         DrawBotApp._cancel_after_attr(self,'preview_after')
+        self.preview_generation=int(getattr(self,'preview_generation',0))+1
         self.needs_plan=False
         self.plan=None
         self.preview_dirty_reason=message
@@ -7441,6 +7530,8 @@ class DrawBotApp:
 
     def update_plan(self, user_initiated=False, reason='automatic',full_detail=False):
         self.preview_after=None
+        self.preview_generation=int(getattr(self,'preview_generation',0))+1
+        generation=self.preview_generation
         if self.activity:
             return
         if self.original is None:
@@ -7567,6 +7658,7 @@ class DrawBotApp:
             plan['preview_safe_pipeline']=not full_detail
             plan['full_detail_preview']=bool(full_detail)
             plan['preview_fallback_used']=bool(used_fallback)
+            plan['preview_generation']=generation
             log_event(f'Preview planning finished in {plan["preview_elapsed_seconds"]:.3f} s fallback={used_fallback}: {_plan_log_text(plan)}.')
             self.events.put(('planned',plan))
         # Historic v1.0.10 status string kept for release-test visibility: Planning optimized preview.
@@ -8381,7 +8473,19 @@ class DrawBotApp:
                     options['browser_brush_plan']=brush_plan.as_dict()
                     options['brush_px']=int(brush_plan.effective_px)
                     options['canvas_guard_brush_px']=int(brush_plan.safe_guard_px)
-                    log_event(f"Automatic browser brush preflight: profile={profile_key} requested={brush_plan.requested_px}px effective={brush_plan.effective_px}px target={brush_plan.target_position!r} selected={brush_plan.selected_index!r} confidence={brush_plan.confidence:.3f} guard={brush_plan.safe_guard_px}px.")
+                    _brush_meta=options['browser_brush_plan']
+                    _level_note=(f" level={_brush_meta.get('effective_level')}" if _brush_meta.get('effective_level') else '')
+                    log_event(f"Automatic browser brush preflight: profile={profile_key} requested={brush_plan.requested_px}{_level_note} physical={brush_plan.effective_px}px target={brush_plan.target_position!r} selected={brush_plan.selected_index!r} confidence={brush_plan.confidence:.3f} guard={brush_plan.safe_guard_px}px.")
+                    if profile_key in ('gartic-phone','gartic-io'):
+                        from GarticOpacity import plan_gartic_opacity
+                        opacity_plan=plan_gartic_opacity(profile_key,shot,tuple(current_client),
+                            canvas_box=(x,y,x+w,y+h),source_image=self.original,
+                            requested=options.get('gartic_opacity','Auto'),draw_quality=options.get('draw_quality',''),
+                            render_style=options.get('render_style',''),drawing_mode=options.get('drawing_mode',''),
+                            outline=bool(options.get('outline')))
+                        options['gartic_opacity_plan']=opacity_plan.as_dict()
+                        options['gartic_opacity_percent']=int(opacity_plan.selected_percent)
+                        log_event(f"Gartic opacity preflight: requested={opacity_plan.requested} selected={opacity_plan.selected_percent}% confidence={opacity_plan.confidence:.3f} target={opacity_plan.target_position!r} reason={opacity_plan.reason}.")
             except Exception as brush_error:
                 # Brush automation is an optimization/convenience layer. A
                 # detector failure must not invent clicks; keep the current brush
@@ -8721,6 +8825,7 @@ class DrawBotApp:
         DrawBotApp._close_smart_drop_overlay(self,'cancel/stop pressed')
         self.smart_drop_pending_payload=None
         self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
+        self.preview_generation=int(getattr(self,'preview_generation',0))+1
         mouse=getattr(self,'mouse',None)
         if hasattr(mouse,'disarm_input'):
             try:mouse.disarm_input()
@@ -9664,8 +9769,32 @@ class DrawBotApp:
             self.status.set('Image updated. Build preview to check the result before Start.')
             self.show_previews()
             self._schedule_recovery_checkpoint(include_image=True,delay=40)
+        elif kind=='background_removed':
+            result=value
+            image=getattr(result,'image',None);meta=getattr(result,'metadata',{}) or {}
+            if image is None:
+                self.status.set('Background removal returned no image. Original preserved.')
+            else:
+                self.original=image.convert('RGBA');self.background_removal_meta=dict(meta);self.plan=None
+                DrawBotApp._clear_render_resume(self,'background removed')
+                self.file_label.set(image_label(self.original,'Background removed PNG'))
+                reduction=float(meta.get('estimated_work_reduction_percent',0) or 0)
+                removed=float(meta.get('removed_percent',0) or 0)
+                reason=meta.get('no_op_reason')
+                if reason:
+                    self.status.set(f'Background remover kept the original: {reason}.')
+                else:
+                    self.status.set(f'Background removed: {removed:.1f}% of image area transparent; drawable pixel work reduced about {reduction:.1f}%. Build preview for real ETA.')
+                log_event(f"Background removal complete: removed={removed:.2f}% work_reduction={reduction:.2f}% ref={meta.get('reference_rgb')} threshold={meta.get('threshold')} bbox={meta.get('foreground_bbox')}.")
+                self._mark_plan_stale('Background changed. Build preview to recalculate strokes and ETA.')
+                self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40)
+                self._maybe_auto_preview(delay=500,reason='background-removed')
+        elif kind=='png_saved':
+            self.status.set(f'PNG saved: {value}')
+            log_event(f'PNG export saved: {value!r}.')
         elif kind=='loaded':
             self._suppress_recovery=False
+            self.background_removal_original=None;self.background_removal_meta=None
             self.upscale_original=None
             self.subject_region=None
             if hasattr(self,'subject_hint'): self.subject_hint.set('Auto: simple background or transparent PNG. Mark busy photos.')
@@ -9702,6 +9831,9 @@ class DrawBotApp:
         elif kind=='planned':
             if not isinstance(value,dict) or 'preview' not in value or 'count' not in value or 'estimate' not in value:
                 raise ValueError('The preview worker returned an invalid plan.')
+            if int(value.get('preview_generation',-1))!=int(getattr(self,'preview_generation',0)):
+                log_event(f"Ignored stale preview result generation={value.get('preview_generation')} current={getattr(self,'preview_generation',0)}.")
+                return
             self.plan=value
             self.preview_dirty_reason=''
             self._sync_mobile_preview()

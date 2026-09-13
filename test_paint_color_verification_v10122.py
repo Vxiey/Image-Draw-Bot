@@ -7,7 +7,7 @@ import ColorCache
 
 class PaintColorVerificationV10122Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc26');self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.145-rc29');self.assertEqual(FILE_VERSION,'1.0.145')
 
     def test_exact_color_is_accepted(self):
         r=verify_paint_color((132,97,54),(132,97,54))

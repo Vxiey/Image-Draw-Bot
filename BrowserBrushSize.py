@@ -4,6 +4,10 @@ The detector stays deliberately conservative: control locations are derived from
 an already verified canvas/palette layout, then checked visually before any click.
 If the control row cannot be verified, no guessed click is generated and Image
 Draw Bot uses a conservative brush guard fallback instead.
+
+Gartic exposes five user-facing brush levels. Image Draw Bot now treats those as
+levels 1..5 while retaining a separate calibrated physical footprint ladder for
+CanvasGuard, raster simulation and execution-cost planning.
 """
 from __future__ import annotations
 
@@ -11,10 +15,14 @@ from dataclasses import dataclass
 from math import sqrt
 
 SUPPORTED = frozenset({'gartic-phone', 'gartic-io', 'skribbl', 'skribbl-fast', 'sketchheads'})
+GARTIC_PROFILES = frozenset({'gartic-phone', 'gartic-io'})
+GARTIC_LEVELS = (1, 2, 3, 4, 5)
 
 POLICIES = {
-    'gartic-phone': {'sizes': (2, 4, 8, 16, 28), 'safe_index': 1},
-    'gartic-io': {'sizes': (2, 4, 8, 16, 28), 'safe_index': 1},
+    # Physical canvas footprints for the five Gartic controls. The public/user
+    # setting is 1..5; these values remain internal safety geometry.
+    'gartic-phone': {'sizes': (2, 4, 8, 16, 28), 'levels': GARTIC_LEVELS, 'safe_index': 1},
+    'gartic-io': {'sizes': (2, 4, 8, 16, 28), 'levels': GARTIC_LEVELS, 'safe_index': 1},
     'skribbl': {'sizes': (4, 8, 16, 32), 'safe_index': 1},
     'skribbl-fast': {'sizes': (4, 8, 16, 32), 'safe_index': 1},
     'sketchheads': {'sizes': (4, 8, 14), 'safe_index': 1},
@@ -34,7 +42,7 @@ def _candidate_positions(profile_key, client_rect, canvas_box=None, palette_box=
     l, t, r, b = map(int, client_rect); cw, ch = r-l, b-t
     canvas = tuple(map(int, canvas_box)) if isinstance(canvas_box, (tuple, list)) and len(canvas_box) == 4 else None
     palette = tuple(map(int, palette_box)) if isinstance(palette_box, (tuple, list)) and len(palette_box) == 4 else None
-    if profile_key in ('gartic-phone', 'gartic-io') and canvas:
+    if profile_key in GARTIC_PROFILES and canvas:
         x0, y0, x1, y1 = canvas; w = x1-x0; h = y1-y0
         y = y1 + max(28, min(int(ch*.095), int(h*.17)))
         xs = [x0 + w*f for f in (.05, .118, .186, .254, .322)]
@@ -99,17 +107,18 @@ def _nearest_index(sizes, brush_px):
 
 
 def _automatic_guard_px(sizes, requested, effective):
-    """Reserve enough CanvasGuard inset for one safe automatic upshift.
-
-    Auto Brush may choose a broader verified preset for large flat image regions,
-    but it may never jump to an arbitrary large game brush. The guard is capped
-    at about 2x the requested/effective brush and always resolves to a real
-    detected preset.
-    """
+    """Reserve enough CanvasGuard inset for one safe automatic upshift."""
     base=max(1,int(effective));requested=max(1,int(requested))
     cap=max(base,requested*2)
     allowed=[int(v) for v in sizes if int(v)<=cap]
     return max(allowed) if allowed else base
+
+
+def _requested_index(key, sizes, requested):
+    if key in GARTIC_PROFILES:
+        level=max(1,min(5,int(requested)))
+        return level-1, level
+    return _nearest_index(sizes,requested), int(requested)
 
 
 @dataclass(frozen=True)
@@ -130,9 +139,19 @@ class BrowserBrushPlan:
         controls_verified=(bool(self.target_position) and float(self.confidence)>=.58 and
                            len(self.control_positions)==len(self.nominal_sizes) and len(self.nominal_sizes)>1)
         verified_sizes=list(map(int,self.nominal_sizes)) if controls_verified else []
+        is_gartic=self.profile_key in GARTIC_PROFILES
+        levels=list(GARTIC_LEVELS) if is_gartic else []
+        effective_index=None
+        try:effective_index=list(map(int,self.nominal_sizes)).index(int(self.effective_px))
+        except (ValueError,TypeError):pass
+        effective_level=(effective_index+1) if is_gartic and effective_index is not None else None
+        requested_level=max(1,min(5,int(self.requested_px))) if is_gartic else None
         return {
             'profile_key':self.profile_key,'control_positions':[list(p) for p in self.control_positions],
             'nominal_sizes':list(self.nominal_sizes),'verified_sizes':verified_sizes,
+            'nominal_levels':levels,'verified_levels':levels if controls_verified and is_gartic else [],
+            'requested_level':requested_level,'effective_level':effective_level,
+            'requested_physical_px':int(self.nominal_sizes[self.target_index]) if self.nominal_sizes else int(self.requested_px),
             'dynamic_guard':bool(verified_sizes),'target_index':int(self.target_index),
             'selected_index':self.selected_index,'confidence':float(self.confidence),
             'target_position':list(self.target_position) if self.target_position else None,
@@ -146,7 +165,7 @@ def plan_browser_brush_size(profile_key, screenshot, client_rect, *, canvas_box=
     if key not in SUPPORTED:
         return BrowserBrushPlan(key,(),(),0,None,0.0,None,requested,requested,max(requested,4),'unsupported profile')
     policy=POLICIES[key];sizes=tuple(policy['sizes']);positions=tuple(_candidate_positions(key,client_rect,canvas_box,palette_box))
-    target=_nearest_index(sizes,requested);safe_index=int(policy['safe_index'])
+    target,requested=_requested_index(key,sizes,requested);safe_index=int(policy['safe_index'])
     if len(positions)!=len(sizes):
         safe=int(sizes[safe_index])
         return BrowserBrushPlan(key,positions,sizes,target,None,0.0,None,requested,safe,max(safe,12),'control geometry unavailable; safe fallback')
@@ -167,13 +186,17 @@ def plan_browser_brush_size(profile_key, screenshot, client_rect, *, canvas_box=
         if cx0-4 <= tx <= cx1+4 and cy0-4 <= ty <= cy1+4:
             target_position=None;confidence=min(confidence,.40)
     effective=int(sizes[target]) if target_position is not None else int(sizes[safe_index])
+    physical_requested=int(sizes[target])
     safe_guard=(
-        _automatic_guard_px(sizes,requested,effective)
+        _automatic_guard_px(sizes,physical_requested,effective)
         if target_position is not None
         else max(effective,12)
     )
-    return BrowserBrushPlan(key,positions,sizes,target,selected,confidence,target_position,requested,effective,safe_guard,
-                            'verified profile-relative brush controls' if target_position else 'visual confidence low; safe fallback')
+    method=('verified Gartic brush level 1-5 with calibrated physical footprint'
+            if target_position and key in GARTIC_PROFILES else
+            'verified profile-relative brush controls' if target_position else
+            'visual confidence low; safe fallback')
+    return BrowserBrushPlan(key,positions,sizes,target,selected,confidence,target_position,requested,effective,safe_guard,method)
 
 
 def capture_control_patch(position, radius=18):
