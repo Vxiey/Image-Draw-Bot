@@ -1,0 +1,67 @@
+name: Prepare Image Draw Bot v1.0.146-rc2
+
+on:
+  push:
+    branches:
+      - 'release/v1.0.146-rc2'
+    paths:
+      - '.github/prepare-v10146-rc2-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Prepare rc2 metadata and active version regressions
+        run: python .github/scripts/prepare_v10146_rc2.py
+
+      - name: Source package hygiene
+        run: python ReleasePackage.py --check
+
+      - name: Focused rc2 regressions
+        run: >-
+          python -m unittest -v
+          test_v10146_rc2_release_rollup.py
+          test_rc28_background_removal.py
+          test_extra_fast_v105.py
+          test_extra_fast_region_quality_rc24.py
+          test_rc28_drawing_style_profiles.py
+          test_draw_time_estimate_v10110.py
+
+      - name: Full portable regression suite
+        run: python -m unittest discover -v
+
+      - name: Image Draw Bot self-test
+        run: python DrawBot.py --self-test
+
+      - name: Commit prepared rc2
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No rc2 changes to commit.'
+            exit 1
+          fi
+          git commit -m 'Prepare Image Draw Bot v1.0.146-rc2'
+          git push origin HEAD:release/v1.0.146-rc2
