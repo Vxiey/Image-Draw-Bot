@@ -59,7 +59,7 @@ class GarticLayout1066Tests(unittest.TestCase):
         self.assertEqual(len(rows),72)
 
     def test_current_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(APP_VERSION,'1.0.146-rc2')
         self.assertEqual(FILE_VERSION,'1.0.146')
 
 

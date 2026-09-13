@@ -1,3 +1,11 @@
+# Image Draw Bot v1.0.146-rc2 — Background Removal & Recognition-First Extra Fast
+
+- Promote the classical non-AI background-removal hardening merged after rc1.
+- Promote target-profile + Drawing Style aware Extra Fast planning so recognition and region structure win over generic line soup.
+- Preserve the final-execution-sequence ETA model and measured local timing calibration.
+- Correct the installer numeric version resource to 1.0.146.0 and synchronize active version regressions.
+- Keep the complete Windows release gate authoritative before publication.
+
 # Image Draw Bot v1.0.146-rc1 — Release Build Recovery
 
 - New RC line based on 1.0.145-rc29.

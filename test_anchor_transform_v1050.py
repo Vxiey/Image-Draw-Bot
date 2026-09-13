@@ -45,7 +45,7 @@ def anchor_options():
 
 class AnchorTransformV1050Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(APP_VERSION,'1.0.146-rc2')
         self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_rebase_translation_uses_anchor_evidence(self):

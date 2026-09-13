@@ -13,7 +13,7 @@ from Version import APP_VERSION, FILE_VERSION
 
 class DeadlineRuntimeOptimizerV10119Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(APP_VERSION,'1.0.146-rc2')
         self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_legacy_60_gets_real_reserve_by_default(self):

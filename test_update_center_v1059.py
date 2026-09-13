@@ -17,7 +17,7 @@ class _Response:
 
 class UpdateCenterTests(unittest.TestCase):
     def test_version_metadata(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(APP_VERSION,'1.0.146-rc2')
         self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_version_parser_orders_beta_and_stable(self):

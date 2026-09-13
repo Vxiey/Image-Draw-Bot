@@ -44,7 +44,7 @@ class ExtraFastRegionQualityRc24Tests(unittest.TestCase):
         self.assertIn("'target_skipped_paths':0",source)
 
     def test_version_stays_rc24_for_hotfix_branch(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(APP_VERSION,'1.0.146-rc2')
 
 
 if __name__=='__main__':

@@ -11,7 +11,7 @@ from Version import APP_VERSION, FILE_VERSION
 
 class RuntimeSafetyReportV1057Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(APP_VERSION,'1.0.146-rc2')
         self.assertEqual(FILE_VERSION,'1.0.146')
 
     def test_counts_actual_edge_decisions(self):

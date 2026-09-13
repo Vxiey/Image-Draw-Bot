@@ -47,6 +47,6 @@ class Rc8DynamicReplannerTests(unittest.TestCase):
         self.assertIn('deadline_scheduler.replan_remaining(_tail)',src)
 
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc1')
+        self.assertEqual(APP_VERSION,'1.0.146-rc2')
 
 if __name__=='__main__':unittest.main()
