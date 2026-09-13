@@ -3835,7 +3835,6 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 _score=analysis_meta.get('drawing_accuracy_score_0_100')
                 _score_label='unavailable' if _score is None else f'{float(_score):.1f}/100'
                 log_event(f"Completed Drawing Analysis saved: accuracy={_score_label} efficiency={analysis_meta.get('efficiency_score_0_100')} recommendations={len(analysis_meta.get('recommendations') or ())} file={analysis_meta.get('latest_json_path')}.")
-                report('status',f"Completed Drawing Analysis: accuracy {_score_label} · {len(analysis_meta.get('recommendations') or ())} optimization suggestion(s) saved.")
             except Exception as analysis_error:
                 log_event(f'Completed Drawing Analysis save skipped: {analysis_error!r}')
         if (not dry_run) and (not plan['options'].get('correction_only_retry')) and speed_measure_completed and execution_measure_started is not None:
