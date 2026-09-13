@@ -215,9 +215,21 @@ def apply_extra_fast_profile_policy(options: dict[str, Any]) -> tuple[dict[str, 
     """
     out = dict(options or {})
     profile_name = str(out.get("profile_name") or "Other drawing app")
-    style = str(out.get("drawing_style_resolved") or out.get("drawing_style") or "Auto")
+    requested_style = str(out.get("drawing_style") or "Auto")
+    style = str(out.get("drawing_style_resolved") or requested_style or "Auto")
     target = _target_policy(profile_name)
     style_policy = _style_policy(style)
+
+    # Unknown/generic Auto callers historically keep adaptive_detail=Auto.  Do
+    # not turn the default metrics used by non-image tests/legacy callers into a
+    # fake Photo profile.  Real target profiles and explicit Drawing Style
+    # selections still get the strong binding below.
+    generic_auto = profile_name == "Other drawing app" and requested_style == "Auto"
+    if generic_auto:
+        style_policy = {
+            "engine_kind": "regional-hybrid",
+            "recognition_priority": "large safe regions and structure before optional detail",
+        }
 
     phase_priority = tuple(style_policy.get("phase_priority") or target.get("phase_priority") or
                            ("foundation", "structure", "detail", "correction"))
@@ -263,6 +275,7 @@ def apply_extra_fast_profile_policy(options: dict[str, Any]) -> tuple[dict[str, 
         "target_profile": profile_name,
         "target_policy": str(target.get("name") or "Generic recognition-first"),
         "drawing_style": style,
+        "drawing_style_requested": requested_style,
         "engine_kind": engine_kind,
         "engine": engine,
         "recognition_priority": str(style_policy.get("recognition_priority") or
