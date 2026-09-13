@@ -2,6 +2,7 @@
 import numpy as np
 from PIL import Image
 from DrawingStyleProfiles import apply_drawing_style
+from ExtraFastProfilePolicy import apply_extra_fast_profile_policy
 
 PRESETS=('Auto','Manual','Masterpiece','Extra fast')
 
@@ -23,27 +24,30 @@ def resolve_drawing(image,options):
     if preset=='Extra fast':
         if out.get('erase_mode'):
             raise ValueError('Extra fast needs Brush or Pencil, not Eraser.')
-        # Extra Fast 2.0 only changes geometry/execution policy.  It deliberately
-        # keeps the Step 1-6 color/fidelity settings supplied by the profile/UI
-        # instead of forcing the old RGB-nearest + fixed calibrated palette path.
-        # This means OKLab matching, dominant hue protection, region-aware color
-        # quantization and Adaptive/Time-aware Auto color counts remain available.
-        out.update(extra_fast=True,extra_fast_v2=True,profile_engine='Manual settings',
-            render_style='Standard / pixel',subject_focus='Off',draw_quality='High likeness',
+        # Extra Fast keeps the proven color pipeline but is no longer one global
+        # scanline preset.  Target profile + Drawing Style select the recognition
+        # policy that feeds Adaptive Region Hybrid / Pixel Accurate / contour
+        # planning.  Native-input safety and calibration remain outside this layer.
+        out.update(extra_fast=True,extra_fast_v2=True,
+            subject_focus='Off',draw_quality='High likeness',
             drawing_mode='Smart paths (recommended)',smart_paths=True,lines=True,
-            color_layers='Off',background_simplification='Off',
+            color_layers='Off',
             background_fill='Balanced' if out.get('fill_tool_available') else 'Off',
             fill_engine='Closed regions v2',human_mode='Off',stroke_optimizer='Smart merge + 2-opt')
         out.setdefault('color_rendering','Perceptual match')
         out.setdefault('color_fidelity','Faithful')
         out.setdefault('custom_color_workflow','Adaptive exact (recommended)' if out.get('exact_color_available') else 'Calibrated palette')
         out.setdefault('exact_color_limit','Auto')
-        out['adaptive_detail']='Auto'
-        engine='Extra Fast regional hybrid: Fill + verified multi-brush regions + structure/detail recovery' if out.get('fill_tool_available') else 'Extra Fast regional hybrid: verified multi-brush regions + structure/detail recovery (calibrate Fill to enable buckets)'
+        out,fast_strategy=apply_extra_fast_profile_policy(out)
+        engine=str(fast_strategy.get('engine') or 'Extra Fast regional hybrid')
         if out.get('paint_current_color') or out.get('outline'):
-            out.update(outline=True,sketch_detail='Simple',background_fill='Off')
-            engine='Simple black contours (single-colour mode)'
-        out['auto_drawing_meta']={'preset':preset,'image_kind':'palette drawing','engine':engine}
+            out.update(outline=True,sketch_detail=out.get('sketch_detail') or 'Simple',background_fill='Off')
+            if out.get('paint_current_color'):
+                engine='Simple black contours (single-colour mode)'
+        out['auto_drawing_meta']={
+            'preset':preset,'image_kind':out.get('drawing_style_resolved') or 'palette drawing',
+            'engine':engine,'recognition_first':True,'extra_fast_strategy':fast_strategy,
+        }
         return out
     rgba=image.convert('RGBA');flat=Image.new('RGBA',rgba.size,'white');flat.alpha_composite(rgba)
     flat.thumbnail((128,128));a=np.asarray(flat.convert('RGB'),dtype=np.int16)
