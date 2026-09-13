@@ -42,7 +42,7 @@ def base_plan():
 
 class CanvasPolygonV1048Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc28')
+        self.assertEqual(APP_VERSION,'1.0.145-rc29')
         self.assertEqual(FILE_VERSION,'1.0.145')
 
     def test_normalized_polygon_becomes_screen_polygon(self):

@@ -57,7 +57,7 @@ class Rc20PixelExecutionCostTests(unittest.TestCase):
         self.assertFalse(plan['metadata']['cost_aware'])
         self.assertEqual(plan['metadata']['cost_policy'],'legacy geometry scheduler')
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc28')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
 
 
 if __name__=='__main__':unittest.main()

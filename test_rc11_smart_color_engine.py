@@ -31,6 +31,6 @@ class Rc11SmartColorEngineTests(unittest.TestCase):
         self.assertAlmostEqual(meta['smart_color_switch_cost_seconds'],.12,places=5)
 
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc28')
+        self.assertEqual(APP_VERSION,'1.0.145-rc29')
 
 if __name__=='__main__':unittest.main()

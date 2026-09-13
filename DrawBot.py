@@ -111,7 +111,7 @@ from Version import APP_VERSION, BUILD_CHANNEL
 from VersionHistory import read_version_history
 from MobilePreview import MobilePreviewServer
 from CrashDiagnostics import (install as install_crash_diagnostics, begin_run_marker,
-                              log_event, previous_run_unclean, clean_exit)
+                              log_event, log_error, previous_run_unclean, clean_exit)
 
 install_crash_diagnostics()
 
@@ -3898,6 +3898,8 @@ class DrawBotApp:
         self.photos = []
         self.hotkeys = []
         self.preview_after = None
+        # Monotonic generation protects the UI from late preview worker results.
+        self.preview_generation = 0
         # Preview rendering has its own debounce job. Keeping this separate from
         # preview generation prevents Canvas <Configure> storms from recursively
         # re-entering Tk while widgets are still laying themselves out.
@@ -7364,8 +7366,8 @@ class DrawBotApp:
                     if _state is not None and getattr(_state,'state',None) not in ('COMPLETED','ABORTED'):
                         try:_state.transition('ABORTED',str(error))
                         except Exception:pass
-                import traceback
-                log_event(f'Worker {activity} failed after {time.monotonic()-started:.3f} s: {error!r}\n{traceback.format_exc()}')
+                log_error(f'Worker {activity} failed after {time.monotonic()-started:.3f} s: {error!r}',
+                          category=f'worker:{activity}', exc_info=True)
                 self.events.put(('status',f'Operation failed: {error}'))
             else:
                 log_event(f'Worker {activity} finished in {time.monotonic()-started:.3f} s.')
@@ -7374,10 +7376,11 @@ class DrawBotApp:
         self.worker=threading.Thread(target=work,daemon=True,name=f'imagedrawbot-{activity}')
         try:
             self.worker.start()
-        except Exception:
+        except Exception as error:
             self.worker=None
             self.set_busy(None)
             screen_window.restore()
+            log_error(f'Worker {activity} could not start: {error!r}', category='worker-start', exc_info=True)
             raise
         return True
 
@@ -7405,6 +7408,7 @@ class DrawBotApp:
 
     def _mark_plan_stale(self, message='Settings changed. Press Build preview or Start Drawing when ready.'):
         DrawBotApp._cancel_after_attr(self,'preview_after')
+        self.preview_generation=int(getattr(self,'preview_generation',0))+1
         self.needs_plan=False
         self.plan=None
         self.preview_dirty_reason=message
@@ -7527,6 +7531,8 @@ class DrawBotApp:
 
     def update_plan(self, user_initiated=False, reason='automatic',full_detail=False):
         self.preview_after=None
+        self.preview_generation=int(getattr(self,'preview_generation',0))+1
+        generation=self.preview_generation
         if self.activity:
             return
         if self.original is None:
@@ -7653,6 +7659,7 @@ class DrawBotApp:
             plan['preview_safe_pipeline']=not full_detail
             plan['full_detail_preview']=bool(full_detail)
             plan['preview_fallback_used']=bool(used_fallback)
+            plan['preview_generation']=generation
             log_event(f'Preview planning finished in {plan["preview_elapsed_seconds"]:.3f} s fallback={used_fallback}: {_plan_log_text(plan)}.')
             self.events.put(('planned',plan))
         # Historic v1.0.10 status string kept for release-test visibility: Planning optimized preview.
@@ -8819,6 +8826,7 @@ class DrawBotApp:
         DrawBotApp._close_smart_drop_overlay(self,'cancel/stop pressed')
         self.smart_drop_pending_payload=None
         self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
+        self.preview_generation=int(getattr(self,'preview_generation',0))+1
         mouse=getattr(self,'mouse',None)
         if hasattr(mouse,'disarm_input'):
             try:mouse.disarm_input()
@@ -9824,6 +9832,9 @@ class DrawBotApp:
         elif kind=='planned':
             if not isinstance(value,dict) or 'preview' not in value or 'count' not in value or 'estimate' not in value:
                 raise ValueError('The preview worker returned an invalid plan.')
+            if int(value.get('preview_generation',-1))!=int(getattr(self,'preview_generation',0)):
+                log_event(f"Ignored stale preview result generation={value.get('preview_generation')} current={getattr(self,'preview_generation',0)}.")
+                return
             self.plan=value
             self.preview_dirty_reason=''
             self._sync_mobile_preview()

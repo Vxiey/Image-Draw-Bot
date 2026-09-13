@@ -57,7 +57,7 @@ class Rc18UnifiedRegionFillCostTests(unittest.TestCase):
             {'speed':'Fast','brush_px':2,'fill_aggressiveness':'Balanced','fill_tool_available':True})
         self.assertEqual(meta['execution_cost_model'],'ExecutionCostModel stateful v2')
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc28')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
 
 
 if __name__=='__main__':unittest.main()

@@ -12,7 +12,7 @@ from Version import APP_VERSION, FILE_VERSION
 
 class SmartCanvasDropTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc28')
+        self.assertEqual(APP_VERSION,'1.0.145-rc29')
         self.assertEqual(FILE_VERSION,'1.0.145')
 
     def test_warning_is_explicitly_experimental_and_early_stage(self):

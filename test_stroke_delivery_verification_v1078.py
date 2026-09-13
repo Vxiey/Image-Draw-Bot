@@ -15,7 +15,7 @@ class InspectMouse:
 
 class StrokeDeliveryVerificationV1078Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc28');self.assertEqual(FILE_VERSION,'1.0.145')
+        self.assertEqual(APP_VERSION,'1.0.145-rc29');self.assertEqual(FILE_VERSION,'1.0.145')
 
     def test_browser_profiles_enabled_with_hard_one_retry_cap(self):
         for key in ('gartic-phone','skribbl','skribbl-fast','sketchheads','sketchful'):

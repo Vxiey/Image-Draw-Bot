@@ -8,7 +8,7 @@ from Version import APP_VERSION, FILE_VERSION
 
 class Rc2FieldLogFixTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.145-rc28')
+        self.assertEqual(APP_VERSION,'1.0.145-rc29')
         self.assertEqual(FILE_VERSION,'1.0.145')
 
     def test_conservative_bottom_outset_is_safe(self):

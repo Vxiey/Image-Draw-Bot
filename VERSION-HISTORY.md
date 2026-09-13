@@ -1,3 +1,12 @@
+# Image Draw Bot v1.0.145-rc29 — Stability & Planner Validation
+
+- Ignore stale preview plans with a monotonic preview generation ID so cancelled/settings-invalidated workers cannot overwrite a newer UI state.
+- Route all centralized background-worker exceptions into the consolidated debug error log while preserving normal session diagnostics.
+- Quality-gate local ETA learning: incomplete execution, untrusted final-canvas evidence, low accuracy and missing coverage cannot train future timing estimates.
+- Keep full-detail Preview on the real final planner geometry while retaining its bounded CPU-only preview resource policy.
+- Preserve existing Paint/browser pre-input target validation, CanvasGuard and auto-recalibration rather than duplicating a second safety system.
+- Remove rc27/rc28 one-off integration triggers/scripts/workflows before mainline release.
+
 # Image Draw Bot v1.0.145-rc28 — Background Remover & PNG Workflow
 
 - Add **Remove BG** beside image import. It converts only border-connected background pixels to transparent alpha instead of deleting same-colour details inside the subject.

@@ -38,7 +38,7 @@ class Rc19ExtraFastExecutionCostTests(unittest.TestCase):
         self.assertFalse(meta['downstream_plan_accepted'])
         self.assertEqual(meta['ordered_cost_after_seconds'],meta['ordered_cost_before_seconds'])
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc28')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
 
 
 if __name__=='__main__':unittest.main()

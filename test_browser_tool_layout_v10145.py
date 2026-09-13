@@ -14,7 +14,7 @@ class BrowserToolLayoutV10145Tests(unittest.TestCase):
         for x,y in points.values():draw.ellipse((x-12,y-12,x+12,y+12),fill=(28,28,28))
         return image,client,canvas
     def test_version(self):
-        self.assertEqual((APP_VERSION,FILE_VERSION),('1.0.145-rc28','1.0.145'))
+        self.assertEqual((APP_VERSION,FILE_VERSION),('1.0.145-rc29','1.0.145'))
     def test_gartic_phone_tools(self):
         image,client,canvas=self.mock();plan=plan_browser_tools('gartic-phone',image,client,canvas_box=canvas)
         self.assertGreaterEqual(plan.confidence,.58);self.assertEqual(set(plan.tools),{'Brush','Fill','Eraser','Clear'})

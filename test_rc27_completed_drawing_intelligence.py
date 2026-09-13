@@ -8,7 +8,7 @@ from BrowserBrushSize import plan_browser_brush_size
 from Version import APP_VERSION
 
 class Rc27Tests(unittest.TestCase):
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc28')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.145-rc29')
     def test_gartic_auto_brush_never_exceeds_level_five(self):
         im=Image.new('RGB',(3000,1800),'white')
         self.assertLessEqual(resolve_brush_width(im,target_size=im.size,profile_key='gartic-phone',render_preset='Extra fast').brush_px,5)
