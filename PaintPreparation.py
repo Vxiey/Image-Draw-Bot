@@ -1,10 +1,10 @@
 """Paint preparation via Windows UI Automation; no canvas input or document clearing."""
 from __future__ import annotations
-import base64
 import json
 import os
 import re
 import subprocess
+import tempfile
 import time
 
 # Kept inline so frozen builds need no PowerShell resource or Python COM package.
@@ -115,14 +115,17 @@ _CUSTOM_COLOR_NAMES = (
 )
 
 
-def automation(handle, *, element=None, action=None, size_px=1, cancelled=lambda:False):
-    if os.name!='nt':raise OSError('Automatic Paint preparation requires Windows.')
-    if cancelled():raise InterruptedError('Paint preparation cancelled.')
+def _powershell_json_literal(value):
+    """Keep control names as data, including quotes and localized Unicode text."""
+    payload=json.dumps(value,ensure_ascii=True)
+    return "'"+payload.replace("'","''")+"'"
+
+
+def _automation_script(handle, *, element=None, action=None, size_px=1):
     command=''
     if element is not None:
         # Re-resolve by identity and rectangle; never trust an old tree index.
-        payload=base64.b64encode(json.dumps(element).encode()).decode()
-        command=f"$wanted=([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}')) | ConvertFrom-Json)\n"
+        command=f"$wanted=ConvertFrom-Json -InputObject {_powershell_json_literal(element)}\n"
         command+=r'''
 $matches=@($rows | Where-Object { $_.name -eq $wanted.name -and $_.kind -eq $wanted.kind -and (($_.rect -join ',') -eq ($wanted.rect -join ',')) })
 if($matches.Count -ne 1){throw 'Paint controls moved or are ambiguous. Retry preparation.'}
@@ -141,22 +144,48 @@ $p.SetValue($targetSize)
 if([Math]::Abs($p.Current.Value-$targetSize) -gt 0.001){throw ('Paint did not accept '+$targetSize+' px.')}
 '''
         else:raise ValueError('Unsupported Paint control action.')
-    script=_SCRIPT.replace('HANDLE',str(int(handle))).replace('ACTION',command)
-    encoded=base64.b64encode(script.encode('utf-16-le')).decode()
+    return _SCRIPT.replace('HANDLE',str(int(handle))).replace('ACTION',command)
+
+
+def _run_powershell(script, *, action=None, cancelled=lambda:False):
+    """Run our readable inline script with the same bounded UIA subprocess."""
+    if cancelled():raise InterruptedError('Paint preparation cancelled.')
+    # -Command - parses stdin one statement at a time. A single block keeps the
+    # UIA scan/action together, including the multiline C# helper. The final blank
+    # line completes that block. JSON's ASCII escapes avoid console-codepage loss.
+    source=("& {\n$ErrorActionPreference='Stop'\n"
+            "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false)\n"
+            "try {\n"+script+"\n} catch {\n"
+            "[Console]::Error.WriteLine($_.ToString())\nexit 1\n}\n}\n\n")
+    source=source.encode('ascii')
     executable=os.path.join(os.environ.get('SystemRoot',r'C:\Windows'),'System32','WindowsPowerShell','v1.0','powershell.exe')
-    process=subprocess.Popen([executable,'-NoProfile','-NonInteractive','-EncodedCommand',encoded],stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-    deadline=time.monotonic()+12
-    try:
-        while True:
-            if cancelled():raise InterruptedError('Paint preparation cancelled.')
-            if time.monotonic()>deadline:raise TimeoutError('Paint controls did not respond during '+(action or 'control scan')+'. Keep Paint visible; if Edit colors is open, leave it in RGB mode and retry calibration.')
-            try:out,err=process.communicate(timeout=.1);break
-            except subprocess.TimeoutExpired:pass
-        if process.returncode:raise ValueError(err.decode('utf-8',errors='replace').strip()[-1200:])
-        data=json.loads(out.decode('utf-8-sig'))
-        return data if isinstance(data,list) else [data]
-    finally:
-        if process.poll() is None:process.kill();process.communicate()
+    # A regular input file avoids communicate(input=...) blocking synchronously
+    # on Windows when a child stops reading its stdin pipe. No script is added to
+    # the command line, downloaded, or kept after this operation finishes.
+    with tempfile.TemporaryFile() as script_input:
+        script_input.write(source)
+        script_input.seek(0)
+        process=subprocess.Popen([executable,'-NoProfile','-NonInteractive','-Command','-'],stdin=script_input,stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        deadline=time.monotonic()+12
+        try:
+            while True:
+                if cancelled():raise InterruptedError('Paint preparation cancelled.')
+                if time.monotonic()>deadline:raise TimeoutError('Paint controls did not respond during '+(action or 'control scan')+'. Keep Paint visible; if Edit colors is open, leave it in RGB mode and retry calibration.')
+                try:out,err=process.communicate(timeout=.1);break
+                except subprocess.TimeoutExpired:pass
+            if process.returncode:raise ValueError(err.decode('utf-8',errors='replace').strip()[-1200:])
+            return out
+        finally:
+            if process.poll() is None:process.kill();process.communicate()
+
+
+def automation(handle, *, element=None, action=None, size_px=1, cancelled=lambda:False):
+    if os.name!='nt':raise OSError('Automatic Paint preparation requires Windows.')
+    if cancelled():raise InterruptedError('Paint preparation cancelled.')
+    script=_automation_script(handle,element=element,action=action,size_px=size_px)
+    out=_run_powershell(script,action=action,cancelled=cancelled)
+    data=json.loads(out.decode('utf-8-sig'))
+    return data if isinstance(data,list) else [data]
 
 
 def _normalized_name(node):

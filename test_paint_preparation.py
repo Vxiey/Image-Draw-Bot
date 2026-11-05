@@ -252,27 +252,26 @@ class PaintPreparationTests(unittest.TestCase):
 class WindowsScriptSyntaxTests(unittest.TestCase):
     @unittest.skipUnless(__import__('os').name=='nt','Windows modal invocation regression')
     def test_modal_helper_bounds_wait_and_propagates_completed_errors(self):
-        import base64, os, subprocess
-        from PaintPreparation import _INVOKE_HELPER
+        from PaintPreparation import _INVOKE_HELPER, _run_powershell
         helper=_INVOKE_HELPER.replace('    public static void Invoke',
             '    public static bool Probe() { return Run(() => Thread.Sleep(5000), 100); }\n'
             '    public static void ErrorProbe() { Run(() => { throw new Exception("probe"); }, 1000); }\n'
             '    public static void Invoke',1)
         script="Add-Type -AssemblyName UIAutomationClient; Add-Type -AssemblyName UIAutomationTypes; $ErrorActionPreference='Stop';\n"+helper
         script+="\n$watch=[Diagnostics.Stopwatch]::StartNew(); if([PaintModalAction]::Probe()){throw 'Blocking action unexpectedly completed'}; if($watch.ElapsedMilliseconds -gt 3000){throw 'Modal action blocked caller'}; $failed=$false; try{[PaintModalAction]::ErrorProbe()}catch{$failed=$true}; if(!$failed){throw 'Provider exception was swallowed'}"
-        path=os.path.join(os.environ['SystemRoot'],'System32','WindowsPowerShell','v1.0','powershell.exe')
-        result=subprocess.run([path,'-NoProfile','-NonInteractive','-EncodedCommand',base64.b64encode(script.encode('utf-16-le')).decode()],capture_output=True,timeout=30)
-        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+        _run_powershell(script)
 
     @unittest.skipUnless(__import__('os').name=='nt','Windows PowerShell parser')
     def test_embedded_script_parses_without_running_paint(self):
-        import base64,os,subprocess
-        from PaintPreparation import _SCRIPT
-        source=_SCRIPT.replace('HANDLE','42').replace('ACTION',_INVOKE_ACTION)
-        payload=base64.b64encode(source.encode('utf-8')).decode()
-        script="$s=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+payload+"'));$tokens=$null;$errors=$null;[void][System.Management.Automation.Language.Parser]::ParseInput($s,[ref]$tokens,[ref]$errors);if($errors.Count){throw ($errors | Out-String)}"
-        path=os.path.join(os.environ['SystemRoot'],'System32','WindowsPowerShell','v1.0','powershell.exe')
-        result=subprocess.run([path,'-NoProfile','-NonInteractive','-EncodedCommand',base64.b64encode(script.encode('utf-16-le')).decode()],capture_output=True,timeout=20)
-        self.assertEqual(result.returncode,0,result.stderr)
+        import json
+        from PaintPreparation import _automation_script, _powershell_json_literal, _run_powershell
+        element=node("Redigera färger'); throw 'label must remain data'; #")
+        sources=[_automation_script(42),
+                 _automation_script(42,element=element,action='invoke'),
+                 _automation_script(42,element=element,action='size',size_px=1)]
+        script="$sources=(ConvertFrom-Json -InputObject "+_powershell_json_literal({'scripts':sources})+").scripts\n"
+        script+="foreach($s in $sources){$tokens=$null;$errors=$null;[void][System.Management.Automation.Language.Parser]::ParseInput($s,[ref]$tokens,[ref]$errors);if($errors.Count){throw ($errors | Out-String)}}\n"
+        script+="ConvertTo-Json -InputObject @{parsed=$sources.Count} -Compress"
+        self.assertEqual(json.loads(_run_powershell(script).decode('utf-8-sig')),{'parsed':3})
 
 if __name__=='__main__':unittest.main()

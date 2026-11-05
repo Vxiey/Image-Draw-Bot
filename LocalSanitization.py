@@ -8,17 +8,53 @@ from pathlib import Path
 import re
 
 
+# Apostrophes are valid in prepared URL paths and query values. A quote must
+# not terminate matching early and leave the remainder of a signed link intact.
+_URL_RE = re.compile(r'''(?i)\bhttps?://[^\s<>"]+''')
+_RELATIVE_URL_RE = re.compile(r'''(?i)(\burl["']?\s*[:=]\s*["']?)(/[^\s<>"]+)''')
+_AUTHORIZATION_RE = re.compile(
+    r'''(?i)((?:proxy-)?authorization["']?\s*[:=]\s*["']?(?:bearer|basic)\s+)[^\s"',;}\]]+'''
+)
+_CREDENTIAL_RE = re.compile(
+    r'''(?i)((?:api[_-]?key|token|password|passwd|secret)["']?\s*[:=]\s*)'''
+    r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)'''
+)
+
+
+def _redact_url_value(original):
+    # Keep error-message punctuation without retaining any query/fragment data.
+    url = original.rstrip(".,;)]}'")
+    suffix = original[len(url):]
+    url = re.sub(r'(?i)(https?://)[^/?#]*@', r'\1<redacted>@', url)
+    # Signed links can use arbitrary parameter names. Preserve the host/path
+    # needed for debugging, but never export query values or fragment tokens.
+    url = re.sub(r'([?#]).*', r'\1<redacted>', url, count=1)
+    return url + suffix
+
+
+def _redact_credential(match):
+    value = match.group(2)
+    quote = value[0] if value[:1] in ('"', "'") and value[-1:] == value[:1] else ''
+    return match.group(1) + quote + '<redacted>' + quote
+
+
 def sanitize_text(text: str) -> str:
-    text = str(text)
+    # Redact URLs before inserting home-path placeholders: '<USER_HOME>' would
+    # otherwise terminate URL matching before a following signed query string.
+    text = _URL_RE.sub(lambda match: _redact_url_value(match.group(0)), str(text))
+    # urllib3 connection failures often include only the relative request target,
+    # e.g. "Max retries exceeded with url: /image.png?signature=...".
+    text = _RELATIVE_URL_RE.sub(
+        lambda match: match.group(1) + _redact_url_value(match.group(2)), text
+    )
     home = str(Path.home())
     if home:
         text = text.replace(home, "<USER_HOME>")
         text = text.replace(home.replace("\\", "/"), "<USER_HOME>")
     text = re.sub(r"(?i)C:\\Users\\[^\\\r\n]+", r"C:\\Users\\<user>", text)
     text = re.sub(r"(?i)C:/Users/[^/\r\n]+", r"C:/Users/<user>", text)
-    text = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s]+", r"\1<redacted>", text)
-    text = re.sub(r"(?i)(api[_-]?key\s*[:=]\s*)[^\s,;]+", r"\1<redacted>", text)
-    text = re.sub(r"(?i)(token\s*[:=]\s*)[^\s,;]+", r"\1<redacted>", text)
+    text = _AUTHORIZATION_RE.sub(r'\1<redacted>', text)
+    text = _CREDENTIAL_RE.sub(_redact_credential, text)
     return text
 
 

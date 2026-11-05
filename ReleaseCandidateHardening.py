@@ -247,6 +247,17 @@ def run_source_release_gate(root: Path, *, app_version: str | None = None,
 def _forbidden_archive_name(name: str) -> bool:
     lowered = name.lower().replace("\\", "/")
     base = lowered.rsplit("/", 1)[-1]
+    # Documentation used to recursively include obsolete source releases.
+    # Reject both the old flattened and the corrected docs/ runtime layout.
+    if "/history/archives/" in lowered:
+        return True
+    # Windows releases are x64. The upstream TkinterDnD2 hook selects the
+    # matching native extension; collecting the entire package defeats it.
+    tkdnd_marker = "/tkinterdnd2/tkdnd/"
+    if tkdnd_marker in lowered:
+        platform_dir = lowered.split(tkdnd_marker, 1)[1].split("/", 1)[0]
+        if platform_dir not in {"win-x64", "win-x64-tcl9"}:
+            return True
     if lowered.endswith(FORBIDDEN_ARCHIVE_SUFFIXES):
         return True
     if "/__pycache__/" in lowered or "/.git/" in lowered or "/safety-reports/" in lowered:

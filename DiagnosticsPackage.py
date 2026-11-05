@@ -72,17 +72,35 @@ def _technical_info(context=None):
 
 
 def _read_text(path: Path, limit=MAX_LOG_CHARS):
+    if limit <= 0:
+        return ''
+    omitted = False
     try:
         with path.open('rb') as stream:
             stream.seek(0,2)
             length=stream.tell()
-            stream.seek(max(0,length-limit*4))
-            text=stream.read(limit*4).decode('utf-8',errors='replace')
+            start=max(0,length-limit*4)
+            if start:
+                omitted = True
+                stream.seek(start-1)
+                at_line_start=stream.read(1)==b'\n'
+            else:
+                stream.seek(0)
+                at_line_start=True
+            data=stream.read(limit*4)
+            if not at_line_start:
+                # A cut URL/header can leave an unrecognizable secret tail.
+                # Discard the partial line within the already bounded buffer;
+                # if it has no newline, none of that line is safe to export.
+                newline=data.find(b'\n')
+                data=data[newline+1:] if newline>=0 else b''
     except OSError:
         return None
+    text=sanitize_text(data.decode('utf-8',errors='replace'))
     if len(text)>limit:
-        text='[older content omitted]\n'+text[-limit:]
-    return sanitize_text(text)
+        omitted=True
+        text=text[-limit:]
+    return ('[older content omitted]\n' if omitted else '')+text
 
 
 def _settings_summary():

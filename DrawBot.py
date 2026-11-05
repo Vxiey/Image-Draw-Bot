@@ -8858,14 +8858,18 @@ class DrawBotApp:
 
     def launch_diagnostic_tool(self,filename,message):
         if self.activity:return
-        import subprocess
+        import os,sys
         try:
+            if sys.platform!='win32' or not hasattr(os,'startfile'):
+                raise OSError('Diagnostic tools require Windows.')
             from RuntimePaths import resource_path
             path=resource_path(filename)
-            if not path.exists():raise OSError(f'{filename} is missing.')
-            subprocess.Popen(['cmd','/c','start','',str(path)],cwd=path.parent)
+            if not path.is_file():raise OSError(f'{filename} is missing.')
+            # Give Windows a literal file path. Building a CMD /c start command
+            # interprets metacharacters such as & in otherwise valid directories.
+            os.startfile(str(path),'open',cwd=str(path.parent))
             self.status.set(message)
-        except OSError as error:
+        except (OSError,NotImplementedError) as error:
             self.status.set(f'Could not start {filename}: {error}')
 
     def _diagnostics_context(self):

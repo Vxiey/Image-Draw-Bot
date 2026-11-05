@@ -90,3 +90,14 @@ jobs:
       - name: Run Image Draw Bot Windows self-test
         if: runner.os == 'Windows'
         run: python DrawBot.py --self-test
+
+      - name: Build and validate the Windows bundle
+        if: runner.os == 'Windows'
+        run: python build_release.py --skip-tests
+
+      - name: Verify packaged GUI and native drag and drop
+        if: runner.os == 'Windows'
+        run: >-
+          python -c "import subprocess; subprocess.run(
+          ['dist/ImageDrawBot/ImageDrawBot.exe', '--smoke-test'],
+          check=True, timeout=90)"
