@@ -247,6 +247,17 @@ def run_source_release_gate(root: Path, *, app_version: str | None = None,
 def _forbidden_archive_name(name: str) -> bool:
     lowered = name.lower().replace("\\", "/")
     base = lowered.rsplit("/", 1)[-1]
+    # Documentation used to recursively include obsolete source releases.
+    # Reject both the old flattened and the corrected docs/ runtime layout.
+    if "/history/archives/" in lowered:
+        return True
+    # Windows releases are x64. The upstream TkinterDnD2 hook selects the
+    # matching native extension; collecting the entire package defeats it.
+    tkdnd_marker = "/tkinterdnd2/tkdnd/"
+    if tkdnd_marker in lowered:
+        platform_dir = lowered.split(tkdnd_marker, 1)[1].split("/", 1)[0]
+        if platform_dir not in {"win-x64", "win-x64-tcl9"}:
+            return True
     if lowered.endswith(FORBIDDEN_ARCHIVE_SUFFIXES):
         return True
     if "/__pycache__/" in lowered or "/.git/" in lowered or "/safety-reports/" in lowered:
@@ -355,11 +366,14 @@ def validate_manifest(path: Path, *, app_version: str, expected_files: Iterable[
 
 
 def validate_windows_release(release_dir: Path, *, app_version: str | None = None,
-                             require_installer: bool = True) -> dict:
+                             require_installer: bool = True, gpu: bool = False) -> dict:
+    if gpu and require_installer:
+        raise ReleaseGateError("CUDA releases are ZIP-only and cannot require an installer.")
     from Version import APP_VERSION, FILE_VERSION, BUILD_CHANNEL
     app_version = APP_VERSION if app_version is None else str(app_version)
     release = Path(release_dir)
-    zip_path = release / f"ImageDrawBot-{app_version}-Windows-x64.zip"
+    suffix = "-CUDA" if gpu else ""
+    zip_path = release / f"ImageDrawBot-{app_version}-Windows-x64{suffix}.zip"
     setup_path = release / f"ImageDrawBot-{app_version}-Windows-x64-Setup.exe"
     checksum_path = release / f"ImageDrawBot-{app_version}-SHA256.txt"
     manifest_path = release / f"ImageDrawBot-{app_version}-manifest.json"
@@ -380,13 +394,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Image Draw Bot release-candidate gates")
     parser.add_argument("--source-gate", action="store_true")
     parser.add_argument("--release-dir")
+    parser.add_argument("--gpu", action="store_true", help="Validate the optional CUDA ZIP release instead of the standard installer release")
     parser.add_argument("--soak-cycles", type=int, default=DEFAULT_SOAK_CYCLES)
     args = parser.parse_args(argv)
+    if args.gpu and not args.release_dir:
+        parser.error("--gpu requires --release-dir")
     if args.source_gate:
         report = run_source_release_gate(Path(__file__).resolve().parent, soak_cycles=args.soak_cycles)
         print(json.dumps(report.as_dict(), indent=2, sort_keys=True))
     if args.release_dir:
-        print(json.dumps(validate_windows_release(Path(args.release_dir)), indent=2, sort_keys=True))
+        print(json.dumps(validate_windows_release(Path(args.release_dir),require_installer=not args.gpu,gpu=args.gpu), indent=2, sort_keys=True))
     if not args.source_gate and not args.release_dir:
         parser.error("choose --source-gate and/or --release-dir")
     return 0

@@ -5,9 +5,25 @@ Usage:
     py -3 build_exe.py --onefile  # optional single-file build
 """
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tempfile
 from Version import APP_VERSION, FILE_VERSION
+
+
+def documentation_data(base: Path) -> list[tuple[Path, str]]:
+    """Keep bundled help under docs without shipping historical source archives."""
+    base = Path(base)
+    docs = base / 'docs'
+    data = []
+    for source in sorted(docs.rglob('*')):
+        relative = source.relative_to(docs)
+        if relative.parts[:2] == ('history', 'archives'):
+            continue
+        if source.is_file() and not source.is_symlink():
+            data.append((source, source.parent.relative_to(base).as_posix()))
+    return data
 
 
 def main():
@@ -195,7 +211,10 @@ def main():
         '--hidden-import', 'LayoutFingerprintV2',
         '--hidden-import', 'RealSpeedBudget',
         '--hidden-import', 'qrcode',
-        '--collect-all', 'tkinterdnd2',
+        # The supported PyInstaller hook collects only the runtime architecture's
+        # TkDnD library and Tcl files. collect-all would re-add foreign binaries.
+        '--hidden-import', 'tkinterdnd2',
+        '--copy-metadata', 'tkinterdnd2',
         '--collect-all', 'customtkinter',
         '--collect-all', 'pyopencl',
         '--hidden-import', 'keyboard',
@@ -251,7 +270,7 @@ def main():
         'RELEASE-NOTES-v1.0.118-beta.md', 'RELEASE-NOTES-v1.0.117-beta.md', 'WORKSPACE-v1.0.92.md',
         'RELEASE-NOTES-v1.0.89-beta.md', 'RELEASE-NOTES-v1.0.88-beta.md', 'RELEASE-NOTES-v1.0.87-beta.md',
         'RELEASE-NOTES-v1.0.86-beta.md', 'RELEASE-NOTES-v1.0.85-rc1.md', 'RELEASE-NOTES-v1.0.83-rc3.md',
-        'docs', 'requirements-gpu-nvidia.txt', 'Install-GPU-NVIDIA.bat', 'requirements-gpu-universal.txt',
+        'requirements-gpu-nvidia.txt', 'Install-GPU-NVIDIA.bat', 'requirements-gpu-universal.txt',
         'Install-GPU-Universal.bat', 'STEP-22-UNIVERSAL-HARDWARE-AUTO-BENCHMARK.md',
         'RELEASE-NOTES-Step22-Universal-Hardware-Auto-Benchmark.md', 'STEP-24-ADAPTIVE-DETAIL-ZOOM.md',
         'STEP-25-QUICK-SKETCH-FILL-CONTOUR.md', 'STEP-29-HYBRID-RENDERER-3.md',
@@ -263,8 +282,20 @@ def main():
         if source.exists():
             command.extend(['--add-data', str(source) + ';.'])
 
-    command.append(str(base / 'DrawBot.py'))
-    subprocess.run(command, cwd=base, check=True)
+    # Stage filtered help as one tree: per-file arguments can exceed Windows'
+    # command-line limit in a long checkout path. The docs destination also
+    # avoids flattening help files over the application's root README/history.
+    with tempfile.TemporaryDirectory(prefix='ImageDrawBot-help-') as staging:
+        staging_root = Path(staging)
+        for source, destination in documentation_data(base):
+            target = staging_root / destination / source.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        docs = staging_root / 'docs'
+        if docs.is_dir():
+            command.extend(['--add-data', str(docs) + ';docs'])
+        command.append(str(base / 'DrawBot.py'))
+        subprocess.run(command, cwd=base, check=True)
 
     output = base / 'dist' / ('ImageDrawBot.exe' if onefile else 'ImageDrawBot/ImageDrawBot.exe')
     if not output.is_file() or output.read_bytes()[:2] != b'MZ':

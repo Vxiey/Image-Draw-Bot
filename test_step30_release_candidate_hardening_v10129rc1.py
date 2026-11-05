@@ -134,6 +134,38 @@ class Step30ReleaseCandidateHardeningTests(unittest.TestCase):
             self.assertEqual(result['integrity'],'PASS')
             self.assertEqual(result['entries'],2)
 
+    def test_windows_zip_rejects_archived_source_and_unused_native_extensions(self):
+        paths = (
+            'ImageDrawBot/_internal/history/archives/legacy-source-1.0.58-beta.zip',
+            'ImageDrawBot/_internal/docs/history/archives/legacy-source-1.0.61-beta.zip',
+            'ImageDrawBot/_internal/tkinterdnd2/tkdnd/win-x86/libtkdnd2.9.5.dll',
+            'ImageDrawBot/_internal/tkinterdnd2/tkdnd/win-arm64/pkgIndex.tcl',
+            'ImageDrawBot/_internal/tkinterdnd2/tkdnd/linux-x64/libtkdnd.so',
+            'ImageDrawBot/_internal/tkinterdnd2/tkdnd/osx-arm64/libtkdnd.dylib',
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'bundle.zip'
+            for leaked_path in paths:
+                with self.subTest(path=leaked_path):
+                    with zipfile.ZipFile(path, 'w') as archive:
+                        archive.writestr('ImageDrawBot/ImageDrawBot.exe', b'MZfixture')
+                        archive.writestr(leaked_path, b'unused fixture')
+                    with self.assertRaisesRegex(ReleaseGateError, 'leaked into Windows ZIP'):
+                        validate_windows_zip(path)
+
+    def test_windows_zip_keeps_help_and_required_x64_drag_and_drop_resources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'bundle.zip'
+            with zipfile.ZipFile(path, 'w') as archive:
+                archive.writestr('ImageDrawBot/ImageDrawBot.exe', b'MZfixture')
+                archive.writestr('ImageDrawBot/_internal/docs/history/README.md', 'History')
+                archive.writestr('ImageDrawBot/_internal/docs/PAINT-AUTOMATIC-PREPARATION.md', 'Help')
+                for platform_dir in ('win-x64', 'win-x64-tcl9'):
+                    prefix = f'ImageDrawBot/_internal/tkinterdnd2/tkdnd/{platform_dir}/'
+                    archive.writestr(prefix + 'pkgIndex.tcl', 'package ifneeded tkdnd')
+                    archive.writestr(prefix + 'libtkdnd.dll', b'MZfixture')
+            self.assertEqual(validate_windows_zip(path)['integrity'], 'PASS')
+
     def test_checksum_verification_detects_tampering(self):
         import hashlib
         with tempfile.TemporaryDirectory() as tmp:

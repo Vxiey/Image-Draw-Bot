@@ -28,7 +28,18 @@ path always requires successful fresh preparation.
 
 Windows UI Automation is accessed through the system Windows PowerShell and
 .NET assemblies; no new Python dependency is required. The subprocess is bounded
-and cancellable. Reference:
+to a 12-second operation timeout and is cancellable. Its inline UI Automation
+script is readable text, passed through `-Command -` standard input as one script
+block. A temporary input file avoids command-line length limits and blocking pipe
+writes; it is closed and removed when the operation ends. Control names remain
+JSON data with escaped quotes and Unicode, including Swedish labels. No Base64
+command, downloaded script or execution-policy override is used. Cancellation or
+timeout terminates and reaps the PowerShell process.
+
+This transport change makes the operation easier to inspect. It does not establish
+whether an antivirus detection on a particular release file is a false positive.
+Reference:
+[Microsoft PowerShell command input](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_powershell_exe?view=powershell-5.1#-command),
 [Microsoft AutomationElement.FromHandle](https://learn.microsoft.com/en-us/dotnet/api/system.windows.automation.automationelement.fromhandle)
 and [InvokePattern](https://learn.microsoft.com/en-us/dotnet/api/system.windows.automation.invokepattern).
 
@@ -38,7 +49,10 @@ The supplied 1920 x 1048 Paint screenshot detects 20 palette colors, Pencil,
 Fill, Eraser and an inset canvas rectangle (77, 227, 1843, 994). Tests cover
 Swedish/English RGB labels, negative monitor coordinates, ambiguous fields,
 window startup, control ordering, and cancellation/stale-start behavior. Windows
-CI parses the embedded PowerShell without sending desktop input.
+CI runs the actual PowerShell transport with synthetic labels, including Unicode,
+quotes, script-like text and input longer than a Windows command line. It parses
+the scan, invoke and size scripts, checks the C# modal helper, and verifies error
+and cancellation handling without starting Paint or sending desktop input.
 
 Live end-to-end UI Automation and RGB delivery on the user's Paint version
 remain to be validated. Screenshot recognition and mock-backed control tests

@@ -88,6 +88,8 @@ def main() -> int:
     parser.add_argument("--skip-tests", action="store_true", help="Skip duplicate tests only when CI already ran the complete gate")
     parser.add_argument("--gpu", action="store_true", help="Bundle optional NVIDIA CUDA/CuPy acceleration")
     args = parser.parse_args()
+    if args.installer and args.gpu:
+        parser.error("The CUDA release ships as a ZIP. Build the standard installer separately without --gpu.")
     signing=None
     if args.signed:
         from CodeSigning import signing_configuration,validate_certificate
@@ -129,8 +131,6 @@ def main() -> int:
     artifacts=[{"name":zip_path.name,"type":"windows-zip","sha256":sha256(zip_path),"bytes":zip_path.stat().st_size}]
     hash_rows = [f"{artifacts[-1]['sha256']}  {zip_path.name}"]
 
-    if args.installer and args.gpu:
-        raise SystemExit("The CUDA release currently ships as a ZIP. Build the standard installer separately without --gpu.")
     if args.installer:
         iscc = find_iscc()
         if iscc is None:
@@ -154,7 +154,7 @@ def main() -> int:
     checksum.write_text("\n".join(hash_rows) + "\n", encoding="utf-8")
     manifest=_write_manifest(artifacts,signed=bool(signing))
 
-    validate_windows_release(RELEASE,app_version=APP_VERSION,require_installer=args.installer)
+    validate_windows_release(RELEASE,app_version=APP_VERSION,require_installer=args.installer,gpu=args.gpu)
     print("RC Windows artifact gate: PASS")
     print("\nRelease artifacts:")
     for row in hash_rows:
