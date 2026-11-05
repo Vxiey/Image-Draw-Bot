@@ -95,7 +95,7 @@ class BuildDocumentationDataTests(unittest.TestCase):
             command, bundled_help = self.build_command(root)
             data_arguments = [command[index + 1] for index, value in enumerate(command)
                               if value == '--add-data']
-            self.assertIn(f'{root / "README.md"};.', data_arguments)
+            self.assertIn(f'{(root / "README.md").resolve()};.', data_arguments)
             docs_arguments = [argument for argument in data_arguments if argument.endswith(';docs')]
             self.assertEqual(len(docs_arguments), 1, 'Help uses one argument even as its file count grows')
             expected = {

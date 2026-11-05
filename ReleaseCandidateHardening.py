@@ -366,11 +366,14 @@ def validate_manifest(path: Path, *, app_version: str, expected_files: Iterable[
 
 
 def validate_windows_release(release_dir: Path, *, app_version: str | None = None,
-                             require_installer: bool = True) -> dict:
+                             require_installer: bool = True, gpu: bool = False) -> dict:
+    if gpu and require_installer:
+        raise ReleaseGateError("CUDA releases are ZIP-only and cannot require an installer.")
     from Version import APP_VERSION, FILE_VERSION, BUILD_CHANNEL
     app_version = APP_VERSION if app_version is None else str(app_version)
     release = Path(release_dir)
-    zip_path = release / f"ImageDrawBot-{app_version}-Windows-x64.zip"
+    suffix = "-CUDA" if gpu else ""
+    zip_path = release / f"ImageDrawBot-{app_version}-Windows-x64{suffix}.zip"
     setup_path = release / f"ImageDrawBot-{app_version}-Windows-x64-Setup.exe"
     checksum_path = release / f"ImageDrawBot-{app_version}-SHA256.txt"
     manifest_path = release / f"ImageDrawBot-{app_version}-manifest.json"
@@ -391,13 +394,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Image Draw Bot release-candidate gates")
     parser.add_argument("--source-gate", action="store_true")
     parser.add_argument("--release-dir")
+    parser.add_argument("--gpu", action="store_true", help="Validate the optional CUDA ZIP release instead of the standard installer release")
     parser.add_argument("--soak-cycles", type=int, default=DEFAULT_SOAK_CYCLES)
     args = parser.parse_args(argv)
+    if args.gpu and not args.release_dir:
+        parser.error("--gpu requires --release-dir")
     if args.source_gate:
         report = run_source_release_gate(Path(__file__).resolve().parent, soak_cycles=args.soak_cycles)
         print(json.dumps(report.as_dict(), indent=2, sort_keys=True))
     if args.release_dir:
-        print(json.dumps(validate_windows_release(Path(args.release_dir)), indent=2, sort_keys=True))
+        print(json.dumps(validate_windows_release(Path(args.release_dir),require_installer=not args.gpu,gpu=args.gpu), indent=2, sort_keys=True))
     if not args.source_gate and not args.release_dir:
         parser.error("choose --source-gate and/or --release-dir")
     return 0

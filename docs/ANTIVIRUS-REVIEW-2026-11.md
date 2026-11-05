@@ -73,6 +73,12 @@ The Windows ZIP gate rejects archived source releases and TkinterDnD2 native
 extensions for other platforms. Standard builds continue to use `--onedir` and
 `--noupx`.
 
+The optional CUDA build also had a filename mismatch: it created a `-CUDA.zip`
+but validated the standard ZIP name. Release validation now selects the requested
+variant explicitly and rejects the unsupported CUDA installer combination before
+starting a build. This prevents a valid CUDA package from failing its final gate
+or accidentally validating an unrelated standard package.
+
 ### Paint preparation
 
 The Paint helper uses Windows UI Automation to inspect Paint controls and select
