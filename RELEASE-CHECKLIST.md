@@ -38,7 +38,7 @@
    - `ImageDrawBot-<version>-Windows-x64.zip`
    - optional `ImageDrawBot-<version>-Windows-x64-Setup.exe`
    - `ImageDrawBot-<version>-SHA256.txt`
-   - `ImageDrawBot-<version>-ReleaseManifest.json`
+   - `ImageDrawBot-<version>-manifest.json`
 
 ## Manual smoke tests
 
@@ -55,8 +55,8 @@
 16. Create a tag matching the app version exactly:
 
    ```powershell
-   git tag v1.0.124-beta
-   git push origin v1.0.124-beta
+   git tag v1.0.146-rc3
+   git push origin v1.0.146-rc3
    ```
 
 17. Attach or verify:
