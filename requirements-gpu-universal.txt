@@ -1,4 +1,4 @@
 # Optional vendor-neutral GPU benchmark backend for Image Draw Bot Step 22.
 # PyOpenCL uses the OpenCL runtime already provided by the installed NVIDIA,
 # AMD or Intel graphics driver. Image Draw Bot never installs a system GPU driver.
-pyopencl>=2024.3,<2027
+pyopencl>=2026.1.4,<2027
