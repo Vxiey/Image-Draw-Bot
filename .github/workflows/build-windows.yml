@@ -117,7 +117,7 @@ jobs:
           if ($uninstallProcess.ExitCode -ne 0) { throw "Silent uninstall failed: $($uninstallProcess.ExitCode)" }
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ImageDrawBot-${{ github.ref_name }}-Windows-x64
           path: |
@@ -175,7 +175,7 @@ jobs:
 
       - name: Preserve release and tag retirement inventory
         if: env.RC3_CLEANUP_READY == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ImageDrawBot-v1.0.146-rc3-retirement-inventory
           path: |
