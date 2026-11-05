@@ -1,3 +1,13 @@
+# Image Draw Bot v1.0.146-rc3 — Security & Windows Packaging
+
+- Publish the dependency, updater, drawing-area guard, image drag-and-drop and mobile-preview session fixes merged after rc2.
+- Upgrade Pillow and Requests to the security-fixed ranges; source runs and builds require Python 3.11 or newer.
+- Exclude archived source releases and unused TkinterDnD2 platform binaries from Windows packages while preserving help resources and native drag and drop.
+- Replace encoded Paint PowerShell commands with readable script input and retain cancellation, literal control data and bounded execution.
+- Fix diagnostic tool launches from special-character paths and redact credentials and signed URLs from diagnostic exports.
+- Validate the explicitly selected standard or CUDA release artifact and test the actual packaged Windows GUI in CI.
+- Publish fresh Windows installer and portable ZIP assets with SHA-256 checksums and a release manifest. Builds remain unsigned; scan results must identify the exact artifact hash.
+
 # Image Draw Bot v1.0.146-rc2 — Background Removal & Recognition-First Extra Fast
 
 - Promote the classical non-AI background-removal hardening merged after rc1.
