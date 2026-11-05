@@ -11,12 +11,12 @@ echo Startup log: %DRAW_LOG%
 if not exist "DrawBot.py" goto missing_files
 if not exist "requirements.txt" goto missing_files
 if exist ".venv\Scripts\python.exe" goto dependencies
-py -3 -c "import sys; sys.exit(sys.version_info < (3,10))" >>"%DRAW_LOG%" 2>&1
+py -3 -c "import sys; sys.exit(sys.version_info < (3,11))" >>"%DRAW_LOG%" 2>&1
 if not errorlevel 1 goto create_py
-python -c "import sys; sys.exit(sys.version_info < (3,10))" >>"%DRAW_LOG%" 2>&1
+python -c "import sys; sys.exit(sys.version_info < (3,11))" >>"%DRAW_LOG%" 2>&1
 if not errorlevel 1 goto create_python
 if exist "%LocalAppData%\Programs\Python\Python312\python.exe" goto create_local
-echo Python 3.10 or later was not found.
+echo Python 3.11 or later was not found. Pillow 13 requires Python 3.11+.
 echo Install Python and enable "Add python.exe to PATH".
 goto error
 :create_py
@@ -34,8 +34,8 @@ echo Using the local Python 3.12 installation...
 if errorlevel 1 goto error
 :dependencies
 echo Checking Python...
-".venv\Scripts\python.exe" -c "import sys; print(sys.executable); print(sys.version); sys.exit(sys.version_info < (3,10))" >>"%DRAW_LOG%" 2>&1
-if errorlevel 1 goto error
+".venv\Scripts\python.exe" -c "import sys; print(sys.executable); print(sys.version); sys.exit(sys.version_info < (3,11))" >>"%DRAW_LOG%" 2>&1
+if errorlevel 1 goto unsupported_python
 if /i "%~1"=="--update" goto install_dependencies
 if not exist ".venv\installed-requirements.txt" goto install_dependencies
 fc /b requirements.txt ".venv\installed-requirements.txt" >nul 2>&1
@@ -50,7 +50,7 @@ echo Updating pip. Internet access is required...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip --disable-pip-version-check --timeout 20 --retries 1 >>"%DRAW_LOG%" 2>&1
 if errorlevel 1 echo pip could not be updated. Continuing with the installed version.
 echo Checking and installing packages. Internet access is required...
-".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --timeout 20 --retries 1 -r requirements.txt >>"%DRAW_LOG%" 2>&1
+".venv\Scripts\python.exe" -m pip install --upgrade --upgrade-strategy eager --disable-pip-version-check --timeout 20 --retries 1 -r requirements.txt >>"%DRAW_LOG%" 2>&1
 if errorlevel 1 goto error
 copy /y requirements.txt ".venv\installed-requirements.txt" >nul
 :gpu_dependencies
@@ -94,6 +94,10 @@ pause
 exit /b 0
 :missing_files
 echo Required files are missing. Extract the ENTIRE ZIP file before starting Image Draw Bot.
+goto error
+:unsupported_python
+echo This environment needs Python 3.11 or later for the security-fixed Pillow 13.
+echo Install Python 3.11+, rename the .venv folder, and run Start.bat again.
 goto error
 :error
 echo.

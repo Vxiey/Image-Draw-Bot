@@ -79,9 +79,24 @@ def _looks_like_image_url(url: str) -> bool:
 
 
 def _clean_url(value: str) -> str:
-    value = unescape(str(value or '').strip().strip('{}').strip('"\''))
-    # HTML attributes often leave a trailing punctuation token after extraction.
-    return value.rstrip('),;')
+    # Strip only drag/drop wrappers. Punctuation and percent escapes can be part
+    # of a signed URL and must survive normalization unchanged.
+    return str(value or '').strip().strip('{}').strip('\"\'')
+
+
+def _is_http_url(value: str) -> bool:
+    """Validate URL structure without making a network request."""
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        return False
+    try:
+        parsed = urlparse(value)
+        if parsed.scheme.lower() not in ('http', 'https') or not parsed.hostname:
+            return False
+        # Accessing port validates malformed and out-of-range port numbers.
+        parsed.port
+    except (ValueError, TypeError):
+        return False
+    return True
 
 
 def _unwrap_image_search_url(url: str) -> str:
@@ -101,8 +116,10 @@ def _unwrap_image_search_url(url: str) -> str:
 
     for key in keys:
         for value in query.get(key) or ():
-            candidate = _clean_url(unquote(str(value)))
-            if urlparse(candidate).scheme.lower() in ('http', 'https'):
+            # parse_qs has already decoded this query parameter once.
+            # Decoding again corrupts escaped path/query bytes in signed URLs.
+            candidate = str(value).strip()
+            if _is_http_url(candidate):
                 return candidate
     return url
 
@@ -125,7 +142,7 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
         try:
             path = Path(candidate)
             exists = path.is_file()
-        except OSError:
+        except (OSError, ValueError):
             exists = False
         if exists:
             if path.suffix.lower() not in _IMAGE_EXTENSIONS:
@@ -135,33 +152,28 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
     # 2) Chromium/Google Images may drag an in-memory thumbnail as a data URI.
     # Accept only common image MIME types and keep the encoded payload bounded;
     # load_image performs the strict decoded-size validation before Pillow sees it.
-    data_candidates=[]
     for value in items + ([raw] if raw else []):
-        for match in _DATA_IMAGE_RE.findall(unescape(str(value))):
-            candidate=str(match).strip()
-            if len(candidate) <= 28_000_000:
-                data_candidates.append(candidate)
-    if data_candidates:
-        return CanvasDropSource(data_candidates[0], 'Dropped web image', 'data')
+        for match in _DATA_IMAGE_RE.finditer(unescape(str(value))):
+            if match.end() - match.start() <= 28_000_000:
+                return CanvasDropSource(match.group(), 'Dropped web image', 'data')
 
     # 3) Prefer explicit <img src=...> or lazy-load image attributes from HTML.
-    html_urls = [_clean_url(match) for match in _IMG_SRC_RE.findall(unescape(raw))]
+    html_urls = [_clean_url(unescape(match)) for match in _IMG_SRC_RE.findall(raw)]
     for url in html_urls:
-        if urlparse(url).scheme.lower() in ('http', 'https'):
+        if _is_http_url(url):
             return CanvasDropSource(_unwrap_image_search_url(url), 'Dropped web image', 'url')
 
     # 4) Plain text/URI-list drops. Rank likely image URLs before generic URLs.
     urls = []
     seen = set()
     for text in items + ([raw] if raw else []):
-        text = unescape(text)
         direct = _clean_url(text)
-        if not any(ch.isspace() for ch in direct) and urlparse(direct).scheme.lower() in ('http', 'https'):
+        if _is_http_url(direct):
             candidates = [direct]
         else:
             candidates = [_clean_url(match) for match in _URL_RE.findall(text)]
         for url in candidates:
-            if url not in seen and urlparse(url).scheme.lower() in ('http', 'https'):
+            if url not in seen and _is_http_url(url):
                 seen.add(url)
                 urls.append(url)
     if urls:

@@ -12,7 +12,7 @@ If the inline player is not available in your GitHub client, click the animated 
 
 [![Image Draw Bot CI](https://github.com/Vxiey/Image-Draw-Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Vxiey/Image-Draw-Bot/actions/workflows/ci.yml)
 ![Windows 10/11](https://img.shields.io/badge/platform-Windows%2010%2F11-informational)
-![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-informational)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-informational)
 ![Local processing](https://img.shields.io/badge/processing-local-informational)
 [![GitHub stars](https://img.shields.io/github/stars/Vxiey/Image-Draw-Bot?style=social)](https://github.com/Vxiey/Image-Draw-Bot/stargazers)
 
@@ -140,7 +140,7 @@ RC builds accept newer RC/stable releases; stable builds do not automatically sw
 
 ## Run from source
 
-Install Python 3.10+ on Windows, extract the complete source and run:
+Install Python 3.11+ on Windows, extract the complete source and run:
 
 ```bat
 Start.bat

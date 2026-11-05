@@ -10,7 +10,7 @@ dist/
 release/
 *.spec
 
-# Draw Studio per-user/source-run state
+# Image Draw Bot per-user/source-run state
 logs/
 safety-reports/
 diagnostics/
@@ -21,6 +21,21 @@ release-state.json
 session-recovery*.json
 session-recovery*.png
 render-resume*.json
+completed-drawings/
+picture-palettes/
+recovery/
+updates/
+exact-colors-*.json
+app-tools-*.json
+paint-tools*.json
+draw-time-calibration*.json
+auto-tuner-feedback-*.json
+correction-history-*.json
+layout-fingerprints-v2*.json
+hardware-performance-profile-v1.json
+real-speed-profiles.json
+performance-auto-tuner-v1.json
+profiles.json
 *.dmp
 
 # Local captures / exports

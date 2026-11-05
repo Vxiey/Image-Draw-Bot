@@ -98,7 +98,8 @@ class MobilePreviewServer:
         self._lock = threading.RLock()
         self._images: Dict[str, Optional[bytes]] = {'original': None, 'preview': None, 'safety': None}
         self._revision = 0
-        self._token = secrets.token_urlsafe(12).replace('-', '').replace('_', '')
+        self._generation = 0
+        self._token = ''
         self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self._port = 0
@@ -116,12 +117,18 @@ class MobilePreviewServer:
         return int(self._port)
 
     def update_images(self, *, original=None, preview=None, safety=None) -> int:
+        with self._lock:
+            generation = self._generation
         encoded = {
             'original': _image_png_bytes(original),
             'preview': _image_png_bytes(preview),
             'safety': _image_png_bytes(safety),
         }
         with self._lock:
+            # Encoding happens outside the lock. A stop must not be undone by
+            # an older, slower encode completing after its session was cleared.
+            if generation != self._generation:
+                return self._revision
             self._images.update(encoded)
             self._revision += 1
             return self._revision
@@ -139,9 +146,15 @@ class MobilePreviewServer:
             return MobilePreviewState(self.running, self.port, self.token, self._revision, tuple(self.urls()))
 
     def start(self, port: int = 0) -> MobilePreviewState:
-        if self.running:
-            return self.state()
+        with self._lock:
+            if self.running:
+                return self.state()
+            return self._start(port)
+
+    def _start(self, port: int) -> MobilePreviewState:
+        """Create one session while holding the state lock."""
         owner = self
+        session_token = secrets.token_urlsafe(12).replace('-', '').replace('_', '')
 
         class Handler(BaseHTTPRequestHandler):
             server_version = 'ImageDrawBotMobilePreview/1.0'
@@ -170,57 +183,65 @@ class MobilePreviewServer:
                     self._send(403, 'text/plain; charset=utf-8', b'Local network access only')
                     return
                 path = urlsplit(self.path).path
-                prefix = f'/{owner.token}/'
+                prefix = f'/{session_token}/'
                 if not path.startswith(prefix):
                     self._send(404, 'text/plain; charset=utf-8', b'Not found')
                     return
                 rest = path[len(prefix):] or 'index.html'
-                if rest in ('', 'index.html'):
-                    self._send(200, 'text/html; charset=utf-8', owner._html().encode('utf-8'))
-                    return
-                if rest == 'status.json':
-                    with owner._lock:
+                with owner._lock:
+                    # Accepted connections can outlive shutdown. Bind both
+                    # authorization and data access to this exact server session.
+                    if owner._server is not self.server or owner._token != session_token:
+                        response = (404, 'text/plain; charset=utf-8', b'Not found')
+                    elif rest in ('', 'index.html'):
+                        response = (200, 'text/html; charset=utf-8', owner._html(session_token).encode('utf-8'))
+                    elif rest == 'status.json':
                         payload = {
                             'revision': owner._revision,
                             'available': {name: data is not None for name, data in owner._images.items()},
                         }
-                    self._send(200, 'application/json; charset=utf-8', json.dumps(payload).encode('utf-8'))
-                    return
-                if rest.endswith('.png'):
-                    name = rest[:-4]
-                    with owner._lock:
-                        data = owner._images.get(name)
-                    if data is None:
-                        self._send(404, 'text/plain; charset=utf-8', b'Preview not available yet')
+                        response = (200, 'application/json; charset=utf-8', json.dumps(payload).encode('utf-8'))
+                    elif rest.endswith('.png'):
+                        data = owner._images.get(rest[:-4])
+                        if data is None:
+                            response = (404, 'text/plain; charset=utf-8', b'Preview not available yet')
+                        else:
+                            response = (200, 'image/png', data)
                     else:
-                        self._send(200, 'image/png', data)
-                    return
-                self._send(404, 'text/plain; charset=utf-8', b'Not found')
+                        response = (404, 'text/plain; charset=utf-8', b'Not found')
+                # Never hold the state lock while writing to a slow client.
+                self._send(*response)
 
         server = ThreadingHTTPServer(('0.0.0.0', int(port)), Handler)
         server.daemon_threads = True
         self._server = server
+        self._token = session_token
         self._port = int(server.server_address[1])
         self._thread = threading.Thread(target=server.serve_forever, name='mobile-preview', daemon=True)
         self._thread.start()
         return self.state()
 
     def stop(self) -> None:
-        server = self._server
-        self._server = None
-        self._port = 0
+        with self._lock:
+            server = self._server
+            thread = self._thread
+            self._server = None
+            self._thread = None
+            self._port = 0
+            self._token = ''
+            self._generation += 1
+            self._images = {name: None for name in self._images}
+            self._revision = 0
         if server is not None:
             try:
                 server.shutdown()
             finally:
                 server.server_close()
-        thread = self._thread
-        self._thread = None
         if thread is not None and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=1.5)
 
-    def _html(self) -> str:
-        token = self.token
+    def _html(self, token: str | None = None) -> str:
+        token = self.token if token is None else token
         return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark"><title>Image Draw Bot Mobile Preview</title>

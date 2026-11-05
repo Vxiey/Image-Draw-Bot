@@ -15,7 +15,7 @@ Download the [Windows ZIP](https://github.com/Vxiey/Image-Draw-Bot/releases/down
 
 ## Source checkout
 
-Source runs require 64-bit Python 3.10+ and internet for dependency installation. Follow the [source instructions](https://github.com/Vxiey/Image-Draw-Bot#run-from-source). Source code archives are different from the packaged Windows ZIP.
+Source runs require 64-bit Python 3.11+ and internet for dependency installation. Follow the [source instructions](https://github.com/Vxiey/Image-Draw-Bot#run-from-source). Source code archives are different from the packaged Windows ZIP.
 
 ## Verification and publisher
 

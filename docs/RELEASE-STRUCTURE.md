@@ -17,7 +17,7 @@ normal installation; it does not patch the portable folder.
 ## Source archive
 
 GitHub's source archives contain Python code, build scripts and documentation.
-They do not contain the packaged application. Use `Start.bat` with Python 3.10+
+They do not contain the packaged application. Use `Start.bat` with Python 3.11+
 on Windows, or download the installer/portable release instead.
 
 ## Verification files

@@ -13,7 +13,7 @@
 | Slow drawing | Fewer details/color switches, simpler source or Extra Fast; leave enough round time |
 | Blank/old preview | Confirm loaded image and canvas, read status, press Build preview again |
 | Old taskbar icon | Check version and executable path; see Updates |
-| Python not found | Use packaged Setup/ZIP, or install 64-bit Python 3.10+ for source use |
+| Python not found | Use packaged Setup/ZIP, or install 64-bit Python 3.11+ for source use |
 | GPU unavailable | CPU fallback remains available; check compatible backend and graphics driver |
 
 ## Picture colors saved, but the preview still looks wrong
