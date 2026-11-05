@@ -6,7 +6,7 @@ No. It processes an existing picture into drawing actions. Image processing runs
 
 ## Do I need Python or a GPU?
 
-Packaged Windows Setup and ZIP include Python. Source use needs Python 3.10+. GPU acceleration is optional; CPU fallback is available.
+Packaged Windows Setup and ZIP include Python. Source use needs Python 3.11+. GPU acceleration is optional; CPU fallback is available.
 
 ## Where is the new guide?
 

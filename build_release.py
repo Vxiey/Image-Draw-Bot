@@ -95,6 +95,8 @@ def main() -> int:
         validate_certificate(signing)
     if sys.platform != "win32":
         raise SystemExit("Release EXEs must be built on Windows. Use the GitHub Actions release workflow or Build-Release.bat.")
+    if sys.version_info < (3, 11):
+        raise SystemExit("Python 3.11 or later is required for the security-fixed Pillow 13 dependency.")
     github_ref=os.environ.get('GITHUB_REF_NAME','').strip()
     github_ref_type=os.environ.get('GITHUB_REF_TYPE','').strip()
     if github_ref_type == 'tag' and github_ref and github_ref != f'v{APP_VERSION}':
@@ -105,7 +107,7 @@ def main() -> int:
     _clean_current_release_outputs()
 
     run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-    run([sys.executable, "-m", "pip", "install", "-r", str(BASE / "requirements.txt")])
+    run([sys.executable, "-m", "pip", "install", "--upgrade", "--upgrade-strategy", "eager", "-r", str(BASE / "requirements.txt")])
 
     if not args.skip_tests:
         run([sys.executable, "-m", "unittest", "discover", "-v"])

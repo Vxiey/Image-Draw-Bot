@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from pathlib import Path, PurePosixPath
 import argparse
+from fnmatch import fnmatchcase
 import hashlib
 import json
 import os
@@ -40,6 +41,10 @@ EXCLUDED_DIR_NAMES = {
     "diagnostics",
     "reports",
     "crash-dumps",
+    "completed-drawings",
+    "picture-palettes",
+    "recovery",
+    "updates",
 }
 
 EXCLUDED_FILE_SUFFIXES = {
@@ -57,6 +62,19 @@ EXCLUDED_FILE_NAMES = {
     "desktop.ini",
     "Thumbs.db",
 }
+
+# Source runs store these beside the application. They contain local paths,
+# calibration/history or recovery state and must never enter a source release.
+# Match only the source root so documented examples remain distributable.
+RUNTIME_FILE_PATTERNS = (
+    "settings*.json", "calibration*.json", "release-state.json",
+    "session-recovery*.json", "session-recovery*.png", "render-resume*.json",
+    "exact-colors-*.json", "app-tools-*.json", "paint-tools*.json",
+    "draw-time-calibration*.json", "auto-tuner-feedback-*.json",
+    "correction-history-*.json", "layout-fingerprints-v2*.json",
+    "hardware-performance-profile-v1.json", "real-speed-profiles.json",
+    "performance-auto-tuner-v1.json", "profiles.json",
+)
 
 OUTPUT_DIR_NAMES = {"build", "dist", "release"}
 NON_FATAL_EXCLUDED_DIR_NAMES = set(EXCLUDED_DIR_NAMES)
@@ -89,6 +107,7 @@ REQUIRED_RELEASE_FILES = (
     "Version.py",
     "version_info.txt",
     "requirements.txt",
+    "requirements-build.txt",
     ".github/workflows/build-windows.yml",
 )
 
@@ -125,9 +144,15 @@ def _parts(rel: PurePosixPath) -> tuple[str, ...]:
     return tuple(part for part in rel.parts if part not in ("", "."))
 
 
+def _is_runtime_file(parts: tuple[str, ...]) -> bool:
+    return len(parts) == 1 and any(fnmatchcase(parts[0], pattern) for pattern in RUNTIME_FILE_PATTERNS)
+
+
 def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
     rel = PurePosixPath(relative_path)
     parts = _parts(rel)
+    if _is_runtime_file(parts):
+        return True
     if any(part in EXCLUDED_DIR_NAMES for part in parts[:-1]):
         return True
     name = parts[-1] if parts else ""
@@ -153,6 +178,8 @@ def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
 def is_nonfatal_excluded_path(relative_path: str | PurePosixPath) -> bool:
     rel=PurePosixPath(relative_path)
     parts=_parts(rel); name=parts[-1] if parts else ''
+    if _is_runtime_file(parts):
+        return True
     suffix=PurePosixPath(name).suffix.lower()
     if any(part in NON_FATAL_EXCLUDED_DIR_NAMES for part in parts):
         return True

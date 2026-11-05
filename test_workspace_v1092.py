@@ -1,3 +1,4 @@
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock,patch
@@ -45,7 +46,9 @@ class WorkspaceTests(unittest.TestCase):
         root=Mock();root.state.return_value='normal';root.winfo_exists.return_value=True;root.update_idletasks.side_effect=RuntimeError('failed')
         with self.assertRaises(RuntimeError):ScreenTaskWindow(root).hide()
         root.deiconify.assert_called_once()
-    def response(self,tag):return SimpleNamespace(raise_for_status=lambda:None,json=lambda:[dict(tag_name=tag,draft=False,prerelease=True,html_url='https://github.com/Vxiey/Image-Draw-Bot/releases/tag/'+tag)])
+    def response(self,tag):
+        payload=[dict(tag_name=tag,draft=False,prerelease=True,html_url='https://github.com/Vxiey/Image-Draw-Bot/releases/tag/'+tag)]
+        return SimpleNamespace(raise_for_status=lambda:None,iter_content=lambda chunk_size:iter([json.dumps(payload).encode('utf-8')]))
     def test_current_version_message(self):
         with patch('UpdateCenter.APP_VERSION','1.0.92-beta'), patch('UpdateCenter.BUILD_CHANNEL','beta'):
             r=check_for_updates(request_get=lambda *a,**k:self.response('v1.0.92-beta'))
@@ -57,5 +60,5 @@ class WorkspaceTests(unittest.TestCase):
     def test_network_failure_is_not_up_to_date(self):
         with self.assertRaises(UpdateCheckError):check_for_updates(request_get=Mock(side_effect=OSError('offline')))
     def test_no_published_releases_is_not_up_to_date(self):
-        r=check_for_updates(request_get=lambda *a,**k:SimpleNamespace(raise_for_status=lambda:None,json=lambda:[]))
+        r=check_for_updates(request_get=lambda *a,**k:SimpleNamespace(raise_for_status=lambda:None,iter_content=lambda chunk_size:iter([b'[]'])))
         self.assertIn('No published',r['message'])

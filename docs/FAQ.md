@@ -10,7 +10,7 @@ Image processing and drawing plans run locally. It does not generate new AI artw
 
 ## Do I need Python or an NVIDIA GPU?
 
-Packaged Windows downloads include Python. Running the source requires Python 3.10+ on Windows. A GPU is optional: CPU processing remains available, with CUDA/OpenCL acceleration where the hardware and installed backend support it. See [running from source](../README.md#run-from-source).
+Packaged Windows downloads include Python. Running the source requires Python 3.11+ on Windows. A GPU is optional: CPU processing remains available, with CUDA/OpenCL acceleration where the hardware and installed backend support it. See [running from source](../README.md#run-from-source).
 
 ## How do I draw a picture in Microsoft Paint?
 

@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from UpdateCenter import (check_for_updates, is_newer_version, normalize_tag,
@@ -13,6 +14,8 @@ class _Response:
             raise RuntimeError(f'HTTP {self.status}')
     def json(self):
         return self.payload
+    def iter_content(self, chunk_size):
+        yield json.dumps(self.payload).encode('utf-8')
 
 
 class UpdateCenterTests(unittest.TestCase):

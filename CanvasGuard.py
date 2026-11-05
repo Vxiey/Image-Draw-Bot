@@ -142,14 +142,48 @@ def _line_intersection(n1: FloatPoint, c1: float, n2: FloatPoint, c2: float) -> 
     return (x, y)
 
 
+def _has_edge_clearance(points: Sequence[FloatPoint], polygon: Sequence[FloatPoint], margin: float) -> bool:
+    """Check every inward edge half-plane of a convex polygon.
+
+    Checking the original vertices with zero margin also rejects concave or
+    self-intersecting polygons, whose centroid is not a safe inset reference.
+    """
+    orientation = 1.0 if _signed_area(polygon) >= 0 else -1.0
+    for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1]):
+        dx, dy = x2 - x1, y2 - y1
+        length = math.hypot(dx, dy)
+        if length <= 1e-7:
+            return False
+        for x, y in points:
+            distance = orientation * (dx * (y - y1) - dy * (x - x1)) / length
+            if distance + 1e-7 < margin:
+                return False
+    return True
+
+
 def _convex_inset_polygon(polygon: Sequence[Sequence[float | int]], margin: float) -> tuple[FloatPoint, ...] | None:
     """Inset a convex polygon by offsetting each edge inward.
 
-    Returns None for degenerate/non-convex/collapsed input so callers can fall
-    back to centroid shrink.  Image Draw Bot canvas polygons are expected to be
-    rectangles or mild quadrilaterals once anchor detection lands in later steps.
+    Returns None when the original polygon or its full brush inset cannot be
+    verified. Image Draw Bot canvas polygons are normally rectangles or convex
+    quadrilaterals derived from calibration anchors.
     """
     pts = list(_dedupe_polygon(polygon))
+    if len(set(pts)) != len(pts) or not _has_edge_clearance(pts, pts, 0.0):
+        return None
+    # Calibration may add an anchor in the middle of a straight edge. Remove
+    # only those redundant vertices before intersecting offset lines, since two
+    # identical adjacent lines have no unique intersection. Validate the full
+    # original polygon above so this never hides a concavity or backtracking.
+    corners: list[FloatPoint] = []
+    for i, point in enumerate(pts):
+        before, after = pts[i - 1], pts[(i + 1) % len(pts)]
+        ax, ay = point[0] - before[0], point[1] - before[1]
+        bx, by = after[0] - point[0], after[1] - point[1]
+        if ax * by - ay * bx == 0.0 and ax * bx + ay * by > 0.0:
+            continue
+        corners.append(point)
+    pts = corners
     if margin <= 0:
         return tuple(pts)
     orientation = 1.0 if _signed_area(pts) >= 0 else -1.0
@@ -177,53 +211,42 @@ def _convex_inset_polygon(polygon: Sequence[Sequence[float | int]], margin: floa
 
     if abs(_signed_area(out)) < 0.5:
         return None
-    center = _centroid(pts)
-    # Offset result must stay inside the original polygon and near the centroid.
-    for p in out:
-        if not point_in_polygon(p, pts):
-            return None
-    if not point_in_polygon(center, out):
+    # An over-large inset can invert while leaving all corners inside the
+    # original bounds. Every corner must satisfy every *offset* edge instead.
+    if not _has_edge_clearance(out, pts, margin):
         return None
     return tuple(out)
 
 
-def _centroid_shrink_polygon(polygon: Sequence[Sequence[float | int]], margin: float) -> tuple[FloatPoint, ...]:
-    pts = list(_dedupe_polygon(polygon))
-    cx, cy = _centroid(pts)
-    out: list[FloatPoint] = []
-    for x, y in pts:
-        dist = math.hypot(x - cx, y - cy)
-        if dist <= 1e-7:
-            out.append((cx, cy))
-            continue
-        scale = max(0.0, (dist - margin) / dist)
-        out.append((cx + (x - cx) * scale, cy + (y - cy) * scale))
-    if abs(_signed_area(out)) < 0.5:
-        return tuple((cx, cy) for _ in pts)
-    return tuple(out)
-
-
 def inset_polygon(polygon: Sequence[Sequence[float | int]], margin: float) -> tuple[Point, ...]:
-    """Return a deterministic brush-inset polygon.
+    """Return a verified convex brush-inset polygon or stop before input.
 
-    Convex polygons use edge-offset insetting.  Non-convex or collapsed polygons
-    fall back to a conservative centroid shrink instead of expanding outward.
+    A centroid shrink is unsafe for concave or collapsed polygons: it can move
+    points outside the selected canvas or reduce the required brush clearance.
     """
     pts = _dedupe_polygon(polygon)
     margin = max(0.0, _finite_number(margin, 'margin'))
     if margin <= 0:
         return _round_polygon(pts)
+    message = ('Canvas Guard cannot fit the brush safely inside this canvas polygon. '
+               'Use a smaller brush or recalibrate a convex drawing area.')
     inset = _convex_inset_polygon(pts, margin)
     if inset is None:
-        inset = _centroid_shrink_polygon(pts, margin)
+        raise CanvasSafetyStop(message)
     rounded = _round_polygon(inset)
-    # Avoid duplicate/degenerate rounded vertices causing contains_safe to fail.
+    if not _has_edge_clearance(rounded, pts, margin):
+        # Integer rounding moves a point by at most sqrt(0.5) pixels. Apply that
+        # extra inset only where needed; axis-aligned canvases stay unchanged.
+        inset = _convex_inset_polygon(pts, margin + math.sqrt(0.5))
+        if inset is None:
+            raise CanvasSafetyStop(message)
+        rounded = _round_polygon(inset)
+        if not _has_edge_clearance(rounded, pts, margin):
+            raise CanvasSafetyStop(message)
     try:
         return _round_polygon(_dedupe_polygon(rounded))
-    except ValueError:
-        cx, cy = _centroid(pts)
-        c = (int(round(cx)), int(round(cy)))
-        return (c, c, c)
+    except ValueError as error:
+        raise CanvasSafetyStop(message) from error
 
 
 def normalize_canvas_polygon(
@@ -649,9 +672,7 @@ class CanvasModel:
             area_tuple = tuple(int(round(_finite_number(v, 'canvas area'))) for v in area)  # type: ignore[assignment]
         inset = BrushInset(int(round(_finite_number(brush_px, 'brush_px'))), int(edge_margin_px))
         left, top, right, bottom = _polygon_bounds(pts)
-        max_margin = max(0, min(right - left, bottom - top) // 2)
-        margin = min(inset.total_px, max_margin)
-        safe_pts = inset_polygon(pts, margin)
+        safe_pts = inset_polygon(pts, inset.total_px)
         safe_left, safe_top, safe_right, safe_bottom = _polygon_bounds(safe_pts)
         return cls(
             area=area_tuple,  # type: ignore[arg-type]

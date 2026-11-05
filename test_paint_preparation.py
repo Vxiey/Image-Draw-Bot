@@ -1,7 +1,7 @@
 import threading
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from PIL import Image
 from PaintPreparation import (_INVOKE_ACTION, rgb_controls, prepare_controls, ensure_paint,
                               find_control, find_custom_color_opener, close_edit_colors,
@@ -229,9 +229,10 @@ class PaintPreparationTests(unittest.TestCase):
             captured.update(kwargs)
             return {'canvas_box':kwargs.get('canvas_box_override'),'tools':{},'positions':[],'rgbs':[],
                     'method':'test','confidence':.96,'palette_count':0}
+        activate=Mock(return_value=True)
         with patch('PaintPreparation.ensure_paint',return_value=candidate), \
              patch('BrowserOneClick._enumerate_windows',return_value=[candidate]), \
-             patch('ScreenGuard.WindowMonitor.activate',return_value=True) as activate, \
+             patch('ScreenGuard.WindowMonitor',return_value=SimpleNamespace(activate=activate)), \
              patch('TargetCapture.probe_handle_isolated',return_value=meta), \
              patch('PaintPreparation.prepare_tool_controls',return_value=True), \
              patch('PaintPreparation.calibrate_rgb_controls',return_value=exact), \

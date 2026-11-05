@@ -13,6 +13,8 @@ from Version import APP_VERSION, FILE_VERSION
 def main():
     if sys.platform != 'win32':
         raise SystemExit('The Windows EXE build must run on Windows. Use Build-Release.bat or the GitHub Actions workflow.')
+    if sys.version_info < (3, 11):
+        raise SystemExit('Python 3.11 or later is required for the security-fixed Pillow 13 dependency.')
     if sys.maxsize <= 2**32:
         raise SystemExit('Use 64-bit Python to build the Windows x64 release.')
 
@@ -25,11 +27,20 @@ def main():
     builder = base / '.build-venv' / 'Scripts' / 'python.exe'
     if not builder.exists():
         subprocess.run([sys.executable, '-m', 'venv', str(base / '.build-venv')], check=True)
+    builder_check = subprocess.run([
+        str(builder), '-c',
+        'import sys; sys.exit(sys.version_info < (3, 11) or sys.maxsize <= 2**32)',
+    ], check=False)
+    if builder_check.returncode:
+        raise SystemExit(
+            'The private .build-venv must use 64-bit Python 3.11 or later. '
+            'Rename .build-venv and run the build again to recreate it.'
+        )
 
     subprocess.run([str(builder), '-m', 'pip', 'install', '--upgrade', 'pip'], check=True)
     subprocess.run([
-        str(builder), '-m', 'pip', 'install', '-r', str(base / 'requirements.txt'),
-        'pyinstaller>=6.22.2,<7'
+        str(builder), '-m', 'pip', 'install', '--upgrade', '--upgrade-strategy', 'eager', '-r', str(base / 'requirements.txt'),
+        '-r', str(base / 'requirements-build.txt')
     ], check=True)
     # Step 22 is part of the standard Windows build: bundle PyOpenCL so AMD,
     # Intel and NVIDIA OpenCL devices can be benchmarked without modifying the

@@ -16,6 +16,8 @@ if not defined PY (
   where python >nul 2>&1 || goto nopython
   set "PY=python"
 )
+%PY% -c "import sys; sys.exit(sys.version_info < (3,11))"
+if errorlevel 1 goto nopython
 
 set "INSTALLER="
 if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "INSTALLER=--installer"
@@ -31,7 +33,7 @@ pause
 exit /b 0
 
 :nopython
-echo Python 3.10+ was not found. Install Python and enable Add Python to PATH.
+echo Python 3.11+ was not found. Install Python and enable Add Python to PATH.
 pause
 exit /b 2
 
