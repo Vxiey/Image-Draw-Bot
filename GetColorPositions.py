@@ -15,6 +15,7 @@ from PaletteMaps import PRESETS, detect_preset, sample_grid, sample_paint_grid, 
 from Colors import (sample_screen_color,save_calibration,enable_dpi_awareness,
                     CALIBRATION_FILE,normalize_rgb)
 from CalibrationAnchors import make_anchor, ensure_same_layout
+from CalibrationValidation import screen_point, screen_rect, point_in_rect
 
 
 class CalibrationApp:
@@ -23,7 +24,7 @@ class CalibrationApp:
         self.mouse,self.root,self.on_close=WindowsMouse(),root,on_close
         self.path=path;self.is_paint=profile=='microsoft-paint';self.profile_key=str(profile);self.preset=PRESETS.get(profile);self.max_colors=96 if str(profile)=='gartic-phone' else 64
         self.map_names=None;self.map_indices=None;self.pending=[];self.rgbs=[];self.job=None;self.snapshot=None
-        self.anchor=None;self.anchor_handle=None
+        self.anchor=None;self.anchor_handle=None;self.closed=False
         root.configure(bg=BG);root.title('Image Draw Bot · Read color palette');root.geometry('760x780');root.minsize(650,620)
         style=ttk.Style(root)
         try: style.theme_use('clam')
@@ -98,21 +99,24 @@ class CalibrationApp:
         if self.anchor_handle is not None and meta['handle']!=self.anchor_handle and not replace:
             raise ValueError('All calibrated colors must belong to the same target window.')
         if self.anchor is None or replace:
-            self.anchor_handle=meta['handle'];self.anchor=make_anchor(meta['client_rect'])
+            anchor=make_anchor(meta['client_rect'])
+            self.anchor_handle=meta['handle'];self.anchor=anchor
         else:
             ensure_same_layout(self.anchor,meta['client_rect'])
         return meta
 
     def _canonical_point(self, point):
-        x,y=map(int,point)
+        x,y=screen_point(point)
         from TargetCapture import capture_target_metadata_isolated
         meta=capture_target_metadata_isolated((x-5,y-5,10,10))
+        if not point_in_rect((x,y),meta['client_rect']):raise ValueError('The color position is outside the target client area.')
         if self.anchor is None:
-            self.anchor_handle=meta['handle'];self.anchor=make_anchor(meta['client_rect']);return (x,y)
+            anchor=make_anchor(meta['client_rect'])
+            self.anchor_handle=meta['handle'];self.anchor=anchor;return (x,y)
         if self.anchor_handle is not None and meta['handle']!=self.anchor_handle:
             raise ValueError('All calibrated colors must belong to the same target window.')
         dx,dy=ensure_same_layout(self.anchor,meta['client_rect'])
-        return (x-dx,y-dy)
+        return screen_point((x-dx,y-dy))
 
     def refresh(self):
         self.swatches.delete('all')
@@ -128,7 +132,8 @@ class CalibrationApp:
         for b in (self.undo_button,self.save_button):b.configure(state='normal' if self.pending else 'disabled')
 
     def capture(self,seconds):
-        self.job=None
+        if getattr(self,'closed',False) or self.job is not None:return
+        if len(self.pending)>=self.max_colors:self.status.set('The palette is full. Remove a color before adding another.');return
         for b in (self.add,self.add_code,self.auto,self.rescan,self.undo_button,self.save_button):b.configure(state='disabled')
         if getattr(self,'capture_visibility',None) is None:
             from ScreenTaskWindow import ScreenTaskWindow
@@ -136,14 +141,18 @@ class CalibrationApp:
             self.capture_visibility.hide()
         if seconds:
             self.status.set(f'Move the mouse to the center of a color swatch.\nCapturing in {seconds} seconds. Do not click.')
-            self.job=self.root.after(1000,self.capture,seconds-1);return
+            def tick():
+                self.job=None
+                self.capture(seconds-1)
+            self.job=self.root.after(1000,tick);return
         try:
-            position=self._canonical_point(tuple(map(int,self.mouse.get_position())))
+            live_position=screen_point(self.mouse.get_position())
+            position=self._canonical_point(live_position)
             if position in self.pending:
                 if self.is_paint:
                     self.status.set('This color swatch is already mapped. No duplicate is needed.');self.refresh();return
                 raise ValueError('That color swatch is already selected.')
-            rgb=sample_screen_color(*position)
+            rgb=sample_screen_color(*live_position)
             if self.is_paint and tuple(rgb) in [tuple(c) for c in self.rgbs]:
                 self.status.set('The color is already mapped. The existing position will be kept.');self.refresh();return
             self.map_names=None;self.map_indices=None
@@ -158,7 +167,8 @@ class CalibrationApp:
 
     def capture_code(self,seconds=3):
         """Associate an explicit RGB/ARGB value with the current cursor point."""
-        if self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None:return
+        if len(self.pending)>=self.max_colors:self.status.set('The palette is full. Remove a color before adding another.');return
         if seconds:
             try:normalize_rgb(self.color_code.get())
             except ValueError as error:self.status.set(str(error));return
@@ -172,7 +182,7 @@ class CalibrationApp:
             return
         try:
             rgb=normalize_rgb(self.color_code.get())
-            position=self._canonical_point(tuple(map(int,self.mouse.get_position())))
+            position=self._canonical_point(screen_point(self.mouse.get_position()))
             if position in self.pending:raise ValueError('That screen position is already mapped.')
             if rgb in [tuple(c) for c in self.rgbs]:raise ValueError('That RGB color is already mapped.')
             self.pending.append(position);self.rgbs.append(rgb)
@@ -186,16 +196,24 @@ class CalibrationApp:
         self.refresh()
 
     def start_scan(self):
-        if self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None:return
         from RegionPicker import select_region
         def selected(box,image):
-            left,top,right,bottom=map(int,box)
-            self._capture_anchor_for_area((left,top,right-left,bottom-top),replace=True)
-            self.snapshot=(box,image);self.read_snapshot()
+            if getattr(self,'closed',False):image.close();return
+            try:
+                left,top,right,bottom=screen_rect(box)
+                if image.size!=(right-left,bottom-top):raise ValueError('The selected screenshot size changed. Select the palette again.')
+                self._capture_anchor_for_area((left,top,right-left,bottom-top),replace=True)
+            except (OSError,ValueError) as error:
+                image.close();self.status.set(str(error));return
+            previous=self.snapshot
+            self.snapshot=(box,image)
+            if previous is not None and previous[1] is not image:previous[1].close()
+            self.read_snapshot()
         select_region(self.root,selected,lambda message:self.status.set(message))
 
     def read_snapshot(self):
-        if self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None:return
         if self.snapshot is None:self.status.set('Select the palette on screen first.');return
         try:
             (left,top,right,bottom),screenshot=self.snapshot
@@ -212,7 +230,8 @@ class CalibrationApp:
                     x=round(col*shown.width/columns);pen.line((x,0,x,shown.height),fill='#ff00bf',width=1)
                 for row in range(1,rows):
                     y=round(row*shown.height/rows);pen.line((0,y,shown.width,y),fill='#ff00bf',width=1)
-            self.photo=ImageTk.PhotoImage(shown);self.preview.configure(image=self.photo,text='')
+            try:self.photo=ImageTk.PhotoImage(shown);self.preview.configure(image=self.photo,text='')
+            finally:shown.close()
             note=''
             if self.preset:
                 try:
@@ -265,10 +284,14 @@ class CalibrationApp:
         self.close()
 
     def close(self):
+        if getattr(self,'closed',False):return
+        self.closed=True
         if self.job is not None:
             job=self.job;self.job=None
             try:self.root.after_cancel(job)
             except (tk.TclError,ValueError,RuntimeError):pass
+        if self.snapshot is not None:
+            self.snapshot[1].close();self.snapshot=None
         try:self.root.destroy()
         except (tk.TclError,RuntimeError):pass
         if self.on_close:

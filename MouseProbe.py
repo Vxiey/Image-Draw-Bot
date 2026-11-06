@@ -27,6 +27,7 @@ def probe_points(area):
 
 
 def run_probe(target, area, mouse=None, monitor=None, stop=None, wait=None, report=None):
+    points = probe_points(area)
     if mouse is None:
         from WindowsMouse import WindowsMouse
         mouse = WindowsMouse()
@@ -44,17 +45,19 @@ def run_probe(target, area, mouse=None, monitor=None, stop=None, wait=None, repo
 
     from ScreenGuard import GuardedMouse
     guarded = GuardedMouse(mouse, monitor, target)
-    report('status', 'Activating target window...')
-    guarded.prepare_target(stop, wait, report)
-    report('status', 'Target window is active. Mouse test without clicking is starting.')
-
     positions = []
     try:
-        for index, point in enumerate(probe_points(area), 1):
+        report('status', 'Activating target window...')
+        guarded.prepare_target(stop, wait, report)
+        report('status', 'Target window is active. Mouse test without clicking is starting.')
+        for index, point in enumerate(points, 1):
             if stop.is_set():
                 raise InterruptedError()
             guarded.move(*point)
             actual = tuple(map(int, mouse.get_position()))
+            tolerance=max(0,min(16,int(getattr(mouse,'position_tolerance',1))))
+            if max(abs(actual[i]-point[i]) for i in (0,1))>tolerance:
+                raise OSError(f'The mouse test requested {point}, but Windows reported {actual}. Select the area again.')
             positions.append(actual)
             report('status', f'Mouse movement {index}/3 verified: {actual[0]}, {actual[1]}')
             wait(.35)

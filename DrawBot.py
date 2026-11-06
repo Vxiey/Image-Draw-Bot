@@ -7,6 +7,7 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from io import BytesIO
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -132,6 +133,26 @@ PREVIEW_PLAN_TIMEOUT_SECONDS = 14.0
 PREVIEW_FALLBACK_TIMEOUT_SECONDS = 6.0
 PREVIEW_MODES = ('Manual', 'Auto light', 'Auto full')
 COLOR_WORKFLOWS = ('Finish color first', 'Progressive passes')
+
+
+def _validated_setup_payload(payload, *, require_canvas=False):
+    """Validate a complete window/canvas update before changing any UI state."""
+    from CalibrationValidation import screen_rect,contained_rect,finite_confidence
+    if not isinstance(payload,dict) or not isinstance(payload.get('target_meta'),dict):
+        raise ValueError('Automatic setup returned no verified target window.')
+    meta=dict(payload['target_meta'])
+    handle=meta.get('handle')
+    if type(handle) is not int or not 0<handle<2**64:
+        raise ValueError('Automatic setup returned an invalid target handle.')
+    meta['rect']=screen_rect(meta.get('rect'),'target window')
+    meta['client_rect']=contained_rect(meta.get('client_rect'),meta['rect'],'target client')
+    confidence=finite_confidence(payload.get('canvas_confidence',payload.get('confidence',0)))
+    canvas=None
+    if payload.get('canvas_box') is not None and confidence>=.70:
+        canvas=contained_rect(payload['canvas_box'],meta['client_rect'],'detected canvas',min_side=10)
+    if require_canvas and canvas is None:
+        raise ValueError('Automatic setup could not verify a drawable canvas. Select the drawing area again.')
+    return meta,canvas
 
 
 def apply_profile_defaults(app, profile_name):
@@ -378,13 +399,22 @@ def preview_area_for(area, *, max_pixels=PREVIEW_MAX_PIXELS, max_dimension=PREVI
     """
     try:
         width, height = [max(1, int(round(v))) for v in area[:2]]
-    except (TypeError, ValueError, IndexError) as error:
+    except (TypeError, ValueError, IndexError, OverflowError) as error:
         raise ValueError('Preview area must contain width and height.') from error
+    try:
+        max_pixels=int(max_pixels);max_dimension=int(max_dimension)
+    except (TypeError,ValueError,OverflowError) as error:
+        raise ValueError('Preview limits must be positive integers.') from error
+    if max_pixels<1 or max_dimension<1:raise ValueError('Preview limits must be positive integers.')
     pixels = width * height
     scale = min(1.0, max_dimension / max(width, height), (max_pixels / max(1, pixels)) ** 0.5)
-    if scale >= 0.999:
+    if scale >= 1:
         return width, height
-    return max(1, int(round(width * scale))), max(1, int(round(height * scale)))
+    pw,ph=max(1,int(width*scale)),max(1,int(height*scale))
+    if pw*ph>max_pixels:
+        if pw>=ph:pw=max(1,max_pixels//ph)
+        else:ph=max(1,max_pixels//pw)
+    return pw,ph
 
 
 def is_preview_plan(options):
@@ -2250,6 +2280,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             if dry_run:
                 raise DryRunBudgetComplete('Dry run time budget completed normally.')
             raise InterruptedError('Time limit reached. No automatic restart.')
+    def guard_keyboard(modal_point=None):
+        wait(0)
+        check=getattr(mouse,'check_keyboard',None)
+        if callable(check):check(modal_point=modal_point)
+        elif callable(getattr(mouse,'check',None)):mouse.check()
     exact_color_samples={}
     color_session_cache=plan['options'].setdefault('color_session_cache',{})
     if plan['options'].get('profile_name')=='Microsoft Paint' and isinstance(color_session_cache,dict):
@@ -2413,7 +2448,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 for name,value in zip(numeric_required,rgb):
                     if hasattr(mouse,'calibrated_modal_click'):mouse.calibrated_modal_click(actions[name])
                     else:mouse.move(*actions[name]);mouse.click()
-                    wait(.05);keyboard.press_and_release('ctrl+a');wait(.02);keyboard.write(str(value),delay=.01);wait(.05)
+                    wait(.05);guard_keyboard(actions[name]);keyboard.press_and_release('ctrl+a')
+                    wait(.02);guard_keyboard(actions[name]);keyboard.write(str(value),delay=.01);wait(.05)
                 wait(.10)
                 return modal_preview()
 
@@ -2493,7 +2529,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             # modal instead of clicking OK, then use the known calibrated palette
             # fallback. The subsequent canvas probe can still try another method.
             if keyboard is not None:
-                try:keyboard.press_and_release('esc');wait(.12)
+                try:guard_keyboard(actions.get('ConfirmColor'));keyboard.press_and_release('esc');wait(.12)
+                except InterruptedError:raise
                 except Exception:pass
             if hasattr(mouse,'reset_tracking'):mouse.reset_tracking()
             return nearest_palette(f'{method_label(method)} could not prove RGB {rgb} before OK')
@@ -2501,7 +2538,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             raise
         except Exception as error:
             if keyboard is not None:
-                try:keyboard.press_and_release('esc');wait(.12)
+                try:guard_keyboard(actions.get('ConfirmColor'));keyboard.press_and_release('esc');wait(.12)
+                except InterruptedError:raise
                 except Exception:pass
             if hasattr(mouse,'reset_tracking'):mouse.reset_tracking()
             return nearest_palette(f'{method_label(method)} error: {error}')
@@ -2539,14 +2577,27 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
     canvas_anchor_space=plan['options'].get('canvas_anchor_space') or canvas_polygon_space
     canvas_anchors=normalize_canvas_anchors(plan['options'].get('canvas_anchors') or (), area=area, coordinate_space=canvas_anchor_space)
     _browser_guard_plan=plan['options'].get('browser_brush_plan') or {}
-    _dynamic_brush_guard=bool(_browser_guard_plan.get('verified_sizes'))
-    _initial_guard_brush=(plan['options'].get('brush_px',3) if _dynamic_brush_guard else
-                          plan['options'].get('canvas_guard_brush_px',plan['options'].get('brush_px',3)))
+    _initial_guard_brush=plan['options'].get('canvas_guard_brush_px',plan['options'].get('brush_px',3))
+    if _browser_guard_plan:
+        from BrowserBrushSize import conservative_brush_guard
+        _initial_guard_brush=max(_initial_guard_brush,conservative_brush_guard(
+            _browser_guard_plan.get('profile_key') or plan['options'].get('profile_key'),
+            plan['options'].get('brush_px',3)))
+    _verified_execution_brush=None
     canvas_guard=CanvasGuard.from_area_or_polygon(area, polygon=canvas_polygon, coordinate_space=canvas_polygon_space,
                                                   brush_px=_initial_guard_brush, edge_margin_px=2, anchors=canvas_anchors,
                                                   confidence=float((plan['options'].get('canvas_anchor_meta') or {}).get('confidence',1.0)) if isinstance(plan['options'].get('canvas_anchor_meta'),dict) else 1.0)
     draw_mouse=FinalMouseGuard(mouse, canvas_guard)
     plan['options']['canvas_guard_meta']=canvas_guard.model.as_dict()
+    def install_brush_guard(brush_px):
+        nonlocal canvas_guard
+        replacement=CanvasGuard.from_area_or_polygon(
+            area, polygon=canvas_polygon, coordinate_space=canvas_polygon_space,
+            brush_px=brush_px, edge_margin_px=2, anchors=canvas_anchors,
+            confidence=float((plan['options'].get('canvas_anchor_meta') or {}).get('confidence',1.0)) if isinstance(plan['options'].get('canvas_anchor_meta'),dict) else 1.0)
+        canvas_guard=replacement
+        draw_mouse.set_canvas_guard(canvas_guard)
+        plan['options']['canvas_guard_meta']=canvas_guard.model.as_dict()
     plan['options'].setdefault('canvas_edge_verification', 'Auto')
     plan['options'].setdefault('canvas_edge_margin_px', 24)
     plan['options'].setdefault('canvas_edge_tolerance_px', 4)
@@ -2616,6 +2667,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         source=plan['options'].get('_accuracy_original_source')
         if not isinstance(source,Image.Image):
             return None
+        snapshot=None
         try:
             snapshot=mouse.snapshot_canvas(area)
             if not isinstance(snapshot,Image.Image) or snapshot.width<=0 or snapshot.height<=0:
@@ -2633,7 +2685,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 quantized_target=layers.get('quantized_target'),
                 profile_key=str(plan['options'].get('profile_key') or ''),
                 actual_elapsed_seconds=actual_elapsed, usable_deadline_seconds=usable,
-                visual_gate_percent=visual_gate)
+                visual_gate_percent=visual_gate,cancelled=stop.is_set)
             plan['options']['post_draw_accuracy_meta']=meta
             if meta.get('available'):
                 trust=meta.get('feedback_trust','none')
@@ -2642,10 +2694,14 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 cov=meta.get('actual_coverage_percent')
                 report('status',f"Drawing Accuracy Score {float(visual or 0):.1f}/100 · trust {trust} · coverage {float(cov or 0):.1f}% · actual vs simulated {float(sim or 0):.1f}%.")
             return meta
+        except InterruptedError:
+            raise
         except Exception as error:
             plan['options']['post_draw_accuracy_meta']={'available':False,'feedback_trust':'none','reason':str(error)[:240],'capture_pixels_persisted':False,'image_pixels_persisted':False}
             log_event(f'Step 13 post-draw snapshot scoring skipped safely: {error!r}')
             return None
+        finally:
+            if isinstance(snapshot,Image.Image):snapshot.close()
 
     def click_ui_control(position, label, settle=None):
         if stop.is_set():raise InterruptedError()
@@ -2717,6 +2773,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             finally:
                 draw_mouse.release()
         wait(max(boundary_delay,.010))
+    visual_previous_snapshot=None
     try:
         precision=plan['options'].get('precision','High')
         if hasattr(mouse,'configure_precision'):mouse.configure_precision(precision)
@@ -2761,45 +2818,42 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         if (plan['options'].get('paint_profile') or stroke_delivery.profile_key in ('gartic-phone','skribbl','skribbl-fast','sketchheads')) and not dry_run:
             report('status',f'{stroke_delivery.label}: <= {stroke_delivery.step_px:.0f}px interpolation, {stroke_delivery.min_path_delay*1000:.2f}ms path floor, palette settle={stroke_delivery.palette_click_delay*1000:.0f}ms, backend={stroke_delivery.drag_backend}.')
         opacity_plan=plan['options'].get('gartic_opacity_plan') or {}
-        if opacity_plan and not resume_skip_prelude and int(opacity_plan.get('selected_percent',100) or 100)<100:
+        if opacity_plan and not resume_skip_prelude:
             opacity_target=opacity_plan.get('target_position')
             if opacity_target:
                 _opacity_started=clock();_opacity_percent=int(opacity_plan.get('selected_percent',100) or 100)
                 click_ui_control(tuple(map(int,opacity_target)),f'Gartic opacity {_opacity_percent}%')
                 _opacity_seconds=max(0.0,clock()-_opacity_started)
                 note_runtime_operation('opacity_change',_opacity_seconds)
-                plan['options']['gartic_opacity_runtime_meta']={'applied':True,'percent':_opacity_percent,'seconds':round(_opacity_seconds,5)}
+                plan['options']['gartic_opacity_runtime_meta']={'applied':not dry_run,'simulated':bool(dry_run),'percent':_opacity_percent,'seconds':round(_opacity_seconds,5)}
             else:
-                plan['options']['gartic_opacity_runtime_meta']={'applied':False,'percent':100,'seconds':0.0,'reason':'slider not verified'}
+                plan['options']['gartic_opacity_runtime_meta']={'applied':False,'percent':None,'seconds':0.0,'reason':'current opacity is unknown; slider not verified'}
         brush_plan=plan['options'].get('browser_brush_plan') or {}
         if brush_plan and not resume_skip_prelude:
             target=brush_plan.get('target_position')
             if target:
                 target=tuple(map(int,target))
-                selected=brush_plan.get('selected_index');wanted=int(brush_plan.get('target_index',0) or 0)
+                wanted=int(brush_plan.get('target_index',0) or 0)
                 if dry_run:
                     mouse.move(*target);wait(max(.02,stroke_delivery.ui_control_delay*.45))
-                    report('status',f"Dry run: automatic browser brush target {brush_plan.get('effective_px','?')} px verified. No click was sent.")
-                elif selected==wanted and float(brush_plan.get('confidence',0) or 0)>=.72:
-                    report('status',f"Automatic brush size verified: {brush_plan.get('effective_px','?')} px is already selected.")
+                    plan['options']['browser_brush_runtime']={'clicked':False,'verified':False,'simulated':True,'effective_px':None}
+                    report('status',f"Dry run: automatic browser brush target {brush_plan.get('effective_px','?')} px visited. No selection change was sent.")
                 else:
-                    try:
-                        from BrowserBrushSize import capture_control_patch,patch_change_score
-                        before=capture_control_patch(target)
-                    except Exception:
-                        before=None
-                    mouse.move(*target);wait(max(.02,stroke_delivery.ui_control_delay*.35));mouse.click();wait(stroke_delivery.ui_control_delay)
-                    try:
-                        after=capture_control_patch(target)
-                        change=patch_change_score(before,after) if before is not None else 0.0
-                    except Exception:
-                        change=0.0
-                    verified=bool(change>=.35 or selected is not None)
-                    plan['options']['browser_brush_runtime']={'clicked':True,'verified':verified,'visual_change_percent':round(change,3),'effective_px':brush_plan.get('effective_px')}
+                    from BrowserBrushSize import verify_brush_selection
+                    verified=verify_brush_selection(brush_plan,wanted)
+                    clicked=not verified
+                    if clicked:
+                        mouse.move(*target);wait(max(.02,stroke_delivery.ui_control_delay*.35));mouse.click();wait(stroke_delivery.ui_control_delay)
+                        verified=verify_brush_selection(brush_plan,wanted)
+                    wait(0)
+                    effective=int(brush_plan['nominal_sizes'][wanted]) if verified else None
+                    plan['options']['browser_brush_runtime']={'clicked':clicked,'verified':verified,'effective_px':effective}
                     if verified:
+                        _verified_execution_brush=effective
+                        install_brush_guard(effective)
                         report('status',f"Automatic brush size applied and visually verified: ~{brush_plan.get('effective_px','?')} px.")
                     else:
-                        report('status',f"Automatic brush control accepted the safe target, but selection highlight could not be visually confirmed. Using {brush_plan.get('safe_guard_px','?')} px CanvasGuard fallback.")
+                        report('status',f"Brush selection could not be visually confirmed. Using {_initial_guard_brush} px CanvasGuard fallback.")
             else:
                 report('status',f"Automatic brush-size detection was not confident enough to click. Safe CanvasGuard fallback={brush_plan.get('safe_guard_px','?')} px; current browser brush is left untouched.")
 
@@ -2824,9 +2878,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     report('status','Dry run: Paint Select All → Delete → Esc clear sequence verified logically. No keys were sent.')
                 else:
                     report('status','Clearing Microsoft Paint canvas automatically…')
-                    keyboard.press_and_release('ctrl+a');wait(.08)
-                    keyboard.press_and_release('delete');wait(.18)
-                    keyboard.press_and_release('esc');wait(.10)
+                    guard_keyboard();keyboard.press_and_release('ctrl+a');wait(.08)
+                    guard_keyboard();keyboard.press_and_release('delete');wait(.18)
+                    guard_keyboard();keyboard.press_and_release('esc');wait(.10)
                     report('status','Microsoft Paint canvas cleared. Starting the new drawing…')
             elif clear_strategy=='native-clear':
                 actions=plan['options'].get('canvas_clear_actions') or ()
@@ -2847,7 +2901,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     click_ui_control(position,'Eraser tool for automatic canvas clear',.22)
                 from CanvasClear import eraser_row_spacing
                 sx0,sy0,sx1,sy1=canvas_guard.model.safe_bounds
-                spacing=eraser_row_spacing(plan['options'].get('canvas_guard_brush_px',plan['options'].get('brush_px',3)))
+                spacing=eraser_row_spacing(plan['options'].get('brush_px',3))
                 rows=list(range(int(sy0),int(sy1)+1,max(1,int(spacing))))
                 if not rows or rows[-1]!=int(sy1):rows.append(int(sy1))
                 if dry_run and len(rows)>3:
@@ -2990,7 +3044,6 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             plan['options'].get('visual_verification','Off'),
             paint_profile=bool(plan['options'].get('visual_verification_enabled',False)),
             dry_run=dry_run,test=False)
-        visual_previous_snapshot=None
         edge_mode=runtime_edge_mode
         plan['options']['edge_behavior_resolved']=edge_mode
         plan['options'].setdefault('edge_behavior_meta',{'active':True,'mode':edge_mode,'hard_clip':0,'hard_skip':0,'adaptive_boundary':0,'preserve_outline_boundary':0,'safe_skip':0})
@@ -3030,7 +3083,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                                                 profile_name=plan['options'].get('profile_name'),
                                                 drawing_mode=plan['options'].get('drawing_mode'),
                                                 outline=bool(plan['options'].get('outline')),
-                                                context='normal stroke')
+                                                context='normal stroke',cancelled=stop.is_set)
             except CanvasSafetyStop as error:
                 runtime_safety.note_blocked(error, reason='CanvasGuard blocked a planned stroke outside the selected canvas polygon.')
                 raise
@@ -3269,15 +3322,21 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             if dry_run or not plan['options'].get('visual_verification_enabled',False) or visual_mode=='Off':
                 return None
             if not hasattr(mouse,'snapshot_canvas'):
-                return {'current':color_number,'total':total_colors,'ok':True,'confidence':0.0,'summary':'snapshot unavailable on this mouse backend'}
+                return {'current':color_number,'total':total_colors,'ok':False,'checked':False,'available':False,'confidence':0.0,'summary':'not checked: snapshot unavailable on this mouse backend'}
             sample_limit={'Fast':80,'Balanced':130,'Strict':180}.get(visual_mode,130)
             brush_px=plan['options'].get('brush_px',1)
             expected=plan['colors'][index]
-            planned_points=planned_batch_points(ordered_items,smart_group=smart_group,transform=point,sample_limit=sample_limit)
-            expected_boxes=planned_batch_boxes(ordered_items,smart_group=smart_group,transform=point,brush_px=brush_px)
+            planned_points=planned_batch_points(ordered_items,smart_group=smart_group,transform=point,sample_limit=sample_limit,cancelled=stop.is_set)
+            expected_boxes=planned_batch_boxes(ordered_items,smart_group=smart_group,transform=point,brush_px=brush_px,cancelled=stop.is_set)
             wait(.08)
             current=mouse.snapshot_canvas(area)
-            result=compare_batch_snapshot(current,visual_previous_snapshot,area,expected,planned_points,expected_boxes,brush_px=brush_px,mode=visual_mode)
+            try:
+                result=compare_batch_snapshot(current,visual_previous_snapshot,area,expected,planned_points,expected_boxes,brush_px=brush_px,mode=visual_mode,cancelled=stop.is_set)
+            except BaseException:
+                current.close()
+                raise
+            if visual_previous_snapshot is not None and visual_previous_snapshot is not current:
+                visual_previous_snapshot.close()
             visual_previous_snapshot=current
             summary=summarize_result(result)
             payload=dict(result);payload.update({'current':color_number,'total':total_colors,'rgb':tuple(map(int,expected)),'summary':summary})
@@ -3419,6 +3478,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                         compact['post_correction_confidence_percent']=final_meta.get('confidence_percent')
                         plan['options']['post_draw_correction_meta']=compact
                         publish_correction_review()
+                except InterruptedError:
+                    raise
                 except Exception as score_error:
                     log_event(f'Step 14 post-correction scoring skipped safely: {score_error!r}')
                 return compact
@@ -3451,13 +3512,13 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                    'No automatic mouse restart will occur. Press Start again; browser Auto-Recalibration + Visual Preflight will run before resuming.')
             return True
 
-        current_execution_brush=max(1,int(plan['options'].get('brush_px',1) or 1))
+        current_execution_brush=_verified_execution_brush or max(1,int(plan['options'].get('brush_px',1) or 1))
         def switch_execution_brush(wanted_px):
             """Switch only between verified controls and atomically install its brush-specific CanvasGuard."""
-            nonlocal current_execution_brush, canvas_guard
+            nonlocal current_execution_brush, _verified_execution_brush
             wanted=max(1,int(wanted_px or current_execution_brush))
-            if wanted==current_execution_brush:return False
             brush_plan=plan['options'].get('browser_brush_plan') or {}
+            if wanted==current_execution_brush and (not brush_plan or dry_run or wanted==_verified_execution_brush):return False
             try:
                 positions=[tuple(map(int,p)) for p in (brush_plan.get('control_positions') or ())]
                 sizes=[max(1,int(v)) for v in (brush_plan.get('nominal_sizes') or ())]
@@ -3478,18 +3539,21 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 if effective not in verified_sizes:return False
             elif effective>max(1,int(plan['options'].get('canvas_guard_brush_px',current_execution_brush) or current_execution_brush)):
                 return False
+            # A previously verified brush no longer justifies its narrower
+            # inset once another selection is attempted.
+            install_brush_guard(_initial_guard_brush)
             mouse.move(*position);wait(max(.025,stroke_delivery.ui_control_delay*.45))
             if not dry_run:
                 mouse.click();wait(max(.10,stroke_delivery.ui_control_delay))
+                from BrowserBrushSize import verify_brush_selection
+                if not verify_brush_selection(brush_plan,index):
+                    _verified_execution_brush=None
+                    raise InterruptedError('Browser brush selection could not be verified. Drawing stopped before the next canvas stroke.')
+                wait(0)
+                _verified_execution_brush=effective
+                install_brush_guard(effective)
             current_execution_brush=effective
-            if verified_sizes:
-                canvas_guard=CanvasGuard.from_area_or_polygon(
-                    area, polygon=canvas_polygon, coordinate_space=canvas_polygon_space,
-                    brush_px=effective, edge_margin_px=2, anchors=canvas_anchors,
-                    confidence=float((plan['options'].get('canvas_anchor_meta') or {}).get('confidence',1.0)) if isinstance(plan['options'].get('canvas_anchor_meta'),dict) else 1.0)
-                draw_mouse.set_canvas_guard(canvas_guard)
-                plan['options']['canvas_guard_meta']=canvas_guard.model.as_dict()
-            plan['options'].setdefault('adaptive_brush_runtime_meta',{'switches':0,'sizes':[],'brush_aware_canvasguard':bool(verified_sizes)})
+            plan['options'].setdefault('adaptive_brush_runtime_meta',{'switches':0,'sizes':[],'brush_aware_canvasguard':not dry_run,'simulated':bool(dry_run)})
             runtime_meta=plan['options']['adaptive_brush_runtime_meta']
             runtime_meta['switches']=int(runtime_meta.get('switches',0))+1
             if effective not in runtime_meta.setdefault('sizes',[]):runtime_meta['sizes'].append(effective)
@@ -3660,9 +3724,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 try:
                     visual_previous_snapshot=mouse.snapshot_canvas(area)
                     report('visual_verification',{'current':0,'total':len(active_order),'ok':True,'confidence':100.0,'summary':'baseline snapshot captured'})
+                except InterruptedError:
+                    raise
                 except Exception as error:
                     plan['options']['visual_verification_enabled']=False
-                    report('visual_verification',{'current':0,'total':len(active_order),'ok':True,'confidence':0.0,'summary':f'visual baseline unavailable: {error}'})
+                    report('visual_verification',{'current':0,'total':len(active_order),'ok':False,'checked':False,'available':False,'confidence':0.0,'summary':f'visual baseline unavailable: {error}'})
             for color_number,index in enumerate(active_order,1):
                 if color_number <= resume_completed:
                     try:rgb_done=tuple(map(int,plan['colors'][int(index)]))
@@ -3782,10 +3848,14 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         # prevent mouse-up or disarming after an interrupted operation.
         from StabilityRC import safe_release_and_disarm
         safe_release_and_disarm(mouse,dry_run=dry_run,logger=log_event)
+        if visual_previous_snapshot is not None:
+            try:visual_previous_snapshot.close()
+            except Exception as close_error:log_event(f'Visual snapshot cleanup failed: {close_error!r}')
         try:
             runtime_payload=save_runtime_safety_report(runtime_safety)
         except Exception as report_error:
-            runtime_payload={'counts':{},'save_error':str(report_error)}
+            runtime_payload=runtime_safety.as_dict()
+            runtime_payload['save_error']=str(report_error)
         plan['options']['runtime_safety_report']=runtime_payload
         runtime_counts=runtime_payload.get('counts') or {}
         runtime_report_path=runtime_payload.get('text_path') or runtime_payload.get('json_path')
@@ -4368,6 +4438,7 @@ class DrawBotApp:
         self.color_session_cache.clear()
         if remove_image:
             self.original=None;self.subject_region=None
+            self.background_removal_original=None;self.background_removal_meta=None
             self.file_label.set('No image loaded');self.url.set('')
         error=None
         try:
@@ -4401,14 +4472,15 @@ class DrawBotApp:
             import os
             from BrowserOneClick import discover_browser_target
             from BrowserAutoCalibration import auto_calibrate_browser
-            candidate=discover_browser_target('gartic-phone',exclude_pid=os.getpid(),preferred_handle=_preferred_handle,preferred_monitor_rect=_preferred_monitor)
-            if self.stop.is_set():raise InterruptedError()
-            meta={'handle':candidate.handle,'rect':candidate.rect,'client_rect':candidate.client_rect,'dpi':candidate.dpi}
-            result=auto_calibrate_browser('gartic-phone',meta,path,screenshot=candidate.screenshot)
-            from LayoutFingerprintV2 import record_from_calibration_file
-            fingerprint=record_from_calibration_file('gartic-phone',meta,result.canvas_box,path,method='Full Gartic grid setup')
-            payload=result.as_dict();payload.update(target_meta=meta,profile_name=profile,layout_fingerprint_meta=fingerprint)
-            self.events.put(('browser_auto_calibration_complete',payload))
+            candidate=discover_browser_target('gartic-phone',exclude_pid=os.getpid(),preferred_handle=_preferred_handle,preferred_monitor_rect=_preferred_monitor,cancelled=self.stop.is_set)
+            with closing(candidate.screenshot):
+                if self.stop.is_set():raise InterruptedError()
+                meta={'handle':candidate.handle,'rect':candidate.rect,'client_rect':candidate.client_rect,'dpi':candidate.dpi}
+                result=auto_calibrate_browser('gartic-phone',meta,path,screenshot=candidate.screenshot,cancelled=self.stop.is_set)
+                from LayoutFingerprintV2 import record_from_calibration_file
+                fingerprint=record_from_calibration_file('gartic-phone',meta,result.canvas_box,path,method='Full Gartic grid setup')
+                payload=result.as_dict();payload.update(target_meta=meta,profile_name=profile,layout_fingerprint_meta=fingerprint)
+                self.events.put(('browser_auto_calibration_complete',payload))
         self.begin_worker('browser-auto-calibration',work)
 
     def clear_recovery_snapshot(self):
@@ -5151,6 +5223,11 @@ class DrawBotApp:
         if normalize_drop_in_action(getattr(self,'drop_action_pending',None)) != DROP_IN_ACTION:
             return False
         if self.closing:return False
+        stop=getattr(self,'stop',None)
+        if stop is not None and stop.is_set():
+            DrawBotApp._disarm_manual_drop_in(self,'cancelled before queued drawing')
+            self.status.set('Drop-In cancelled. The image remains loaded.')
+            return False
         context=getattr(self,'drop_in_start_context',None)
         if context is not None:
             if pending_drop_in_expired(context):
@@ -5174,6 +5251,7 @@ class DrawBotApp:
             # as an active drawing/recording. Only read-only browser setup waits.
             self.status.set(f'Drop-In cannot start while {self.activity} is active.')
             log_event(f'Drop-In draw request not started because non-waitable activity={self.activity!r}.')
+            DrawBotApp._disarm_manual_drop_in(self,'unrelated work interrupted queued drawing')
             return False
         if not DrawBotApp._manual_drop_in_armed(self):
             self.status.set('Drop-In Start did not run because the arm expired before the image finished loading.')
@@ -5217,11 +5295,15 @@ class DrawBotApp:
         # image; geometry changes inside that target are allowed.
         if context is not None:
             current=DrawBotApp._drop_in_fingerprint(self)
-            same_identity=(context.fingerprint[0:2]==current[0:2])
+            same_identity=pending_drop_in_target_matches(context,current)
             if not same_identity:
                 DrawBotApp._disarm_manual_drop_in(self,'target identity changed after verification')
                 self.status.set('Drop-In cancelled: the selected browser/profile changed before drawing.')
                 return False
+        if stop is not None and stop.is_set():
+            DrawBotApp._disarm_manual_drop_in(self,'cancelled during target verification')
+            self.status.set('Drop-In cancelled. The image remains loaded.')
+            return False
         self.drop_action_pending=None
         self.drop_in_sync_phase=DROP_SYNC_READY
         # Preserve authorization only long enough to enter draw(); then revoke it
@@ -5891,7 +5973,7 @@ class DrawBotApp:
         except Exception:pass
         def work():
             from BrowserOneClick import one_click_setup
-            payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle)
+            payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,cancelled=self.stop.is_set)
             payload['one_click_force']=force
             self.events.put(('browser_one_click_setup_complete',payload))
         started=bool(self.begin_worker('browser-one-click-setup',work))
@@ -5966,28 +6048,28 @@ class DrawBotApp:
             meta=probe_handle_isolated(handle)
             # v1.0.76: try a previously verified layout first. One screenshot is
             # shared by the cache verifier and the full detector on cache miss.
-            from PIL import ImageGrab
-            screenshot=ImageGrab.grab(bbox=tuple(meta['client_rect']),all_screens=True).convert('RGB')
-            cached=try_restore(profile_key,meta,palette_path,screenshot=screenshot)
-            if cached.hit:
-                payload=cached.as_dict()
-                payload.update({
-                    'palette_confidence':cached.confidence, 'canvas_confidence':max(.90,cached.confidence),
-                    'method':'Layout Fingerprint v2 cache',
-                    'note':'Verified local layout fingerprint restored without full palette detection.',
-                    'target_meta':meta, 'profile_name':profile_name,
-                    'layout_fingerprint_meta':cached.as_dict(),
-                })
+            from ScreenGuard import _grab_rgb
+            with closing(_grab_rgb(tuple(meta['client_rect']))) as screenshot:
+                cached=try_restore(profile_key,meta,palette_path,screenshot=screenshot,cancelled=self.stop.is_set)
+                if cached.hit:
+                    payload=cached.as_dict()
+                    payload.update({
+                        'palette_confidence':cached.confidence, 'canvas_confidence':max(.90,cached.confidence),
+                        'method':'Layout Fingerprint v2 cache',
+                        'note':'Verified local layout fingerprint restored without full palette detection.',
+                        'target_meta':meta, 'profile_name':profile_name,
+                        'layout_fingerprint_meta':cached.as_dict(),
+                    })
+                    self.events.put(('browser_auto_calibration_complete',payload))
+                    return
+                result=auto_calibrate_browser(profile_key,meta,palette_path,screenshot=screenshot,cancelled=self.stop.is_set)
+                try:
+                    fingerprint=record_from_calibration_file(profile_key,meta,result.canvas_box,palette_path,method=result.method) if result.canvas_box else None
+                except Exception as error:
+                    fingerprint={'saved':False,'reason':str(error)}
+                payload=result.as_dict();payload['target_meta']=meta;payload['profile_name']=profile_name
+                payload['layout_fingerprint_meta']=fingerprint
                 self.events.put(('browser_auto_calibration_complete',payload))
-                return
-            result=auto_calibrate_browser(profile_key,meta,palette_path,screenshot=screenshot)
-            try:
-                fingerprint=record_from_calibration_file(profile_key,meta,result.canvas_box,palette_path,method=result.method) if result.canvas_box else None
-            except Exception as error:
-                fingerprint={'saved':False,'reason':str(error)}
-            payload=result.as_dict();payload['target_meta']=meta;payload['profile_name']=profile_name
-            payload['layout_fingerprint_meta']=fingerprint
-            self.events.put(('browser_auto_calibration_complete',payload))
         started=self.begin_worker('browser-auto-calibration',work)
         if not started and self.drop_in_sync_phase==DROP_SYNC_AUTO_SETUP:
             self.drop_in_sync_phase=DROP_SYNC_IDLE
@@ -6023,7 +6105,7 @@ class DrawBotApp:
         def work():
             try:
                 from BrowserOneClick import one_click_setup
-                payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle)
+                payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,cancelled=self.stop.is_set)
                 payload['one_click_setup_verify_only']=True
                 self.events.put(('browser_one_click_setup_complete',payload))
             except Exception as error:
@@ -6930,7 +7012,7 @@ class DrawBotApp:
             def work():
                 import os
                 from SmartDropInCanvas import discover_canvas_target
-                payload=discover_canvas_target(profile_key,preferred_handle=preferred,exclude_pid=os.getpid())
+                payload=discover_canvas_target(profile_key,preferred_handle=preferred,exclude_pid=os.getpid(),cancelled=self.stop.is_set)
                 if self.stop.is_set():raise InterruptedError('Game Canvas Drop detection cancelled.')
                 payload['profile_name']=self.game.get();payload['profile_key']=profile_key;payload['generation']=generation
                 self.events.put(('smart_drop_canvas_ready',payload))
@@ -7143,6 +7225,7 @@ class DrawBotApp:
 
     def undo_background_removal(self):
         if self.activity:return False
+        from ImageFormatInfo import image_label
         previous=self.background_removal_original
         if previous is None:
             self.status.set('No background-removal change to undo.')
@@ -7253,13 +7336,17 @@ class DrawBotApp:
                 self._suppress_recovery=False;self.original=ImageOps.exif_transpose(content).convert('RGBA');self.plan=None
                 self.original.info.pop('draw_studio_format',None)
                 self.upscale_original=None
+                self.background_removal_original=None;self.background_removal_meta=None
                 self.subject_region=None
                 if hasattr(self,'subject_hint'): self.subject_hint.set('Auto: simple background or transparent PNG. Mark busy photos.')
                 action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self))
                 DrawBotApp._clear_render_resume(self,'new pasted image')
                 from ImageFormatInfo import image_label
                 self.file_label.set(image_label(self.original,'Pasted image'));self._mark_plan_stale('Image pasted. Press Build preview when ready.');self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40);self._maybe_auto_preview(delay=900, reason='paste-image')
-                DrawBotApp._queue_drop_in_start(self,action,source_label='pasted image')
+                if DrawBotApp._queue_drop_in_start(self,action,source_label='pasted image'):
+                    DrawBotApp._schedule_pending_drop_in_start(self)
+                elif action is None:
+                    DrawBotApp._queue_browser_one_click_after_import(self,'pasted image')
             elif isinstance(content,list) and content:
                 from CanvasDropPayload import parse_canvas_drop
                 source=parse_canvas_drop('',split_items=content)
@@ -7294,6 +7381,7 @@ class DrawBotApp:
             if self.activity:return
             self._suppress_recovery=False;self.original=image.convert('RGBA');self.plan=None;self.file_label.set('Image from screen')
             self.subject_region=None;self.upscale_original=None
+            self.background_removal_original=None;self.background_removal_meta=None
             if hasattr(self,'subject_hint'):self.subject_hint.set('Auto: simple background or transparent PNG. Mark busy photos.')
             DrawBotApp._clear_render_resume(self,'new screen image')
             window.destroy();self._mark_plan_stale('Screen image captured. Press Build preview when ready.');self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40);self._maybe_auto_preview(delay=900, reason='screen-image')
@@ -7555,10 +7643,10 @@ class DrawBotApp:
 
     def update_plan(self, user_initiated=False, reason='automatic',full_detail=False):
         self.preview_after=None
+        if self.activity or self.closing:
+            return
         self.preview_generation=int(getattr(self,'preview_generation',0))+1
         generation=self.preview_generation
-        if self.activity:
-            return
         if self.original is None:
             if user_initiated:self.status.set('Load an image before building a preview.')
             return
@@ -7586,7 +7674,9 @@ class DrawBotApp:
             options=dict(options)
             options.setdefault('release_stability_meta',{})['preview_memory_limits']=_limits.as_options_meta()
         except Exception as _stability_error:
-            log_event(f'Preview stability memory guard skipped: {_stability_error!r}')
+            log_event(f'Preview stopped by its memory guard: {_stability_error!r}')
+            self.status.set(f'Preview cannot fit the selected memory budget: {_stability_error}')
+            return
         preview_area=preview_area_for(target_area,max_pixels=max_pixels,max_dimension=max_dimension)
         preview_options=dict(options)
         preview_options['_preview_plan']=True
@@ -7616,7 +7706,8 @@ class DrawBotApp:
         preview_options=preview_safe_options(preview_options,mode)
         if full_detail:
             from PreviewQuality import full_preview_options
-            try:preview_options=full_preview_options(options,target_area)
+            try:
+                preview_options=full_preview_options(options,target_area)
             except ValueError as error:
                 self.status.set(str(error));return
             preview_area=tuple(map(int,target_area))
@@ -8130,10 +8221,10 @@ class DrawBotApp:
         except InterruptedError as error:
             raise ValueError(f'Browser Auto-Recalibration could not verify the target browser: {error}') from error
         if uses_paint_color(self):
-            from PIL import ImageGrab
+            from ScreenGuard import _grab_rgb
             from BrowserAutoCalibration import detect_browser_canvas
-            shot=ImageGrab.grab(bbox=client,all_screens=True).convert('RGB')
-            detected=detect_browser_canvas(profile_key,shot,screen_origin=client[:2])
+            with closing(_grab_rgb(client)) as shot:
+                detected=detect_browser_canvas(profile_key,shot,screen_origin=client[:2],cancelled=self.stop.is_set)
             canvas=detected['canvas_box']
             if canvas is None or detected['canvas_confidence']<.70:
                 raise ValueError('Single-color sketch could not verify the game canvas. Show a blank drawing canvas and select the area again.')
@@ -8152,41 +8243,41 @@ class DrawBotApp:
         # Cache verification samples only saved palette control points and emits
         # no input. Browser Visual Preflight still runs before real drawing.
         from LayoutFingerprintV2 import try_restore, record_from_calibration_file
-        from PIL import ImageGrab
-        screenshot=ImageGrab.grab(bbox=client,all_screens=True).convert('RGB')
-        cached=try_restore(profile_key,meta,Path(self.calibration_path),screenshot=screenshot)
-        cache_hit=bool(cached.hit);cache_refresh_meta=None
-        retry_meta={'attempts':0,'retries':0,'errors':(), 'delays':()}
-        if cache_hit:
-            from BrowserAutoCalibration import detect_browser_canvas
-            from BrowserAutoRecalibration import evaluate_cached_canvas
-            live_canvas=detect_browser_canvas(profile_key,screenshot,screen_origin=(client[0],client[1]))
-            cache_refresh_meta=evaluate_cached_canvas(cached.canvas_box,live_canvas.get('canvas_box'),live_canvas.get('canvas_confidence',0.0))
-            if cache_refresh_meta.action=='full':
-                cache_hit=False
-            else:
-                refreshed_canvas=(live_canvas.get('canvas_box') if cache_refresh_meta.action=='canvas-only' else cached.canvas_box)
-                class _CachedResult:
-                    canvas_box=refreshed_canvas
-                    canvas_confidence=float(live_canvas.get('canvas_confidence') or max(.90,cached.confidence))
-                    palette_count=cached.palette_count
-                    confidence=cached.confidence
-                    method=('Layout Fingerprint v2 cache + canvas-only refresh' if cache_refresh_meta.action=='canvas-only' else 'Layout Fingerprint v2 cache')
-                result=_CachedResult()
-                if cache_refresh_meta.action=='canvas-only' and refreshed_canvas:
-                    try:record_from_calibration_file(profile_key,meta,refreshed_canvas,Path(self.calibration_path),method=result.method)
-                    except Exception as fingerprint_error:log_event(f'rc13 canvas-only fingerprint refresh skipped: {fingerprint_error!r}')
-        if not cache_hit:
-            from BrowserAutoRecalibration import calibrate_browser_with_retry
-            result,retry_meta=calibrate_browser_with_retry(
-                profile_key,meta,Path(self.calibration_path),screenshot=screenshot,
-                recapture=lambda:ImageGrab.grab(bbox=client,all_screens=True).convert('RGB'),
-                cancelled=self.stop.is_set)
-            try:
-                if result.canvas_box:
-                    record_from_calibration_file(profile_key,meta,result.canvas_box,Path(self.calibration_path),method=result.method)
-            except Exception as fingerprint_error:
-                log_event(f'Layout Fingerprint v2 save skipped: {fingerprint_error!r}')
+        from ScreenGuard import _grab_rgb
+        with closing(_grab_rgb(client)) as screenshot:
+            cached=try_restore(profile_key,meta,Path(self.calibration_path),screenshot=screenshot,cancelled=self.stop.is_set)
+            cache_hit=bool(cached.hit);cache_refresh_meta=None
+            retry_meta={'attempts':0,'retries':0,'errors':(), 'delays':()}
+            if cache_hit:
+                from BrowserAutoCalibration import detect_browser_canvas
+                from BrowserAutoRecalibration import evaluate_cached_canvas
+                live_canvas=detect_browser_canvas(profile_key,screenshot,screen_origin=(client[0],client[1]),cancelled=self.stop.is_set)
+                cache_refresh_meta=evaluate_cached_canvas(cached.canvas_box,live_canvas.get('canvas_box'),live_canvas.get('canvas_confidence',0.0))
+                if cache_refresh_meta.action=='full':
+                    cache_hit=False
+                else:
+                    refreshed_canvas=(live_canvas.get('canvas_box') if cache_refresh_meta.action=='canvas-only' else cached.canvas_box)
+                    class _CachedResult:
+                        canvas_box=refreshed_canvas
+                        canvas_confidence=float(live_canvas.get('canvas_confidence') or max(.90,cached.confidence))
+                        palette_count=cached.palette_count
+                        confidence=cached.confidence
+                        method=('Layout Fingerprint v2 cache + canvas-only refresh' if cache_refresh_meta.action=='canvas-only' else 'Layout Fingerprint v2 cache')
+                    result=_CachedResult()
+                    if cache_refresh_meta.action=='canvas-only' and refreshed_canvas:
+                        try:record_from_calibration_file(profile_key,meta,refreshed_canvas,Path(self.calibration_path),method=result.method)
+                        except Exception as fingerprint_error:log_event(f'rc13 canvas-only fingerprint refresh skipped: {fingerprint_error!r}')
+            if not cache_hit:
+                from BrowserAutoRecalibration import calibrate_browser_with_retry
+                result,retry_meta=calibrate_browser_with_retry(
+                    profile_key,meta,Path(self.calibration_path),screenshot=screenshot,
+                    recapture=lambda:_grab_rgb(client),
+                    cancelled=self.stop.is_set)
+                try:
+                    if result.canvas_box:
+                        record_from_calibration_file(profile_key,meta,result.canvas_box,Path(self.calibration_path),method=result.method)
+                except Exception as fingerprint_error:
+                    log_event(f'Layout Fingerprint v2 save skipped: {fingerprint_error!r}')
         canvas=result.canvas_box
         if not isinstance(canvas,(tuple,list)) or len(canvas)!=4 or float(result.canvas_confidence)<.70:
             raise ValueError(
@@ -8521,8 +8612,9 @@ class DrawBotApp:
                 # Brush automation is an optimization/convenience layer. A
                 # detector failure must not invent clicks; keep the current brush
                 # and enlarge only the safety inset.
-                options['canvas_guard_brush_px']=max(int(options.get('brush_px',3) or 3),12)
-                options['browser_brush_plan']={'target_position':None,'safe_guard_px':options['canvas_guard_brush_px'],'method':str(brush_error)}
+                from BrowserBrushSize import conservative_brush_guard
+                options['canvas_guard_brush_px']=conservative_brush_guard(profile_key,options.get('brush_px',3))
+                options['browser_brush_plan']={'profile_key':profile_key,'target_position':None,'safe_guard_px':options['canvas_guard_brush_px'],'method':str(brush_error)}
                 log_event(f'Automatic browser brush detection fell back safely: {brush_error!r}.')
             try:
                 from BrowserToolLayout import SUPPORTED as TOOL_PROFILES,plan_browser_tools
@@ -8695,7 +8787,8 @@ class DrawBotApp:
                     if not monitor.active(self.target_window):raise ValueError('Gartic must stay visible while reading the timer.')
                     if tuple(monitor.client_rectangle(self.target_window[0]))!=tuple(current_client):
                         raise ValueError('Gartic changed size while reading the timer. Select the area again.')
-                    return ImageGrab.grab(bbox=tuple(current_client),all_screens=True).convert('RGB')
+                    from ScreenGuard import _grab_rgb
+                    return _grab_rgb(tuple(current_client))
                 local_canvas=(area[0]-current_client[0],area[1]-current_client[1],area[0]+area[2]-current_client[0],area[1]+area[3]-current_client[1])
                 reading=observe_timer(timer_capture,local_canvas,self.stop,lambda msg:self.events.put(('status',msg)))
                 options.update(apply_timer_budget(options,reading))
@@ -9489,11 +9582,18 @@ class DrawBotApp:
                 screen_window=getattr(self,'screen_task_window',None)
                 if screen_window is not None:screen_window.restore()
             return
+        stop=getattr(self,'stop',None)
+        if (stop is not None and stop.is_set() and kind in
+                ('loaded','planned','background_removed','screen','paint_auto_calibration_complete',
+                 'browser_one_click_setup_complete','browser_auto_calibration_complete',
+                 'one_click_setup_verification_complete')):
+            log_event(f'Ignored cancelled worker result: {kind}.')
+            return
         if kind=='status':
             self.status.set(str(value))
         elif kind=='paint_auto_calibration_complete':
             if self.game.get()!='Microsoft Paint':return
-            meta=value['target_meta'];l,t,r,b=map(int,value['canvas_box'])
+            meta,canvas=_validated_setup_payload(value,require_canvas=True);l,t,r,b=canvas
             self.corners=[(l,t),(r,b)];self.saved_area=list(self.corners);self.canvas_anchor_detection=None
             self.target_window=(int(meta['handle']),tuple(meta['rect']))
             self.target_client_rect=tuple(meta['client_rect']);self.target_dpi=meta.get('dpi')
@@ -9616,11 +9716,12 @@ class DrawBotApp:
                 self.browser_one_click_force=False
                 log_event('Ignored stale Browser One-Click setup result after profile change.')
             else:
+                self.browser_auto_calibration_success=False
+                meta,canvas=_validated_setup_payload(payload,require_canvas=True)
                 # Preserve the one-shot canvas-drop authorization through the
                 # setup-complete event until _finish_browser_one_click consumes it.
                 if force:self.browser_one_click_force=True
-                meta=payload.get('target_meta') or {};canvas=payload.get('canvas_box')
-                if isinstance(canvas,(list,tuple)) and len(canvas)==4 and float(payload.get('canvas_confidence',0) or 0)>=.70:
+                if canvas is not None:
                     l,t,r,b=map(int,canvas);self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)];self.canvas_anchor_detection=None
                     self.area_text.set(f'✓ Canvas Drop verified {r-l} × {b-t} px' if force else f'✓ One-Click canvas {r-l} × {b-t} px')
                 if meta.get('handle') and meta.get('rect') and meta.get('client_rect'):
@@ -9662,13 +9763,16 @@ class DrawBotApp:
             if profile_name!=self.game.get():
                 log_event('Ignored stale Browser Auto Setup result after profile change.')
             else:
-                meta=payload.get('target_meta') or {}
-                canvas=payload.get('canvas_box')
-                if isinstance(canvas,(list,tuple)) and len(canvas)==4 and float(payload.get('canvas_confidence',0) or 0)>=.70:
+                self.browser_auto_calibration_success=False
+                meta,canvas=_validated_setup_payload(payload)
+                self.corners=[];self.saved_area=[];self.canvas_anchor_detection=None
+                if canvas is not None:
                     l,t,r,b=map(int,canvas)
                     if r-l>=10 and b-t>=10:
                         self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)];self.canvas_anchor_detection=None
                         self.area_text.set(f'✓ Auto canvas {r-l} × {b-t} px · confidence {float(payload.get("canvas_confidence",0))*100:.0f}%')
+                else:
+                    self.area_text.set('Select drawing area: automatic setup verified the palette only.')
                 if meta.get('handle') and meta.get('rect') and meta.get('client_rect'):
                     self.target_window=(int(meta['handle']),tuple(meta['rect']))
                     self.target_client_rect=tuple(meta['client_rect']);self.target_dpi=meta.get('dpi')
@@ -9678,12 +9782,15 @@ class DrawBotApp:
                 count=int(payload.get('palette_count',0) or 0);confidence=float(payload.get('confidence',0) or 0)
                 self.browser_auto_text.set(f'✓ Auto setup ready · {count} colors · confidence {confidence*100:.0f}% · manual calibration not required.')
                 self.status.set(f'✓ {profile_name} Auto Setup ready: {count} verified colors. Add/drop the image and draw.')
+                if canvas is None:
+                    self.browser_auto_text.set(f'Palette ready · {count} colors · select the drawing area manually.')
+                    self.status.set(f'{profile_name} palette calibrated. Select the drawing area before starting.')
                 try:self.save_settings()
                 except Exception:pass
                 try:self.root.deiconify();self.root.lift()
                 except tk.TclError:pass
-                self.browser_auto_calibration_success=True
-                self.drop_in_sync_phase=DROP_SYNC_READY
+                self.browser_auto_calibration_success=canvas is not None
+                self.drop_in_sync_phase=DROP_SYNC_READY if canvas is not None else DROP_SYNC_IDLE
                 fingerprint_meta=payload.get('layout_fingerprint_meta') or {}
                 cache_hit=bool(isinstance(fingerprint_meta,dict) and fingerprint_meta.get('hit'))
                 log_event(f'Browser Auto Setup completed: profile={profile_name!r} colors={count} confidence={confidence:.3f} canvas={canvas!r} layout_fingerprint_cache_hit={cache_hit}.')
@@ -9805,6 +9912,7 @@ class DrawBotApp:
             self.show_previews()
             self._schedule_recovery_checkpoint(include_image=True,delay=40)
         elif kind=='background_removed':
+            from ImageFormatInfo import image_label
             result=value
             image=getattr(result,'image',None);meta=getattr(result,'metadata',{}) or {}
             if image is None:

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ProfileStorage import profile_correction_history_file, safe_profile_key
-from RuntimePaths import atomic_write_text, file_transaction, read_json
+from RuntimePaths import atomic_write_text, file_transaction, is_finite_number, read_json
 
 VERSION = 1
 MAX_ENTRIES = 30
@@ -74,6 +74,34 @@ def _empty(profile_key: str) -> dict[str, Any]:
     return {"version": VERSION, "profile_key": safe_profile_key(profile_key), "entries": []}
 
 
+def _valid_entry(entry) -> bool:
+    """Keep legacy rows only when their display fields have their real domains."""
+    if not isinstance(entry, dict) or contains_image_data(entry):
+        return False
+    if 'state' in entry and (not isinstance(entry['state'], str) or len(entry['state']) > 80):
+        return False
+    for section in ('before', 'after', 'delta', 'correction', 'context'):
+        if section in entry and not isinstance(entry[section], dict):
+            return False
+    for section in ('before', 'after', 'delta'):
+        for key, value in entry.get(section, {}).items():
+            if value is None or not key.endswith(('_percent', '_delta')):
+                continue
+            low = -100 if key.endswith('_delta') else 0
+            if not is_finite_number(value) or not low <= value <= 100:
+                return False
+    for key in ('executed_paths', 'planned_paths', 'executed_colors', 'corrected_colors',
+                'selected_correction_pixels', 'missing_pixels', 'wrong_color_pixels'):
+        value = entry.get('correction', {}).get(key)
+        if value is not None and (type(value) is not int or not 0 <= value <= 1_000_000_000):
+            return False
+    for key in ('created_at', 'actual_seconds'):
+        value = entry.get(key)
+        if value is not None and (not is_finite_number(value) or value < 0):
+            return False
+    return True
+
+
 def _load(options: dict[str, Any], path: Path | None = None) -> tuple[Path, dict[str, Any]]:
     resolved = _resolved_path(options, path)
     profile = _profile_from_options(options)
@@ -90,7 +118,7 @@ def _load(options: dict[str, Any], path: Path | None = None) -> tuple[Path, dict
     entries = raw.get("entries")
     if not isinstance(entries, list):
         return resolved, _empty(profile)
-    return resolved, {"version": VERSION, "profile_key": profile, "entries": [e for e in entries if isinstance(e, dict)][-MAX_ENTRIES:]}
+    return resolved, {"version": VERSION, "profile_key": profile, "entries": [e for e in entries if _valid_entry(e)][-MAX_ENTRIES:]}
 
 
 def _budget_class(seconds: Any) -> str:
@@ -279,7 +307,10 @@ def build_history_entry(plan_or_options: dict[str, Any], *, actual_seconds: floa
     if not after and _state(correction) in {"skipped", "skipped-clean", "blocked", "planned-not-executed"}:
         after = dict(before)
 
-    created = float(created_at if created_at is not None else time.time())
+    created = time.time() if created_at is None else created_at
+    if not is_finite_number(created) or created < 0:
+        raise ValueError('Correction-history timestamp must be finite and nonnegative.')
+    created = float(created)
     material = json.dumps({"t": round(created, 3), "ctx": ctx, "corr": correction, "before": before, "after": after}, sort_keys=True, default=str)
     entry_id = hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
     entry = {
@@ -323,7 +354,7 @@ def record_correction_history(plan_or_options: dict[str, Any], *, actual_seconds
         db["entries"] = entries[-MAX_ENTRIES:]
         db["updated_at"] = round(time.time(), 3)
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2))
+        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False))
         summary = summarize_correction_history(db, limit=DISPLAY_LIMIT)
         return {
             "recorded": True,

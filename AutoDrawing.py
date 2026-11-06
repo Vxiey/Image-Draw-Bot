@@ -6,6 +6,30 @@ from ExtraFastProfilePolicy import apply_extra_fast_profile_policy
 
 PRESETS=('Auto','Manual','Masterpiece','Extra fast')
 
+def _image_statistics(image):
+    """Analyze the same opaque thumbnail without redundant full-size copies."""
+    rgba=flat=rgb=None
+    try:
+        if image.mode=='RGB' and 'transparency' not in image.info:
+            flat=image.copy()
+        else:
+            rgba=image if image.mode=='RGBA' else image.convert('RGBA')
+            flat=Image.new('RGBA',rgba.size,'white')
+            flat.alpha_composite(rgba)
+        flat.thumbnail((128,128))
+        rgb=flat if flat.mode=='RGB' else flat.convert('RGB')
+        a=np.asarray(rgb,dtype=np.int16)
+    finally:
+        if rgb is not None and rgb is not flat:rgb.close()
+        if flat is not None:flat.close()
+        if rgba is not None and rgba is not image:rgba.close()
+    white=float(np.mean(np.min(a,axis=2)>235))
+    chroma=float(np.mean(a.max(axis=2)-a.min(axis=2)>35))
+    bins=(a//32).astype(np.int32);codes=bins[:,:,0]*64+bins[:,:,1]*8+bins[:,:,2]
+    hist=np.bincount(codes.ravel(),minlength=512)
+    dominant=float(np.sort(hist)[-12:].sum()/hist.sum())
+    return white,chroma,dominant
+
 def resolve_drawing(image,options):
     raw=dict(options);preset=raw.get('render_preset','Manual')
     if preset not in PRESETS:raise ValueError('Choose Auto, Manual, Masterpiece or Extra fast.')
@@ -49,13 +73,8 @@ def resolve_drawing(image,options):
             'engine':engine,'recognition_first':True,'extra_fast_strategy':fast_strategy,
         }
         return out
-    rgba=image.convert('RGBA');flat=Image.new('RGBA',rgba.size,'white');flat.alpha_composite(rgba)
-    flat.thumbnail((128,128));a=np.asarray(flat.convert('RGB'),dtype=np.int16)
-    white=float(np.mean(np.min(a,axis=2)>235))
-    chroma=float(np.mean(a.max(axis=2)-a.min(axis=2)>35))
     # Quantized colour occupancy is a texture heuristic, not object recognition.
-    bins=(a//32).astype(np.int32);codes=bins[:,:,0]*64+bins[:,:,1]*8+bins[:,:,2]
-    hist=np.bincount(codes.ravel(),minlength=512);dominant=float(np.sort(hist)[-12:].sum()/hist.sum())
+    white,chroma,dominant=_image_statistics(image)
     source_kind='line art' if white>.65 and chroma<.12 else 'flat illustration' if dominant>.90 else 'photo / texture'
     # Step 11: Auto is now an end-to-end quality/speed policy for full-colour
     # images. It composes the existing colour/deadline/calibration engines and

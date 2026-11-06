@@ -134,10 +134,12 @@ def _parallel_basic_strokes(image, lines, skip_white, cancelled, cpu_workers, cp
             if cancelled():
                 return None
             tasks.append((y0, rgba.width, raw[y0 * stride:y1 * stride], bool(lines), bool(skip_white), palette))
-        chunks = parallel_map(_basic_rows_worker, tasks, backend=backend, workers=workers)
+        chunks = parallel_map(_basic_rows_worker, tasks, backend=backend, workers=workers, cancelled=cancelled)
         if cancelled():
             return None
         return _merge_groups(chunks, len(palette))
+    except InterruptedError:
+        raise
     except Exception:
         # A failed optimization must never break the safe legacy planner.
         return None

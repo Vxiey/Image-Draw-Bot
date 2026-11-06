@@ -145,6 +145,19 @@ def _raise_rate_limit(response):
         raise UpdateCheckError("GitHub's request limit was reached." + detail + " You can still open the Releases page.")
 
 
+def _close_response(response):
+    """A transport cleanup error must not replace cancellation or verification."""
+    if response is None or not hasattr(response, 'close'):
+        return
+    try:
+        response.close()
+    except Exception as error:
+        # Keep the successful verified result (or primary exception) intact.
+        # Log only the exception class, never signed redirect URLs/headers.
+        from CrashDiagnostics import log_error
+        log_error(f'Update response cleanup failed: {type(error).__name__}', category='update-cleanup')
+
+
 def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, deadline=None, **options):
     """Follow only validated HTTPS redirects and close every discarded response."""
     for hop in range(_MAX_REDIRECTS + 1):
@@ -179,8 +192,8 @@ def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, d
             except ValueError as error:
                 raise UpdateCheckError("Update redirect has an invalid destination.") from error
         finally:
-            if not accepted and hasattr(response, "close"):
-                response.close()
+            if not accepted:
+                _close_response(response)
 
 
 def check_for_updates(*, request_get=None, timeout=(4, 8), cancelled=lambda: False) -> dict:
@@ -217,8 +230,7 @@ def check_for_updates(*, request_get=None, timeout=(4, 8), cancelled=lambda: Fal
     except Exception as error:
         raise UpdateCheckError(f"Could not check GitHub Releases: {error}") from error
     finally:
-        if response is not None and hasattr(response, "close"):
-            response.close()
+        _close_response(response)
     if not isinstance(releases, list):
         raise UpdateCheckError("GitHub returned an unexpected releases response.")
 
@@ -315,7 +327,15 @@ def download_installer(asset, *, directory=None, request_get=None, cancelled=lam
     path=Path(temp);response=None
     try:
         total=0;digest=hashlib.sha256();deadline=time.monotonic()+1800
-        with os.fdopen(fd,'wb') as output:
+        try:
+            output = os.fdopen(fd, 'wb')
+        except BaseException:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
+        with output:
             response=_get_trusted_response(
                 asset['url'],request_get=request_get,hosts=_INSTALLER_HOSTS,
                 cancelled=cancelled,deadline=deadline,stream=True,timeout=(5,15),
@@ -334,7 +354,7 @@ def download_installer(asset, *, directory=None, request_get=None, cancelled=lam
                 if total>asset['size']:raise UpdateCheckError('Installer exceeds its published size.')
                 digest.update(chunk);output.write(chunk);progress(total,asset['size'])
             output.flush();os.fsync(output.fileno())
-        if cancelled():raise InterruptedError('Update cancelled.')
+        _check_transfer_budget(cancelled, deadline)
         if total!=asset['size'] or digest.hexdigest()!=asset['sha256']:
             raise UpdateCheckError('Installer checksum or size mismatch. Nothing was installed; try again.')
         with path.open('rb') as check:
@@ -342,10 +362,17 @@ def download_installer(asset, *, directory=None, request_get=None, cancelled=lam
         destination=path.with_suffix('.exe');path.replace(destination)
         return str(destination)
     finally:
+        import sys
+        failure = sys.exc_info()[1]
         try:
-            if response is not None and hasattr(response,'close'):response.close()
+            _close_response(response)
         finally:
-            path.unlink(missing_ok=True)
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as error:
+                if failure is None:
+                    raise
+                failure.add_note(f'Update staging cleanup also failed: {type(error).__name__}.')
 
 
 def installer_launch_args(path, *, executable=None):

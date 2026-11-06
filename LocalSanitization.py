@@ -14,7 +14,8 @@ import re
 _URL_RE = re.compile(r'''(?i)\bhttps?://[^\s<>"]+''')
 _RELATIVE_URL_RE = re.compile(r'''(?i)(\burl["']?\s*[:=]\s*["']?)(/[^\s<>"]+)''')
 _AUTHORIZATION_RE = re.compile(
-    r'''(?i)((?:proxy-)?authorization["']?\s*[:=]\s*["']?(?:bearer|basic)\s+)[^\s"',;}\]]+'''
+    r'''(?im)((?<![\w-])(?:proxy-)?authorization["']?\s*[:=]\s*)'''
+    r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n]+)'''
 )
 _CREDENTIAL_RE = re.compile(
     r'''(?i)((?:api[_-]?key|token|password|passwd|secret)["']?\s*[:=]\s*)'''
@@ -43,6 +44,15 @@ def _redact_credential(match):
     return match.group(1) + quote + '<redacted>' + quote
 
 
+def _redact_authorization(match):
+    value = match.group(2)
+    quote = value[0] if value[:1] in ('"', "'") and value[-1:] == value[:1] else ''
+    body = value[1:-1] if quote else value
+    scheme = body.split(None, 1)[0] if body.strip() else ''
+    prefix = scheme + ' ' if scheme.lower() in ('basic', 'bearer') else ''
+    return match.group(1) + quote + prefix + '<redacted>' + quote
+
+
 def sanitize_text(text: str) -> str:
     # Redact URLs before inserting home-path placeholders: '<USER_HOME>' would
     # otherwise terminate URL matching before a following signed query string.
@@ -61,7 +71,7 @@ def sanitize_text(text: str) -> str:
         text = text.replace(home.replace("\\", "/"), "<USER_HOME>")
     text = re.sub(r'(?i)([a-z]:[\\/]Users[\\/])[^\\/\r\n"<>]+', r'\1<user>', text)
     text = re.sub(r'(/(?:home|Users)/)[^/\r\n"<>]+', r'\1<user>', text)
-    text = _AUTHORIZATION_RE.sub(r'\1<redacted>', text)
+    text = _AUTHORIZATION_RE.sub(_redact_authorization, text)
     text = _COOKIE_RE.sub(_redact_credential, text)
     text = _CREDENTIAL_RE.sub(_redact_credential, text)
     return text

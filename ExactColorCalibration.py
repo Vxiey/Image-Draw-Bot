@@ -3,7 +3,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
-from CalibrationAnchors import make_anchor
+from CalibrationAnchors import make_anchor,ensure_same_layout
+from CalibrationValidation import screen_point,point_in_rect
 from ExactColorTools import ALL_FIELDS,BASE_FIELDS,RGB_FIELDS,SPECTRUM_FIELDS,load,save
 from Colors import enable_dpi_awareness
 
@@ -25,6 +26,7 @@ class App:
     def __init__(self,root,profile_key):
         from WindowsMouse import WindowsMouse
         self.root=root;self.profile_key=profile_key;self.mouse=WindowsMouse();self.positions={};self.anchor=None;self.job=None
+        self.anchor_handle=None;self.anchor_owner=None;self.anchor_pid=None;self.closed=False
         try:
             data=load(profile_key);self.positions={k:tuple(v) for k,v in data['controls'].items()};self.anchor=data['anchor']
         except (OSError,ValueError):pass
@@ -46,13 +48,14 @@ class App:
         ttk.Label(body,textvariable=self.status,wraplength=700).pack(anchor='w',pady=6)
         actions=ttk.Frame(body);actions.pack(fill='x',pady=(10,0))
         ttk.Button(actions,text='Save calibration',command=self.save).pack(side='left')
-        ttk.Button(actions,text='Close',command=root.destroy).pack(side='right')
+        ttk.Button(actions,text='Close',command=self.close).pack(side='right')
+        root.protocol('WM_DELETE_WINDOW',self.close)
         self.refresh()
     def refresh(self):
         optional={'Eyedropper','SelectedColorPreview','ActiveColorPreview','BrightnessTop','BrightnessBottom','RedField','GreenField','BlueField'}
         for n,l in self.labels.items():l.configure(text=('✓ '+str(self.positions[n])) if n in self.positions else ('Optional' if n in optional else 'Not captured'))
     def capture(self,name,seconds):
-        if self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None:return
         if getattr(self,'capture_visibility',None) is None:
             from ScreenTaskWindow import ScreenTaskWindow
             self.capture_visibility=ScreenTaskWindow(self.root)
@@ -61,14 +64,48 @@ class App:
             self.status.set(f'Switch to the target app and hover over: {LABELS[name]}. Capturing in {seconds}… Do not click.')
             self.job=self.root.after(1000,lambda:self._tick(name,seconds-1));return
         self._now(name)
-    def _tick(self,name,seconds):self.job=None;self.capture(name,seconds) if seconds else self._now(name)
+    def _tick(self,name,seconds):
+        self.job=None
+        if not getattr(self,'closed',False):self.capture(name,seconds) if seconds else self._now(name)
     def _now(self,name):
+        if getattr(self,'closed',False):return
         try:
-            point=tuple(map(int,self.mouse.get_position()))
-            if self.anchor is None:
-                from TargetCapture import capture_target_metadata_isolated
-                x,y=point;meta=capture_target_metadata_isolated((x-5,y-5,10,10));self.anchor=make_anchor(meta['client_rect'])
-            self.positions[name]=point;self.status.set(f'Captured {LABELS[name]} at {point}.')
+            if name not in ALL_FIELDS:raise ValueError('Unknown exact color control.')
+            if getattr(self,'anchor_handle',None) is None and name!='OpenCustomColor':
+                raise ValueError('Capture Open custom color first to identify the current target window.')
+            point=screen_point(self.mouse.get_position())
+            from TargetCapture import capture_target_metadata_isolated,probe_handle_isolated
+            x,y=point;meta=capture_target_metadata_isolated((x-5,y-5,10,10))
+            if not point_in_rect(point,meta['client_rect']):raise ValueError('The control is outside the captured client area.')
+            handle=getattr(self,'anchor_handle',None)
+            if handle is None:
+                current=meta
+            elif meta['handle']==handle:
+                current=meta
+            else:
+                owner=meta.get('owner_root_handle')
+                if (owner is None or owner!=getattr(self,'anchor_owner',None) or
+                        not meta.get('target_pid') or meta['target_pid']!=getattr(self,'anchor_pid',None)):
+                    raise ValueError('Capture controls only from the same target window or its owned color dialog.')
+                # Dialog geometry is independent; rebase against the original
+                # target's client area, never against the modal's smaller frame.
+                current=probe_handle_isolated(handle)
+                if (current.get('owner_root_handle',handle)!=self.anchor_owner or
+                        current.get('target_pid')!=self.anchor_pid):
+                    raise ValueError('The target window identity changed. Capture Open custom color again.')
+            anchor=self.anchor or make_anchor(current['client_rect'])
+            reset_controls=False
+            try:dx,dy=ensure_same_layout(anchor,current['client_rect'])
+            except ValueError:
+                if name!='OpenCustomColor':raise
+                # An explicit opener capture can start a new layout after a
+                # resize. Never mix its new frame with the saved old controls.
+                anchor=make_anchor(current['client_rect']);dx=dy=0;reset_controls=True
+            stored=screen_point((point[0]-dx,point[1]-dy))
+            self.anchor=anchor;self.anchor_handle=current['handle']
+            self.anchor_owner=current.get('owner_root_handle',current['handle']);self.anchor_pid=current.get('target_pid')
+            if reset_controls:self.positions={}
+            self.positions[name]=stored;self.status.set(f'Captured {LABELS[name]} at {point}.')
         except Exception as e:self.status.set(str(e))
         finally:
             visibility=getattr(self,'capture_visibility',None)
@@ -76,6 +113,7 @@ class App:
             self.capture_visibility=None
         self.refresh()
     def save(self):
+        if getattr(self,'closed',False) or self.job is not None:return
         try:
             if self.anchor is None:raise ValueError('Capture the Open custom color control first.')
             missing_base=[n for n in BASE_FIELDS if n not in self.positions]
@@ -90,6 +128,16 @@ class App:
             mode='visual spectrum' if spectrum else 'numeric RGB fields'
             self.status.set(f'Exact color controls saved using {mode}. You can close this window.')
         except (OSError,ValueError) as e:self.status.set(f'Could not save: {e}')
+
+    def close(self):
+        if getattr(self,'closed',False):return
+        self.closed=True
+        job=self.job;self.job=None
+        if job is not None:
+            try:self.root.after_cancel(job)
+            except (tk.TclError,RuntimeError,ValueError):pass
+        try:self.root.destroy()
+        except (tk.TclError,RuntimeError):pass
 
 def main(argv=None):
     import argparse,traceback

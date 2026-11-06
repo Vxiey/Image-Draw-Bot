@@ -9,6 +9,7 @@ pixels; no AI/ML/face recognition is involved.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import closing
 from typing import MutableMapping, Sequence
 
 import numpy as np
@@ -52,10 +53,28 @@ def _bounded_factor(size: Sequence[int], requested: int) -> int:
 
 
 def _rgba_visible_array(image: Image.Image, size: tuple[int, int], factor: int) -> tuple[Image.Image, np.ndarray]:
-    source = ImageOps.exif_transpose(image).convert("RGBA")
     hi_size = (max(1, size[0] * factor), max(1, size[1] * factor))
-    hi = source.resize(hi_size, Image.Resampling.LANCZOS)
+    hi = _resize_rgba(image, hi_size)
     return hi, np.asarray(hi, dtype=np.uint8)
+
+
+def _resize_rgba(image, size):
+    # RGBA/LA resampling already handles premultiplied alpha. Ordinary RGB/L
+    # can be reduced before adding an opaque alpha channel; palette/keyed
+    # transparency needs explicit RGBA conversion first.
+    if image.mode in ('RGB', 'RGBA', 'L', 'LA') and 'transparency' not in image.info:
+        resized = image.resize(size, Image.Resampling.LANCZOS)
+        if resized.mode == 'RGBA':
+            return resized
+        try:
+            return resized.convert('RGBA')
+        finally:
+            resized.close()
+    rgba = image.convert('RGBA')
+    try:
+        return rgba.resize(size, Image.Resampling.LANCZOS)
+    finally:
+        rgba.close()
 
 
 def _cell_extreme(rgb: np.ndarray, base_rgb: np.ndarray, factor: int, dark_bias: float):
@@ -81,9 +100,9 @@ def _cell_extreme(rgb: np.ndarray, base_rgb: np.ndarray, factor: int, dark_bias:
     return chosen, contrast
 
 
-def detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "Detailed", *,
+def _detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "Detailed", *,
                         cancelled=lambda: False,
-                        metadata: MutableMapping | None = None) -> Image.Image:
+                        metadata: MutableMapping | None = None, _owned) -> Image.Image:
     """Resize RGBA while recovering high-contrast micro-features.
 
     Flat regions remain normal Lanczos output.  Only cells with enough local
@@ -97,9 +116,14 @@ def detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "De
     if cancelled():
         raise InterruptedError()
 
-    source = ImageOps.exif_transpose(image).convert("RGBA")
+    source = ImageOps.exif_transpose(image) if image.getexif().get(274, 1) not in (None, 1) else image
+    if source is not image:
+        _owned.append(source)
     if factor <= 1 or profile.recovery_strength <= 0.0:
-        out = source.resize((w, h), Image.Resampling.LANCZOS)
+        out = _resize_rgba(source, (w, h))
+        _owned.append(out)
+        if cancelled():
+            raise InterruptedError()
         if metadata is not None:
             metadata.update({
                 "preview_detail_mode": mode,
@@ -111,6 +135,7 @@ def detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "De
         return out
 
     hi, arr = _rgba_visible_array(source, (w, h), factor)
+    _owned.append(hi)
     if cancelled():
         raise InterruptedError()
     # Flatten transparency against white for feature selection, but preserve alpha
@@ -118,11 +143,14 @@ def detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "De
     alpha = arr[..., 3:4].astype(np.float32) / 255.0
     visible = arr[..., :3].astype(np.float32) * alpha + 255.0 * (1.0 - alpha)
     base = hi.resize((w, h), Image.Resampling.LANCZOS)
+    _owned.append(base)
     base_arr = np.asarray(base, dtype=np.uint8).astype(np.float32)
     base_alpha = base_arr[..., 3:4] / 255.0
     base_visible = base_arr[..., :3] * base_alpha + 255.0 * (1.0 - base_alpha)
 
     chosen, contrast = _cell_extreme(visible, base_visible, factor, profile.dark_bias)
+    if cancelled():
+        raise InterruptedError()
     active = contrast >= float(profile.threshold)
     strength = np.clip((contrast - profile.threshold) / max(1.0, 90.0 - profile.threshold), 0.0, 1.0)
     strength = (0.20 + 0.80 * strength) * float(profile.recovery_strength)
@@ -140,10 +168,15 @@ def detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "De
     straight = np.where(a > 0.0, straight, out_arr[..., :3].astype(np.float32))
     out_arr[..., :3] = np.rint(straight).clip(0, 255).astype(np.uint8)
     out = Image.fromarray(out_arr, mode="RGBA")
+    _owned.append(out)
     if profile.sharpen_percent > 0:
         alpha_channel = out.getchannel("A")
+        _owned.append(alpha_channel)
         out = out.filter(ImageFilter.UnsharpMask(radius=0.55, percent=profile.sharpen_percent, threshold=2))
+        _owned.append(out)
         out.putalpha(alpha_channel)
+    if cancelled():
+        raise InterruptedError()
     if metadata is not None:
         recovered = int(np.count_nonzero(active))
         total = max(1, w * h)
@@ -158,10 +191,36 @@ def detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "De
     return out
 
 
+def detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "Detailed", *,
+                        cancelled=lambda: False,
+                        metadata: MutableMapping | None = None) -> Image.Image:
+    """Return an owned preview while releasing all private analysis buffers."""
+    owned = []
+    result = None
+    try:
+        result = _detail_aware_resize(image, size, mode, cancelled=cancelled, metadata=metadata, _owned=owned)
+        return result
+    finally:
+        for private in reversed(owned):
+            if private is not result:
+                private.close()
+
+
 def detail_aware_resize_gray(image: Image.Image, size: Sequence[int], mode: str = "Detailed", *,
                              cancelled=lambda: False,
                              metadata: MutableMapping | None = None) -> Image.Image:
     """Grayscale equivalent used by the shaded portrait preview path."""
-    rgba = ImageOps.exif_transpose(image).convert("L").convert("RGBA")
-    enhanced = detail_aware_resize(rgba, size, mode, cancelled=cancelled, metadata=metadata)
-    return enhanced.convert("L")
+    if cancelled():
+        raise InterruptedError()
+    from AccuracyEvaluator import normalize_source
+    oriented = ImageOps.exif_transpose(image) if image.getexif().get(274, 1) not in (None, 1) else image
+    try:
+        with closing(normalize_source(oriented, oriented.size)) as visible:
+            with closing(visible.convert('L')) as gray:
+                with closing(detail_aware_resize(gray, size, mode, cancelled=cancelled, metadata=metadata)) as enhanced:
+                    if cancelled():
+                        raise InterruptedError()
+                    return enhanced.convert('L')
+    finally:
+        if oriented is not image:
+            oriented.close()

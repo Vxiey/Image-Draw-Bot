@@ -7,10 +7,13 @@ The generic profile keeps the historic filenames for backwards compatibility.
 from __future__ import annotations
 
 import hashlib
+import stat
 from pathlib import Path
 from typing import Iterable
 
 from RuntimePaths import data_dir
+
+MAX_CALIBRATION_CONTEXT_BYTES = 8 * 1024 * 1024
 
 
 def safe_profile_key(profile_key: str | None) -> str:
@@ -87,12 +90,23 @@ def calibration_context_fingerprint(profile_key: str | None, *, workflow: str = 
     for path in _profile_context_files(key, palette_path):
         digest.update(f"file:{path.name}:".encode("utf-8"))
         try:
+            if not stat.S_ISREG(path.stat().st_mode):
+                raise ValueError(f'Calibration context is not a regular file: {path.name}')
             file_digest = hashlib.sha256()
+            total = 0
             with path.open("rb") as stream:
-                for chunk in iter(lambda: stream.read(65536), b""):
+                while True:
+                    chunk = stream.read(min(65536, MAX_CALIBRATION_CONTEXT_BYTES + 1 - total))
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_CALIBRATION_CONTEXT_BYTES:
+                        raise ValueError(f'Calibration context is too large: {path.name}')
                     file_digest.update(chunk)
-        except OSError:
+        except FileNotFoundError:
             digest.update(b"<missing>\n")
+        except OSError as error:
+            raise ValueError(f'Calibration context cannot be read: {path.name}') from error
         else:
             digest.update(file_digest.digest())
             digest.update(b"\n")

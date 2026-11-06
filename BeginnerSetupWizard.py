@@ -55,10 +55,10 @@ def build_setup_wizard(*, profile_name: str = "Other drawing app", image_loaded:
         WizardStep("image", "Load image", _state(image_loaded),
                    "Select, paste or drop an image.",
                    detail="Source image is loaded." if image_loaded else "No source image is loaded.", blocks_start=not image_loaded),
-        WizardStep("calibration", "Calibrate tools and colors", _state(tools_ready and palette_ready, optional=(browser and tools_ready)),
+        WizardStep("calibration", "Calibrate tools and colors", _state(tools_ready and palette_ready, optional=(browser and palette_ready)),
                    "Run Auto setup for browser games or Auto setup Paint / Read colors for Paint.",
                    detail=("Tools and palette are ready." if tools_ready and palette_ready else "Tool or palette setup is still missing."),
-                   blocks_start=strict and not (tools_ready and palette_ready)),
+                   blocks_start=not palette_ready),
         WizardStep("canvas", "Select drawing area", _state(area_ready, blocked=not image_loaded),
                    "Select only the drawable canvas, not the toolbar or browser chrome.",
                    detail="Drawing area is selected." if area_ready else "Canvas bounds are missing.", blocks_start=not area_ready),
@@ -86,10 +86,10 @@ def build_setup_wizard(*, profile_name: str = "Other drawing app", image_loaded:
                        "Small test, Lock setup, Safety preflight and Dry run remain available for extra safety.",
                        blocks_start=False),
         ])
-    steps.append(WizardStep("unlock", "Unlock and start", _state(full_draw_unlocked, blocked=activity is not None),
-                            "Press Unlock full drawing, then Start. Esc stops immediately.",
+    steps.append(WizardStep("unlock", "Unlock and start", _state(full_draw_unlocked and not activity, blocked=bool(activity)),
+                            "Wait for the current operation or press Stop." if activity else "Press Unlock full drawing, then Start. Esc stops immediately.",
                             detail=("Another operation is running." if activity else "Start remains locked until Unlock is pressed."),
-                            blocks_start=not full_draw_unlocked))
+                            blocks_start=not full_draw_unlocked or bool(activity)))
     return tuple(steps)
 
 
@@ -98,6 +98,7 @@ def missing_start_requirements(steps: Iterable[WizardStep]) -> tuple[WizardStep,
 
 
 def next_action(steps: Iterable[WizardStep]) -> str:
+    steps=tuple(steps)
     for step in steps:
         if step.state in ("next", "blocked") and step.blocks_start:
             return step.action
@@ -110,12 +111,14 @@ def next_action(steps: Iterable[WizardStep]) -> str:
 def format_setup_status(steps: Iterable[WizardStep], *, max_missing: int = 3) -> str:
     steps = tuple(steps)
     missing = missing_start_requirements(steps)
+    final_action=("Prepare Paint & draw" if any(step.key=="prepare" for step in steps)
+                  else "Unlock full drawing, then Start")
     if not missing:
-        return "Setup wizard: ready. Unlock full drawing, then Start."
+        return f"Setup wizard: ready. {final_action}."
     short = ", ".join(step.title for step in missing[:max(1, int(max_missing))])
     extra = len(missing) - max(1, int(max_missing))
     suffix = f" +{extra} more" if extra > 0 else ""
-    return f"Setup wizard: {len(missing)} blocking item(s) · {short}{suffix}. Next: {next_action(steps)} · Final: Unlock full drawing, then Start."
+    return f"Setup wizard: {len(missing)} blocking item(s) · {short}{suffix}. Next: {next_action(steps)} · Final: {final_action}."
 
 
 def format_wizard_dialog(steps: Iterable[WizardStep], *, profile_warnings: Iterable[str] = ()) -> str:

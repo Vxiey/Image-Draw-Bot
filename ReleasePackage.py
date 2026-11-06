@@ -318,11 +318,17 @@ def write_checksum_file(paths: Sequence[Path], destination: Path) -> Path:
 def write_release_manifest(root: Path, destination: Path, artifacts: Sequence[Path] = ()) -> Path:
     report = validate_release_tree(root, allow_output_dirs=True)
     payload = report.to_dict()
-    payload["artifacts"] = [
-        {"name": path.name, "sha256": sha256(path), "bytes": path.stat().st_size}
-        for path in artifacts
-        if path.is_file()
-    ]
+    records = []
+    names = set()
+    for artifact in artifacts:
+        path = Path(artifact)
+        if not path.is_file() or _is_link(path):
+            raise ValueError(f'Release artifact is missing or linked: {path.name}')
+        if path.name.casefold() in names:
+            raise ValueError(f'Release artifacts have duplicate names: {path.name}')
+        names.add(path.name.casefold())
+        records.append({'name': path.name, 'sha256': sha256(path), 'bytes': path.stat().st_size})
+    payload['artifacts'] = records
     destination.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(destination, json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n")
     return destination

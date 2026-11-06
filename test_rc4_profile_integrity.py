@@ -111,7 +111,7 @@ class ProfileIntegrityTests(unittest.TestCase):
             if calls == 2:
                 raise OSError('disk full during staging')
             real_write(path, text)
-        with patch.object(PP, 'atomic_write_text', side_effect=fail_second):
+        with patch('RuntimePaths.atomic_write_text', side_effect=fail_second):
             with self.assertRaises(PP.ProfilePortabilityError):
                 PP.apply_package_to_paths(self.package(), 'microsoft-paint', root=self.root)
         self.assertEqual({path: path.read_bytes() for path in originals}, originals)

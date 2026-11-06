@@ -11,6 +11,7 @@ updates while preserving the existing safety/compatibility behaviour elsewhere.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 @dataclass(frozen=True)
@@ -72,8 +73,11 @@ def _pixel_accurate_requested(options: dict) -> bool:
 
 def resolve_stroke_delivery(options: dict | None, *, dry_run: bool = False) -> StrokeDeliveryPolicy:
     options = options or {}
-    requested = float(options.get('stroke_step_px', 8) or 8)
-    if requested <= 0:
+    try:
+        requested = float(options.get('stroke_step_px', 8) or 8)
+    except (TypeError, ValueError, OverflowError):
+        requested = 8.0
+    if not math.isfinite(requested) or requested <= 0:
         requested = 8.0
 
     key = _profile_key(options)

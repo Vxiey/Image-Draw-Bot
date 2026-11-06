@@ -131,29 +131,47 @@ class CompactGroup:
             return True
 
     def refresh(self):
-        # Re-hide first because ProfileIsolation may have restored a scoped child
-        # after a profile switch while this disclosure section stayed closed.
+        # ProfileIsolation may have restored a child; hide only disallowed items
+        # and preserve controls that are already in the requested sibling order.
+        desired=[]
         for widget in self.items:
-            if widget.winfo_manager() == 'pack':
-                widget.pack_forget()
-        if not self.open:
-            return
-        previous = self.shell
-        for widget in self.items:
-            if not self._scope_allowed(widget):
+            try:
+                allowed=self.open and self._scope_allowed(widget)
+                if not allowed:
+                    if widget.winfo_manager() == 'pack':widget.pack_forget()
+                else:
+                    widget.winfo_manager()  # Detect a destroyed Tcl widget before packing.
+                    desired.append(widget)
+            except tk.TclError:
                 continue
+        if not desired:return
+        try:order=list(self.parent.pack_slaves())
+        except tk.TclError:return
+        previous = self.shell
+        for widget in desired:
+            if previous in order:
+                index=order.index(previous)+1
+                if index<len(order) and order[index] is widget:
+                    previous=widget
+                    continue
             options = dict(self.saved_pack.get(id(widget), {}))
             options['after'] = previous
             try:
                 widget.pack(**options)
+                if widget in order:order.remove(widget)
+                if previous in order:order.insert(order.index(previous)+1,widget)
+                else:order.append(widget)
                 previous = widget
             except tk.TclError:
                 # A widget may have been destroyed during shutdown/profile reset.
                 continue
 
     def set_open(self, value):
+        changed=self.open!=bool(value)
         self.open = bool(value)
-        self.toggle.configure(text=('▾  ' if self.open else '›  ') + self.title)
+        if changed:
+            try:self.toggle.configure(text=('▾  ' if self.open else '›  ') + self.title)
+            except tk.TclError:return
         self.refresh()
 
     def toggle_open(self):

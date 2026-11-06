@@ -11,6 +11,7 @@ import json
 import math
 import time
 import tracemalloc
+from contextlib import closing
 from typing import Callable
 
 import numpy as np
@@ -119,30 +120,43 @@ def _add_cost(a,b):
     return float(a.total_seconds)+float(b.total_seconds)
 
 
-def _run_case(name: str, image: Image.Image) -> dict:
+def _measure(operation, cancelled):
+    if cancelled():raise InterruptedError()
+    owns_trace=not tracemalloc.is_tracing()
+    if owns_trace:tracemalloc.start()
+    started=time.perf_counter()
+    try:
+        value=operation()
+        elapsed=(time.perf_counter()-started)*1000.0
+        peak=tracemalloc.get_traced_memory()[1] if owns_trace else None
+        if cancelled():raise InterruptedError()
+        return value,elapsed,peak
+    finally:
+        if owns_trace:tracemalloc.stop()
+
+
+def _run_case(name: str, image: Image.Image, *, cancelled=lambda:False) -> dict:
     options=_options();fitted=image.size
-    tracemalloc.start();t0=time.perf_counter()
-    pm=build_pixel_map(image,PALETTE,skip_white=True,gpu_mode='CPU')
-    baseline=build_pixel_stroke_plan(pm,len(PALETTE),cpu_workers=2)
-    baseline_plan_ms=(time.perf_counter()-t0)*1000.0
-    baseline_peak=tracemalloc.get_traced_memory()[1];tracemalloc.stop()
+    pm,common_ms,_=_measure(lambda:build_pixel_map(image,PALETTE,skip_white=True,gpu_mode='CPU'),cancelled)
+    def baseline_pipeline():
+        baseline=build_pixel_stroke_plan(pm,len(PALETTE),cpu_workers=2,cancelled=cancelled)
+        sequence=[dict(raw,brush_px=1) for raw in baseline['execution_sequence']]
+        quality,_=simulate_quantized_plan(pm,sequence,())
+        return sequence,quality
+    (baseline_seq,base_quality),baseline_plan_ms,baseline_peak=_measure(baseline_pipeline,cancelled)
     model=build_cost_model(options,image.size,fitted)
-    baseline_seq=[]
-    for raw in baseline['execution_sequence']:
-        e=dict(raw);e['brush_px']=1;baseline_seq.append(e)
     base_runtime=model.sequence_cost(baseline_seq)
     base_fixed=model.fixed_overhead(active_colors=len({e['color_index'] for e in baseline_seq}))
-    base_quality,_=simulate_quantized_plan(pm,baseline_seq,())
-
-    source_groups=groups_from_pixel_map(pm,len(PALETTE),lines=True)
-    fill_regions,fill_meta=_build_fill_regions(source_groups,PALETTE,image.size,fitted,options,lambda:False)
-    work=remove_filled_region_strokes(source_groups,fill_regions) if fill_regions else source_groups
-    work_pm=pixel_map_from_groups(image,work,PALETTE)
-    tracemalloc.start();t1=time.perf_counter()
-    adaptive=build_adaptive_execution(work_pm,PALETTE,options,fitted,fill_regions=fill_regions,
-                                      reference_pixel_map=pm,cancelled=lambda:False)
-    adaptive_plan_ms=(time.perf_counter()-t1)*1000.0
-    adaptive_peak=tracemalloc.get_traced_memory()[1];tracemalloc.stop()
+    def adaptive_pipeline():
+        source_groups=groups_from_pixel_map(pm,len(PALETTE),lines=True,cancelled=cancelled)
+        fill_regions,fill_meta=_build_fill_regions(source_groups,PALETTE,image.size,fitted,options,cancelled)
+        if cancelled():raise InterruptedError()
+        work=remove_filled_region_strokes(source_groups,fill_regions) if fill_regions else source_groups
+        work_pm=pixel_map_from_groups(image,work,PALETTE,cancelled=cancelled)
+        adaptive=build_adaptive_execution(work_pm,PALETTE,options,fitted,fill_regions=fill_regions,
+                                          reference_pixel_map=pm,cancelled=cancelled)
+        return adaptive,fill_regions,fill_meta
+    (adaptive,fill_regions,fill_meta),adaptive_plan_ms,adaptive_peak=_measure(adaptive_pipeline,cancelled)
     adaptive_runtime=model.sequence_cost(adaptive['execution_sequence'])
     adaptive_fixed=model.fixed_overhead(active_colors=len({e['color_index'] for e in adaptive['execution_sequence']}),
                                         fill_actions=len(fill_regions))
@@ -155,14 +169,14 @@ def _run_case(name: str, image: Image.Image) -> dict:
             'estimated_draw_seconds':round(baseline_est,4),'actual_draw_seconds':None,
             'operations':len(baseline_seq),'palette_switches':base_runtime.palette_switches,
             'brush_switches':base_runtime.brush_switches,'fill_actions':0,
-            'python_peak_kib':round(baseline_peak/1024,1),'quality':base_quality,
+            'python_peak_kib':None if baseline_peak is None else round(baseline_peak/1024,1),'quality':base_quality,
         },
         'adaptive':{
             'engine':'Adaptive Region Hybrid 4.0','planning_ms':round(adaptive_plan_ms,3),
             'estimated_draw_seconds':round(adaptive_est,4),'actual_draw_seconds':None,
             'operations':len(adaptive['execution_sequence'])+len(fill_regions),
             'palette_switches':adaptive_runtime.palette_switches,'brush_switches':adaptive_runtime.brush_switches,
-            'fill_actions':len(fill_regions),'python_peak_kib':round(adaptive_peak/1024,1),
+            'fill_actions':len(fill_regions),'python_peak_kib':None if adaptive_peak is None else round(adaptive_peak/1024,1),
             'quality':adaptive['metrics'],'methods':adaptive['metadata'].get('methods',{}),
             'fill_safety':(fill_meta.get('stateful_fill_simulation') or {}),
         },
@@ -173,14 +187,22 @@ def _run_case(name: str, image: Image.Image) -> dict:
         },
         'measurement':{
             'planning_time':'measured locally with perf_counter in this process',
+            'planning_scope':'each engine includes its own preparation, path construction and quality simulation; common quantization is reported separately',
+            'common_preparation_ms':round(common_ms,3),
+            'memory':'isolated Python trace per measured stage; unavailable when caller tracing is already active',
             'draw_time':'calibrated/modelled only; not real Windows mouse execution',
             'real_windows_input_verified':False,'real_gpu_execution_verified':False,
         },
     }
 
 
-def run_benchmarks() -> dict:
-    rows=[_run_case(name,factory()) for name,factory in CASES]
+def run_benchmarks(*, cancelled=lambda:False) -> dict:
+    rows=[]
+    for name,factory in CASES:
+        if cancelled():raise InterruptedError()
+        with closing(factory()) as image:
+            rows.append(_run_case(name,image,cancelled=cancelled))
+    if cancelled():raise InterruptedError()
     return {
         'schema':1,'suite':'Image Draw Bot Adaptive Hybrid deterministic benchmark',
         'cases':rows,'case_count':len(rows),'palette_colors':len(PALETTE),

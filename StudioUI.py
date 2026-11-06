@@ -69,7 +69,9 @@ class ToolTip:
     def _show(self):
         self.job=None
         if self.window is not None:return
+        win=None
         try:
+            if not self.widget.winfo_exists() or not self.widget.winfo_ismapped():return
             x=self.widget.winfo_rootx()+18; y=self.widget.winfo_rooty()+self.widget.winfo_height()+7
             win=tk.Toplevel(self.widget); win.wm_overrideredirect(True); win.wm_geometry(f'{x:+d}{y:+d}')
             label=tk.Label(win,text=self.text,justify='left',background='#202c3d',foreground='#f4f7fb',
@@ -81,7 +83,11 @@ class ToolTip:
             x=max(left,min(x,right-win.winfo_reqwidth()-8))
             y=max(top,min(y,bottom-win.winfo_reqheight()-8))
             win.wm_geometry(f'{x:+d}{y:+d}')
-        except Exception:self.window=None
+        except Exception:
+            if win is not None:
+                try:win.destroy()
+                except tk.TclError:pass
+            self.window=None
 
 
 def tooltip(widget, text):

@@ -7,36 +7,75 @@ selection, path ordering, mouse input, or deadline behaviour.
 from __future__ import annotations
 
 from typing import Any, Callable, Iterable
+from contextlib import closing
 import math
 import numpy as np
 from PIL import Image, ImageDraw
 
 from AccuracyEvaluator import normalize_source, _srgb_to_oklab
+from RuntimePaths import is_finite_number
 
 
 def _clamp_rgb(value) -> tuple[int, int, int]:
     try:
         r, g, b = value[:3]
-    except Exception:
+        return tuple(max(0, min(255, int(round(v)))) for v in (r, g, b))
+    except (TypeError, ValueError, OverflowError, IndexError):
         return (255, 255, 255)
-    return tuple(max(0, min(255, int(round(v)))) for v in (r, g, b))
 
 
-def render_quantized_target(source_size: tuple[int, int], groups, palette_rgb,
+def _draw_clipped_segment(draw, size, segment, color):
+    """Clip raster samples, retaining the original line's slope and error phase.
+
+    Bresenham's rounded minor coordinate can be evaluated at any major-axis
+    index, so even enormous off-canvas endpoints require at most one canvas
+    dimension of work. Independently clamping endpoints changes the raster.
+    """
+    w,h=size;x0,y0,x1,y1=segment
+    if 0<=x0<w and 0<=x1<w and 0<=y0<h and 0<=y1<h:
+        draw.line(segment,fill=color,width=1);return
+    dx=abs(x1-x0);dy=abs(y1-y0);sx=1 if x1>=x0 else -1;sy=1 if y1>=y0 else -1
+    if dx==0:
+        low=max(0,min(y0,y1));high=min(h-1,max(y0,y1))
+        if 0<=x0<w and low<=high:draw.line((x0,low,x0,high),fill=color)
+        return
+    if dy==0:
+        low=max(0,min(x0,x1));high=min(w-1,max(x0,x1))
+        if 0<=y0<h and low<=high:draw.line((low,y0,high,y0),fill=color)
+        return
+    points=[]
+    if dx>=dy:
+        lo=max(0,-x0 if sx>0 else x0-w+1);hi=min(dx,w-1-x0 if sx>0 else x0)
+        for step in range(lo,hi+1):
+            y=y0+sy*((2*step*dy+dx)//(2*dx))
+            if 0<=y<h:points.append((x0+sx*step,y))
+    else:
+        lo=max(0,-y0 if sy>0 else y0-h+1);hi=min(dy,h-1-y0 if sy>0 else y0)
+        for step in range(lo,hi+1):
+            x=x0+sx*((2*step*dx+dy)//(2*dy))
+            if 0<=x<w:points.append((x,y0+sy*step))
+    if points:draw.point(points,fill=color)
+
+
+def _render_quantized_target(source_size: tuple[int, int], groups, palette_rgb,
                             *, fill_regions=(), background_fill_plan=None,
                             color_order=None, explicit_target: Image.Image | None = None,
-                            cancelled: Callable[[], bool] = lambda: False) -> Image.Image:
+                            cancelled: Callable[[], bool] = lambda: False, _owned=None) -> Image.Image:
     """Render the palette/quantized target before physical brush simulation.
 
     The target uses one source pixel of width for planned raster runs.  It is
     therefore deliberately different from the simulated-final preview, which
     models brush width, execution paths, fills and later geometry decisions.
     """
+    if cancelled():raise InterruptedError()
     w, h = max(1, int(source_size[0])), max(1, int(source_size[1]))
     if isinstance(explicit_target, Image.Image):
-        return explicit_target.convert('RGB').resize((w, h), Image.Resampling.NEAREST)
+        rgb=normalize_source(explicit_target,explicit_target.size);_owned.append(rgb)
+        result=rgb.resize((w,h),Image.Resampling.NEAREST);_owned.append(result)
+        if cancelled():raise InterruptedError()
+        return result
 
-    palette = tuple(_clamp_rgb(c) for c in (palette_rgb or ()))
+    palette = tuple(_clamp_rgb(c) for c in (palette_rgb if palette_rgb is not None else ()))
     bg = (255, 255, 255)
     meta = background_fill_plan or {}
     try:
@@ -47,6 +86,7 @@ def render_quantized_target(source_size: tuple[int, int], groups, palette_rgb,
     except (TypeError, ValueError):
         pass
     target = Image.new('RGB', (w, h), bg)
+    _owned.append(target)
     draw = ImageDraw.Draw(target)
 
     # Accepted fills belong to the plan target even when their corresponding
@@ -61,14 +101,16 @@ def render_quantized_target(source_size: tuple[int, int], groups, palette_rgb,
             color = palette[idx]
             spans = region.get('row_spans') or ()
             if spans:
-                for raw in spans:
+                for n,raw in enumerate(spans):
+                    if n%512==0 and cancelled():raise InterruptedError()
                     y, x0, x1 = map(int, raw)
-                    if 0 <= y < h:
+                    if 0 <= y < h and x0 <= x1 and x0 < w and x1 >= 0:
                         draw.line((max(0, x0), y, min(w - 1, x1), y), fill=color, width=1)
             else:
                 x0, y0, x1, y1 = map(int, region.get('bbox'))
-                draw.rectangle((max(0, x0), max(0, y0), min(w - 1, x1), min(h - 1, y1)), fill=color)
-        except (TypeError, ValueError, KeyError, IndexError):
+                if x0<=x1 and y0<=y1 and x0<w and y0<h and x1>=0 and y1>=0:
+                    draw.rectangle((max(0, x0), max(0, y0), min(w - 1, x1), min(h - 1, y1)), fill=color)
+        except (TypeError, ValueError, OverflowError, KeyError, IndexError):
             continue
 
     if color_order is None:
@@ -98,13 +140,23 @@ def render_quantized_target(source_size: tuple[int, int], groups, palette_rgb,
                 raise InterruptedError()
             try:
                 x0, y0, x1, y1 = map(int, stroke[:4])
-            except (TypeError, ValueError, IndexError):
+            except (TypeError, ValueError, OverflowError, IndexError):
                 continue
-            # Clip to the source raster. PIL does clipping too, but explicit
-            # clipping avoids huge malformed legacy coordinates allocating work.
-            x0=max(-1,min(w,x0));x1=max(-1,min(w,x1));y0=max(-1,min(h,y0));y1=max(-1,min(h,y1))
-            draw.line((x0, y0, x1, y1), fill=color, width=1)
+            _draw_clipped_segment(draw,(w,h),(x0,y0,x1,y1),color)
+    if cancelled():raise InterruptedError()
     return target
+
+
+def render_quantized_target(source_size,groups,palette_rgb,*,fill_regions=(),
+                            background_fill_plan=None,color_order=None,explicit_target=None,
+                            cancelled=lambda:False):
+    arguments=locals().copy();owned=[];result=None
+    try:
+        result=_render_quantized_target(**arguments,_owned=owned)
+        return result
+    finally:
+        for image in owned:
+            if image is not result:image.close()
 
 
 def _heat_ramp(values: np.ndarray) -> np.ndarray:
@@ -138,10 +190,13 @@ def render_delta_e_heatmap(source: Image.Image, simulated_final: Image.Image, *,
     """Return an OKLab ΔE-style heatmap plus numeric distribution metadata."""
     if cancelled():
         raise InterruptedError()
+    if not is_finite_number(full_error) or full_error<=0:
+        raise ValueError('Heatmap full-error scale must be finite and positive.')
     size = tuple(map(int, simulated_final.size))
-    src_img = normalized_source if isinstance(normalized_source, Image.Image) and normalized_source.size == size else normalize_source(source, size)
-    src = np.asarray(src_img.convert('RGB'), dtype=np.float32) / 255.0
-    dst = np.asarray(simulated_final.convert('RGB'), dtype=np.float32) / 255.0
+    src_input=normalized_source if isinstance(normalized_source,Image.Image) and normalized_source.size==size else source
+    with closing(normalize_source(src_input,size)) as src_img,closing(normalize_source(simulated_final,size)) as dst_img:
+        src = np.asarray(src_img, dtype=np.float32) / 255.0
+        dst = np.asarray(dst_img, dtype=np.float32) / 255.0
     try:
         from UniversalGpuAcceleration import perceptual_pair
         _src_lab, _dst_lab, delta, route = perceptual_pair(src, dst, gpu_mode=gpu_mode, cancelled=cancelled)
@@ -153,7 +208,7 @@ def render_delta_e_heatmap(source: Image.Image, simulated_final: Image.Image, *,
         route = {'backend_id':'cpu:numpy','backend':'CPU/NumPy','fallback_reason':f'{type(exc).__name__}: {exc}'}
     if cancelled():
         raise InterruptedError()
-    scaled = np.clip(delta / max(1e-6, float(full_error)), 0.0, 1.0)
+    scaled = np.clip(delta / float(full_error), 0.0, 1.0)
     heat = Image.fromarray(_heat_ramp(scaled), 'RGB')
     if delta.size:
         mean=float(np.mean(delta,dtype=np.float64)); median=float(np.median(delta)); p95=float(np.percentile(delta,95)); maximum=float(np.max(delta))
@@ -181,6 +236,7 @@ def build_preview_diagnostics(options: dict, *, accuracy: dict | None = None,
                               path_count: int = 0, source_count: int = 0,
                               performance_profile: dict | None = None) -> dict[str, Any]:
     """Build compact metadata shown below the preview and in benchmarks."""
+    options=dict(options) if isinstance(options,dict) else {}
     calibration = options.get('calibration_state') if isinstance(options, dict) else {}
     calibration = calibration if isinstance(calibration, dict) else {}
     try:
@@ -192,13 +248,13 @@ def build_preview_diagnostics(options: dict, *, accuracy: dict | None = None,
     tools = calibration.get('tools') or {}
     exact = calibration.get('exact_color') or {}
     accuracy = accuracy or options.get('adaptive_accuracy_meta') or {}
-    draw_time = draw_time or {}
-    perf = performance_profile or {}
-    timings = perf.get('timings') if isinstance(perf,dict) else {}
-    dominant = None
-    if isinstance(timings,dict) and timings:
-        dominant=max(timings,key=lambda k:float(timings.get(k,0) or 0))
-    projected=float(draw_time.get('projected_seconds',0) or 0)
+    accuracy=accuracy if isinstance(accuracy,dict) else {}
+    draw_time = draw_time if isinstance(draw_time,dict) else {}
+    perf = performance_profile if isinstance(performance_profile,dict) else {}
+    from PerformanceProfiler import dominant_phase
+    dominant,_=dominant_phase({'timings':perf.get('timings') if isinstance(perf.get('timings'),dict) else {}})
+    projected=draw_time.get('projected_seconds')
+    projected=float(projected) if is_finite_number(projected) and projected>=0 else None
     tuner = options.get('auto_tuner_meta') if isinstance(options,dict) else {}
     tuner = tuner if isinstance(tuner,dict) else {}
     acceptance = options.get('auto_tuner_acceptance_meta') if isinstance(options,dict) else {}
@@ -211,8 +267,7 @@ def build_preview_diagnostics(options: dict, *, accuracy: dict | None = None,
     try:
         from CorrectionHistory import load_correction_history
         correction_history = load_correction_history(options, limit=3)
-        if isinstance(options, dict):
-            options.setdefault('correction_history_meta', correction_history)
+        options['correction_history_meta']=correction_history
     except Exception:
         correction_history = {}
     try:
@@ -254,7 +309,7 @@ def build_preview_diagnostics(options: dict, *, accuracy: dict | None = None,
         'correction_history':dict(correction_history or {}),
         'delta_e':dict(delta_e or {}),
         'performance':{
-            'projected_draw_seconds':round(projected,3),
+            'projected_draw_seconds':None if projected is None else round(projected,3),
             'draw_range':draw_time.get('range_label'), 'confidence':draw_time.get('confidence'),
             'estimate_source':draw_time.get('estimate_source'), 'measured_samples':int(draw_time.get('measured_samples',0) or 0),
             'planned_paths':int(path_count or 0),'source_strokes':int(source_count or 0),

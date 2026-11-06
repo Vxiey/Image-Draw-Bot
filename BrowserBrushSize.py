@@ -13,6 +13,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import sqrt
+from CalibrationValidation import (screen_rect, screen_point, contained_rect,
+                                   point_in_rect, screenshot_matches, bounded_number,
+                                   finite_confidence, nonnegative_integer)
 
 SUPPORTED = frozenset({'gartic-phone', 'gartic-io', 'skribbl', 'skribbl-fast', 'sketchheads'})
 GARTIC_PROFILES = frozenset({'gartic-phone', 'gartic-io'})
@@ -38,6 +41,26 @@ def _clamp_point(point, rect):
     return max(l, min(r-1, x)), max(t, min(b-1, y))
 
 
+def _valid_positions(points, client_rect):
+    points = [tuple(map(int, point)) for point in points]
+    if len(set(points)) != len(points) or any(not point_in_rect(p, client_rect) for p in points):
+        return []
+    return points
+
+
+def conservative_brush_guard(profile_key, requested_px=3):
+    """Bound an unknown selection by every size in the known profile ladder."""
+    key = str(profile_key or '').lower()
+    try:
+        requested = max(1, round(bounded_number(requested_px, 'Brush size', minimum=1, maximum=10000)))
+    except ValueError:
+        requested = 3
+    policy = POLICIES.get(key)
+    if policy:
+        return max(max(policy['sizes']), requested if key not in GARTIC_PROFILES else 1)
+    return max(12, requested)
+
+
 def _candidate_positions(profile_key, client_rect, canvas_box=None, palette_box=None):
     l, t, r, b = map(int, client_rect); cw, ch = r-l, b-t
     canvas = tuple(map(int, canvas_box)) if isinstance(canvas_box, (tuple, list)) and len(canvas_box) == 4 else None
@@ -46,30 +69,30 @@ def _candidate_positions(profile_key, client_rect, canvas_box=None, palette_box=
         x0, y0, x1, y1 = canvas; w = x1-x0; h = y1-y0
         y = y1 + max(28, min(int(ch*.095), int(h*.17)))
         xs = [x0 + w*f for f in (.05, .118, .186, .254, .322)]
-        return [_clamp_point((x, y), client_rect) for x in xs]
+        return _valid_positions([(x, y) for x in xs], client_rect)
     if profile_key in ('skribbl', 'skribbl-fast') and canvas:
         x0, y0, x1, y1 = canvas; w = x1-x0
         y = y1 + max(18, min(34, int(ch*.045)))
         xs = [x0 + w*f for f in (.71, .785, .86, .935)]
-        return [_clamp_point((x, y), client_rect) for x in xs]
+        return _valid_positions([(x, y) for x in xs], client_rect)
     if profile_key == 'sketchheads':
         if palette:
             px0, py0, px1, py1 = palette; y = (py0+py1)//2
             scale = max(18, min(34, int(ch*.030)))
             xs = (px0-4.95*scale, px0-3.95*scale, px0-2.45*scale)
-            return [_clamp_point((x, y), client_rect) for x in xs]
+            return _valid_positions([(x, y) for x in xs], client_rect)
         if canvas:
             x0, y0, x1, y1 = canvas; w=x1-x0
             y = min(b-12, y1 + max(18, int(ch*.04)))
-            return [_clamp_point((x0+w*f,y), client_rect) for f in (.26,.29,.325)]
+            return _valid_positions([(x0+w*f,y) for f in (.26,.29,.325)], client_rect)
     return []
 
 
 def _patch(image, client_rect, point, radius=15):
     l,t,_,_ = map(int, client_rect); x,y=map(int,point)
     x -= l; y -= t
-    left=max(0,x-radius);top=max(0,y-radius);right=min(image.width,x+radius+1);bottom=min(image.height,y+radius+1)
-    if right-left < 7 or bottom-top < 7:
+    left=x-radius;top=y-radius;right=x+radius+1;bottom=y+radius+1
+    if not (0<=left<right<=image.width and 0<=top<bottom<=image.height):
         return None
     return image.crop((left,top,right,bottom)).convert('RGB')
 
@@ -92,13 +115,21 @@ def _control_score(patch):
 def _selection_score(patch):
     if patch is None:return 0.0
     w,h=patch.size;cx=w//2;cy=h//2
-    outer=[];inner=[]
-    for radius,target in ((max(4,min(w,h)//2-3),outer),(max(2,min(w,h)//3),inner)):
+    center=patch.getpixel((cx,cy))
+    corners=[patch.getpixel(p) for p in ((1,1),(w-2,1),(1,h-2),(w-2,h-2))]
+    background=tuple(sum(p[i] for p in corners)/4 for i in range(3))
+    bg_luma=sum(background)/3;center_luma=sum(center)/3;best=0.0
+    for radius in range(3,min(w,h)//2):
+        supported=[]
         for dx,dy in ((radius,0),(-radius,0),(0,radius),(0,-radius)):
-            target.append(patch.getpixel((max(0,min(w-1,cx+dx)),max(0,min(h-1,cy+dy)))))
-    outer_luma=sum(sum(p)/3 for p in outer)/max(1,len(outer))
-    inner_luma=sum(sum(p)/3 for p in inner)/max(1,len(inner))
-    return abs(outer_luma-inner_luma)
+            color=patch.getpixel((cx+dx,cy+dy));luma=sum(color)/3
+            # Crossing from an ordinary dark circle into its light background
+            # is not a selected rim. Require a distinct highlight on three sides.
+            bright=luma-bg_luma>=8 and luma-center_luma>=20
+            chromatic=max(color)-min(color)>=60 and _rgb_distance(color,background)>=40 and _rgb_distance(color,center)>=30
+            if bright or chromatic:supported.append(_rgb_distance(color,center))
+        if len(supported)>=3:best=max(best,sum(supported)/len(supported))
+    return best
 
 
 def _nearest_index(sizes, brush_px):
@@ -134,11 +165,14 @@ class BrowserBrushPlan:
     effective_px: int
     safe_guard_px: int
     method: str
+    verified_indices: tuple[int, ...] = ()
+    client_rect: tuple | None = None
 
     def as_dict(self):
         controls_verified=(bool(self.target_position) and float(self.confidence)>=.58 and
                            len(self.control_positions)==len(self.nominal_sizes) and len(self.nominal_sizes)>1)
-        verified_sizes=list(map(int,self.nominal_sizes)) if controls_verified else []
+        verified_indices=[i for i in self.verified_indices if 0 <= i < len(self.nominal_sizes)] if controls_verified else []
+        verified_sizes=[int(self.nominal_sizes[i]) for i in verified_indices]
         is_gartic=self.profile_key in GARTIC_PROFILES
         levels=list(GARTIC_LEVELS) if is_gartic else []
         effective_index=None
@@ -149,7 +183,9 @@ class BrowserBrushPlan:
         return {
             'profile_key':self.profile_key,'control_positions':[list(p) for p in self.control_positions],
             'nominal_sizes':list(self.nominal_sizes),'verified_sizes':verified_sizes,
-            'nominal_levels':levels,'verified_levels':levels if controls_verified and is_gartic else [],
+            'nominal_levels':levels,'verified_levels':[i+1 for i in verified_indices] if is_gartic else [],
+            'verified_indices':verified_indices,
+            'client_rect':list(self.client_rect) if self.client_rect is not None else None,
             'requested_level':requested_level,'effective_level':effective_level,
             'requested_physical_px':int(self.nominal_sizes[self.target_index]) if self.nominal_sizes else int(self.requested_px),
             'dynamic_guard':bool(verified_sizes),'target_index':int(self.target_index),
@@ -161,14 +197,20 @@ class BrowserBrushPlan:
 
 
 def plan_browser_brush_size(profile_key, screenshot, client_rect, *, canvas_box=None, palette_box=None, requested_px=3):
-    key=str(profile_key or '').lower(); requested=max(1,int(round(float(requested_px or 3))))
+    key=str(profile_key or '').lower()
+    requested=max(1,int(round(bounded_number(requested_px, 'Brush size', minimum=1, maximum=10000))))
     if key not in SUPPORTED:
         return BrowserBrushPlan(key,(),(),0,None,0.0,None,requested,requested,max(requested,4),'unsupported profile')
-    policy=POLICIES[key];sizes=tuple(policy['sizes']);positions=tuple(_candidate_positions(key,client_rect,canvas_box,palette_box))
+    policy=POLICIES[key];sizes=tuple(policy['sizes'])
+    client_rect=screen_rect(client_rect)
+    if canvas_box is not None: canvas_box=contained_rect(canvas_box,client_rect)
+    if palette_box is not None: palette_box=contained_rect(palette_box,client_rect,'palette rectangle')
+    screenshot_matches(screenshot,client_rect)
+    positions=tuple(_candidate_positions(key,client_rect,canvas_box,palette_box))
     target,requested=_requested_index(key,sizes,requested);safe_index=int(policy['safe_index'])
     if len(positions)!=len(sizes):
         safe=int(sizes[safe_index])
-        return BrowserBrushPlan(key,positions,sizes,target,None,0.0,None,requested,safe,max(safe,12),'control geometry unavailable; safe fallback')
+        return BrowserBrushPlan(key,positions,sizes,target,None,0.0,None,requested,safe,conservative_brush_guard(key,requested),'control geometry unavailable; current size unverified')
     screenshot=screenshot.convert('RGB')
     patches=[_patch(screenshot,client_rect,p) for p in positions]
     scores=[_control_score(p) for p in patches]
@@ -180,7 +222,9 @@ def plan_browser_brush_size(profile_key, screenshot, client_rect, *, canvas_box=
         order=sorted(range(len(select_scores)),key=lambda i:select_scores[i],reverse=True)
         if select_scores[order[0]]>=12 and (len(order)==1 or select_scores[order[0]]-select_scores[order[1]]>=4):
             selected=order[0]
-    target_position=positions[target] if confidence>=.58 else None
+    verified_indices=tuple(i for i,score in enumerate(scores) if score>=12)
+    if selected not in verified_indices: selected=None
+    target_position=positions[target] if confidence>=.58 and target in verified_indices else None
     if target_position is not None and isinstance(canvas_box,(tuple,list)) and len(canvas_box)==4:
         cx0,cy0,cx1,cy1=map(int,canvas_box);tx,ty=target_position
         if cx0-4 <= tx <= cx1+4 and cy0-4 <= ty <= cy1+4:
@@ -190,19 +234,63 @@ def plan_browser_brush_size(profile_key, screenshot, client_rect, *, canvas_box=
     safe_guard=(
         _automatic_guard_px(sizes,physical_requested,effective)
         if target_position is not None
-        else max(effective,12)
+        else conservative_brush_guard(key,requested)
     )
     method=('verified Gartic brush level 1-5 with calibrated physical footprint'
             if target_position and key in GARTIC_PROFILES else
             'verified profile-relative brush controls' if target_position else
             'visual confidence low; safe fallback')
-    return BrowserBrushPlan(key,positions,sizes,target,selected,confidence,target_position,requested,effective,safe_guard,method)
+    return BrowserBrushPlan(key,positions,sizes,target,selected,confidence,target_position,requested,effective,safe_guard,method,verified_indices,client_rect)
 
 
 def capture_control_patch(position, radius=18):
     from PIL import ImageGrab
     x,y=map(int,position);r=max(8,min(40,int(radius)))
     return ImageGrab.grab(bbox=(x-r,y-r,x+r+1,y+r+1),all_screens=True).convert('RGB')
+
+
+def verify_brush_selection(plan_dict, target_index) -> bool:
+    """Recheck the current, unique selection in one fresh read-only row capture.
+
+    A click or a changed hover pixel is not a selected-state observation. This
+    uses the same bounded visual evidence as planning, with all buffers owned
+    by this call released before returning.
+    """
+    raw=rgb=None;patches=[]
+    try:
+        if not isinstance(plan_dict,dict) or bounded_number(plan_dict.get('confidence'),'Brush confidence')<.58:return False
+        key=str(plan_dict.get('profile_key') or '').lower()
+        if key not in POLICIES:return False
+        positions=plan_dict.get('control_positions');sizes=plan_dict.get('nominal_sizes')
+        if not isinstance(positions,(tuple,list)) or not isinstance(sizes,(tuple,list)) or len(positions)!=len(sizes) or len(sizes)!=len(POLICIES[key]['sizes']):return False
+        if any(isinstance(size,bool) or not isinstance(size,int) for size in sizes) or tuple(sizes)!=tuple(POLICIES[key]['sizes']):return False
+        positions=[screen_point(p,'brush control') for p in positions]
+        if len(set(positions))!=len(positions):return False
+        wanted=nonnegative_integer(target_index,'Brush index',maximum=len(positions)-1)
+        verified=plan_dict.get('verified_indices')
+        if verified is not None:
+            if not isinstance(verified,(tuple,list)) or any(isinstance(i,bool) or not isinstance(i,int) or not 0<=i<len(positions) for i in verified) or len(set(verified))!=len(verified) or wanted not in verified:return False
+        left=min(p[0] for p in positions)-15;top=min(p[1] for p in positions)-15
+        right=max(p[0] for p in positions)+16;bottom=max(p[1] for p in positions)+16
+        if (right-left)*(bottom-top)>1_000_000:return False
+        box=screen_rect((left,top,right,bottom),'brush capture')
+        if plan_dict.get('client_rect') is not None:contained_rect(box,plan_dict['client_rect'],'brush capture')
+        from PIL import ImageGrab
+        raw=ImageGrab.grab(bbox=box,all_screens=True)
+        if raw.size!=(right-left,bottom-top):return False
+        rgb=raw if raw.mode=='RGB' else raw.convert('RGB')
+        patches=[_patch(rgb,box,p) for p in positions]
+        if _control_score(patches[wanted])<12:return False
+        scores=[_selection_score(patch) if _control_score(patch)>=12 else 0.0 for patch in patches]
+        order=sorted(range(len(scores)),key=lambda i:scores[i],reverse=True)
+        return bool(order[0]==wanted and scores[wanted]>=12 and scores[wanted]-scores[order[1]]>=4)
+    except (OSError,ValueError,TypeError,ArithmeticError,IndexError,AttributeError):
+        return False
+    finally:
+        for patch in patches:
+            if patch is not None:patch.close()
+        if rgb is not None and rgb is not raw:rgb.close()
+        if raw is not None:raw.close()
 
 
 def patch_change_score(before, after):

@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw
 
 from CanvasGuard import CanvasGuard, CanvasSafetyStop, normalize_canvas_anchors
 from EdgeBehavior import apply_edge_behavior, resolve_edge_behavior
-from SafetyDebugOverlay import add_debug_event, make_debug_event, summarize_debug
+from SafetyDebugOverlay import record_debug_event, summarize_debug
 from Precision import CanvasTransform
 
 Point = tuple[int, int]
@@ -118,6 +118,8 @@ def build_preview_safety_plan(
     cancelled=lambda: False,
 ) -> PreviewSafetyPlan:
     """Replay execution path safety in preview-local canvas coordinates."""
+    if cancelled():
+        raise InterruptedError()
     width, height = int(image_size[0]), int(image_size[1])
     guard = preview_canvas_guard(options, fitted)
     transform = CanvasTransform(width, height, fitted)
@@ -156,8 +158,11 @@ def build_preview_safety_plan(
             path_index += 1
             meta['paths_in'] += 1
             if execution_groups is not None:
-                source_points = list(item)
-                raw_canvas_points = [transform.point(x, y) for x, y in source_points]
+                raw_canvas_points = []
+                for number, (x, y) in enumerate(item):
+                    if number % 512 == 0 and cancelled():
+                        raise InterruptedError()
+                    raw_canvas_points.append(transform.point(x, y))
             else:
                 x1, y1, x2, y2 = item
                 raw_canvas_points = [transform.point(x1, y1), transform.point(x2, y2)]
@@ -170,14 +175,15 @@ def build_preview_safety_plan(
                     drawing_mode=options.get('drawing_mode'),
                     outline=bool(options.get('outline')),
                     context='preview stroke',
+                    cancelled=cancelled,
                 )
             except CanvasSafetyStop as error:
                 meta['source_outside_canvas'] += 1
                 meta['stopped'] = True
-                add_debug_event(meta, make_debug_event(path_index, color_index, raw_canvas_points, exception=error))
+                record_debug_event(meta, path_index, color_index, raw_canvas_points, exception=error)
                 continue
             meta[result.strategy] = int(meta.get(result.strategy, 0)) + 1
-            add_debug_event(meta, make_debug_event(path_index, color_index, raw_canvas_points, result))
+            record_debug_event(meta, path_index, color_index, raw_canvas_points, result)
             if not result.subpaths:
                 continue
             for subpath in result.subpaths:
@@ -193,6 +199,8 @@ def build_preview_safety_plan(
     meta['changed_total'] = skipped + adapted
     meta['clipped_or_guarded'] = int(meta.get('hard_clip', 0)) + adapted
     meta['safety_debug'] = summarize_debug(meta)
+    if cancelled():
+        raise InterruptedError()
     return PreviewSafetyPlan(safe_groups, edge_mode, meta)
 
 
@@ -203,6 +211,8 @@ def canvas_to_preview(point: Sequence[int | float], fitted: Sequence[int | float
 
 
 def draw_safe_paths(draw: ImageDraw.ImageDraw, safety_plan: PreviewSafetyPlan, fitted, preview_size, palette_rgb, brush: int, cancelled=lambda: False) -> tuple[int, int]:
+    if cancelled():
+        raise InterruptedError()
     path_count = 0
     dot_count = 0
     for index, paths in enumerate(safety_plan.groups):
@@ -233,6 +243,8 @@ def draw_safe_paths(draw: ImageDraw.ImageDraw, safety_plan: PreviewSafetyPlan, f
 
 
 def render_preview_safety_map(source: Image.Image, preview_size, safety_plan: PreviewSafetyPlan, palette_rgb, brush: int, cancelled=lambda: False) -> Image.Image:
+    if cancelled():
+        raise InterruptedError()
     w, h = int(preview_size[0]), int(preview_size[1])
     base = Image.new('RGB', (max(1, w), max(1, h)), (15, 20, 29))
     draw = ImageDraw.Draw(base)

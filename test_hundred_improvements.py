@@ -225,7 +225,10 @@ class PreviewTests(unittest.TestCase):
         for zoom,pan in [('bad',None),(float('nan'),(1,)),(float('inf'),(float('inf'),0))]:
             actual,actual_scale=viewport_image(source,(60,60),zoom=zoom,pan=pan)
             self.assertEqual(actual.tobytes(),baseline.tobytes());self.assertEqual(actual_scale,scale)
-        full_preview_options({'ram_budget_mb':'bad'},(100,100))
+        # Viewport preferences may fall back, but an invalid resource limit
+        # cannot silently authorize native-resolution planning.
+        with self.assertRaises(ValueError):
+            full_preview_options({'ram_budget_mb':'bad'},(100,100))
         with self.assertRaises(ValueError):viewport_image(Image.new('RGB',(0,0)),(20,20))
 
     def test_image_label_does_not_convert_opaque_or_alpha_sources(self):

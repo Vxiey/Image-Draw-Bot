@@ -24,7 +24,7 @@ class CanvasSafetyStop(InterruptedError):
 def _finite_number(value: object, name: str) -> float:
     try:
         number = float(value)
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, OverflowError) as error:
         raise ValueError(f'{name} must be a finite number.') from error
     if not math.isfinite(number):
         raise ValueError(f'{name} must be a finite number.')
@@ -105,8 +105,11 @@ def _round_polygon(points: Sequence[Sequence[float | int]]) -> tuple[Point, ...]
 
 def point_in_polygon(point: Sequence[float | int], polygon: Sequence[Sequence[float | int]]) -> bool:
     """Return True when point is inside or on the boundary of a simple polygon."""
-    x, y = _float_point(point)
-    pts = [_float_point(p) for p in polygon]
+    return _point_in_prepared_polygon(_float_point(point), tuple(_float_point(p) for p in polygon))
+
+
+def _point_in_prepared_polygon(point: FloatPoint, pts: Sequence[FloatPoint]) -> bool:
+    x, y = point
     if len(pts) < 3:
         return False
 
@@ -264,14 +267,19 @@ def normalize_canvas_polygon(
         points fit inside area width/height, otherwise screen coordinates.
     """
     pts = [_float_point(p) for p in polygon]
-    _dedupe_polygon(pts)
     mode = (coordinate_space or 'auto').strip().lower()
+    if mode not in ('auto', 'normalized', 'relative', 'area', 'absolute', 'screen'):
+        raise ValueError(f'Unknown canvas polygon coordinate_space: {coordinate_space!r}')
+    def checked(values):
+        # Area and duplicate-distance thresholds are measured in screen pixels,
+        # not fractions of a normalized canvas.
+        return _round_polygon(_dedupe_polygon(_round_polygon(values)))
     if mode in ('absolute', 'screen'):
-        return _round_polygon(pts)
+        return checked(pts)
     if area is None:
         if mode in ('normalized', 'relative', 'area'):
             raise ValueError('Canvas polygon coordinate_space requires area.')
-        return _round_polygon(pts)
+        return checked(pts)
     if len(area) != 4:
         raise ValueError('Canvas area must be (x, y, width, height).')
     ax, ay, aw, ah = [_finite_number(v, 'canvas area') for v in area]
@@ -287,11 +295,11 @@ def normalize_canvas_polygon(
         else:
             mode = 'screen'
     if mode == 'normalized':
-        return _round_polygon((ax + x * (aw - 1), ay + y * (ah - 1)) for x, y in pts)
+        return checked((ax + x * (aw - 1), ay + y * (ah - 1)) for x, y in pts)
     if mode in ('relative', 'area'):
-        return _round_polygon((ax + x, ay + y) for x, y in pts)
+        return checked((ax + x, ay + y) for x, y in pts)
     if mode in ('absolute', 'screen'):
-        return _round_polygon(pts)
+        return checked(pts)
     raise ValueError(f'Unknown canvas polygon coordinate_space: {coordinate_space!r}')
 
 
@@ -309,6 +317,8 @@ def _normalise_space(value: str | None) -> str:
 def _point_to_screen(point: Sequence[float | int], area: Sequence[int | float] | None, coordinate_space: str | None) -> FloatPoint:
     x, y = _float_point(point)
     mode = _normalise_space(coordinate_space)
+    if mode not in ('auto', 'screen', 'normalized', 'area'):
+        raise ValueError(f'Unknown canvas anchor coordinate_space: {coordinate_space!r}')
     if mode == 'screen':
         return (x, y)
     if area is None:
@@ -344,12 +354,12 @@ def _anchor_from_mapping(data: Mapping[str, object]) -> 'CanvasAnchor':
     if center is None:
         raise ValueError('Canvas anchor requires a center point.')
     tip = data.get('tip')
-    confidence = float(data.get('confidence', 1.0))
+    confidence = _finite_number(data.get('confidence', 1.0), 'anchor confidence')
     orientation = data.get('orientation')
     return CanvasAnchor(kind=kind, center=_float_point(center),
                         tip=(_float_point(tip) if tip is not None else None),
-                        confidence=max(0.0, min(1.0, confidence)),
-                        orientation=(float(orientation) if orientation is not None else None))
+                        confidence=confidence,
+                        orientation=(_finite_number(orientation, 'anchor orientation') if orientation is not None else None))
 
 
 def normalize_canvas_anchors(
@@ -363,7 +373,7 @@ def normalize_canvas_anchors(
     kind/center/tip/confidence/orientation fields. coordinate_space follows the
     same screen, area, normalized and auto rules used by canvas polygons.
     """
-    result: list[CanvasAnchor] = []
+    normalized: list[CanvasAnchor] = []
     for raw in anchors or ():
         if isinstance(raw, CanvasAnchor):
             anchor = raw
@@ -371,10 +381,34 @@ def normalize_canvas_anchors(
             anchor = _anchor_from_mapping(raw)
         else:
             raise ValueError('Canvas anchors must be CanvasAnchor objects or dictionaries.')
-        center = _point_to_screen(anchor.center, area, coordinate_space)
-        tip = _point_to_screen(anchor.tip, area, coordinate_space) if anchor.tip is not None else None
+        if anchor.kind not in ('corner', 'triangle'):
+            raise ValueError('Canvas anchor kind must be corner or triangle.')
+        confidence = _finite_number(anchor.confidence, 'anchor confidence')
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError('Anchor confidence must be between zero and one.')
+        orientation = (_finite_number(anchor.orientation, 'anchor orientation')
+                       if anchor.orientation is not None else None)
+        normalized.append(CanvasAnchor(anchor.kind, _float_point(anchor.center),
+                                       _float_point(anchor.tip) if anchor.tip is not None else None,
+                                       confidence, orientation))
+    mode = _normalise_space(coordinate_space)
+    if mode == 'auto' and area is not None and normalized:
+        if len(area) != 4:
+            raise ValueError('Canvas area must be (x, y, width, height).')
+        _ax, _ay, aw, ah = [_finite_number(v, 'canvas area') for v in area]
+        points = [point for anchor in normalized for point in (anchor.center, anchor.tip) if point is not None]
+        if all(-0.001 <= v <= 1.001 for point in points for v in point):
+            mode = 'normalized'
+        elif all(-0.001 <= x <= aw + .001 and -0.001 <= y <= ah + .001 for x, y in points):
+            mode = 'area'
+        else:
+            mode = 'screen'
+    result: list[CanvasAnchor] = []
+    for anchor in normalized:
+        center = _point_to_screen(anchor.center, area, mode)
+        tip = _point_to_screen(anchor.tip, area, mode) if anchor.tip is not None else None
         result.append(CanvasAnchor(anchor.kind, center, tip=tip,
-                                   confidence=max(0.0, min(1.0, float(anchor.confidence))),
+                                   confidence=anchor.confidence,
                                    orientation=anchor.orientation))
     return tuple(result)
 
@@ -491,9 +525,15 @@ def clip_segment_to_polygon(start: Sequence[float | int], end: Sequence[float | 
     return tuple(out)
 
 
-def clip_path_to_polygon(points: Iterable[Sequence[float | int]], polygon: Sequence[Sequence[float | int]]) -> tuple[tuple[Point, ...], ...]:
+def clip_path_to_polygon(points: Iterable[Sequence[float | int]], polygon: Sequence[Sequence[float | int]], *, cancelled=lambda: False) -> tuple[tuple[Point, ...], ...]:
     """Clip a polyline to a polygon and preserve gaps as separate subpaths."""
-    raw = [_float_point(p) for p in points]
+    if cancelled():
+        raise InterruptedError()
+    raw = []
+    for index, point in enumerate(points):
+        if index % 512 == 0 and cancelled():
+            raise InterruptedError()
+        raw.append(_float_point(point))
     pts = [_float_point(p) for p in polygon]
     if not raw or len(pts) < 3:
         return ()
@@ -507,7 +547,9 @@ def clip_path_to_polygon(points: Iterable[Sequence[float | int]], polygon: Seque
 
     subpaths: list[list[Point]] = []
     current: list[Point] = []
-    for a, b in zip(raw, raw[1:]):
+    for index, (a, b) in enumerate(zip(raw, raw[1:])):
+        if index % 512 == 0 and cancelled():
+            raise InterruptedError()
         pieces = clip_segment_to_polygon(a, b, pts)
         if not pieces:
             if current:
@@ -556,9 +598,15 @@ def _safe_projection(point: Sequence[float | int], polygon: Sequence[Sequence[fl
     """
     pts = [_float_point(p) for p in polygon]
     cx, cy = _centroid(pts)
-    if point_in_polygon(point, pts):
-        return _round_point(point)
+    rounded_point = _round_point(point)
+    if point_in_polygon(point, pts) and point_in_polygon(rounded_point, pts):
+        return rounded_point
     bx, by = _nearest_boundary_point(point, pts)
+    candidates = {(x, y) for x in (math.floor(bx), math.ceil(bx))
+                  for y in (math.floor(by), math.ceil(by))}
+    for candidate in sorted(candidates, key=lambda p: ((p[0]-bx)**2 + (p[1]-by)**2, p)):
+        if point_in_polygon(candidate, pts):
+            return candidate
     # Nudge toward center to avoid sitting just outside after rounding.
     for ratio in (0.02, 0.05, 0.10, 0.20, 0.35, 0.50, 0.75, 1.0):
         nx = bx + (cx - bx) * ratio
@@ -566,7 +614,11 @@ def _safe_projection(point: Sequence[float | int], polygon: Sequence[Sequence[fl
         rounded = _round_point((nx, ny))
         if point_in_polygon(rounded, pts):
             return rounded
-    return _round_point((cx, cy))
+    for raw in pts:
+        rounded = _round_point(raw)
+        if point_in_polygon(rounded, pts):
+            return rounded
+    raise CanvasSafetyStop('Canvas Guard cannot project this point to a verified integer canvas coordinate.')
 
 
 @dataclass(frozen=True)
@@ -612,11 +664,49 @@ class SafePolygon:
     bounds: tuple[int, int, int, int]
     safe_bounds: tuple[int, int, int, int]
 
+    _prepared: tuple = field(init=False, repr=False, compare=False)
+    _safe_prepared: tuple = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        def prepare(polygon):
+            pts = tuple(_float_point(p) for p in polygon)
+            if not pts:
+                return pts, None, False
+            xs, ys = zip(*pts)
+            bounds = (min(xs), min(ys), max(xs), max(ys))
+            left, top, right, bottom = bounds
+            rectangle = (len(pts) == 4 and len(set(pts)) == 4
+                         and set(pts) == set(_rect_polygon(left, top, right, bottom))
+                         and all(a[0] == b[0] or a[1] == b[1] for a, b in zip(pts, pts[1:] + pts[:1])))
+            return pts, bounds, rectangle
+        object.__setattr__(self, '_prepared', prepare(self.polygon))
+        object.__setattr__(self, '_safe_prepared', prepare(self.safe_polygon))
+        # Freeze nested caller containers as well as the dataclass itself, so
+        # projection/public geometry cannot diverge from the prepared cache.
+        object.__setattr__(self, 'polygon', self._prepared[0])
+        object.__setattr__(self, 'safe_polygon', self._safe_prepared[0])
+        object.__setattr__(self, 'bounds', tuple(self.bounds))
+        object.__setattr__(self, 'safe_bounds', tuple(self.safe_bounds))
+
+    @staticmethod
+    def _contains(point, prepared):
+        point = _float_point(point)
+        pts, bounds, rectangle = prepared
+        if bounds is None:
+            return False
+        x, y = point
+        left, top, right, bottom = bounds
+        if x < left-1e-7 or x > right+1e-7 or y < top-1e-7 or y > bottom+1e-7:
+            return False
+        if rectangle and left <= x <= right and top <= y <= bottom:
+            return True
+        return _point_in_prepared_polygon(point, pts)
+
     def contains(self, point: Sequence[float | int]) -> bool:
-        return point_in_polygon(point, self.polygon)
+        return self._contains(point, self._prepared)
 
     def contains_safe(self, point: Sequence[float | int]) -> bool:
-        return point_in_polygon(point, self.safe_polygon)
+        return self._contains(point, self._safe_prepared)
 
     def clamp_to_safe(self, point: Sequence[float | int]) -> Point:
         return _safe_projection(point, self.safe_polygon)
@@ -670,6 +760,11 @@ class CanvasModel:
             if len(area) != 4:
                 raise ValueError('Canvas area must be (x, y, width, height).')
             area_tuple = tuple(int(round(_finite_number(v, 'canvas area'))) for v in area)  # type: ignore[assignment]
+        ax, ay, aw, ah = area_tuple
+        if aw < 2 or ah < 2:
+            raise ValueError('Canvas area is too small for Canvas Guard.')
+        if any(not (ax <= x <= ax+aw-1 and ay <= y <= ay+ah-1) for x, y in pts):
+            raise CanvasSafetyStop('Canvas polygon extends outside the selected drawing area. Recalibrate the canvas.')
         inset = BrushInset(int(round(_finite_number(brush_px, 'brush_px'))), int(edge_margin_px))
         left, top, right, bottom = _polygon_bounds(pts)
         safe_pts = inset_polygon(pts, inset.total_px)
@@ -815,7 +910,7 @@ class CanvasGuard:
         """
         return clip_segment_to_polygon(start, end, self.model.safe_polygon)
 
-    def clip_path_to_safe_subpaths(self, points: Iterable[Sequence[int | float]], context: str = 'drawing path') -> tuple[tuple[Point, ...], ...]:
+    def clip_path_to_safe_subpaths(self, points: Iterable[Sequence[int | float]], context: str = 'drawing path', *, cancelled=lambda: False) -> tuple[tuple[Point, ...], ...]:
         """Clip a complete polyline to safe_polygon and preserve split gaps.
 
         Every planned input point must still be inside the selected canvas polygon;
@@ -823,10 +918,14 @@ class CanvasGuard:
         edge with true segment clipping. Completely stale/off-canvas plans still
         stop before native input.
         """
-        raw_points = tuple(_round_point(p) for p in points)
-        for index, point in enumerate(raw_points):
-            self.require_source_inside_canvas(point, f'{context} source point {index + 1}')
-        subpaths = clip_path_to_polygon(raw_points, self.model.safe_polygon)
+        if cancelled():
+            raise InterruptedError()
+        raw_points = []
+        for index, point in enumerate(points):
+            if index % 512 == 0 and cancelled():
+                raise InterruptedError()
+            raw_points.append(self.require_source_inside_canvas(point, f'{context} source point {index + 1}'))
+        subpaths = clip_path_to_polygon(raw_points, self.model.safe_polygon, cancelled=cancelled)
         validated: list[tuple[Point, ...]] = []
         for path_index, path in enumerate(subpaths):
             clean: list[Point] = []

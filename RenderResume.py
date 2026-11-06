@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 from collections import Counter, defaultdict
+from contextlib import closing
 
 SCHEMA = 3
 SUPPORTED_SCHEMAS = (1, 2, 3)
@@ -72,9 +73,14 @@ def plan_fingerprint(plan):
     h = hashlib.sha256()
     image = plan.get('image')
     if image is not None:
-        try:
-            rgb = image.convert('RGBA');h.update(f'image-rgba:{rgb.width}x{rgb.height}:'.encode());h.update(rgb.tobytes())
-        except Exception:h.update(repr(getattr(image, 'size', None)).encode())
+        # Keep the exact historical RGBA byte stream without a whole-image
+        # RGBA allocation plus a second full-size bytes object.
+        h.update(f'image-rgba:{image.width}x{image.height}:'.encode())
+        rows = max(1, (1024 * 1024) // max(1, image.width * 4))
+        for top in range(0, image.height, rows):
+            with closing(image.crop((0, top, image.width, min(image.height, top + rows)))) as strip:
+                with closing(strip.convert('RGBA')) as rgba:
+                    h.update(rgba.tobytes())
     h.update(repr(tuple(plan.get('fitted') or ())).encode())
     h.update(repr(tuple(_clean_rgb(c) for c in (plan.get('colors') or ()))).encode())
     order = active_color_order(plan);h.update(repr(tuple(order)).encode());h.update(str(int(plan.get('count') or 0)).encode())
@@ -104,10 +110,14 @@ def plan_fingerprint(plan):
     return h.hexdigest()
 
 
-def _base(plan, completed_count, *, prelude_complete=True):
-    order=active_color_order(plan);completed=max(0,min(int(completed_count),len(order)))
+def _base(plan, completed_count, *, prelude_complete=True, fingerprint=None):
+    order = active_color_order(plan)
+    if (type(completed_count) is not int or not 0 <= completed_count <= len(order)
+            or type(prelude_complete) is not bool or (completed_count and not prelude_complete)):
+        raise ValueError('Completed color count/prelude is inconsistent with the plan.')
+    completed = completed_count
     return {
-        'schema':SCHEMA,'plan_fingerprint':plan_fingerprint(plan),'total_colors':len(order),
+        'schema':SCHEMA,'plan_fingerprint':fingerprint if fingerprint is not None else plan_fingerprint(plan),'total_colors':len(order),
         'completed_count':completed,'completed_keys':[batch_key(plan,index) for index in order[:completed]],
         'next_color':completed+1 if completed < len(order) else 0,'prelude_complete':bool(prelude_complete),
         'active_color_number':0,'active_color_index':None,'active_batch_key':'','next_path_index':0,
@@ -124,10 +134,12 @@ def checkpoint_after_batch(plan, completed_count, *, prelude_complete=True):
 
 
 def checkpoint_before_path(plan, color_number, path_index, path_count, *, ordered_items=None, prelude_complete=True):
-    order=active_color_order(plan);color_number=int(color_number)
-    if not 1 <= color_number <= len(order):raise ValueError('Invalid active color number for path checkpoint.')
+    order=active_color_order(plan)
+    if type(color_number) is not int or not 1 <= color_number <= len(order):raise ValueError('Invalid active color number for path checkpoint.')
     if type(path_count) is not int or type(path_index) is not int or not 0 <= path_index <= path_count:
         raise ValueError("Path checkpoint index must be within the path count.")
+    if path_index and not prelude_complete:
+        raise ValueError('Completed paths require a completed prelude.')
     if ordered_items is not None and len(ordered_items) != path_count:
         raise ValueError("Path checkpoint count does not match ordered items.")
     color_index=order[color_number-1]
@@ -142,7 +154,9 @@ def checkpoint_before_path(plan, color_number, path_index, path_count, *, ordere
 
 
 def checkpoint_after_path(plan, color_number, completed_path_index, path_count, *, ordered_items=None, prelude_complete=True):
-    return checkpoint_before_path(plan,color_number,int(completed_path_index)+1,path_count,
+    if type(completed_path_index) is not int or completed_path_index < 0:
+        raise ValueError('Completed path index must be a nonnegative integer.')
+    return checkpoint_before_path(plan,color_number,completed_path_index+1,path_count,
                                   ordered_items=ordered_items,prelude_complete=prelude_complete)
 
 
@@ -164,7 +178,10 @@ def sequence_entry_key(entry) -> str:
 
 
 def _sequence_catalog(plan):
-    keys=sorted(sequence_entry_key(row) for row in (plan.get('execution_sequence') or ()) if isinstance(row,dict))
+    sequence = plan.get('execution_sequence') or ()
+    if len(sequence) > MAX_SEQUENCE_OPERATIONS:
+        raise ValueError('Execution sequence exceeds the supported resume limit.')
+    keys=sorted(sequence_entry_key(row) for row in sequence if isinstance(row,dict))
     digest=hashlib.sha256('|'.join(keys).encode('ascii')).hexdigest()
     return keys,digest
 
@@ -177,8 +194,10 @@ def sequence_context_fingerprint(plan):
 
 
 def _encode_bits(flags) -> str:
-    flags=list(bool(v) for v in flags);raw=bytearray((len(flags)+7)//8)
+    raw = bytearray()
     for index,value in enumerate(flags):
+        if index % 8 == 0:
+            raw.append(0)
         if value:raw[index//8] |= 1 << (index%8)
     return base64.b64encode(bytes(raw)).decode('ascii')
 
@@ -229,16 +248,20 @@ def checkpoint_sequence_progress(plan, completed_counts, *, prelude_complete=Tru
         try:n=max(0,int(value or 0))
         except (TypeError,ValueError,OverflowError):continue
         if key in available:requested[key]=min(n,available[key])
-    seen=Counter();flags=[]
-    for key in keys:
-        seen[key]+=1;flags.append(seen[key] <= requested.get(key,0))
-    completed=sum(flags);total=len(keys)
+    seen = Counter()
+    def flags():
+        for key in keys:
+            seen[key] += 1
+            yield seen[key] <= requested.get(key, 0)
+    completed=sum(requested.values());total=len(keys)
+    if completed and not prelude_complete:
+        raise ValueError('Completed sequence operations require a completed prelude.')
     last_color = (last_entry or {}).get('color_index')
-    out=_base(plan,0,prelude_complete=prelude_complete)
+    out=_base(plan,0,prelude_complete=prelude_complete,fingerprint=sequence_context_fingerprint(plan))
     out.update({
-        'schema':SCHEMA,'plan_fingerprint':sequence_context_fingerprint(plan),
+        'schema':SCHEMA,
         'sequence_level':True,'sequence_total':total,'sequence_completed_count':completed,
-        'sequence_catalog_fingerprint':catalog_fp,'sequence_completed_bits':_encode_bits(flags),
+        'sequence_catalog_fingerprint':catalog_fp,'sequence_completed_bits':_encode_bits(flags()),
         'sequence_coverage_percent':round((completed/max(1,total))*100.0,3),
         'sequence_remaining_count':max(0,total-completed),
         'sequence_last_phase':str((last_entry or {}).get('phase') or '')[:80],
@@ -270,6 +293,8 @@ def validate_progress(value):
         return None
     if path_level and sequence_level:
         return None
+    if completed and not prelude:
+        return None
     out = dict(schema=schema, plan_fingerprint=fp, total_colors=total, completed_count=completed,
                completed_keys=list(keys), next_color=completed+1 if completed<total else 0,
                prelude_complete=prelude, active_color_number=0, active_color_index=None,
@@ -281,6 +306,7 @@ def validate_progress(value):
     if schema >= 3 and sequence_level:
         st=value.get('sequence_total');sc=value.get('sequence_completed_count');catalog=value.get('sequence_catalog_fingerprint');bits=value.get('sequence_completed_bits')
         if type(st) is not int or type(sc) is not int or not 0 <= sc <= st or not _hex(catalog,64):return None
+        if sc and not prelude:return None
         packed=_decode_packed_bits(bits,st)
         if packed is None or sum(byte.bit_count() for byte in packed)!=sc:return None
         try:last_color=int(value.get('sequence_last_color_index',-1));last_brush=max(0,int(value.get('sequence_last_brush_px',0) or 0))
@@ -298,6 +324,8 @@ def validate_progress(value):
             return None
         key, items_fp = value.get('active_batch_key'), value.get('active_items_fingerprint')
         if n != completed+1 or not 1 <= n <= total or idx < 0 or not 0 <= nxt <= count:
+            return None
+        if nxt and not prelude:
             return None
         if not _hex(key, 20) or not _hex(items_fp, 64):
             return None

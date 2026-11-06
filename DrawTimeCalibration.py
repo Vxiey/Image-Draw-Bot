@@ -20,10 +20,62 @@ from ProfileStorage import profile_timing_file, safe_profile_key
 # Legacy shared database. It is read only for one-time per-profile migration.
 FILE = data_dir() / "draw-time-calibration.json"
 VERSION = 4
+MAX_CONTEXTS = 256
+MAX_DATABASE_BYTES = 4 * 1024 * 1024
+MAX_DATABASE_ITEMS = 100000
+MAX_OPERATION_KINDS = 64
 
 
 def _empty() -> dict[str, Any]:
     return {"version": VERSION, "profiles": {}}
+
+
+def _node_count(value):
+    pending = [value]
+    count = 0
+    while pending:
+        item = pending.pop()
+        count += 1
+        if count > MAX_DATABASE_ITEMS:
+            return count
+        if isinstance(item, dict):
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            pending.extend(item)
+    return count
+
+
+def _database_text(db, keep_key=None):
+    """Keep the newest contexts within the exact reader's byte/item budgets."""
+    profiles = db['profiles']
+    def stamp(key):
+        value = profiles[key].get('updated_at', 0)
+        return float(value) if is_finite_number(value) else 0.0
+    oldest = iter(sorted((key for key in profiles if key != keep_key), key=stamp))
+    nodes = {key: _node_count(item) for key, item in profiles.items()}
+    total_nodes = 3 + sum(nodes.values())  # root, version and profiles object
+    def discard_oldest():
+        nonlocal total_nodes
+        key = next(oldest, None)
+        if key is None:
+            raise ValueError('A timing record exceeds the supported storage size.')
+        total_nodes -= nodes[key]
+        del profiles[key]
+    while len(profiles) > MAX_CONTEXTS or total_nodes > MAX_DATABASE_ITEMS:
+        discard_oldest()
+    text = json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False)
+    while len(text.encode('utf-8')) > MAX_DATABASE_BYTES:
+        discard_oldest()
+        text = json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False)
+    return text
+
+
+def _operation_rows(values):
+    if not isinstance(values, dict):
+        return ()
+    from itertools import islice
+    return islice(((key, value) for key, value in values.items()
+                   if isinstance(key, str) and 0 < len(key) <= 80), MAX_OPERATION_KINDS)
 
 
 def _profile(options: dict[str, Any]) -> str:
@@ -116,7 +168,7 @@ def _ensure_profile_db(options: dict[str, Any], path: Path | None) -> tuple[Path
         db['profiles'] = {k: dict(v) for k, v in _load_raw(FILE, accept_legacy_version=True)['profiles'].items()
                           if k.startswith(prefix)}
         if db['profiles']:
-            atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False))
+            atomic_write_text(resolved, _database_text(db))
         return resolved, db
 
 
@@ -236,9 +288,9 @@ def record_sample(options: dict[str, Any], predicted_seconds: float, actual_seco
         return {"recorded": False, "reason": "resume sample", "key": _key(options)}
     if any(type(v) is not int or v < 0 for v in (completed_paths, fill_actions)):
         return {"recorded": False, "reason": "invalid operation counts", "key": _key(options)}
-    operation_counts = {str(k): v for k, v in (operation_counts if isinstance(operation_counts, dict) else {}).items()
+    operation_counts = {k: v for k, v in _operation_rows(operation_counts)
                         if type(v) is int and 0 <= v <= 1_000_000_000}
-    operation_runtime = {str(k): clean for k, v in (operation_runtime if isinstance(operation_runtime, dict) else {}).items()
+    operation_runtime = {k: clean for k, v in _operation_rows(operation_runtime)
                          if (clean := _runtime_entry(v)) is not None}
 
     ratio = max(.35, min(5.0, actual / predicted))
@@ -281,7 +333,11 @@ def record_sample(options: dict[str, Any], predicted_seconds: float, actual_seco
         db["profiles"].pop(_legacy_key(options), None)
         db["profiles"][key] = item
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False))
+        try:
+            text = _database_text(db, keep_key=key)
+        except ValueError:
+            return {'recorded': False, 'reason': 'timing record exceeds storage limit', 'key': key}
+        atomic_write_text(resolved, text)
         result = dict(item)
         result["recorded"] = True
         result["storage_path"] = str(resolved)
@@ -300,5 +356,5 @@ def reset_profile(options: dict[str, Any], *, path: Path | None = None) -> dict[
         db["profiles"].pop(v2, None)
         db["profiles"].pop(legacy, None)
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2))
+        atomic_write_text(resolved, _database_text(db))
         return {"reset": bool(existed), "key": key, "profile_key": _profile(options), "storage_path": str(resolved)}

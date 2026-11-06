@@ -1,0 +1,59 @@
+{
+  "baseline": "1c09774ad22088c5c30a8f8220b6b451fdee9659",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "repeats": 7,
+  "method": "Paired median warm perf_counter timings on one CPU environment. Generated/repository image fixtures. Float output comparison tolerance 1e-9. No GPU or native input.",
+  "cases": [
+    {
+      "case": "skribbl_setup",
+      "before_ms": 198.5045,
+      "after_ms": 49.4627,
+      "speedup": 4.013,
+      "equal_output": true
+    },
+    {
+      "case": "paint_setup",
+      "before_ms": 493.8314,
+      "after_ms": 95.4501,
+      "speedup": 5.174,
+      "equal_output": true
+    },
+    {
+      "case": "six_triangle_detection",
+      "before_ms": 16.9931,
+      "after_ms": 11.4656,
+      "speedup": 1.482,
+      "equal_output": true
+    },
+    {
+      "case": "solid_palette_scan",
+      "before_ms": 40.1842,
+      "after_ms": 2.7652,
+      "speedup": 14.532,
+      "equal_output": true
+    },
+    {
+      "case": "noisy_palette_rejection",
+      "before_ms": 38.2769,
+      "after_ms": 0.7114,
+      "speedup": 53.809,
+      "equal_output": true
+    },
+    {
+      "case": "opacity_slider_contrast",
+      "before_ms": 0.6401,
+      "after_ms": 0.0717,
+      "speedup": 8.93,
+      "equal_output": true
+    },
+    {
+      "case": "palette_row_clustering",
+      "before_ms": 0.813,
+      "after_ms": 0.4972,
+      "speedup": 1.635,
+      "equal_output": true
+    }
+  ]
+}

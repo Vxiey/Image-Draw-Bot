@@ -91,6 +91,7 @@ class WindowsMouse:
         return bool(getattr(self, '_input_armed', False))
 
     def arm_input(self):
+        self._input_armed = False
         down=self.buttons_down()
         if down:
             raise InterruptedError('Release all mouse buttons before starting mouse control: '+', '.join(down)+'.')

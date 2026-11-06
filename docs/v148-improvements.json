@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 262,
+  "implemented": 498,
   "release_published": false,
-  "validation": "Batch 01 local full suite passed; Windows CI pending.",
+  "validation": "Batch 02: 2,557 local tests passed (22 platform/hardware skips), source gate passed with 5,000 soak cycles, source hygiene passed, eight exact-raster engine fixtures passed; native Windows checkpoint CI pending.",
   "improvements": [
     {
       "id": 1,
@@ -2000,6 +2000,1894 @@
       "local_id": "UI41",
       "description": "Release region-picker full-desktop buffers on selection/cancellation while leaving the delivered crop usable.",
       "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 263,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL01",
+      "description": "Fractional, Boolean or out-of-LONG calibration coordinates could be truncated or overflow later. Screen points/rectangles now require the declared integer domain and positive dimensions.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 264,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL02",
+      "description": "NaN could result in confidence 1 and reuse both old calibrations. Invalid confidence now represents no evidence and requests recalibration.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 265,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL03",
+      "description": "Raw one-pixel deltas overrode an already accepted comparison tolerance and could escalate canvas-only recovery. Planning now honors changed/reasons after tolerance.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 266,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL04",
+      "description": "An initial layout delta with default high confidence could request no calibration. It now requires a full initial calibration.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 267,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL05",
+      "description": "Long browser palette/component scans and the final Paint canvas analysis could ignore Stop. Callbacks propagate through scans, component loops and final-result boundaries.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 268,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL06",
+      "description": "A successful scan could be returned after cancellation, and retry delay did not poll Stop. Retry now checks after scan/recapture and polls its default settle wait.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 269,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL07",
+      "description": "After a window move, manual capture sampled the old canonical screen point. It now samples the actual cursor and stores the rebased point.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 270,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL08",
+      "description": "A captured palette/tool point could be retained outside the probed client. Manual capture now checks containment before storing or sampling it.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 271,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL09",
+      "description": "A direct or delayed capture could append beyond the profile color limit despite disabled UI buttons. Capture methods now enforce capacity themselves.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 272,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL10",
+      "description": "Repeated palette countdown calls could replace the tracked job; Paint/exact Save could persist before a pending capture completed. Active jobs now block these operations.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 273,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL11",
+      "description": "The exact-color Close action destroyed Tk without cancelling its timer, and late callbacks could still run. Close is idempotent, cancels jobs and gates later capture callbacks.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 274,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL12",
+      "description": "After the first exact-color capture, later positions were stored without re-probing or rebasing. Every capture now validates layout and stores the original target frame.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 275,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL13",
+      "description": "Later exact-color fields could be captured from an unrelated window. Capture binds the Open control first, then requires the same window or matching owner-root/process identity; modal coordinates use a fresh original-window probe. An explicit Open capture can restart an incompatible saved layout after validation, clearing its old controls.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 276,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL14",
+      "description": "Malformed nested fingerprints, bad DPI/timestamps or oversized local JSON could crash setup. The bounded cache loader validates entries individually, treats invalid entries as misses and bounds recording input; the writer emits only validated schema fields so unknown payloads cannot exceed the reader's item budget.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 277,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL15",
+      "description": "Only sampled cache points were checked, allowing an unsampled point outside the client or inside the drawing canvas to be restored. Every cached point is now validated for location/uniqueness.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 278,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL16",
+      "description": "A successful palette restoration was reported as failed if updating last_used raised a permission error. Optional recency failure no longer undoes verified restoration.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 279,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL17",
+      "description": "Concurrent record/touch operations could overwrite each other after independent reads. Read-modify-write sequences now use the existing file transaction lock.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 280,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL18",
+      "description": "Equal count/spacing could collide for palettes at different positions. Signatures now include the full ordered client-relative control positions.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 281,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL19",
+      "description": "A calibration file could seed cache metadata without verified profile ownership or translating its old anchor. Cache seeding now validates state/owner and resolves its points in the current client frame.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 282,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL20",
+      "description": "A weak preferred window could outrank a strong match, then make selection fail; nonfinite confidence could also participate. Only valid finite visual candidates are ranked with context.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 283,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL21",
+      "description": "GetForegroundWindow used ctypes default integer return handling, risking truncation on 64-bit Windows. Its argument and pointer-sized return signature are now explicit.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 284,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL22",
+      "description": "Browser discovery loaded user32 by a bare DLL name. It now uses the existing System32-only library loader.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 285,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL23",
+      "description": "Window title lengths could drive unbounded buffer allocation, and failed PID queries admitted identity-less candidates. Enumeration declares its callback ABI, caps titles and skips failed process lookups.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 286,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL24",
+      "description": "Discovery retained every candidate screenshot until selection. It now keeps candidate metadata plus only the current best screenshot, closing superseded captures.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 287,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL25",
+      "description": "A high confidence number could admit a candidate with absent/out-of-client canvas or mismatched capture dimensions. Discovery now requires consistent capture/client/canvas geometry before ranking.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 288,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL26",
+      "description": "Uniform dark pixels alone scored as Brush/Eraser/Fill/Clear controls. Tool evidence now requires local contrast or diversity.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 289,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL27",
+      "description": "Estimated controls outside the client were clamped onto its edge. Such candidates are now omitted, with coverage measured against the full expected tool set.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 290,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL28",
+      "description": "Malformed tool dictionaries or NaN confidence could generate actions. Action construction validates supported tools, finite evidence and point/client containment.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 291,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL29",
+      "description": "Other visible controls could lend enough average confidence to click a missing requested brush. The requested index must itself have control evidence.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 292,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL30",
+      "description": "Metadata described every nominal brush size as verified. It now exposes only individually verified indices/sizes while retaining original control indexing.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 293,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL31",
+      "description": "Edge-clipped image patches shifted the apparent control center and could still contribute evidence. Tool and brush patches require their complete neighborhood.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 294,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL32",
+      "description": "Requesting one sample from a larger palette divided by zero. Both live and cached samplers now define a single first-point sample.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 295,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL33",
+      "description": "Live preflight checked only sampled coordinates. It now validates every supplied point, RGB and duplicate before representative color sampling.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 296,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL34",
+      "description": "Missing owner, NaN saved confidence or zero saved confidence could be accepted/promoted by the independent setup gate. Explicit ownership and the lower of valid saved/live confidence are now required.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 297,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL35",
+      "description": "The independent browser verifier sampled saved absolute coordinates after a window move. It now resolves stored anchor coordinates against the current client.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 298,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL36",
+      "description": "Twenty saved colors plus a separate count 20 were enough to pass despite wrong saved coordinates/RGB. The independent verifier now matches all 20 actual live swatch positions and colors uniquely.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 299,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL37",
+      "description": "Saved Pencil/Fill presence could pass with legacy unanchored or unrelated tool positions. Independent verification now requires an anchored schema, current containment and matching live ribbon positions.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 300,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL38",
+      "description": "Unbounded JSON, Boolean schema values and NaN automatic confidence were accepted by the tool-file reader. Loading is bounded and schema/confidence validation is strict.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 301,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL39",
+      "description": "Anchored tool translation could yield a valid integer point outside the current client. Tool action construction now rejects that point.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 302,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL40",
+      "description": "Tools were written before palette validation/publication, leaving mixed old/new calibration on failure. Both payloads are validated first and the shared staged file-set helper rolls back publication exceptions.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 303,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL41",
+      "description": "Tool auto-calibration inflated compact/clipped detector confidence to a fixed 0.90. It now preserves the detector confidence and rechecks cancellation before save.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 304,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL42",
+      "description": "Negative/out-of-range/fractional RGB values could be clamped into a valid apparent match. The verifier now requires three integer byte channels and a supported comparison context.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 305,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL43",
+      "description": "Downscaled tolerance could accept a selected canvas extending slightly outside the original screenshot. Manual overrides now also require exact original-surface containment.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 306,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL44",
+      "description": "An open Edit colors dialog with a temporarily invalid numeric value looked closed when RGB validation failed. Presence now uses modal/field structure independently of valid numeric contents.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 307,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL45",
+      "description": "Duplicate named RGB edits could fall back to a geometric label match and choose one. Explicit duplicate names now reject the scan.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 308,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL46",
+      "description": "An empty/transient UIA tree or the final single closed-looking scan could be reported as closed. Closure now requires recognizable main controls and a second post-settle scan, including the final attempt.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 309,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL47",
+      "description": "The UIA Enter fallback trusted the prior SetFocus call after a wait. It now checks the current focused UIA element and process immediately before SendWait.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 310,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL48",
+      "description": "UIA scan output and Python node arrays had no local acceptance budget. The scan now caps 10,000 controls, rejects output over 8 MiB/malformed rows and validates action geometry; row collection avoids repeated PowerShell array copies.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 311,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL49",
+      "description": "After killing PowerShell, cleanup could wait indefinitely on a pipe inherited by another child. Pipe draining and parent reaping now have bounded waits.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 312,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL50",
+      "description": "A later empty high-DPI tile aborted an otherwise valid palette scan. A distinct no-swatch result now skips only empty tiles while preserving genuine validation/cancellation failures.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 313,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL51",
+      "description": "A negative tile budget could make the tile-sizing loop nonterminating. The budget is now a bounded integer with a minimum viable area.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 314,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL52",
+      "description": "Large solid UI regions were visited pixel by pixel in Python. A row-span union path preserves exact four-connected components, encounter order and output, with fallback for noisy images.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 315,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL53",
+      "description": "Images without any possible exact 5x5 swatch interior still required a full Python walk. A vector necessary-condition check now rejects those images early while retaining valid swatches amid noise.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 316,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL54",
+      "description": "Browser canvas analysis repeatedly read Pillow pixels in nested Python loops. It now builds exact sampled light masks in bounded strips and consumes byte visitation state.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 317,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL55",
+      "description": "High-DPI setup allocated the entire palette ROI and then scanned separate tiles. The full crop is now created only for the single-crop path.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 318,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL56",
+      "description": "Many swatches with the same Y caused identical row-cluster work to run repeatedly. Each distinct row seed is now processed once.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 319,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL57",
+      "description": "Every scan reopened and rebuilt the same bundled tool templates/masks. They are now cached once as immutable arrays.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 320,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL58",
+      "description": "Triangle preprocessing classified pixels through Python loops. Vector distance/saturation/edge masks preserve the scalar predicate.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 321,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL59",
+      "description": "Tiny irrelevant components consumed the 120-component budget before real markers were reached. Only sufficiently large candidate components now spend that budget.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 322,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL60",
+      "description": "A floor sampling step could retain up to 1,399 points despite the 700-point limit; oversized rejected components retained full point lists and expected 0 still scanned. Sampling is truly bounded, oversized lists are discarded and zero skips analysis.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 323,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL61",
+      "description": "Invisible RGB data in transparent pixels could create anchors. Alpha-bearing sources and RGB images with a transparency key now use the established visible-on-white composition.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 324,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL62",
+      "description": "Rejected transforms and invalid/negative/nonfinite coefficients or tolerance values could still emit coordinates or disable checks. Transform application and threshold inputs now fail validation.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 325,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL63",
+      "description": "Rebasing could accept an original canvas outside its client; collapsed output was inflated to one pixel and negative containment margins widened authority. Both old/new areas must be contained, output nonempty and margins nonnegative.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 326,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL64",
+      "description": "A later sketch-style override could turn an outline or Pixel Accurate decision from 100% into 10%. The final light-sketch rule now preserves the mandatory opaque decision.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 327,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL65",
+      "description": "Hidden RGB under transparent pixels influenced image opacity selection. Metrics now analyze the visible composited image.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 328,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL66",
+      "description": "Pillow FIND_EDGES preserves source border pixels, so a uniform white image reported edges. Edge statistics now exclude the untouched border.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 329,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL67",
+      "description": "Independent minimum dimensions distorted thin images and upscaled small images before opacity analysis. Sampling now preserves aspect and never scales above the source.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 330,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL68",
+      "description": "A tiny opacity probe converted the full screenshot to RGB first. It now crops the small validated region before conversion.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 331,
+      "area": "calibration",
+      "batch": 2,
+      "local_id": "CAL69",
+      "description": "The slider scorer allocated an unused pixel list and repeatedly called getpixel. It now compares the required rows in NumPy float64, preserving numeric precision.",
+      "ledger": "v148-batch02-calibration.md"
+    },
+    {
+      "id": 332,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP01",
+      "description": "Scale and round to screen coordinates before duplicate/area validation.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 333,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP02",
+      "description": "Resolve one coordinate space from the full center/tip set.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 334,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP03",
+      "description": "Validate anchor evidence and coordinate-space names explicitly, including dataclass inputs and the no-area path.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 335,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP04",
+      "description": "Require valid area dimensions and contain every polygon vertex in that area.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 336,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP05",
+      "description": "Check rounded containment, search nearest integer boundary neighbors, and verify every fallback.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 337,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP06",
+      "description": "Prepare immutable geometry once, freeze nested public geometry too, reject outside bounds quickly and use an exact rectangle interior path while retaining boundary tolerance semantics.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 338,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP07",
+      "description": "Forward cancellation through preview construction, `apply_edge_behavior`, boundary projection and CanvasGuard path loops at bounded intervals.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 339,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP08",
+      "description": "Resolve invalid spacing to the finite profile default before applying profile limits.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 340,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP09",
+      "description": "Never increase the original step during retry; reject invalid base spacing/delay.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 341,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP10",
+      "description": "Require a literal boolean match and identify malformed verifier responses.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 342,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP11",
+      "description": "Give explicit stop types/deadlines precedence and treat CanvasGuard exceptions as hard stops.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 343,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP12",
+      "description": "Consume the validated EMA first, preserving the legacy count/total fallback.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 344,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP13",
+      "description": "Use bounded deterministic streaming decimation, include the batch tail and honor zero.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 345,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP14",
+      "description": "Merge only exact rectangular unions and compare sorted row intervals without a lossy enclosing-box fallback.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 346,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP15",
+      "description": "Map probe centers, brush radius and outside-change positions between screen and capture dimensions.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 347,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP16",
+      "description": "Return unavailable failure for incompatible snapshots, invalid area, RGB or brush geometry before private conversions.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 348,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP17",
+      "description": "Require actual valid sampled evidence and apply the match gate to every nonempty sample count.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 349,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP18",
+      "description": "Derive explicit row/column counts whose product stays within the sample target and spans the full image.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 350,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP19",
+      "description": "Check cancellation during candidate generation, duplicate/invalid paths, comparisons and grid rows; close owned conversions on every exit.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 351,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP20",
+      "description": "Share one consistent trust predicate across correction, review and completed-result analysis; explicit negative evidence wins.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 352,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP21",
+      "description": "Validate finite positive geometry and reject fitted dimensions larger than the selected canvas before cropping.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 353,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP22",
+      "description": "Require positive integer dimensions, at most 16,384 per axis and 4,000,000 pixels before crop/analysis allocation.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 354,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP23",
+      "description": "Flatten alpha against the same visible background used by evaluation.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 355,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP24",
+      "description": "Reject absent/nonfinite/out-of-range visual evidence and return unavailable scoring metadata.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 356,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP25",
+      "description": "Propagate `InterruptedError`, check analysis stages and close every owned image while preserving caller images.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 357,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP26",
+      "description": "Validate caps, honor zero as disabled and floor the allowed pixel fraction.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 358,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP27",
+      "description": "Retain all strictly higher scores, then fill the remaining slots from cutoff ties deterministically.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 359,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP28",
+      "description": "Require bounded finite RGB triplets and reject an invalid correction palette.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 360,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP29",
+      "description": "Keep selected/wanted indices in signed 32-bit storage.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 361,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP30",
+      "description": "Tile palette colors as well, bounding each distance block to 262,144 pixel/color pairs and preserving first-index ties.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 362,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP31",
+      "description": "Iterate only actually selected nonnegative color indices.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 363,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP32",
+      "description": "Require verified crop geometry and finite positive brush/fitted axes before footprint verification.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 364,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP33",
+      "description": "Validate timing, floor the affordable path count and disable correction when no complete path fits.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 365,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP34",
+      "description": "Subtract elapsed planning time before applying the execution budget cap.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 366,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP35",
+      "description": "Recompute retained correction raster counts and filter empty colors after capping; report the selected fraction against candidate pixels.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 367,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP36",
+      "description": "Check within long row scans, propagate stage cancellation and explicitly release owned source/crop/filter images on all exits.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 368,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP37",
+      "description": "Respect fresh correction trust/metric failures and require literal booleans for correction and readiness gates.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 369,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP38",
+      "description": "Require the exact standard success reason plus trusted evidence and no outstanding correction need.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 370,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP39",
+      "description": "Select indices before conversion and reuse existing integer tuples.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 371,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP40",
+      "description": "Apply one shared event output budget across representative subpaths, retaining full output-count metadata.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 372,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP41",
+      "description": "Count the resolved action directly after saturation; avoid unused geometry samples.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 373,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP42",
+      "description": "Borrow already oriented inputs and resize compatible image modes before channel expansion; preserve palette/keyed-alpha handling.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 374,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP43",
+      "description": "Normalize visible color before grayscale detail analysis.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 375,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP44",
+      "description": "Track and close private buffers explicitly, keep the returned image open, and check after analysis stages.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 376,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP45",
+      "description": "Add a per-report UUID to both filenames.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 377,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP46",
+      "description": "Serialize save publication with an instance lock and return detached copies of the saved result.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 378,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP47",
+      "description": "Stage/publish the report pair through the shared rollback-capable file-set helper.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 379,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP48",
+      "description": "Use a bounded JSON reader, validate report evidence, skip unreadable/invalid newer files and continue to valid older reports.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 380,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP49",
+      "description": "Preserve independently available counts/fills even when both publication and full serialization fail.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 381,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP50",
+      "description": "Keep prediction/error/efficiency unavailable when no finite valid estimate exists.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 382,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP51",
+      "description": "Require trusted observed quality for efficiency and complete quality/coverage evidence before more aggressive speed recommendations.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 383,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP52",
+      "description": "Require finite positive duration and a nonnegative integer completed count.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 384,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP53",
+      "description": "Bound history reads and filter to supported records before applying the retention limit.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 385,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP54",
+      "description": "Hold the profile history transaction lock across read/append/publication.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 386,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP55",
+      "description": "Publish all three through rollback-capable replacement and update in-memory success metadata only afterwards.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 387,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP56",
+      "description": "Bind named evidence to the requested active profile; preserve the legacy unnamed-plan contract.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 388,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP57",
+      "description": "Validate finite confidence, positive unique integer sizes, unique signed-LONG integer coordinate pairs and target membership using the same screen-point contract as fresh calibration; valid negative screen positions remain supported.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 389,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP58",
+      "description": "Treat explicit verified subsets/indices as authoritative and enable dynamic selection only with multiple usable sizes.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 390,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP59",
+      "description": "Clip raster samples while preserving the original Bresenham error phase, with work bounded by the canvas major dimension even for enormous endpoints.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 391,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP60",
+      "description": "Check interval/bbox intersection and ordering before drawing the clipped fill.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 392,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP61",
+      "description": "Compare/render visible normalized pixels, including caller-supplied normalized sources.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 393,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP62",
+      "description": "Require a finite positive full-error scale.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 394,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP63",
+      "description": "Keep unknown ETA unavailable and reuse the validated profiler phase selection.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 395,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP64",
+      "description": "Build review from a local options copy containing the same fresh history returned in diagnostics.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 396,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP65",
+      "description": "Check before allocation and within span work, and explicitly close partial private targets on cancellation.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 397,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP66",
+      "description": "Require finite in-range mandatory quality metrics and literal safe evidence; an empty suite cannot pass.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 398,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP67",
+      "description": "Generate once per requested case and reuse that image's dimensions, preserving existing-file behavior.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 399,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP68",
+      "description": "Preserve unavailable timing/quality/gates and use only finite valid measurements and boolean acceptance in summaries.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 400,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP69",
+      "description": "Deep-copy options independently for every benchmark case and engine.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 401,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP70",
+      "description": "Give each engine an owned source copy.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 402,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP71",
+      "description": "Check before fixture generation and after each planner, propagate callbacks into the hybrid suite, and explicitly close owned images on success/failure/cancellation.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 403,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP72",
+      "description": "Track trace ownership, release owned traces in `finally`, preserve caller sessions and report local peak as unavailable under an external trace.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 404,
+      "area": "delivery-planning",
+      "batch": 2,
+      "local_id": "DP73",
+      "description": "Report shared quantization separately and include each engine's preparation, path creation and quality simulation in its planning time.",
+      "ledger": "v148-batch02-delivery-planning.md"
+    },
+    {
+      "id": 405,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR01",
+      "description": "`CorrectionHistory` validates row containers, finite metric domains, integer counters and timestamps, discarding unusable rows while preserving valid older entries. Invalid new timestamps are rejected before publication.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 406,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR02",
+      "description": "`PerformanceAutoTuner` validates JSON payload size/shape, explicit availability flags, finite throughput and integer GPU capacities before recommendation. Unusable optional results take the existing safe CPU fallback.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 407,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR03",
+      "description": "`PerformanceAutoTuner` propagates `InterruptedError` through GPU probing, universal benchmarking and cached fallback loading; interrupted tuning does not save a replacement result.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 408,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR04",
+      "description": "`TargetCapture` sanitizes stdout/stderr before bounded head/tail logging and publishes the log atomically; a logging failure does not damage the helper protocol. The bound is for stored logs, not total subprocess capture memory.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 409,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR05",
+      "description": "`DrawTimeCalibration` keeps at most 256 recent contexts and enforces the shared 4 MiB/100,000-item limits before publication. It preserves the current context and bounds operation-kind metadata at 64 rows.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 410,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR06",
+      "description": "`CompletedDrawLearning` distinguishes executed drawing operations and actual runtime fill clicks from plans and dry runs, requiring real finite numeric elapsed evidence. `DrawTimeEstimate` persists the actual fill count, and `AutoTunerFeedback` rejects empty draws.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 411,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR07",
+      "description": "`AutoTunerFeedback` records adjustment outcomes under their base strategy, retaining the selected strategy as metadata. Explicit rescue strategies retain their own contexts.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 412,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR08",
+      "description": "`ProfilePortability` writes an empty current-format timing document during reset, preserving the migration boundary.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 413,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR09",
+      "description": "`ReleaseStabilityHardening` gives the actual memory bound priority, rejects a budget unable to fit fixed overhead and one pixel, and never enlarges a requested dimension. Coordinated `DrawBot` and `PreviewQuality.full_preview_options` integration protects both normal UI preview and direct full-detail callers; full-detail keeps its stricter 512-byte-per-pixel/8M limit.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 414,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR10",
+      "description": "`PreviewAttemptGuard` requires a finite positive deadline and latches cancellation and timeout, with zero remaining time after termination.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 415,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR11",
+      "description": "`MobilePreview.start` includes thread construction in the cleanup boundary and releases the server/session on failure.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 416,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR12",
+      "description": "`MobilePreview` applies an absolute five-second header deadline, closing the socket when it expires and cancelling the deadline after parsing/cleanup. Normal response transfer keeps its existing socket timeout.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 417,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR13",
+      "description": "`MobilePreview` returns a controlled 400 for invalid target parsing and contains expected send/disconnect errors for successful and error responses.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 418,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR14",
+      "description": "`MobilePreview` resizes opaque inputs before conversion, retaining previous handling for alpha/color-key transparency and closing owned temporary images.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 419,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR15",
+      "description": "`RenderResume` computes the context once, streams bounded RGBA strips in the same byte order and builds the completion bitset from an iterator. Existing checkpoint content and fingerprints remain compatible.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 420,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR16",
+      "description": "`RenderResume` validates integer progress ranges and requires the prelude before any completed path/color/sequence work. Invalid persisted combinations are rejected; a fresh zero-progress checkpoint remains valid.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 421,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR17",
+      "description": "`RenderResume` requires successful image hashing and propagates a read failure instead of constructing a weaker fingerprint.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 422,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR18",
+      "description": "`SessionRecovery.clear_render_progress` reports the storage error under the snapshot guard; callers cannot mistake retained progress for successful deletion.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 423,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR19",
+      "description": "`SessionRecovery` excludes zero-extent areas while retaining valid reversed corner ordering.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 424,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR20",
+      "description": "`ProfileStorage` bounds regular calibration files at the portability limit of 8 MiB, preserves full-content hashing for valid files and distinguishes an actual missing file from an I/O/permission failure.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 425,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR21",
+      "description": "`ProfilePortability` converts anchored Paint calibration into generic schema 1 using only direct Fill/Eraser controls. Unanchored legacy tools are omitted and require recapture. Source package data is preserved.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 426,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR22",
+      "description": "`TargetCapture` validates finite deadlines, signed native geometry and PID domains before launch and reports malformed/deep/extreme JSON as a controlled helper-response error.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 427,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR23",
+      "description": "`build_release` creates and integrity-checks a unique staged ZIP before atomic publication and defers obsolete-variant cleanup until the final release gate succeeds. Dependency/compression failures preserve existing finished outputs. This is not an atomic transaction across every release asset.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 428,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR24",
+      "description": "`build_release.zip_onedir` writes sorted entries with fixed timestamps and regular-file permissions while streaming their content.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 429,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR25",
+      "description": "`build_release` preflights the complete regular distribution tree before compression; `build_exe` prunes archived/linked help directories before walking and excludes linked help files.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 430,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR26",
+      "description": "`build_exe` explicitly excludes `cupy` and `cupyx` for the standard variant. CUDA still explicitly collects them, and required PyOpenCL/TkDnD/CustomTkinter collection stays intact.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 431,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR27",
+      "description": "`ReleaseCandidateHardening` validates all three representations, retaining permitted channel suffixes and historical fixture versions.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 432,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR28",
+      "description": "`ReleaseCandidateHardening` performs cheap path/required-executable/header checks before full CRC decompression. Valid archives still receive the integrity pass.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 433,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR29",
+      "description": "`ReleasePackage` rejects missing/linked explicitly requested artifacts and duplicate output names before replacing the previous manifest.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 434,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR30",
+      "description": "`CodeSigning.validate_certificate` obtains an absolute OS-resolved PowerShell path and validates the certificate thumbprint at its own boundary. Signing policy and valid upstream signatures remain unchanged.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 435,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR31",
+      "description": "`DiagnosticsPackage` uses bounded heap selection for summary and recent-dump inventory. It retains the intended order/selection and excludes nonregular dump entries.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 436,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR32",
+      "description": "`SessionRecovery.diagnostics_summary` and `DiagnosticsPackage` sanitize these metadata strings before export. Existing useful identifiers remain when they contain no sensitive content.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 437,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR33",
+      "description": "`LocalSanitization` redacts arbitrary Authorization values, retaining familiar scheme labels where appropriate and preserving surrounding quoted JSON structure.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 438,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR34",
+      "description": "`CrashDiagnostics` reports whether rotation made room and skips additional append when it did not. A failed filesystem operation cannot turn bounded logging into indefinite growth.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 439,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR35",
+      "description": "`CrashDiagnostics` bounds Python-record additions while preserving the open descriptor registered with `faulthandler`; exceptions still reach the separate rotating error log. Native fatal-handler output itself is not claimed to be strictly capped.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 440,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR36",
+      "description": "`CrashDiagnostics` reads at most 1,025 bytes and rejects oversized/malformed ownership data before removing a marker.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 441,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR37",
+      "description": "`ResourceAllocation.parallel_map` polls an optional cancellation callback during waits, stops replenishing the bounded queue and cancels queued tasks. `PixelData` and `AdvancedColor` pass existing callbacks and propagate interruption. Running workers still finish during executor shutdown.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 442,
+      "area": "storage-runtime",
+      "batch": 2,
+      "local_id": "SR38",
+      "description": "`UpdateCenter` closes raw descriptors on stream-construction failure, preserves primary download/cancellation/status failures and records secondary cleanup trouble without publishing incomplete data. Response-close failure also cannot invalidate an otherwise verified result.",
+      "ledger": "v148-batch02-storage-runtime.md"
+    },
+    {
+      "id": 443,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT01",
+      "description": "Reject coordinates outside signed Windows LONG range before creating a native POINT; negative-monitor coordinates remain valid.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 444,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT02",
+      "description": "Check all four corners and the center of target/capture areas instead of accepting coverage on only one diagonal.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 445,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT03",
+      "description": "Fail target capture and isolated target inspection when Windows cannot return a valid process identity.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 446,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT04",
+      "description": "Use one client-rectangle snapshot for a complete target-area validation, avoiding repeated native queries and mixed geometry.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 447,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT05",
+      "description": "Require custom-color modal controls to belong to the locked window or its owned foreground dialog; recheck ownership after moving to the control.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 448,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT06",
+      "description": "Refresh the observed pointer after live callbacks, overlay waits and settle waits before authorizing a native action.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 449,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT07",
+      "description": "Recheck foreground identity after palette sampling instead of sending input under pre-capture focus evidence.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 450,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT08",
+      "description": "Honor cancellation that arrives during foreground activation before arming the mouse.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 451,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT09",
+      "description": "A failed mouse rearm revokes a previous armed state.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 452,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT10",
+      "description": "Sample the entire palette in one bounded capture, preserving compatibility with older monitors and rejecting incomplete batch results.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 453,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT11",
+      "description": "Bound modal brightness, spectrum and canvas captures before allocation.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 454,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT12",
+      "description": "Release owned screen-capture images on conversion, sampling, cancellation, scoring failure and runtime completion; keep caller-owned source images alive.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 455,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT13",
+      "description": "Reject a screenshot whose returned dimensions differ from the requested region.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 456,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT14",
+      "description": "Validate target identity again after a canvas capture before accepting its pixels as evidence.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 457,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT15",
+      "description": "Reject margin captures when the selected canvas itself extends outside the target client.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 458,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT16",
+      "description": "Compute actual color error, confidence and sample count for the single-pixel ink/fill fallback when neighborhood sampling is unavailable.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 459,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT17",
+      "description": "Recheck target identity after the ink-settle delay before accepting a matching sample.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 460,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT18",
+      "description": "Check keyboard focus before every Paint clear or numeric RGB command, and propagate cancellation instead of continuing fallback input.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 461,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT19",
+      "description": "Apply a verified 100% opacity position when a prior drawing may have left the browser translucent.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 462,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT20",
+      "description": "Report unknown opacity and dry-run opacity honestly instead of claiming a successful opaque change.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 463,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT21",
+      "description": "Require fresh selected-state evidence before reducing the brush inset; retain a conservative profile-sized guard for unknown initial selection and stop an unconfirmed adaptive switch before drawing.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 464,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT22",
+      "description": "Successful filenames containing words such as crash or timeout no longer turn ready UI status into an error.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 465,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT23",
+      "description": "Validate mouse-probe geometry before target activation or arming.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 466,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT24",
+      "description": "Always disarm the probe when activation or subsequent status reporting fails.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 467,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT25",
+      "description": "Confirm the probe's observed cursor endpoint before reporting successful movement.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 468,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT26",
+      "description": "Read a timer ring from its local crop without converting the whole desktop image for each observation.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 469,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT27",
+      "description": "Bound timer discovery by both image dimensions, including tall portrait captures.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 470,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT28",
+      "description": "Observe timer cancellation during component scanning, after capture and after the final observation.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 471,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT29",
+      "description": "Timestamp timer acquisition before capture and analysis so analysis latency is not added back into the remaining budget.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 472,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT30",
+      "description": "Validate timer geometry and observation array shape before analysis/indexing, returning controlled validation errors.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 473,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT31",
+      "description": "Treat malformed optional target-fingerprint geometry and DPI as missing values instead of crashing queued imports on overflow.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 474,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT32",
+      "description": "Require finite, bounded Drop-In authorization lifetimes and expire at the deadline boundary, including malformed stored deadlines.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 475,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT33",
+      "description": "A missing window identity cannot match another missing identity and authorize a queued start.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 476,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT34",
+      "description": "Honor Stop both before and after queued Drop-In target verification, before a worker can clear the stop event.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 477,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT35",
+      "description": "Revoke queued Drop-In authorization when unrelated activity makes that start invalid.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 478,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT36",
+      "description": "Exclude nonfinite, invalid or out-of-client Smart Canvas Drop candidates before ranking and ambiguity checks.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 479,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT37",
+      "description": "A tiny Smart Canvas Drop canvas cannot silently disable its edge margin.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 480,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT38",
+      "description": "Failure of the user's selected preferred drop target does not silently choose a different window.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 481,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT39",
+      "description": "Allow cancellation during Smart Canvas Drop discovery, between candidate captures and inside the live detector invoked by either discovery path.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 482,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT40",
+      "description": "A queued preview callback while busy/closing no longer increments the generation and invalidates a running worker.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 483,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT41",
+      "description": "Background removal and its Undo update their labels and previews without a missing `image_label` import exception.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 484,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT42",
+      "description": "New clipboard/screenshot images and image removal discard the previous image's background-removal Undo state.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 485,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT43",
+      "description": "Bitmap clipboard imports schedule their authorized Drop-In start or browser One-Click continuation, matching file imports.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 486,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT44",
+      "description": "Discard cancelled queued image, preview and calibration results before they can restore stale UI state.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 487,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT45",
+      "description": "The setup wizard marks a missing palette as blocking for browser and generic targets.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 488,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT46",
+      "description": "The wizard's busy state overrides a previous full-drawing unlock and points to Wait/Stop.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 489,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT47",
+      "description": "Paint setup status names the actual Prepare Paint & draw action.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 490,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT48",
+      "description": "Wizard next-action fallback works when supplied a generator rather than a reusable list.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 491,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT49",
+      "description": "Destroy partially created tooltip windows when label creation or layout fails.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 492,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT50",
+      "description": "Delayed tooltips do not open for controls that have become hidden or destroyed.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 493,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT51",
+      "description": "Compact-sidebar refresh skips destroyed widgets without preventing the remaining controls from being restored.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 494,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT52",
+      "description": "Reuse unchanged compact-sidebar packing and move only misplaced controls, avoiding repeated hide/show layout work.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 495,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT53",
+      "description": "Validate complete target/canvas geometry before committing automatic setup to the UI; palette-only setup clears the old canvas and stays unready.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 496,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT54",
+      "description": "Avoid redundant full-image RGBA copies in automatic preset analysis while preserving transparent-image compositing and source ownership.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 497,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT55",
+      "description": "Space eraser rows using the actual ink width instead of the larger conservative CanvasGuard width, avoiding uncovered gaps.",
+      "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 498,
+      "area": "ui-input",
+      "batch": 2,
+      "local_id": "RT56",
+      "description": "Enforce preview pixel/dimension caps after scaling, including near-equal sizes and extremely thin images.",
+      "ledger": "v148-batch02-ui-input.md"
     }
   ]
 }

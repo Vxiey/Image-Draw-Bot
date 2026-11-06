@@ -2,9 +2,63 @@
 import ctypes
 import os
 import time
+from contextlib import contextmanager
 from ctypes import wintypes
 
 from DpiSupport import get_window_dpi_info
+
+
+def _screen_point(point):
+    """Validate before crossing the signed 32-bit Win32 coordinate boundary."""
+    try:
+        x, y = map(int, point)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError('Screen coordinates must be two finite integers.') from error
+    if not all(-(2**31) <= value < 2**31 for value in (x, y)):
+        raise ValueError('Screen coordinates are outside the Windows coordinate range.')
+    return x, y
+
+
+def _capture_box(box, *, max_pixels=64_000_000, max_side=32768):
+    left, top, right, bottom = map(int, box)
+    _screen_point((left, top)); _screen_point((right - 1, bottom - 1))
+    width, height = right - left, bottom - top
+    if width <= 0 or height <= 0 or max(width, height) > max_side or width * height > max_pixels:
+        raise ValueError('The screen capture area is empty or too large. Select a smaller visible area.')
+    return left, top, right, bottom
+
+
+def _grab_rgb(box):
+    """Return one owned RGB image; release the original capture on conversion."""
+    from PIL import ImageGrab
+    box = _capture_box(box)
+    captured = ImageGrab.grab(bbox=box, all_screens=True)
+    try:
+        if captured.size != (box[2] - box[0], box[3] - box[1]):
+            raise InterruptedError('The screen capture size changed. Check display scaling and select the area again.')
+        if captured.mode == 'RGB':
+            result = captured
+            captured = None
+            return result
+        return captured.convert('RGB')
+    finally:
+        if captured is not None:
+            captured.close()
+
+
+@contextmanager
+def _sample_rgb(box):
+    image = _grab_rgb(box)
+    try:
+        yield image
+    finally:
+        image.close()
+
+
+def _box_probes(box):
+    left, top, right, bottom = box
+    return ((left, top), (right - 1, top), (left, bottom - 1),
+            (right - 1, bottom - 1), ((left + right) // 2, (top + bottom) // 2))
 
 
 class WindowMonitor:
@@ -16,6 +70,8 @@ class WindowMonitor:
         self.api.WindowFromPoint.restype=wintypes.HWND
         self.api.GetAncestor.argtypes=[wintypes.HWND,wintypes.UINT]
         self.api.GetAncestor.restype=wintypes.HWND
+        self.api.GetWindow.argtypes=[wintypes.HWND,wintypes.UINT]
+        self.api.GetWindow.restype=wintypes.HWND
         self.api.GetForegroundWindow.argtypes=[]
         self.api.GetForegroundWindow.restype=wintypes.HWND
         self.api.SetForegroundWindow.argtypes=[wintypes.HWND]
@@ -48,7 +104,7 @@ class WindowMonitor:
         return handle
 
     def at(self,point):
-        handle=self.api.WindowFromPoint(wintypes.POINT(*map(int,point)))
+        handle=self.api.WindowFromPoint(wintypes.POINT(*_screen_point(point)))
         return self.api.GetAncestor(handle,2) if handle else None
 
     def rectangle(self,handle):
@@ -89,10 +145,12 @@ class WindowMonitor:
         x,y,w,h=map(int,area)
         if w < 10 or h < 10:
             raise ValueError('The drawing area is too small. Select at least 10 × 10 pixels.')
+        _capture_box((x,y,x+w,y+h))
         handle=self.at((x+w//2,y+h//2))
         pid=wintypes.DWORD()
         if not handle:raise ValueError('No window was found under the drawing area.')
-        self.api.GetWindowThreadProcessId(handle,ctypes.byref(pid))
+        if not self.api.GetWindowThreadProcessId(handle,ctypes.byref(pid)) or not pid.value:
+            raise ValueError('The target window disappeared before its process could be verified. Select the area again.')
         excluded={int(value) for value in excluded_pids if value is not None}
         if pid.value==os.getpid() or pid.value in excluded:
             raise ValueError('You selected the Image Draw Bot window. Move it aside and select the target application.')
@@ -100,10 +158,11 @@ class WindowMonitor:
         # shadows can belong to another HWND even though the drawing surface is
         # entirely inside the intended top-level window.
         inset_x=min(2,max(0,w//4));inset_y=min(2,max(0,h//4))
-        points=((x+inset_x,y+inset_y),(x+w-1-inset_x,y+h-1-inset_y))
+        points=_box_probes((x+inset_x,y+inset_y,x+w-inset_x,y+h-inset_y))
         if any(self.at(p)!=handle for p in points):
             raise ValueError('The drawing area is covered by different windows. Select it again in the target application.')
-        if any(not self.in_client_area(handle,p) for p in points):
+        left,top,right,bottom=self.client_rectangle(handle)
+        if any(not (left<=px<right and top<=py<bottom) for px,py in points):
             raise ValueError('The drawing area touches the title bar/window border. Select only the drawable client area.')
         return handle,self.rectangle(handle)
 
@@ -126,6 +185,10 @@ class WindowMonitor:
         from Colors import sample_screen_color
         return tuple(sample_screen_color(*point))
 
+    def colors(self,points):
+        from Colors import sample_screen_colors
+        return sample_screen_colors(points)
+
     def colors_near(self,point,radius=2):
         """Sample a small screen patch around a rendered stroke.
 
@@ -147,6 +210,27 @@ class WindowMonitor:
             raise InterruptedError('Stopped: another window covers the click position.')
         if not self.in_client_area(handle,point):
             raise InterruptedError('Stopped: the pointer would enter the title bar/window border. Select only the drawable client area.')
+
+    def verify_modal(self,target,point):
+        """Allow the locked window or its owned foreground dialog, never a stranger."""
+        handle,rectangle=target
+        if self.rectangle(handle)!=rectangle:
+            raise InterruptedError('Stopped: target window geometry changed while the custom-color dialog was open.')
+        foreground=self.api.GetForegroundWindow()
+        self._validate_handle(foreground)
+        owner=foreground
+        visited=set()
+        for _ in range(32):
+            if owner==handle:
+                break
+            if not owner or owner in visited:
+                raise InterruptedError('Stopped: the active color dialog does not belong to the locked target window.')
+            visited.add(owner)
+            owner=self.api.GetWindow(owner,4)  # GW_OWNER; bounded against stale/cyclic HWNDs.
+        else:
+            raise InterruptedError('Stopped: the color dialog ownership could not be verified.')
+        if self.api.IsIconic(foreground) or self.at(point)!=foreground or not self.in_client_area(foreground,point):
+            raise InterruptedError('Stopped: the calibrated color control is covered or outside the active target dialog.')
 
 
 class GuardedMouse:
@@ -184,6 +268,7 @@ class GuardedMouse:
         for attempt in range(81):
             if stop.is_set():raise InterruptedError()
             if self.monitor.active(self.target):
+                if stop.is_set():raise InterruptedError()
                 # This is the only transition that arms the native mouse backend,
                 # and prepare_target is called only by explicit test/draw actions.
                 if hasattr(self.mouse,'arm_input'):self.mouse.arm_input()
@@ -205,6 +290,7 @@ class GuardedMouse:
         current=self.mouse.get_position()
         if self.live_target_check is not None:
             self.live_target_check(self.monitor,self.target,current if point is None else point)
+            current=self.mouse.get_position()
         verify_point=current if point is None else point
         try:
             self.monitor.verify(self.target,verify_point)
@@ -216,12 +302,20 @@ class GuardedMouse:
             if 'another window covers the click position' not in str(error):
                 raise
             time.sleep(float(getattr(self,'transient_cover_retry_seconds',0.08)))
+            current=self.mouse.get_position()
+            verify_point=current if point is None else point
+            if self.live_target_check is not None:
+                self.live_target_check(self.monitor,self.target,verify_point)
+                current=self.mouse.get_position()
+                verify_point=current if point is None else point
             self.monitor.verify(self.target,verify_point)
         # Palette geometry/color is verified once before any UI click. Rechecking
         # it after selecting a color can false-trigger because Paint may draw a
         # selection indicator around the active swatch.
         if self.palette_colors and not self.palette_verified:
             self.verify_palette_layout()
+            current=self.mouse.get_position()
+            self.monitor.verify(self.target,current if point is None else point)
         if self.last is not None:
             tolerance=max(1,int(getattr(self,'tracking_tolerance',4)))
             delta=max(abs(current[i]-self.last[i]) for i in (0,1))
@@ -235,6 +329,7 @@ class GuardedMouse:
                     raise InterruptedError(
                         f'Stopped: the mouse was moved manually (delta {confirmed_delta}px). No automatic restart.'
                     )
+                self.monitor.verify(self.target,confirmed if point is None else point)
 
     def verify_palette_layout(self):
         if not self.palette_colors:
@@ -243,8 +338,14 @@ class GuardedMouse:
         if self.monitor.rectangle(handle)!=rectangle:
             raise InterruptedError('Stopped before input: the target window changed geometry. Select the drawing area again.')
         mismatches=[]
-        for position,rgb in self.palette_colors.items():
-            actual=self.monitor.color(position)
+        entries=tuple(self.palette_colors.items())
+        if hasattr(self.monitor,'colors'):
+            actual_colors=self.monitor.colors([position for position,_ in entries])
+            if len(actual_colors)!=len(entries):
+                raise InterruptedError('Stopped before input: the entire calibrated palette could not be sampled.')
+        else:
+            actual_colors=[self.monitor.color(position) for position,_ in entries]
+        for (position,rgb),actual in zip(entries,actual_colors):
             error=max(abs(int(actual[i])-int(rgb[i])) for i in (0,1,2))
             if error>45:mismatches.append((position,tuple(rgb),tuple(actual),error))
         if mismatches:
@@ -270,11 +371,16 @@ class GuardedMouse:
             self.mouse.press();time.sleep(.015)
         finally:self.mouse.release()
 
-    def _check_modal_geometry(self):
+    def _check_modal_geometry(self,point=None):
         """Keep modal color-picker sampling tied to the originally locked target."""
         handle,rectangle=self.target
         if self.monitor.rectangle(handle)!=rectangle:
             raise InterruptedError('Stopped: target window geometry changed while the custom-color dialog was open.')
+        if point is not None:
+            verifier=getattr(self.monitor,'verify_modal',None) or getattr(self.monitor,'verify',None)
+            if not callable(verifier):
+                raise InterruptedError('Stopped: this screen monitor cannot verify the calibrated color dialog.')
+            verifier(self.target,_screen_point(point))
 
     @staticmethod
     def _rgb_error(actual, expected):
@@ -287,50 +393,51 @@ class GuardedMouse:
     def calibrated_modal_nearest_color_rect(self, corner_a, corner_b, expected, max_samples=70000):
         """Read a calibrated 2-D color spectrum and return its nearest visible RGB point.
 
-        The picker may be a separate modal HWND, so this deliberately does not call
-        normal WindowFromPoint/foreground guards. Only the user-calibrated rectangle
-        is sampled and the original target window geometry must remain unchanged.
+        The picker may be a separate modal HWND. Its ownership and visible control
+        bounds are checked against the locked target before reading any pixels.
         """
-        from PIL import ImageGrab
         import math
         self._check_modal_geometry()
-        x0,y0=map(int,corner_a);x1,y1=map(int,corner_b)
+        x0,y0=_screen_point(corner_a);x1,y1=_screen_point(corner_b)
         left,right=sorted((x0,x1));top,bottom=sorted((y0,y1))
         width=max(1,right-left+1);height=max(1,bottom-top+1)
         if width>1800 or height>1800 or width*height>2_000_000:
             raise ValueError('The calibrated custom color spectrum is too large. Recalibrate only the visible color field.')
-        shot=ImageGrab.grab(bbox=(left,top,right+1,bottom+1),all_screens=True).convert('RGB')
+        box=(left,top,right+1,bottom+1)
+        for point in _box_probes(box):self._check_modal_geometry(point)
         expected=tuple(map(int,expected))
         stride=max(1,int(math.ceil(math.sqrt((width*height)/max(1,int(max_samples))))))
         best=None
-        for y in range(0,height,stride):
-            for x in range(0,width,stride):
-                rgb=shot.getpixel((x,y));err=self._rgb_error(rgb,expected)
-                if best is None or err<best[0]:best=(err,x,y,rgb)
-        if best is None:raise ValueError('Could not read the calibrated color spectrum.')
-        _,bx,by,_=best
-        radius=max(2,stride+1)
-        for y in range(max(0,by-radius),min(height,by+radius+1)):
-            for x in range(max(0,bx-radius),min(width,bx+radius+1)):
-                rgb=shot.getpixel((x,y));err=self._rgb_error(rgb,expected)
-                if err<best[0]:best=(err,x,y,rgb)
+        with _sample_rgb(box) as shot:
+            for y in range(0,height,stride):
+                for x in range(0,width,stride):
+                    rgb=shot.getpixel((x,y));err=self._rgb_error(rgb,expected)
+                    if best is None or err<best[0]:best=(err,x,y,rgb)
+            if best is None:raise ValueError('Could not read the calibrated color spectrum.')
+            _,bx,by,_=best
+            radius=max(2,stride+1)
+            for y in range(max(0,by-radius),min(height,by+radius+1)):
+                for x in range(max(0,bx-radius),min(width,bx+radius+1)):
+                    rgb=shot.getpixel((x,y));err=self._rgb_error(rgb,expected)
+                    if err<best[0]:best=(err,x,y,rgb)
         err,bx,by,rgb=best
         return (left+bx,top+by),tuple(map(int,rgb)),float(err)
 
     def calibrated_modal_nearest_color_line(self, point_a, point_b, expected, samples=320):
         """Find the closest rendered color along a calibrated brightness/value scale."""
-        from PIL import ImageGrab
         self._check_modal_geometry()
-        x0,y0=map(int,point_a);x1,y1=map(int,point_b);expected=tuple(map(int,expected))
+        x0,y0=_screen_point(point_a);x1,y1=_screen_point(point_b);expected=tuple(map(int,expected))
         left,right=sorted((x0,x1));top,bottom=sorted((y0,y1))
         pad=2
-        shot=ImageGrab.grab(bbox=(left-pad,top-pad,right+pad+1,bottom+pad+1),all_screens=True).convert('RGB')
+        box=_capture_box((left-pad,top-pad,right+pad+1,bottom+pad+1),max_pixels=2_000_000,max_side=1804)
+        for point in (point_a,point_b):self._check_modal_geometry(point)
         best=None;n=max(2,min(1200,int(samples)))
-        for i in range(n):
-            t=i/(n-1);sx=round(x0+(x1-x0)*t);sy=round(y0+(y1-y0)*t)
-            px=max(0,min(shot.width-1,sx-(left-pad)));py=max(0,min(shot.height-1,sy-(top-pad)))
-            rgb=shot.getpixel((px,py));err=self._rgb_error(rgb,expected)
-            if best is None or err<best[0]:best=(err,sx,sy,rgb)
+        with _sample_rgb(box) as shot:
+            for i in range(n):
+                t=i/(n-1);sx=round(x0+(x1-x0)*t);sy=round(y0+(y1-y0)*t)
+                px=max(0,min(shot.width-1,sx-(left-pad)));py=max(0,min(shot.height-1,sy-(top-pad)))
+                rgb=shot.getpixel((px,py));err=self._rgb_error(rgb,expected)
+                if best is None or err<best[0]:best=(err,sx,sy,rgb)
         if best is None:raise ValueError('Could not read the calibrated brightness scale.')
         err,sx,sy,rgb=best
         return (sx,sy),tuple(map(int,rgb)),float(err)
@@ -342,34 +449,37 @@ class GuardedMouse:
         patch around the captured swatch point makes exact-color verification much
         less likely to accept or reject the wrong RGB because of one bad pixel.
         """
-        from PIL import ImageGrab
         import numpy as np
-        self._check_modal_geometry();x,y=map(int,point);r=max(0,min(6,int(radius)))
-        shot=ImageGrab.grab(bbox=(x-r,y-r,x+r+1,y+r+1),all_screens=True).convert('RGB')
-        arr=np.asarray(shot,dtype=np.uint8).reshape(-1,3)
-        return tuple(int(v) for v in np.median(arr,axis=0))
+        self._check_modal_geometry(point);x,y=_screen_point(point);r=max(0,min(6,int(radius)))
+        with _sample_rgb((x-r,y-r,x+r+1,y+r+1)) as shot:
+            arr=np.asarray(shot,dtype=np.uint8).reshape(-1,3)
+            return tuple(int(v) for v in np.median(arr,axis=0))
 
     def calibrated_modal_click(self, point):
         """Click one explicitly calibrated modal-dialog control safely.
 
-        Custom-color dialogs can become a separate foreground HWND, so the
-        normal foreground/WindowFromPoint guard cannot be used while that modal
-        dialog is open. The original target top-level rectangle must still be
-        unchanged, and this method is only called for saved calibration points.
+        The foreground dialog must belong to the locked target. Recheck after
+        moving the cursor, since focus or an overlay can change during movement.
         """
         import time
-        handle,rectangle=self.target
-        if self.monitor.rectangle(handle)!=rectangle:
-            raise InterruptedError('Stopped: target window geometry changed while the custom-color dialog was open.')
+        self._check_modal_geometry(point)
         current=self.mouse.get_position()
         if self.last is not None and max(abs(current[i]-self.last[i]) for i in (0,1))>getattr(self,'tracking_tolerance',4):
             raise InterruptedError('Stopped: the mouse was moved manually while selecting an exact color.')
-        self.mouse.move(*map(int,point));self.last=tuple(map(int,point))
+        self.mouse.move(*_screen_point(point));self.last=self.mouse.get_position()
+        self._check_modal_geometry(self.last)
         try:self.mouse.press();time.sleep(.015)
         finally:self.mouse.release()
 
     def press(self):
         self.check();self.mouse.press()
+
+    def check_keyboard(self,modal_point=None):
+        """Revalidate focus immediately before a keyboard command or RGB write."""
+        if modal_point is None:
+            self.check()
+        else:
+            self._check_modal_geometry(modal_point)
 
     def release(self):
         self.mouse.release()
@@ -395,7 +505,9 @@ class GuardedMouse:
         radius=max(2,min(6,int(round(max(1,int(brush_px))/2))+2))
         best_error=999;best=None;sample_count=0
         for settle in (0.0,0.08,0.18,0.32):
-            if settle:time.sleep(settle)
+            if settle:
+                time.sleep(settle)
+                for point in points:self.check(point)
             samples=[]
             for point in points:
                 try:samples.extend(self.monitor.colors_near(point,radius))
@@ -406,7 +518,10 @@ class GuardedMouse:
             error,color=min(scored,key=lambda item:item[0])
             if error<best_error:best_error,best=error,color
             if best_error<=tolerance:break
-        if best is None:best=tuple(map(int,self.monitor.color(points[len(points)//2])))
+        if best is None:
+            best=tuple(map(int,self.monitor.color(points[len(points)//2])))
+            best_error=max(abs(best[i]-expected[i]) for i in range(3))
+            sample_count+=1
         confidence=max(0.0,min(100.0,100.0*(1.0-float(best_error)/255.0)))
         expected_luma=sum(expected)/3;best_luma=sum(best)/3
         # Do not infer transparency/opacity from a single failed RGB probe. A light
@@ -465,14 +580,18 @@ class GuardedMouse:
         expected=tuple(map(int,expected));self.check(point)
         best=None;best_error=999
         for settle in (0.0,.10,.22,.38):
-            if settle:time.sleep(settle)
+            if settle:
+                time.sleep(settle)
+                self.check(point)
             try:samples=self.monitor.colors_near(point,4)
             except AttributeError:samples=[self.monitor.color(point)]
             for actual in samples or []:
                 actual=tuple(map(int,actual));error=max(abs(actual[i]-expected[i]) for i in range(3))
                 if error<best_error:best_error,best=error,actual
             if best_error<=52:return
-        if best is None:best=self.monitor.color(point)
+        if best is None:
+            best=self.monitor.color(point)
+            if max(abs(int(best[i])-expected[i]) for i in range(3))<=52:return
         raise InterruptedError(
             f'Stopped: the Fill tool did not produce the expected color {expected}. Closest rendered RGB was {best}. '
             'Recalibrate the Fill tool/color palette, confirm the canvas is blank, and retry with the target application at the same window size.')
@@ -485,17 +604,24 @@ class GuardedMouse:
         The four inset corners and center are checked against the locked target
         before PIL reads the pixels.
         """
-        from PIL import ImageGrab
         x, y, w, h = map(int, area)
         if w < 2 or h < 2:
             raise ValueError('The drawing area is too small to verify visually.')
+        box=_capture_box((x,y,x+w,y+h))
         inset_x = min(4, max(0, w // 5)); inset_y = min(4, max(0, h // 5))
         points = ((x + inset_x, y + inset_y), (x + w - 1 - inset_x, y + inset_y),
                   (x + inset_x, y + h - 1 - inset_y), (x + w - 1 - inset_x, y + h - 1 - inset_y),
                   (x + w // 2, y + h // 2))
         for point in points:
             self.monitor.verify(self.target, point)
-        return ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True).convert('RGB')
+        image=_grab_rgb(box)
+        try:
+            for point in points:
+                self.monitor.verify(self.target,point)
+        except BaseException:
+            image.close()
+            raise
+        return image
 
     def snapshot_canvas_with_margin(self, area, margin=24):
         """Capture a read-only canvas neighborhood for edge verification.
@@ -505,23 +631,29 @@ class GuardedMouse:
         compare the saved drawing rectangle against visible canvas borders
         without moving or clicking the mouse.
         """
-        from PIL import ImageGrab
         x, y, w, h = map(int, area)
         if w < 2 or h < 2:
             raise ValueError('The drawing area is too small to verify visually.')
+        _capture_box((x,y,x+w,y+h))
         pad = max(0, min(96, int(round(float(margin)))))
         handle = self.target[0]
         client_left, client_top, client_right, client_bottom = self.monitor.client_rectangle(handle)
+        if x<client_left or y<client_top or x+w>client_right or y+h>client_bottom:
+            raise InterruptedError('The selected canvas extends outside the target client area. Select the drawing area again.')
         left = max(client_left, x - pad); top = max(client_top, y - pad)
         right = min(client_right, x + w + pad); bottom = min(client_bottom, y + h + pad)
         if right <= left or bottom <= top:
             raise ValueError('The edge-verification capture area is empty.')
-        probe_points = ((max(left, min(right - 1, x)), max(top, min(bottom - 1, y))),
-                        (max(left, min(right - 1, x + w - 1)), max(top, min(bottom - 1, y + h - 1))),
-                        (max(left, min(right - 1, x + w // 2)), max(top, min(bottom - 1, y + h // 2))))
+        probe_points = _box_probes((left,top,right,bottom))
         for point in probe_points:
             self.monitor.verify(self.target, point)
-        image = ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True).convert('RGB')
+        image = _grab_rgb((left,top,right,bottom))
+        try:
+            for point in probe_points:
+                self.monitor.verify(self.target,point)
+        except BaseException:
+            image.close()
+            raise
         selected_box = (x - left, y - top, w, h)
         return image, selected_box, (left, top, right, bottom)
 

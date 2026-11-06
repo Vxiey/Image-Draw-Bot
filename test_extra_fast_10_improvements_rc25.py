@@ -15,7 +15,7 @@ def opts(limit=60.0):
             'time_budget_active':True,'time_budget_mode':'Custom','max_seconds':limit,
             'manual_max_seconds':limit,'deadline_safety_reserve':'Auto','paint_current_color':False,
             'adaptive_color_verification':False,'fill_tool_available':False,
-            'browser_brush_plan':{'target_position':(10,10),'confidence':.99,
+            'browser_brush_plan':{'target_position':(1,1),'confidence':.99,
                 'nominal_sizes':[2,4,8,16,28],'verified_sizes':[2,4,8,16,28],
                 'control_positions':[(1,1),(2,1),(3,1),(4,1),(5,1)],'safe_guard_px':4}}
 

@@ -1,6 +1,19 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 262 distinct runtime improvements: the original 100-change baseline plus 162 additional changes in batch 01. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 498 distinct runtime improvements: the original 100-change baseline, 162 changes in batch 01 and 236 changes in batch 02. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 02: calibration, execution and application reliability
+
+- Revalidate owned Paint/color dialogs and live browser controls before using their coordinates. Fresh selected-brush evidence is required before reducing the conservative canvas inset; unknown or unconfirmed switches do not authorize drawing outside that inset.
+- Apply verified full opacity, retain unknown-state reporting, and propagate Stop from live GUI setup through canvas, palette and verification scans.
+- Enforce strict target/canvas containment and finite evidence before committing setup. Palette-only calibration clears a stale canvas instead of retaining another window's drawing area.
+- Preserve valid normalized polygons and exact boundary projection, use immutable prepared geometry, and honor cancellation through delivery verification and post-draw scoring.
+- Learn from measured completed operations and real fill clicks, preserve truthful runtime counts, and keep invalid or contradictory evidence out of learning databases.
+- Enforce configured preview-memory limits, cancel queued resource work, preserve atomic profile/recovery writes and close owned image buffers on failure.
+- Bound mobile header lifetimes, preserve completed release assets during failed rebuilds, produce deterministic portable ZIPs and explicitly exclude optional CUDA libraries from standard builds.
+- Keep queued imports and previews from reviving cancelled work, repair background-removal Undo state, improve wizard readiness, and avoid unchanged sidebar layout work.
+
+The batch includes reproducible CPU microbenchmarks for calibration scans, checkpoint storage, timer ROI analysis, preset analysis and planning helpers. Exact-output comparisons accompany the applicable optimizations. Some measured helpers remain unchanged or slower; their correctness and allocation improvements are reported separately.
 
 ## Additional planning, color and performance improvements
 
@@ -18,7 +31,7 @@
 - Keep native paste in text controls, restore UI state after startup failures, yield long event queues and avoid redundant preview layouts.
 - Save recordings through unique atomic staging files, preserve existing recordings on failure and release owned capture buffers.
 
-The batch passed 2,202 local unittest tests with 19 platform/hardware skips. Area ledgers contain reproducible CPU measurements and exact-output comparisons; Windows packaging, physical GPU behavior and real drawing remain separate verification scopes.
+Batch 01 passed 2,202 local unittest tests with 19 platform/hardware skips. Batch 02 passed 2,557 local tests with 22 platform/hardware skips, its 5,000-cycle source gate and eight exact-raster engine fixtures. The new Windows build and native GUI checks remain pending. Area ledgers contain reproducible CPU measurements and exact-output comparisons; Windows packaging, physical GPU behavior and real drawing remain separate verification scopes.
 
 ## Original 100-change baseline
 

@@ -30,7 +30,7 @@ from ProfileStorage import (
     profile_verified_color_file,
     safe_profile_key,
 )
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import atomic_write_text, data_dir, replace_text_files
 from StabilityRC import migrate_settings
 from Version import APP_VERSION
 
@@ -477,67 +477,30 @@ def _package_file_changes(package, destination_key, root=None):
             changes[path] = None
             continue
         payload = _rewrite_calibration_owner(payload, destination_key)
+        if logical == 'tools' and package['profile']['key'] == 'microsoft-paint' and destination_key != 'microsoft-paint':
+            # A custom profile uses the generic tool protocol. Paint dropdown
+            # menus/presets are multi-click actions, never a generic Brush click.
+            from PaintTools import validate_tool_calibration
+            paint = validate_tool_calibration(payload)
+            if paint.get('version', 0) < 2:
+                changes[path] = None  # Unanchored legacy controls need recapture.
+                continue
+            from AppTools import validate_calibration
+            payload = validate_calibration({
+                'version': 1, 'profile': destination_key, 'anchor': paint['anchor'],
+                'tools': {name: value for name, value in paint['tools'].items()
+                          if name in ('Fill', 'Eraser')},
+            }, destination_key)
         changes[path] = json.dumps(payload, ensure_ascii=False, indent=2)
     return paths, changes
 
 
 def _replace_profile_files(changes):
-    """Stage all writes, then restore every original if any publish/delete fails.
-
-    Existing files are moved to unique backups in the same directory. Backups
-    are removed only after the entire operation succeeds; rollback failures
-    retain their backup paths for recovery rather than silently discarding data.
-    """
-    with _PROFILE_FILE_LOCK:
-        entries = []
-        rollback_failed = set()
-        try:
-            for path, text in changes.items():
-                path = Path(path)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                if path.exists() and not path.is_file():
-                    raise OSError(f'Profile path is not a file: {path.name}')
-                entry = dict(path=path, staged=None, backup=None, moved=False, published=False)
-                entries.append(entry)
-                if text is not None:
-                    fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.import', dir=path.parent)
-                    os.close(fd)
-                    entry['staged'] = Path(name)
-                    atomic_write_text(entry['staged'], text)
-                if path.exists() or path.is_symlink():
-                    fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.backup', dir=path.parent)
-                    os.close(fd)
-                    entry['backup'] = Path(name)
-            for entry in entries:
-                if entry['backup'] is not None:
-                    os.replace(entry['path'], entry['backup'])
-                    entry['moved'] = True
-                if entry['staged'] is not None:
-                    os.replace(entry['staged'], entry['path'])
-                    entry['published'] = True
-        except Exception as error:
-            for entry in reversed(entries):
-                try:
-                    if entry['moved']:
-                        os.replace(entry['backup'], entry['path'])
-                    elif entry['published']:
-                        entry['path'].unlink(missing_ok=True)
-                except OSError:
-                    rollback_failed.add(entry['backup'] or entry['path'])
-            if rollback_failed:
-                names = ', '.join(str(path) for path in sorted(rollback_failed))
-                raise ProfilePortabilityError(f'Profile update failed and could not be fully rolled back. Retained recovery paths: {names}') from error
-            if isinstance(error, ProfilePortabilityError):
-                raise
-            raise ProfilePortabilityError(f'Profile update failed; previous files were restored: {error}') from error
-        finally:
-            for entry in entries:
-                for temporary in (entry['staged'], entry['backup']):
-                    if temporary is not None and temporary not in rollback_failed:
-                        try:
-                            temporary.unlink(missing_ok=True)
-                        except OSError:
-                            pass
+    """Use the shared staged publisher, preserving the profile-facing error."""
+    try:
+        replace_text_files(changes)
+    except (OSError, ValueError) as error:
+        raise ProfilePortabilityError(str(error)) from error
 
 
 def apply_package_to_paths(package: dict, destination_key: str, *, root: Path | None = None):
@@ -647,7 +610,12 @@ def reset_profile(app):
         raise ProfilePortabilityError("Wait for the current Image Draw Bot task to finish before resetting a profile.")
     name, key = _profile_identity(str(app.game.get()))
     # Do not let the profile-change wrapper save the old values after deletion.
-    _replace_profile_files({path: None for path in profile_reset_paths(key)})
+    changes = {path: None for path in profile_reset_paths(key)}
+    # A missing per-profile ETA file triggers one-time migration from the old
+    # shared database. Keep an empty current-format record to make Reset final.
+    from DrawTimeCalibration import VERSION as TIMING_VERSION
+    changes[profile_timing_file(key)] = json.dumps({'version': TIMING_VERSION, 'profiles': {}})
+    _replace_profile_files(changes)
     _reload_profile(app, name)
     if hasattr(app, "status"):
         try: app.status.set(f"{name} restored to Image Draw Bot defaults. Calibration/setup must be verified again.")

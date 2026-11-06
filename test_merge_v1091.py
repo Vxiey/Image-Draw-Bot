@@ -10,7 +10,7 @@ from test_pixel_accurate_v1086 import opts
 
 class MergeTests(unittest.TestCase):
     def test_subject_phase_prefix_keeps_detail_brush_policy(self):
-        plan=assign_adaptive_brushes([entry('subject/fine_detail'),entry('background/fill')],default_brush_px=4,browser_brush_plan=brush_plan())
+        plan=assign_adaptive_brushes([entry('subject/fine_detail'),entry('background/fill')],profile_key='gartic-phone',default_brush_px=4,browser_brush_plan=brush_plan())
         self.assertEqual([e['brush_px'] for e in plan['execution_sequence']],[2,4])
         self.assertEqual(plan['execution_sequence'][0]['phase'],'subject/fine_detail')
 

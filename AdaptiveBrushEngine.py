@@ -10,22 +10,33 @@ removes one-path brush upshifts that cost more UI time than they can save.
 from __future__ import annotations
 
 from collections import Counter
+from math import isfinite
 from typing import Sequence
+from CalibrationValidation import screen_point
 
 
 def _unique_sizes(values, fallback: int) -> tuple[int, ...]:
     out=[]
     for value in values or ():
         try:v=max(1,int(round(float(value))))
-        except (TypeError,ValueError):continue
+        except (TypeError,ValueError,OverflowError):continue
         if v not in out:out.append(v)
     if not out:out=[max(1,int(fallback))]
     return tuple(sorted(out))
 
 
 def _plan_confidence(plan: dict) -> float:
-    try:return float(plan.get('confidence',0) or 0)
-    except (TypeError,ValueError):return 0.0
+    if isinstance(plan.get('confidence'),bool):return 0.0
+    try:
+        value=float(plan.get('confidence',0) or 0)
+        return value if isfinite(value) and 0 <= value <= 1 else 0.0
+    except (TypeError,ValueError,OverflowError):return 0.0
+
+
+def _screen_position(value):
+    try:
+        return screen_point(value,'brush control')
+    except (TypeError,ValueError,OverflowError):return None
 
 
 def verified_brush_sizes(profile_key: str, browser_brush_plan: dict | None,
@@ -33,23 +44,53 @@ def verified_brush_sizes(profile_key: str, browser_brush_plan: dict | None,
     """Return only brush sizes whose UI controls and safety inset were verified."""
     default=max(1,int(default_brush_px or 1))
     plan=browser_brush_plan if isinstance(browser_brush_plan,dict) else {}
-    sizes=_unique_sizes(plan.get('nominal_sizes'),default)
+    if plan.get('profile_key') and str(plan['profile_key']).lower()!=str(profile_key or '').lower():
+        return (default,),False
+    nominal=plan.get('nominal_sizes')
+    if not isinstance(nominal,(tuple,list)) or not nominal:
+        return (default,),False
+    try:
+        if any(isinstance(v,bool) or not isfinite(float(v)) or float(v)!=int(v) or int(v)<=0 for v in nominal):
+            return (default,),False
+        nominal=tuple(map(int,nominal))
+    except (TypeError,ValueError,OverflowError):
+        return (default,),False
+    if len(set(nominal))!=len(nominal):return (default,),False
+    sizes=tuple(sorted(nominal))
     positions=plan.get('control_positions') or ()
     confidence=_plan_confidence(plan)
-    verified=bool(plan.get('target_position')) and confidence>=.58 and len(positions)==len(sizes) and len(sizes)>1
+    if not isinstance(positions,(tuple,list)):
+        return (default,),False
+    points=tuple(_screen_position(p) for p in positions)
+    target=_screen_position(plan.get('target_position'))
+    verified=(target is not None and confidence>=.58 and len(points)==len(sizes)
+              and len(sizes)>1 and all(p is not None for p in points)
+              and len(set(points))==len(points) and target in points)
     if not verified:
         return (default,),False
-    explicit_verified=_unique_sizes(plan.get('verified_sizes'),default) if plan.get('verified_sizes') else ()
-    if explicit_verified:
-        verified_set=set(explicit_verified)
+    if 'verified_sizes' in plan:
+        values=plan.get('verified_sizes')
+        if not isinstance(values,(tuple,list)) or not values:
+            return (default,),False
+        # An explicit subset is authoritative. Empty/invalid evidence must never
+        # fall through to the older, guard-bounded whole-ladder contract.
+        try:
+            verified_set={int(v) for v in values if not isinstance(v,bool) and isfinite(float(v)) and float(v)==int(v) and int(v)>0}
+        except (TypeError,ValueError,OverflowError):
+            return (default,),False
+        indices=plan.get('verified_indices')
+        if indices is not None:
+            if not isinstance(indices,(tuple,list)) or any(type(i) is not int or not 0<=i<len(nominal) for i in indices):
+                return (default,),False
+            verified_set.intersection_update(nominal[i] for i in indices)
         usable=tuple(v for v in sizes if v in verified_set)
         if not usable:usable=(default,)
         return usable,len(usable)>1
     try:safe_guard=max(default,int(round(float(plan.get('safe_guard_px',default) or default))))
-    except (TypeError,ValueError):safe_guard=default
+    except (TypeError,ValueError,OverflowError):safe_guard=default
     usable=tuple(v for v in sizes if v<=safe_guard)
     if not usable:usable=(default,)
-    return usable,True
+    return usable,len(usable)>1
 
 
 def _nearest_not_above(sizes: Sequence[int], wanted: int) -> int:
@@ -58,8 +99,10 @@ def _nearest_not_above(sizes: Sequence[int], wanted: int) -> int:
 
 
 def _safe_float(value, default=0.0) -> float:
-    try:return float(value)
-    except (TypeError,ValueError):return float(default)
+    try:
+        result=float(value)
+        return result if isfinite(result) else float(default)
+    except (TypeError,ValueError,OverflowError):return float(default)
 
 
 def _component_thin(entry: dict) -> int | None:

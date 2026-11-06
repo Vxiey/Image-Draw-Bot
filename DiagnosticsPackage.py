@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 from contextlib import contextmanager
-from itertools import islice
+from heapq import nsmallest, nlargest
 import json
 import math
 import os
@@ -155,7 +155,7 @@ def _read_text(path: Path, limit=MAX_LOG_CHARS):
 def _settings_summary():
     result={}
     base=data_dir()
-    for path in islice(sorted(base.glob('settings*.json')), MAX_SUMMARY_FILES):
+    for path in nsmallest(MAX_SUMMARY_FILES, base.glob('settings*.json')):
         loaded = _json_input(path, base)
         if loaded is None:
             continue
@@ -170,7 +170,7 @@ def _settings_summary():
 def _calibration_summary():
     result={}
     base=data_dir()
-    for path in islice(sorted(base.glob('calibration*.json')), MAX_SUMMARY_FILES):
+    for path in nsmallest(MAX_SUMMARY_FILES, base.glob('calibration*.json')):
         loaded = _json_input(path, base)
         if loaded is None:
             continue
@@ -212,14 +212,15 @@ def create_diagnostics_package(context=None) -> Path:
             if text:
                 archive.writestr(f'logs/{name}',text)
         dumps=Path(os.environ.get('LOCALAPPDATA',str(data_dir())))/'ImageDrawBot'/'dumps'
-        inventory=[]
-        if dumps.is_dir():
-            candidates=[]
+        def dump_candidates():
             for dump in dumps.glob('*.dmp'):
                 try:
-                    stat=dump.stat();candidates.append((stat.st_mtime,dump.name,stat.st_size))
+                    info=dump.stat()
                 except OSError:continue
-            inventory=[{'name':name,'bytes':size} for _,name,size in sorted(candidates,reverse=True)[:5]]
+                if stat.S_ISREG(info.st_mode):
+                    yield (info.st_mtime, dump.name, info.st_size)
+        inventory = [{'name':sanitize_text(name),'bytes':size}
+                     for _,name,size in nlargest(5, dump_candidates())] if dumps.is_dir() else []
         archive.writestr('dump-files.json',json.dumps({'files':inventory,'memory_dumps_included':False},indent=2))
     return path
 

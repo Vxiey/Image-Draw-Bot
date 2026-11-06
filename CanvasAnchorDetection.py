@@ -15,6 +15,7 @@ from typing import Iterable, Sequence
 from PIL import Image, ImageFilter, ImageOps
 
 from CanvasGuard import CanvasAnchor
+from CalibrationValidation import nonnegative_integer
 
 FloatPoint = tuple[float, float]
 
@@ -125,42 +126,41 @@ def _border_background(rgb: Image.Image) -> tuple[float, float, float]:
 
 
 def _binary_foreground(rgb: Image.Image) -> list[bytearray]:
-    width, height = rgb.size
+    import numpy as np
     bg = _border_background(rgb)
-    gray = ImageOps.grayscale(rgb)
-    edges = gray.filter(ImageFilter.FIND_EDGES)
-    edge_px = edges.load()
-    rgb_px = rgb.load()
-    # The contrast threshold is tied to background distance so blank canvases do
-    # not produce anchors, while high-contrast handles/icons can be found.
-    rows: list[bytearray] = []
-    for y in range(height):
-        row = bytearray(width)
-        for x in range(width):
-            r, g, b = rgb_px[x, y]
-            dist = abs(float(r) - bg[0]) + abs(float(g) - bg[1]) + abs(float(b) - bg[2])
-            sat = max(r, g, b) - min(r, g, b)
-            if dist >= 95 or sat >= 55 or edge_px[x, y] >= 115:
-                row[x] = 1
-        rows.append(row)
-    return rows
+    pixels=np.asarray(rgb,dtype=np.int16)
+    distance=np.abs(pixels-np.asarray(bg,dtype=np.int16)).sum(axis=2)
+    saturation=pixels.max(axis=2)-pixels.min(axis=2)
+    with ImageOps.grayscale(rgb) as gray:
+        with gray.filter(ImageFilter.FIND_EDGES) as edges:
+            foreground=(distance>=95)|(saturation>=55)|(np.asarray(edges)>=115)
+    return [bytearray(row) for row in foreground.astype(np.uint8)]
 
 
-def _component_points(mask: list[bytearray], max_components: int = 120) -> list[list[tuple[int, int]]]:
+def _component_points(mask: list[bytearray], max_components: int = 120, *, max_side=None,
+                      cancelled=lambda:False) -> list[list[tuple[int, int]]]:
     height = len(mask)
     width = len(mask[0]) if height else 0
     seen = [bytearray(width) for _ in range(height)]
     components: list[list[tuple[int, int]]] = []
     for y in range(height):
+        if y%16==0 and cancelled():raise InterruptedError('Canvas anchor detection cancelled.')
         for x in range(width):
             if not mask[y][x] or seen[y][x]:
                 continue
             stack = [(x, y)]
             seen[y][x] = 1
             pts: list[tuple[int, int]] = []
+            left=right=x;top=bottom=y;oversized=False;visited=0
             while stack:
                 cx, cy = stack.pop()
-                pts.append((cx, cy))
+                visited+=1
+                if visited%4096==0 and cancelled():raise InterruptedError('Canvas anchor detection cancelled.')
+                if not oversized:
+                    left=min(left,cx);right=max(right,cx);top=min(top,cy);bottom=max(bottom,cy)
+                    if max_side is not None and max(right-left+1,bottom-top+1)>max_side:
+                        oversized=True;pts.clear()
+                    else:pts.append((cx,cy))
                 for ny in (cy - 1, cy, cy + 1):
                     if ny < 0 or ny >= height:
                         continue
@@ -170,6 +170,9 @@ def _component_points(mask: list[bytearray], max_components: int = 120) -> list[
                         if mask[ny][nx] and not seen[ny][nx]:
                             seen[ny][nx] = 1
                             stack.append((nx, ny))
+            # Single-pixel noise must not spend the budget reserved for actual
+            # marker candidates farther down the image.
+            if len(pts)<18:continue
             components.append(pts)
             if len(components) >= max_components:
                 return components
@@ -220,7 +223,7 @@ def _candidate_from_component(points: list[tuple[int, int]], width: int, height:
         return None
     # Work on a bounded sample so very large components do not slow selection.
     if len(points) > 700:
-        step = max(1, len(points) // 700)
+        step = math.ceil(len(points) / 700)
         raw = points[::step]
     else:
         raw = points
@@ -266,39 +269,48 @@ def _suppress_near_duplicates(candidates: Iterable[TriangleCandidate], min_dista
     return tuple(sorted(accepted, key=lambda c: (c.center[1], c.center[0])))
 
 
-def detect_triangle_anchors(image: Image.Image, expected: int = 6) -> tuple[TriangleCandidate, ...]:
+def detect_triangle_anchors(image: Image.Image, expected: int = 6, *, cancelled=lambda:False) -> tuple[TriangleCandidate, ...]:
     """Detect triangular marker components in a selected canvas screenshot."""
-    if image.width < 10 or image.height < 10:
+    expected=nonnegative_integer(expected,'Expected triangle count',maximum=120)
+    if cancelled():raise InterruptedError('Canvas anchor detection cancelled.')
+    if not expected or image.width < 10 or image.height < 10:
         return ()
     max_dim = max(image.width, image.height)
-    scale = 1.0
-    working = image.convert('RGB')
-    if max_dim > 520:
-        scale = 520.0 / max_dim
-        working = working.resize((max(1, round(image.width * scale)), max(1, round(image.height * scale))), Image.Resampling.BILINEAR)
-    mask = _binary_foreground(working)
-    found: list[TriangleCandidate] = []
-    for pts in _component_points(mask):
-        candidate = _candidate_from_component(pts, working.width, working.height)
-        if candidate is not None:
-            # Candidate coordinates are normalised, so no rescale is needed.
-            found.append(candidate)
-    return _suppress_near_duplicates(found)[:max(0, int(expected))]
+    from ColorMatchingEngine import visible_rgb_image
+    rgb=image if image.mode=='RGB' and 'transparency' not in image.info else visible_rgb_image(image)
+    working=rgb
+    try:
+        if max_dim > 520:
+            scale = 520.0 / max_dim
+            working = rgb.resize((max(1, round(image.width * scale)), max(1, round(image.height * scale))), Image.Resampling.BILINEAR)
+        mask = _binary_foreground(working)
+        found: list[TriangleCandidate] = []
+        max_side=max(18,int(min(working.size)*0.38))
+        for pts in _component_points(mask,max_side=max_side,cancelled=cancelled):
+            if cancelled():raise InterruptedError('Canvas anchor detection cancelled.')
+            candidate = _candidate_from_component(pts, working.width, working.height)
+            if candidate is not None:found.append(candidate)
+        return _suppress_near_duplicates(found)[:expected]
+    finally:
+        if working is not rgb:working.close()
+        if rgb is not image:rgb.close()
 
 
-def detect_canvas_anchors(image: Image.Image | None, expected_triangles: int = 6) -> AnchorDetectionResult:
+def detect_canvas_anchors(image: Image.Image | None, expected_triangles: int = 6, *, cancelled=lambda:False) -> AnchorDetectionResult:
     """Return rectangle corners plus any detected triangle marker anchors.
 
     The returned polygon and anchors use normalized canvas coordinates so they
     survive target-window translations and can be mapped to the live screen area
     by CanvasGuard at execution time.
     """
+    expected_triangles=nonnegative_integer(expected_triangles,'Expected triangle count',maximum=120)
+    if cancelled():raise InterruptedError('Canvas anchor detection cancelled.')
     if image is None:
         width = height = 1
         triangles: tuple[TriangleCandidate, ...] = ()
     else:
         width, height = max(1, int(image.width)), max(1, int(image.height))
-        triangles = detect_triangle_anchors(image, expected_triangles)
+        triangles = detect_triangle_anchors(image, expected_triangles,cancelled=cancelled)
     corners = _corner_anchors(width, height)
     triangle_anchors = tuple(t.as_anchor() for t in triangles)
     expected = max(1, int(expected_triangles))

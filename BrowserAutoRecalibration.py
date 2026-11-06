@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable, Sequence
+from CalibrationValidation import (screen_rect, screen_point, contained_rect,
+                                   finite_confidence, nonnegative_integer)
 
 
 @dataclass(frozen=True)
@@ -31,12 +33,7 @@ class BrowserLayoutDelta:
 
 
 def _client(rect: Sequence[int]) -> tuple[int, int, int, int]:
-    if not isinstance(rect, (tuple, list)) or len(rect) != 4:
-        raise ValueError('Browser client rectangle is unavailable.')
-    l, t, r, b = map(int, rect)
-    if r <= l or b <= t:
-        raise ValueError('Browser client rectangle is invalid.')
-    return l, t, r, b
+    return screen_rect(rect, 'browser client rectangle')
 
 
 def make_layout_state(client_rect: Sequence[int], dpi: int | None,
@@ -45,11 +42,14 @@ def make_layout_state(client_rect: Sequence[int], dpi: int | None,
     l, t, r, b = _client(client_rect)
     canvas_rel = None
     if canvas_box is not None:
-        if not isinstance(canvas_box, (tuple, list)) or len(canvas_box) != 4:
-            raise ValueError('Browser canvas box is invalid.')
-        cl, ct, cr, cb = map(int, canvas_box)
+        cl, ct, cr, cb = contained_rect(canvas_box, (l,t,r,b), 'browser canvas')
         canvas_rel = (cl-l, ct-t, cr-l, cb-t)
-    palette_rel = tuple((int(p[0])-l, int(p[1])-t) for p in palette_positions)
+    palette_rel = tuple((x-l, y-t) for x,y in (screen_point(p) for p in palette_positions))
+    if any(not (0 <= x < r-l and 0 <= y < b-t) for x,y in palette_rel):
+        raise ValueError('Palette position is outside the browser client.')
+    if dpi is not None:
+        dpi = nonnegative_integer(dpi, 'DPI', maximum=10000)
+        if dpi == 0: raise ValueError('DPI must be positive.')
     return BrowserLayoutState(
         client_size=(r-l, b-t),
         dpi=(int(dpi) if dpi is not None else None),
@@ -62,7 +62,7 @@ def compare_layout_states(old: BrowserLayoutState | None, new: BrowserLayoutStat
                           *, tolerance_px: int = 4) -> BrowserLayoutDelta:
     if old is None:
         return BrowserLayoutDelta(True, ('initial browser calibration',), 0, 0)
-    tolerance = max(0, int(tolerance_px))
+    tolerance = nonnegative_integer(tolerance_px, 'Layout tolerance')
     reasons: list[str] = []
     if old.client_size != new.client_size:
         reasons.append(f'client resize {old.client_size[0]}×{old.client_size[1]}→{new.client_size[0]}×{new.client_size[1]}')
@@ -114,24 +114,24 @@ class RecalibrationPlan:
 
 def adaptive_retry_delay(attempt: int, confidence: float | None = None) -> float:
     """Small bounded settle delay for a read-only re-scan; never an input delay."""
-    n = max(0, int(attempt or 0))
-    try:
-        confidence = float(confidence) if confidence is not None else .68
-    except (TypeError, ValueError, OverflowError):
-        confidence = .68
+    n = nonnegative_integer(attempt, 'Retry attempt')
+    confidence = finite_confidence(confidence, default=.68 if confidence is None else 0.0)
     deficit = max(0.0, min(1.0, .82 - confidence))
     return round(min(.45, .09 + n * .09 + deficit * .32), 3)
 
 
 def plan_recalibration(delta: BrowserLayoutDelta | None, *, palette_confidence: float = 1.0,
                        canvas_confidence: float = 1.0, attempt: int = 0) -> RecalibrationPlan:
-    pc = max(0.0, min(1.0, float(palette_confidence or 0.0)))
-    cc = max(0.0, min(1.0, float(canvas_confidence or 0.0)))
+    pc = finite_confidence(palette_confidence)
+    cc = finite_confidence(canvas_confidence)
     reasons = tuple(getattr(delta, "reasons", ()) or ()) if delta is not None else ()
     text = " ".join(reasons).lower()
-    canvas_changed = bool(getattr(delta, "max_canvas_shift", 0) > 0 or "canvas " in text)
-    palette_changed = bool(getattr(delta, "max_palette_shift", 0) > 0 or "palette " in text)
-    structural = "client resize" in text or "dpi " in text or "canvas detection changed" in text
+    # The comparison already applies its tolerance. Raw sub-tolerance shifts
+    # are diagnostic values, not a reason to repeatedly rescan a stable page.
+    changed = bool(getattr(delta, 'changed', False))
+    canvas_changed = changed and ("canvas " in text or (not reasons and getattr(delta, 'max_canvas_shift', 0) > 0))
+    palette_changed = changed and ("palette " in text or (not reasons and getattr(delta, 'max_palette_shift', 0) > 0))
+    structural = "client resize" in text or "dpi " in text or "canvas detection changed" in text or "initial browser calibration" in text
     low_palette = pc < .70
     low_canvas = cc < .68
     if structural or (canvas_changed and palette_changed) or (low_palette and low_canvas):
@@ -160,15 +160,15 @@ def evaluate_cached_canvas(cached_box, detected_box, canvas_confidence: float, *
                            tolerance_px: int = 4, max_partial_shift_px: int = 28) -> RecalibrationPlan:
     """Decide whether a verified cached palette can survive a canvas-only drift."""
     try:
-        old = tuple(map(int, cached_box))
-        new = tuple(map(int, detected_box))
-        if len(old) != 4 or len(new) != 4:
-            raise ValueError
+        old = screen_rect(cached_box, 'cached canvas')
+        new = screen_rect(detected_box, 'detected canvas')
     except Exception:
         delta = BrowserLayoutDelta(True, ("canvas detection changed",), 0, 999)
         return plan_recalibration(delta, palette_confidence=1.0, canvas_confidence=canvas_confidence)
     shift = max(abs(a - b) for a, b in zip(old, new))
-    conf = max(0.0, min(1.0, float(canvas_confidence or 0.0)))
+    tolerance_px = nonnegative_integer(tolerance_px, 'Canvas tolerance')
+    max_partial_shift_px = nonnegative_integer(max_partial_shift_px, 'Partial canvas shift')
+    conf = finite_confidence(canvas_confidence)
     if conf < .68:
         return RecalibrationPlan(
             "full", f"canvas confidence {conf:.2f}", .5 * (1.0 + conf), True, False,
@@ -205,8 +205,14 @@ def calibrate_browser_with_retry(profile_key, target_metadata, palette_path, *, 
     import time
     from BrowserAutoCalibration import auto_calibrate_browser
     if sleep_fn is None:
-        sleep_fn = time.sleep
-    attempts = max(1, min(3, int(max_attempts or 1)))
+        def sleep_fn(delay):
+            end=time.monotonic()+delay
+            while True:
+                if cancelled():raise InterruptedError('Browser recalibration cancelled.')
+                remaining=end-time.monotonic()
+                if remaining<=0:return
+                time.sleep(min(.05,remaining))
+    attempts = max(1, min(3, nonnegative_integer(max_attempts, 'Retry count')))
     current = screenshot
     errors = []
     delays = []
@@ -216,28 +222,37 @@ def calibrate_browser_with_retry(profile_key, target_metadata, palette_path, *, 
         "palette grid could not be verified",
         "show the whole palette",
     )
-    for attempt in range(attempts):
-        if cancelled():
-            raise InterruptedError("Browser recalibration cancelled.")
-        try:
-            result = auto_calibrate_browser(profile_key, target_metadata, palette_path, screenshot=current)
-            return result, {
-                "attempts": attempt + 1,
-                "retries": attempt,
-                "errors": tuple(errors),
-                "delays": tuple(delays),
-            }
-        except ValueError as error:
-            message = str(error).lower()
-            errors.append(str(error))
-            if attempt + 1 >= attempts or not any(token in message for token in transient):
-                raise
-            delay = adaptive_retry_delay(attempt, _confidence_from_error(error))
-            delays.append(delay)
-            sleep_fn(delay)
+    try:
+        for attempt in range(attempts):
             if cancelled():
                 raise InterruptedError("Browser recalibration cancelled.")
-            if recapture is not None:
-                current = recapture()
-    raise RuntimeError("Browser recalibration retry loop exhausted unexpectedly.")
+            try:
+                result = auto_calibrate_browser(profile_key, target_metadata, palette_path, screenshot=current,
+                                                cancelled=cancelled)
+                if cancelled():
+                    raise InterruptedError("Browser recalibration cancelled.")
+                return result, {
+                    "attempts": attempt + 1,
+                    "retries": attempt,
+                    "errors": tuple(errors),
+                    "delays": tuple(delays),
+                }
+            except ValueError as error:
+                message = str(error).lower()
+                errors.append(str(error))
+                if attempt + 1 >= attempts or not any(token in message for token in transient):
+                    raise
+                delay = adaptive_retry_delay(attempt, _confidence_from_error(error))
+                delays.append(delay)
+                sleep_fn(delay)
+                if cancelled():
+                    raise InterruptedError("Browser recalibration cancelled.")
+                if recapture is not None:
+                    fresh=recapture()
+                    if current is not None and current is not screenshot and current is not fresh:current.close()
+                    current=fresh
+        raise RuntimeError("Browser recalibration retry loop exhausted unexpectedly.")
 
+    finally:
+        if current is not None and current is not screenshot:
+            current.close()

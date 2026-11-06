@@ -1,18 +1,28 @@
 """Bounded native-resolution planning and viewport-only image rendering."""
 from PIL import Image
 import math
+from numbers import Integral
 
 from ResourceAllocation import resolve_cpu_workers
 
 
 def full_preview_options(options,area):
-    w,h=map(int,area)
     try:
-        ram=max(128,int(options.get('ram_budget_mb',512)))
-    except (TypeError, ValueError, OverflowError):
-        ram=512
+        w,h=area
+    except (TypeError,ValueError) as error:
+        raise ValueError('Full preview needs two positive integer dimensions.') from error
+    if any(isinstance(v,bool) or not isinstance(v,Integral) or v<1 for v in (w,h)):
+        raise ValueError('Full preview needs two positive integer dimensions.')
+    w,h=int(w),int(h)
+    from ReleaseStabilityHardening import apply_preview_memory_limits
+    budget=options.get('ram_budget_mb')
+    limits=apply_preview_memory_limits(w*h,max(w,h),memory_budget_mb=512 if budget is None else budget)
+    if limits.reduced:
+        raise ValueError('Full-detail preview exceeds the selected memory budget. Use the normal preview or a smaller drawing area.')
+    ram=limits.memory_budget_mb
     # Reserve most of the configured RAM for the planner, app and source image.
-    pixel_limit=min(8_000_000,max(250_000,ram*1024*1024//512))
+    pixel_limit=(8_000_000 if ram>=8_000_000*512/(1024*1024)
+                 else int(ram*1024*1024//512))
     if w<1 or h<1 or w*h>pixel_limit:
         raise ValueError(f'Full preview exceeds its memory budget ({pixel_limit:,} target pixels). Use the normal preview or a smaller drawing area.')
     requested_workers=str(options.get('cpu_workers') or 'Auto')

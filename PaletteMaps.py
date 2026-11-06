@@ -1,6 +1,10 @@
 """Versioned source palette plus conservative, click-free screen matching."""
 from dataclasses import dataclass
 
+
+class NoColorSwatchesError(ValueError):
+    """A valid sampling region contained no eligible solid swatches."""
+
 @dataclass(frozen=True)
 class Palette:
     source: str
@@ -133,7 +137,90 @@ def sample_paint_grid(image, rows, columns, offset=(0,0)):
     return positions,colors,{'duplicates':duplicates,'skipped':skipped}
 
 
-def detect_color_swatches(image, offset=(0, 0), max_colors=96):
+def _span_components(image, cancelled):
+    """Label solid row spans; return None for noise that needs the bounded DFS."""
+    import numpy as np
+    a=np.asarray(image)
+    breaks=np.any(a[:,1:] != a[:,:-1],axis=2)
+    run_count=int(np.count_nonzero(breaks))+image.height
+    if run_count>max(4096,min(50000,image.width*image.height//8)):
+        # Every accepted swatch needs an exact 5×5 interior. If five horizontal
+        # runs cannot overlap for five rows, the noisy image has no candidate;
+        # avoid a Python component walk over thousands of isolated pixels.
+        same=~breaks
+        row_solid=same[:,:-3]&same[:,1:-2]&same[:,2:-1]&same[:,3:]
+        possible=row_solid[:-4]&row_solid[1:-3]&row_solid[2:-2]&row_solid[3:-1]&row_solid[4:]
+        if not bool(np.any(possible)):return []
+        return None
+    pixels=image.load();parents=[];stats=[];colors=[];previous=[]
+    def root(index):
+        while parents[index]!=index:
+            parents[index]=parents[parents[index]];index=parents[index]
+        return index
+    def merge(left,right):
+        left,right=root(left),root(right)
+        if left==right:return left
+        if right<left:left,right=right,left
+        parents[right]=left
+        s,t=stats[left],stats[right]
+        s[0]+=t[0];s[1]=min(s[1],t[1]);s[2]=min(s[2],t[2]);s[3]=max(s[3],t[3]);s[4]=max(s[4],t[4])
+        return left
+    for y in range(image.height):
+        if y%16==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
+        boundaries=[0,*((np.flatnonzero(breaks[y])+1).tolist()),image.width]
+        current=[];first=0
+        for x0,x1 in zip(boundaries,boundaries[1:]):
+            rgb=pixels[x0,y]
+            while first<len(previous) and previous[first][1]<=x0:first+=1
+            neighbor=first;matches=[]
+            while neighbor<len(previous) and previous[neighbor][0]<x1:
+                if previous[neighbor][3]==rgb:matches.append(root(previous[neighbor][2]))
+                neighbor+=1
+            if not matches:
+                label=len(parents);parents.append(label);colors.append(rgb)
+                stats.append([x1-x0,x0,y,x1-1,y])
+            else:
+                label=matches[0]
+                for other in matches[1:]:label=merge(label,other)
+                s=stats[label];s[0]+=x1-x0;s[1]=min(s[1],x0);s[3]=max(s[3],x1-1);s[4]=y
+            current.append((x0,x1,label,rgb))
+        previous=current
+    return [(colors[i],*stats[i]) for i in range(len(parents)) if parents[i]==i]
+
+
+def _pixel_components(image, cancelled):
+    """Exact four-connected fallback with one byte of visit state per pixel."""
+    w,h=image.size;pixels=image.load();visited=bytearray(w*h)
+    for sy in range(h):
+        if sy%16==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
+        for sx in range(w):
+            start_index=sy*w+sx
+            if visited[start_index]:continue
+            rgb=pixels[sx,sy];visited[start_index]=1;stack=[(sx,sy)]
+            count=0;left=right=sx;top=bottom=sy
+            while stack:
+                x,y=stack.pop();count+=1
+                if count%4096==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
+                if x<left:left=x
+                elif x>right:right=x
+                if y<top:top=y
+                elif y>bottom:bottom=y
+                if x:
+                    ni=y*w+x-1
+                    if not visited[ni] and pixels[x-1,y]==rgb:visited[ni]=1;stack.append((x-1,y))
+                if x+1<w:
+                    ni=y*w+x+1
+                    if not visited[ni] and pixels[x+1,y]==rgb:visited[ni]=1;stack.append((x+1,y))
+                if y:
+                    ni=(y-1)*w+x
+                    if not visited[ni] and pixels[x,y-1]==rgb:visited[ni]=1;stack.append((x,y-1))
+                if y+1<h:
+                    ni=(y+1)*w+x
+                    if not visited[ni] and pixels[x,y+1]==rgb:visited[ni]=1;stack.append((x,y+1))
+            yield rgb,count,left,top,right,bottom
+
+
+def detect_color_swatches(image, offset=(0, 0), max_colors=96, *, cancelled=lambda:False):
     """Find solid color swatches inside a user-selected screen region.
 
     This intentionally works only inside the selected region and never scans the
@@ -141,16 +228,16 @@ def detect_color_swatches(image, offset=(0, 0), max_colors=96):
     gradients and antialiased controls are rejected rather than guessed as
     clickable colors.  The returned position is inside the solid component.
     """
-    image = image.convert('RGB')
+    if cancelled():raise InterruptedError('Palette scan cancelled.')
+    image = image if image.mode=='RGB' else image.convert('RGB')
     w, h = image.size
     area = w * h
     if w < 8 or h < 8 or area > 1_000_000:
         raise ValueError('Select a color sampling area between 8 px and 1 million pixels.')
-    if not 1 <= max_colors <= 96:
+    if type(max_colors) is not int or not 1 <= max_colors <= 96:
         raise ValueError('Maximum color count must be between 1 and 96.')
 
     pixels = image.load()
-    visited = bytearray(area)
     found = []
     rejected = 0
 
@@ -181,42 +268,9 @@ def detect_color_swatches(image, offset=(0, 0), max_colors=96):
                 return x, y
         return None
 
-    for sy in range(h):
-        row_base = sy * w
-        for sx in range(w):
-            start_index = row_base + sx
-            if visited[start_index]:
-                continue
-            rgb = pixels[sx, sy]
-            visited[start_index] = 1
-            stack = [(sx, sy)]
-            count = 0
-            left = right = sx
-            top = bottom = sy
-            while stack:
-                x, y = stack.pop()
-                count += 1
-                if x < left: left = x
-                elif x > right: right = x
-                if y < top: top = y
-                elif y > bottom: bottom = y
-                if x:
-                    ni = y*w + x-1
-                    if not visited[ni] and pixels[x-1, y] == rgb:
-                        visited[ni] = 1; stack.append((x-1, y))
-                if x + 1 < w:
-                    ni = y*w + x+1
-                    if not visited[ni] and pixels[x+1, y] == rgb:
-                        visited[ni] = 1; stack.append((x+1, y))
-                if y:
-                    ni = (y-1)*w + x
-                    if not visited[ni] and pixels[x, y-1] == rgb:
-                        visited[ni] = 1; stack.append((x, y-1))
-                if y + 1 < h:
-                    ni = (y+1)*w + x
-                    if not visited[ni] and pixels[x, y+1] == rgb:
-                        visited[ni] = 1; stack.append((x, y+1))
-
+    components=_span_components(image,cancelled)
+    if components is None:components=_pixel_components(image,cancelled)
+    for rgb,count,left,top,right,bottom in components:
             cw, ch = right-left+1, bottom-top+1
             bbox_area = cw * ch
             touches = sum((left == 0, top == 0, right == w-1, bottom == h-1))
@@ -254,8 +308,9 @@ def detect_color_swatches(image, offset=(0, 0), max_colors=96):
         else:
             duplicates += 1
     unique = list(by_rgb.values())
+    if cancelled():raise InterruptedError('Palette scan cancelled.')
     if not unique:
-        raise ValueError('No solid color swatches were found in the selected area. Try a tighter selection or use Grid mode.')
+        raise NoColorSwatchesError('No solid color swatches were found in the selected area. Try a tighter selection or use Grid mode.')
     if len(unique) > max_colors:
         # Prefer the largest solid components if decorative UI colors were also
         # selected, then restore visual order.

@@ -6,6 +6,7 @@ import customtkinter as ctk
 from StudioUI import button, BG, PANEL, FIELD, TEXT
 from PaintTools import TOOL_FILE, load_tool_calibration, save_tool_calibration
 from CalibrationAnchors import make_anchor, ensure_same_layout
+from CalibrationValidation import screen_point, point_in_rect
 
 
 class PaintToolCalibrationApp:
@@ -14,7 +15,7 @@ class PaintToolCalibrationApp:
         self.root,self.on_close,self.path=root,on_close,path
         self.mouse=WindowsMouse()  # DISARMED; get_position() only
         self.positions={};self.brush_menu=None;self.brush_preset=None;self.opacity_100=None
-        self.anchor=None;self.anchor_handle=None;self.job=None
+        self.anchor=None;self.anchor_handle=None;self.job=None;self.closed=False
         try:
             data=load_tool_calibration(path)
             if data.get('version') in (2,3):
@@ -58,7 +59,7 @@ class PaintToolCalibrationApp:
         self.opacity_label.configure(text=f'✓ {self.opacity_100}' if self.opacity_100 else 'Required for Brush only')
 
     def capture(self,name,seconds):
-        if self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None:return
         if getattr(self,'capture_visibility',None) is None:
             from ScreenTaskWindow import ScreenTaskWindow
             self.capture_visibility=ScreenTaskWindow(self.root)
@@ -71,24 +72,29 @@ class PaintToolCalibrationApp:
 
     def _capture_tick(self,name,seconds):
         self.job=None
+        if getattr(self,'closed',False):return
         if seconds:self.capture(name,seconds)
         else:self._capture_now(name)
 
     def _capture_now(self,name):
+        if getattr(self,'closed',False):return
         try:
-            point=tuple(map(int,self.mouse.get_position()))
+            if name not in ('Pencil','Eraser','Fill','opacity_100','brush_menu','brush_preset'):raise ValueError('Unknown Paint control.')
+            point=screen_point(self.mouse.get_position())
             from TargetCapture import capture_target_metadata_isolated
             x,y=point;meta=capture_target_metadata_isolated((x-5,y-5,10,10))
+            if not point_in_rect(point,meta['client_rect']):raise ValueError('The control is outside the Paint client area.')
             if self.anchor_handle is not None and meta['handle']!=self.anchor_handle:
                 raise ValueError('All tool positions must be captured from the same Paint window.')
             if self.anchor is None:
-                self.anchor_handle=meta['handle'];self.anchor=make_anchor(meta['client_rect']);stored=point
+                anchor=make_anchor(meta['client_rect']);stored=point
             else:
-                self.anchor_handle=meta['handle']
+                anchor=self.anchor
                 dx,dy=ensure_same_layout(self.anchor,meta['client_rect'])
                 # Store every point in the first capture's coordinate frame, so
                 # moving Paint during calibration does not corrupt earlier points.
-                stored=(point[0]-dx,point[1]-dy)
+                stored=screen_point((point[0]-dx,point[1]-dy))
+            self.anchor_handle=meta['handle'];self.anchor=anchor
             if name=='opacity_100':self.opacity_100=stored
             elif name=='brush_menu':self.brush_menu=stored
             elif name=='brush_preset':self.brush_preset=stored
@@ -102,6 +108,7 @@ class PaintToolCalibrationApp:
         self.refresh()
 
     def save(self):
+        if getattr(self,'closed',False) or self.job is not None:return
         try:
             if self.anchor is None:raise ValueError('Capture at least one Paint control first.')
             if not self.positions and not (self.brush_menu or self.brush_preset):raise ValueError('Capture at least one Paint tool.')
@@ -111,6 +118,8 @@ class PaintToolCalibrationApp:
         except (OSError,ValueError) as error:self.status.set(f'Could not save: {error}')
 
     def close(self):
+        if getattr(self,'closed',False):return
+        self.closed=True
         if self.job is not None:
             try:self.root.after_cancel(self.job)
             except tk.TclError:pass

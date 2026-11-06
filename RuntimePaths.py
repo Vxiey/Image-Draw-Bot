@@ -14,6 +14,40 @@ import time
 
 _FILE_LOCKS = tuple(threading.RLock() for _ in range(32))
 _HELD_FILES = threading.local()
+# Logical file transactions may hold a stripe while publishing multiple paths.
+# Publication must never acquire another stripe: a different logical writer can
+# already hold it while waiting to publish. Both ordinary and file-set writes
+# instead use this reentrant lock, always after any logical transaction locks.
+_PUBLICATION_LOCK = threading.RLock()
+
+
+class FileSetTransactionError(OSError):
+    """A staged file-set publish failed; any recovery backups are retained."""
+    def __init__(self, message, recovery_paths=()):
+        super().__init__(message)
+        self.recovery_paths = tuple(recovery_paths)
+
+
+def _path_lock_key(path):
+    return os.path.normcase(str(path.parent.resolve() / path.name))
+
+
+def _replace_with_retry(source: Path, destination: Path) -> None:
+    """Serialize publishers; briefly retry Windows' transient sharing failures."""
+    with _PUBLICATION_LOCK:
+        for attempt in range(10):
+            try:
+                os.replace(source, destination)
+                return
+            except OSError as error:
+                if (sys.platform != 'win32' or getattr(error, 'winerror', None) not in (5, 32, 33)
+                        or attempt == 9):
+                    raise
+                # Antivirus/indexer readers and another process can briefly keep
+                # the old destination delete-pending. Never delete it first or
+                # fall back to a partial in-place write; permanent denial still
+                # raises after at most 0.65 seconds of retry delays.
+                time.sleep(min(.01 * (2 ** attempt), .10))
 
 
 def is_frozen() -> bool:
@@ -75,7 +109,7 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
                 # replace is still safer than writing the destination in place.
                 if error.errno not in {errno.EINVAL, errno.ENOSYS, errno.ENOTSUP}:
                     raise
-        os.replace(temporary, path)
+        _replace_with_retry(temporary, path)
         temporary = None
     finally:
         if temporary is not None:
@@ -83,6 +117,76 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
                 temporary.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def replace_text_files(changes) -> None:
+    """Stage a set of text replacements/deletions and roll back on exceptions.
+
+    This coordinates callers in this process. Each rename is atomic; the whole
+    set is not a filesystem transaction and cannot guarantee crash atomicity.
+    Failed rollback backups are deliberately left available for recovery.
+    """
+    normalized = []
+    seen = set()
+    for path, text in changes.items():
+        path = Path(path)
+        key = _path_lock_key(path)
+        if key in seen or (text is not None and not isinstance(text, str)):
+            raise ValueError('File-set destinations must be unique and values must be text or None.')
+        seen.add(key)
+        normalized.append((path, text))
+    with _PUBLICATION_LOCK:
+        entries = []
+        rollback_failed = set()
+        try:
+            for path, text in normalized:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if path.exists() and not path.is_file():
+                    raise OSError(f'Destination is not a file: {path.name}')
+                entry = dict(path=path, staged=None, backup=None, moved=False, published=False)
+                entries.append(entry)
+                if text is not None:
+                    fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.import', dir=path.parent)
+                    os.close(fd)
+                    entry['staged'] = Path(name)
+                    atomic_write_text(entry['staged'], text)
+                if path.exists() or path.is_symlink():
+                    fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.backup', dir=path.parent)
+                    os.close(fd)
+                    entry['backup'] = Path(name)
+            for entry in entries:
+                if entry['backup'] is not None:
+                    _replace_with_retry(entry['path'], entry['backup'])
+                    entry['moved'] = True
+                if entry['staged'] is not None:
+                    _replace_with_retry(entry['staged'], entry['path'])
+                    entry['published'] = True
+        except BaseException as error:
+            for entry in reversed(entries):
+                try:
+                    if entry['moved']:
+                        _replace_with_retry(entry['backup'], entry['path'])
+                    elif entry['published']:
+                        entry['path'].unlink(missing_ok=True)
+                except OSError:
+                    rollback_failed.add(entry['backup'] or entry['path'])
+            if not isinstance(error, Exception):
+                if rollback_failed:
+                    error.add_note('File-set rollback retained recovery paths: ' + ', '.join(map(str, sorted(rollback_failed))))
+                raise
+            if rollback_failed:
+                names = ', '.join(str(path) for path in sorted(rollback_failed))
+                raise FileSetTransactionError(f'File update failed and could not be fully rolled back. Retained recovery paths: {names}',
+                                              sorted(rollback_failed)) from error
+            raise FileSetTransactionError(f'File update failed; previous files were restored: {error}') from error
+        finally:
+            for entry in entries:
+                for temporary in (entry['staged'], entry['backup']):
+                    if temporary is not None and temporary not in rollback_failed:
+                        try:
+                            temporary.unlink(missing_ok=True)
+                        except OSError:
+                            pass
 
 
 def is_finite_number(value) -> bool:
@@ -141,7 +245,7 @@ def file_transaction(path: Path, *, timeout: float = 5.0):
     if not is_finite_number(timeout) or not 0 <= timeout <= threading.TIMEOUT_MAX:
         raise ValueError('File transaction timeout must be a finite, nonnegative supported duration.')
     path = Path(path)
-    key = os.path.normcase(str(path.parent.resolve() / path.name))
+    key = _path_lock_key(path)
     deadline = time.monotonic() + timeout
     lock = _FILE_LOCKS[hash(key) % len(_FILE_LOCKS)]
     if not lock.acquire(timeout=max(0.0, timeout)):

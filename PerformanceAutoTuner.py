@@ -22,6 +22,27 @@ TUNER_VERSION = 1
 TUNER_FILE = data_dir() / "performance-auto-tuner-v1.json"
 
 
+def _benchmark_payload(value):
+    """Keep optional driver results JSON-safe before recommendation or storage."""
+    if not isinstance(value, dict):
+        raise ValueError('Benchmark result must be an object.')
+    try:
+        text = json.dumps(value, allow_nan=False)
+        if len(text) > 4 * 1024 * 1024:
+            raise ValueError('Benchmark result is too large.')
+        return json.loads(text)
+    except (TypeError, ValueError, OverflowError, RecursionError) as error:
+        raise ValueError('Benchmark result contains invalid metadata.') from error
+
+
+def _positive_integer(value):
+    return value if type(value) is int and 0 < value <= 1_000_000_000 else None
+
+
+def _nonnegative_number(value, default=0.0):
+    return float(value) if is_finite_number(value) and value >= 0 else default
+
+
 @dataclass(frozen=True)
 class TuneRecommendation:
     cpu_workers: str
@@ -83,7 +104,7 @@ def _ram_recommendation(available_mb: int | None) -> tuple[str, str, int]:
 
 
 def _vram_recommendation(total_mb: int | None, free_mb: int | None) -> str:
-    if not total_mb or not free_mb:
+    if not _positive_integer(total_mb) or not _positive_integer(free_mb) or free_mb > total_mb:
         return "Auto"
     total, free = int(total_mb), int(free_mb)
     # Use percentages so the setting remains sane after driver/desktop changes.
@@ -114,16 +135,21 @@ def _reason_text(*, workers: int, ram_mb: int, gpu_ok: bool, planning: str) -> s
 def build_recommendation(*, scheduler_result: dict[str, Any], available_mb: int | None,
                          gpu_result: dict[str, Any] | None = None,
                          hardware_result: dict[str, Any] | None = None) -> TuneRecommendation:
-    logical = max(1, int(scheduler_result.get("logical_cpus", logical_cpu_count()) or 1))
-    workers = max(1, min(logical, int(scheduler_result.get("recommended_workers", 1) or 1)))
+    scheduler_result = scheduler_result if isinstance(scheduler_result, dict) else {}
+    logical = _positive_integer(scheduler_result.get('logical_cpus')) or logical_cpu_count()
+    workers = min(logical, _positive_integer(scheduler_result.get('recommended_workers')) or 1)
     ram_setting, ram_custom, ram_mb = _ram_recommendation(available_mb)
-    gpu = gpu_result or {}
-    gpu_ok = bool(gpu.get("used_gpu") and gpu.get("accelerated", True))
-    gpu_detected = bool(gpu.get("hardware_detected") or gpu_ok)
-    gpu_mp_s = float(gpu.get("throughput_mp_s", 0.0) or 0.0)
-    hardware = hardware_result or {}
-    detected_adapters = [item for item in (hardware.get("detected_gpus") or []) if isinstance(item, dict)]
-    primary = dict(hardware.get("primary_backend") or {})
+    try: gpu = _benchmark_payload(gpu_result or {})
+    except ValueError: gpu = {}
+    gpu_mp_s = _nonnegative_number(gpu.get('throughput_mp_s'))
+    gpu_ok = gpu.get('used_gpu') is True and gpu.get('accelerated', True) is True and gpu_mp_s > 0
+    gpu_detected = gpu.get('hardware_detected') is True or gpu_ok
+    try: hardware = _benchmark_payload(hardware_result or {})
+    except ValueError: hardware = {}
+    adapters = hardware.get('detected_gpus')
+    detected_adapters = [item for item in adapters if isinstance(item, dict)] if isinstance(adapters, list) else []
+    primary = hardware.get('primary_backend')
+    primary = primary if isinstance(primary, dict) else {}
     universal_gpu_detected = bool(detected_adapters)
     primary_backend = str(primary.get("backend") or "CPU/NumPy")
     primary_vendor = str(primary.get("vendor") or "CPU")
@@ -150,7 +176,7 @@ def build_recommendation(*, scheduler_result: dict[str, Any], available_mb: int 
         gpu_device=str(gpu.get("hardware_device") or gpu.get("device") or ("CPU" if not gpu_detected else "NVIDIA GPU")),
         gpu_driver_version=str(gpu.get("driver_version") or ""),
         gpu_reason=str(gpu.get("reason") or ""),
-        cpu_score=float(scheduler_result.get("best_score", 0.0) or 0.0),
+        cpu_score=_nonnegative_number(scheduler_result.get('best_score')),
         gpu_throughput_mp_s=gpu_mp_s,
         logical_cpus=logical,
         available_ram_mb=available_mb,
@@ -161,8 +187,8 @@ def build_recommendation(*, scheduler_result: dict[str, Any], available_mb: int 
         primary_compute_backend=primary_backend,
         primary_compute_vendor=primary_vendor,
         primary_compute_device=primary_device,
-        safe_gpu_memory_mb=int(safe_gpu_memory) if isinstance(safe_gpu_memory, (int, float)) and safe_gpu_memory else None,
-        hardware_tile_size=int(hardware_tile) if isinstance(hardware_tile, (int, float)) and hardware_tile else None,
+        safe_gpu_memory_mb=_positive_integer(safe_gpu_memory),
+        hardware_tile_size=_positive_integer(hardware_tile),
     )
 
 
@@ -184,7 +210,9 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
     gpu_error = ""
     if gpu_benchmark is not None:
         try:
-            gpu_result = dict(gpu_benchmark("Auto", max(256, int(gpu_size)), "Auto", "High throughput") or {})
+            gpu_result = _benchmark_payload(gpu_benchmark("Auto", max(256, int(gpu_size)), "Auto", "High throughput") or {})
+        except InterruptedError:
+            raise
         except Exception as exc:  # CUDA is optional; fail safely to CPU.
             gpu_error = f"{type(exc).__name__}: {exc}"
             gpu_result = {"used_gpu": False, "accelerated": False, "device": "CPU", "reason": gpu_error}
@@ -192,13 +220,20 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
     hardware_result: dict[str, Any] = {}
     hardware_error = ""
     try:
-        hardware_result = run_universal_hardware_benchmark(
-            save=save, small_size=128, large_size=max(256, min(768, int(gpu_size))), repeats=2, refresh_hardware=True)
+        hardware_result = _benchmark_payload(run_universal_hardware_benchmark(
+            save=save, small_size=128, large_size=max(256, min(768, int(gpu_size))), repeats=2, refresh_hardware=True))
+    except InterruptedError:
+        raise
     except Exception as exc:
         # The tuner must remain fully usable on CPU if an optional GPU runtime
         # or vendor driver misbehaves.
         hardware_error = f"{type(exc).__name__}: {exc}"
-        hardware_result = load_hardware_profile(validate_current=True) or {}
+        try:
+            hardware_result = _benchmark_payload(load_hardware_profile(validate_current=True) or {})
+        except InterruptedError:
+            raise
+        except Exception:
+            hardware_result = {}
 
     recommendation = build_recommendation(
         scheduler_result=scheduler,

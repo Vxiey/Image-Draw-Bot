@@ -7,12 +7,15 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import zipfile
 
 from Version import APP_VERSION, FILE_VERSION, BUILD_CHANNEL
 from ReleaseCandidateHardening import run_source_release_gate, validate_windows_release
+from RuntimePaths import _replace_with_retry, atomic_write_text
 
 BASE = Path(__file__).resolve().parent
 DIST = BASE / "dist" / "ImageDrawBot"
@@ -40,17 +43,45 @@ def is_pe_executable(path: Path) -> bool:
 
 
 def zip_onedir(destination: Path) -> None:
-    if destination.exists():
-        destination.unlink()
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for path in sorted(DIST.rglob("*")):
-            if path.is_file():
+    destination = Path(destination)
+    def regular(path, directory=False):
+        info = path.lstat()
+        expected = stat.S_ISDIR if directory else stat.S_ISREG
+        if not expected(info.st_mode) or getattr(info, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C):
+            raise ValueError(f'Release distribution contains a link or non-regular entry: {path.name}')
+    def walk_error(error):
+        raise error
+    regular(DIST, directory=True)
+    files = []
+    for current, directories, names in os.walk(DIST, followlinks=False, onerror=walk_error):
+        for name in directories:
+            regular(Path(current) / name, directory=True)
+        for name in names:
+            path = Path(current) / name
+            regular(path)
+            files.append(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix='.runtime-release-', suffix='.tmp', dir=destination.parent)
+    os.close(descriptor)
+    temporary = Path(temporary)
+    try:
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            for path in sorted(files):
                 relative = Path("ImageDrawBot") / path.relative_to(DIST)
-                archive.write(path, relative.as_posix())
-    with zipfile.ZipFile(destination, "r") as archive:
-        bad=archive.testzip()
-        if bad is not None:
-            raise SystemExit(f"Release ZIP failed integrity at {bad}")
+                info = zipfile.ZipInfo(relative.as_posix(), (1980, 1, 1, 0, 0, 0))
+                info.create_system = 3
+                info.external_attr = 0o100644 << 16
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info._compresslevel = archive.compresslevel
+                with path.open('rb') as source, archive.open(info, 'w', force_zip64=True) as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
+        with zipfile.ZipFile(temporary, "r") as archive:
+            bad = archive.testzip()
+            if bad is not None:
+                raise ValueError(f"Release ZIP failed integrity at {bad}")
+        _replace_with_retry(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def find_iscc() -> Path | None:
@@ -64,11 +95,11 @@ def find_iscc() -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
-def _clean_current_release_outputs() -> None:
+def _clean_current_release_outputs(*, keep=()) -> None:
     RELEASE.mkdir(exist_ok=True)
     for pattern in (f"ImageDrawBot-{APP_VERSION}-*",):
         for path in RELEASE.glob(pattern):
-            if path.is_file():
+            if path.is_file() and path.name not in keep:
                 path.unlink()
 
 
@@ -84,7 +115,7 @@ def _write_manifest(artifacts: list[dict], *, signed=False) -> Path:
         "unsigned":not signed,
         "artifacts":artifacts,
     }
-    path.write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+    atomic_write_text(path, json.dumps(payload,indent=2,sort_keys=True,allow_nan=False)+"\n")
     return path
 
 
@@ -113,7 +144,9 @@ def main() -> int:
 
     report=run_source_release_gate(BASE,soak_cycles=5000)
     print('RC source gate: PASS', report.as_dict())
-    _clean_current_release_outputs()
+    # Failed dependency/build steps must not erase previously completed assets.
+    # The ZIP writer validates its staging file before replacing the old ZIP.
+    RELEASE.mkdir(exist_ok=True)
 
     run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
     run([sys.executable, "-m", "pip", "install", "--upgrade", "--upgrade-strategy", "eager", "-r", str(BASE / "requirements.txt")])
@@ -158,10 +191,11 @@ def main() -> int:
         artifacts.append({"name":setup.name,"type":"inno-setup","sha256":digest,"bytes":setup.stat().st_size})
 
     checksum = RELEASE / f"ImageDrawBot-{APP_VERSION}-SHA256.txt"
-    checksum.write_text("\n".join(hash_rows) + "\n", encoding="utf-8")
+    atomic_write_text(checksum, "\n".join(hash_rows) + "\n")
     manifest=_write_manifest(artifacts,signed=bool(signing))
 
     validate_windows_release(RELEASE,app_version=APP_VERSION,require_installer=args.installer,gpu=args.gpu)
+    _clean_current_release_outputs(keep={item['name'] for item in artifacts} | {checksum.name, manifest.name})
     print("RC Windows artifact gate: PASS")
     print("\nRelease artifacts:")
     for row in hash_rows:

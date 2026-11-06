@@ -45,10 +45,14 @@ def main(argv=None):
             raise ValueError('Windows returned an invalid window handle.')
         client_rect=monitor.client_rectangle(handle)
         pid=wintypes.DWORD()
-        monitor.api.GetWindowThreadProcessId(handle,ctypes.byref(pid))
+        if not monitor.api.GetWindowThreadProcessId(handle,ctypes.byref(pid)) or not pid.value:
+            raise ValueError('The target window disappeared before its process could be verified.')
+        owner_root=_handle_value(monitor.api.GetAncestor(handle,3))  # GA_ROOTOWNER, including owned dialogs.
+        if not owner_root or not monitor.api.IsWindow(owner_root):
+            raise ValueError('The target window ownership could not be verified.')
         dpi_info=monitor.dpi_info(handle)
         emit({'ok':True,'handle':int(handle_value),'rect':[int(v) for v in rect],
-              'client_rect':[int(v) for v in client_rect],'target_pid':int(pid.value),
+              'client_rect':[int(v) for v in client_rect],'target_pid':int(pid.value),'owner_root_handle':int(owner_root),
               'dpi':int(dpi_info.dpi),'dpi_source':dpi_info.source,'dpi_scale':float(dpi_info.scale),
               'monitor_rect':list(dpi_info.monitor_rect) if dpi_info.monitor_rect else None,
               'monitor_work_rect':list(dpi_info.work_rect) if dpi_info.work_rect else None})

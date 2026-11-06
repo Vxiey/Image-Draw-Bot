@@ -7,9 +7,20 @@ import os
 import subprocess
 
 from Colors import DATA_DIR
-from RuntimePaths import helper_command
+from RuntimePaths import atomic_write_text, helper_command, is_finite_number
+from LocalSanitization import sanitize_text
 
 BASE=DATA_DIR
+MAX_HELPER_LOG_CHARS = 64 * 1024
+
+
+def _helper_log_text(command, result):
+    text = sanitize_text(f'Command: {command!r}\nExit: {result.returncode}\n\nSTDOUT:\n{result.stdout or ""}\n\nSTDERR:\n{result.stderr or ""}')
+    if len(text) > MAX_HELPER_LOG_CHARS:
+        marker = '\n[long helper output truncated]\n'
+        keep = (MAX_HELPER_LOG_CHARS - len(marker)) // 2
+        text = text[:keep] + marker + text[-keep:]
+    return text
 
 
 def _window_rectangle(value):
@@ -36,6 +47,8 @@ def _describe_exit(code):
 
 
 def _run(command, timeout=8):
+    if not is_finite_number(timeout) or not 0 < timeout <= 120:
+        raise ValueError('The target-window check needs a finite timeout between zero and 120 seconds.')
     flags=getattr(subprocess,'CREATE_NO_WINDOW',0)
     try:
         result=subprocess.run(command,cwd=BASE,capture_output=True,text=True,
@@ -45,16 +58,14 @@ def _run(command, timeout=8):
         raise InterruptedError('The target-window check took too long and was stopped.') from error
     try:
         log_dir=BASE/'logs';log_dir.mkdir(parents=True,exist_ok=True)
-        (log_dir/'ImageDrawBot-target-probe.log').write_text(
-            f'Command: {command!r}\nExit: {result.returncode}\n\nSTDOUT:\n{result.stdout or ""}\n\nSTDERR:\n{result.stderr or ""}',
-            encoding='utf-8')
+        atomic_write_text(log_dir/'ImageDrawBot-target-probe.log', _helper_log_text(command, result))
     except OSError:pass
     payload=None
     for line in (result.stdout or '').splitlines():
         try:
             value=json.loads(line)
             if isinstance(value,dict):payload=value
-        except (json.JSONDecodeError,TypeError):pass
+        except (ValueError,TypeError,RecursionError):pass
     if result.returncode!=0:
         if payload and payload.get('error'):raise ValueError(payload['error'])
         raise OSError(f'The Windows target check exited unexpectedly: {_describe_exit(result.returncode)}.')
@@ -68,6 +79,9 @@ def _run(command, timeout=8):
     target_pid = payload.get('target_pid')
     if target_pid is not None and not _native_id(target_pid, 32):
         raise OSError('The Windows check returned an invalid process identifier.')
+    owner_root_handle = payload.get('owner_root_handle')
+    if owner_root_handle is not None and not _native_id(owner_root_handle, 64):
+        raise OSError('The Windows check returned an invalid owner window.')
     dpi=payload.get('dpi')
     if dpi is not None and (type(dpi) is not int or not 48<=dpi<=768):
         raise OSError('The Windows check returned invalid DPI data.')
@@ -78,14 +92,23 @@ def _run(command, timeout=8):
     monitor_rect=payload.get('monitor_rect');work_rect=payload.get('monitor_work_rect')
     return {'handle':handle,'rect':rect,'client_rect':client,
             'target_pid':target_pid,'dpi':dpi,
+            'owner_root_handle':owner_root_handle,
             'dpi_source':payload.get('dpi_source'),'dpi_scale':scale,
             'monitor_rect':_window_rectangle(monitor_rect),'monitor_work_rect':_window_rectangle(work_rect)}
 
 
 def capture_target_metadata_isolated(area,exclude_pid=None,timeout=8):
-    x,y,w,h=map(int,area)
+    if (not isinstance(area, (tuple, list)) or len(area) != 4
+            or any(type(value) is not int for value in area)):
+        raise ValueError('The target area must contain four integer coordinates/dimensions.')
+    x,y,w,h=area
+    if (w <= 0 or h <= 0 or _window_rectangle((x, y, x+w, y+h)) is None):
+        raise ValueError('The target area must have positive dimensions within Windows coordinate limits.')
+    excluded = os.getpid() if exclude_pid is None else exclude_pid
+    if not _native_id(excluded, 32):
+        raise ValueError('The excluded process identifier must be a valid process ID.')
     command=helper_command('target','--area',str(x),str(y),str(w),str(h),
-                           '--exclude-pid',str(int(exclude_pid or os.getpid())))
+                           '--exclude-pid',str(excluded))
     return _run(command,timeout)
 
 

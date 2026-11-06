@@ -5,7 +5,9 @@ Usage:
     py -3 build_exe.py --onefile  # optional single-file build
 """
 from pathlib import Path
+import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -17,12 +19,24 @@ def documentation_data(base: Path) -> list[tuple[Path, str]]:
     base = Path(base)
     docs = base / 'docs'
     data = []
-    for source in sorted(docs.rglob('*')):
-        relative = source.relative_to(docs)
-        if relative.parts[:2] == ('history', 'archives'):
-            continue
-        if source.is_file() and not source.is_symlink():
-            data.append((source, source.parent.relative_to(base).as_posix()))
+    if not docs.exists():
+        return data
+    def is_link(path):
+        info = path.lstat()
+        return stat.S_ISLNK(info.st_mode) or getattr(info, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)
+    if docs.exists() and is_link(docs):
+        raise ValueError('Bundled documentation must not be a linked directory.')
+    def walk_error(error):
+        raise error
+    for current, directories, filenames in os.walk(docs, followlinks=False, onerror=walk_error):
+        current = Path(current)
+        directories[:] = sorted(name for name in directories
+            if tuple(part.casefold() for part in (current / name).relative_to(docs).parts[:2]) != ('history', 'archives')
+            and not is_link(current / name))
+        for name in sorted(filenames):
+            source = current / name
+            if not is_link(source) and stat.S_ISREG(source.stat().st_mode):
+                data.append((source, source.parent.relative_to(base).as_posix()))
     return data
 
 
@@ -249,6 +263,10 @@ def main():
     ]
     if gpu_build:
         command.extend(['--collect-all', 'cupy', '--collect-all', 'cupyx', '--hidden-import', 'cupyx.scipy.ndimage'])
+    else:
+        # A reused builder may still have CuPy installed from a previous CUDA
+        # build. Preserve the explicit standard/CUDA variant boundary.
+        command.extend(['--exclude-module', 'cupy', '--exclude-module', 'cupyx'])
 
     # Keep the frozen application clean. Runtime-critical data above remains a
     # hard requirement; historical/help documentation here is optional and may
@@ -298,7 +316,11 @@ def main():
         subprocess.run(command, cwd=base, check=True)
 
     output = base / 'dist' / ('ImageDrawBot.exe' if onefile else 'ImageDrawBot/ImageDrawBot.exe')
-    if not output.is_file() or output.read_bytes()[:2] != b'MZ':
+    valid_header = False
+    if output.is_file():
+        with output.open('rb') as executable:
+            valid_header = executable.read(2) == b'MZ'
+    if not valid_header:
         raise SystemExit('The build did not produce a valid Windows EXE.')
 
     print('\nDone!')

@@ -28,6 +28,11 @@ def _looks_like_error(status: str) -> bool:
     text = str(status or "").strip().lower()
     if not text:
         return False
+    # These success messages carry a user-chosen filename/folder after the colon.
+    # A file named crash.png or timeout.gif must not disable the ready workspace.
+    if text.startswith(('png saved: ', 'recording saved: ', 'diagnostics package created: ',
+                        'app data: ', 'safety reports: ', 'latest safety report: ')):
+        return False
     markers = (
         "operation failed", "preflight stopped", "could not", "crash",
         "did not get the expected color", "unexpectedly", "access violation",

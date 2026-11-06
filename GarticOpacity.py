@@ -3,8 +3,8 @@
 Gartic exposes a continuous opacity control while the five brush controls are
 separate. This module keeps opacity planning read-only and fail-closed: it may
 produce a click target only when the slider-like toolbar structure is visible in
-the already verified browser/canvas screenshot. Low confidence means 100% ink
-and no opacity input.
+the already verified browser/canvas screenshot. Low confidence leaves the
+current opacity unverified and produces no opacity input.
 
 The planner intentionally prefers opaque ink for flat fills, outlines, Pixel
 Accurate and high-edge images. Reduced opacity is reserved for smooth tonal or
@@ -18,6 +18,7 @@ from math import sqrt
 from typing import Any
 
 from PIL import Image, ImageFilter, ImageStat
+from CalibrationValidation import contained_rect, screen_rect, screenshot_matches
 
 SUPPORTED = frozenset({"gartic-phone", "gartic-io"})
 OPACITY_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
@@ -31,11 +32,18 @@ def _metrics(image: Image.Image | None) -> tuple[float, float, float]:
     """Return edge density, color complexity and smooth tonal variation."""
     if not isinstance(image, Image.Image):
         return .5, .5, .0
-    rgb = image.convert("RGB")
-    w = max(32, min(160, rgb.width)); h = max(32, min(160, rgb.height))
+    if image.width < 1 or image.height < 1:
+        return .5, .5, .0
+    from ColorMatchingEngine import visible_rgb_image
+    rgb = image if image.mode == 'RGB' and 'transparency' not in image.info else visible_rgb_image(image)
+    scale = min(1.0, 160 / rgb.width, 160 / rgb.height)
+    w, h = max(1,round(rgb.width*scale)), max(1,round(rgb.height*scale))
     sample = rgb.resize((w, h), Image.Resampling.BILINEAR)
     gray = sample.convert("L")
-    edge = float(ImageStat.Stat(gray.filter(ImageFilter.FIND_EDGES)).mean[0]) / 255.0
+    edges = gray.filter(ImageFilter.FIND_EDGES)
+    # Pillow preserves border pixels for FIND_EDGES. Those pixels are not real
+    # edges in the source (a uniform white image must have zero edge density).
+    edge = float(ImageStat.Stat(edges.crop((1,1,w-1,h-1))).mean[0]) / 255.0 if w>2 and h>2 else 0.0
     palette_source = rgb.resize((w, h), Image.Resampling.NEAREST)
     palette = palette_source.quantize(colors=32, method=Image.Quantize.MEDIANCUT)
     used = sum(1 for value in palette.histogram() if value)
@@ -83,7 +91,8 @@ def choose_opacity_percent(image: Image.Image | None, *, requested: Any = "Auto"
     mode = str(drawing_mode or "")
     kind = str(source_kind or "").casefold()
 
-    if outline or "Pixel Accurate" in quality or "line" in kind:
+    opaque_required = outline or "Pixel Accurate" in quality or "line" in kind
+    if opaque_required:
         selected = 100
         reason = "hard edges/Pixel Accurate require opaque ink"
     elif style in ("Quick Sketch", "Sketch + Color Fill") and edge < .22:
@@ -115,7 +124,7 @@ def choose_opacity_percent(image: Image.Image | None, *, requested: Any = "Auto"
     # 10% is intentionally rare because repeated semi-transparent strokes are
     # highly target/background dependent. It is allowed for manual use and only
     # selected automatically for an exceptionally smooth sketch layer.
-    if style in ("Quick Sketch", "Sketch + Color Fill") and smooth >= .88 and edge <= .07:
+    if not opaque_required and style in ("Quick Sketch", "Sketch + Color Fill") and smooth >= .88 and edge <= .07:
         selected = 10
         reason = "exceptionally smooth sketch source: very light construction layer"
 
@@ -130,10 +139,13 @@ def choose_opacity_percent(image: Image.Image | None, *, requested: Any = "Auto"
 def _screen_crop(screenshot: Image.Image, client_rect, box):
     cl, ct, _, _ = map(int, client_rect)
     l, t, r, b = map(int, box)
-    local = (max(0, l-cl), max(0, t-ct), min(screenshot.width, r-cl), min(screenshot.height, b-ct))
-    if local[2] <= local[0] or local[3] <= local[1]:
+    local = (l-cl, t-ct, r-cl, b-ct)
+    if not (0 <= local[0] < local[2] <= screenshot.width and 0 <= local[1] < local[3] <= screenshot.height):
         return None
-    return screenshot.convert("RGB").crop(local)
+    patch=screenshot.crop(local)
+    if patch.mode=='RGB':return patch
+    try:return patch.convert('RGB')
+    finally:patch.close()
 
 
 def _slider_geometry(client_rect, canvas_box) -> tuple[tuple[int, int], tuple[int, int], int]:
@@ -156,22 +168,22 @@ def _slider_confidence(screenshot: Image.Image, client_rect, start, end) -> floa
         return 0.0
     radius = 13
     crop = _screen_crop(screenshot, client_rect, (sx-radius, sy-radius, ex+radius+1, sy+radius+1))
-    if crop is None or crop.width < 60 or crop.height < 15:
-        return 0.0
-    gray = crop.convert("L")
-    arr = list(gray.getdata())
-    if not arr:
-        return 0.0
-    overall_std = float(ImageStat.Stat(gray).stddev[0])
-    cy = gray.height // 2
-    center = [gray.getpixel((x, cy)) for x in range(4, gray.width-4)]
-    above_y = max(1, cy-8); below_y = min(gray.height-2, cy+8)
-    surroundings = [(gray.getpixel((x, above_y)) + gray.getpixel((x, below_y))) / 2.0
-                    for x in range(4, gray.width-4)]
-    line_contrast = sum(abs(float(a)-float(b)) for a, b in zip(center, surroundings)) / max(1, len(center))
+    if crop is None:return 0.0
+    try:
+        if crop.width < 60 or crop.height < 15:return 0.0
+        with crop.convert('L') as gray:
+            import numpy as np
+            arr = np.asarray(gray, dtype=np.float64)
+            overall_std = float(ImageStat.Stat(gray).stddev[0])
+            cy = gray.height // 2
+            center = arr[cy,4:-4]
+            above_y = max(1, cy-8); below_y = min(gray.height-2, cy+8)
+            surroundings = (arr[above_y,4:-4] + arr[below_y,4:-4]) / 2.0
+            line_contrast = float(np.mean(np.abs(center-surroundings)))
+    finally:crop.close()
     # A slider track plus handle normally has both a long horizontal contrast and
     # some local diversity. Thresholds are deliberately conservative because a
-    # false click is worse than falling back to 100%.
+    # Uncertain evidence leaves the current opacity unverified.
     confidence = _clamp((line_contrast-3.0)/18.0, 0.0, 1.0) * .70 + _clamp((overall_std-5.0)/35.0, 0.0, 1.0) * .30
     return _clamp(confidence, 0.0, 1.0)
 
@@ -201,6 +213,8 @@ class GarticOpacityPlan:
             "reason": self.reason,
             "automatic": bool(self.automatic),
             "image_metrics": dict(self.image_metrics),
+            "control_verified": self.target_position is not None and self.confidence >= .58,
+            "opacity_state_verified": False,
         }
 
 
@@ -219,20 +233,22 @@ def plan_gartic_opacity(profile_key: str, screenshot: Image.Image | None, client
     if key not in SUPPORTED:
         return GarticOpacityPlan(key, request, selected, None, None, None, 0.0,
                                  "unsupported opacity target", bool(decision["automatic"]), metrics)
-    if selected >= 100:
-        # 100% is the fail-safe default. No UI click is necessary unless a future
-        # runtime has evidence the target was left at a different opacity.
-        return GarticOpacityPlan(key, request, 100, None, None, None, 1.0,
-                                 str(decision["reason"]), bool(decision["automatic"]), metrics)
     if not isinstance(screenshot, Image.Image) or not (isinstance(canvas_box, (tuple, list)) and len(canvas_box) == 4):
         return GarticOpacityPlan(key, request, 100, None, None, None, 0.0,
-                                 str(decision["reason"]) + "; slider geometry unavailable, fail-safe 100%",
+                                 str(decision["reason"]) + "; slider geometry unavailable; current opacity is unverified",
                                  bool(decision["automatic"]), metrics)
+    try:
+        client_rect=screen_rect(client_rect)
+        canvas_box=contained_rect(canvas_box,client_rect)
+        screenshot_matches(screenshot,client_rect)
+    except ValueError:
+        return GarticOpacityPlan(key, request, 100, None, None, None, 0.0,
+                                 'Target geometry changed; current opacity is unverified',bool(decision['automatic']),metrics)
     start, end, y = _slider_geometry(client_rect, canvas_box)
     confidence = _slider_confidence(screenshot, client_rect, start, end)
     if confidence < .58:
         return GarticOpacityPlan(key, request, 100, None, start, end, confidence,
-                                 str(decision["reason"]) + "; opacity slider not visually verified, fail-safe 100%",
+                                 str(decision["reason"]) + "; opacity slider unavailable; current opacity is unverified",
                                  bool(decision["automatic"]), metrics)
     # Gartic's track is treated as 0..100; our public choices are 10..100.
     ratio = _clamp(selected / 100.0, .10, 1.0)

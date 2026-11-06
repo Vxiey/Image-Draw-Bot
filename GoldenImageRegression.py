@@ -13,6 +13,8 @@ clean checkout without bundling personal data.
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from copy import deepcopy
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Callable, Iterable
 import json
@@ -164,22 +166,28 @@ def _case_filename(case: GoldenCase) -> str:
     return f"{case.name}.png"
 
 
-def ensure_local_golden_images(directory: str | Path | None = None, *, overwrite: bool = False) -> dict[str, Any]:
+def ensure_local_golden_images(directory: str | Path | None = None, *, overwrite: bool = False,
+                               cases: Iterable[GoldenCase] = GOLDEN_CASES, cancelled=lambda:False) -> dict[str, Any]:
     """Create/refresh the local golden PNGs and manifest.
 
     The images are generated synthetic fixtures, not user uploads. Existing PNGs
     are left untouched by default to make local diffs explicit.
     """
+    if cancelled():raise InterruptedError('Golden image regression cancelled.')
     root = Path(directory) if directory is not None else DEFAULT_OUTPUT_DIR
     root.mkdir(parents=True, exist_ok=True)
     rows = []
-    for case in GOLDEN_CASES:
+    for case in cases:
+        if cancelled():raise InterruptedError('Golden image regression cancelled.')
         path = root / _case_filename(case)
-        if overwrite or not path.is_file():
-            image = case.factory().convert("RGBA")
-            image.save(path, "PNG", optimize=True)
+        with closing(case.factory()) as image:
+            if cancelled():raise InterruptedError('Golden image regression cancelled.')
+            if overwrite or not path.is_file():
+                with closing(image.convert('RGBA')) as rgba:
+                    rgba.save(path, 'PNG', optimize=True)
+            size=image.size
         row = case.manifest_row()
-        row.update({"file": path.name, "width": case.factory().width, "height": case.factory().height})
+        row.update({"file": path.name, "width": size[0], "height": size[1]})
         rows.append(row)
     manifest = {
         "version": VERSION,
@@ -191,6 +199,7 @@ def ensure_local_golden_images(directory: str | Path | None = None, *, overwrite
         "description": "Synthetic Image Draw Bot golden-image regression fixtures.",
         "cases": rows,
     }
+    if cancelled():raise InterruptedError('Golden image regression cancelled.')
     atomic_write_text(root / "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
     return {"directory": str(root), "manifest": str(root / "manifest.json"), "case_count": len(rows), "cases": rows}
 
@@ -199,17 +208,18 @@ def load_golden_image(case: GoldenCase, directory: str | Path | None = None) -> 
     root = Path(directory) if directory is not None else DEFAULT_OUTPUT_DIR
     path = root / _case_filename(case)
     if path.is_file():
-        return Image.open(path).convert("RGBA")
+        with closing(Image.open(path)) as image:return image.convert('RGBA')
     packaged = resource_path("golden-regression") / _case_filename(case)
     if packaged.is_file():
-        return Image.open(packaged).convert("RGBA")
-    return case.factory().convert("RGBA")
+        with closing(Image.open(packaged)) as image:return image.convert('RGBA')
+    with closing(case.factory()) as image:return image.convert('RGBA')
 
 
 def _num(value: Any, default: float | None = None) -> float | None:
+    if isinstance(value,bool):return default
     try:
         out = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     return out if math.isfinite(out) else default
 
@@ -232,13 +242,14 @@ def _delta_e_meta(plan: dict[str, Any]) -> dict[str, Any]:
     return acc if isinstance(acc, dict) else {}
 
 
-def _draw_seconds(plan: dict[str, Any]) -> float:
+def _draw_seconds(plan: dict[str, Any]) -> float | None:
     timing = plan.get("draw_time_estimate") if isinstance(plan, dict) else {}
     if isinstance(timing, dict):
         value = _num(timing.get("projected_seconds"), None)
-        if value is not None:
+        if value is not None and value>=0:
             return value
-    return _num(plan.get("estimate") if isinstance(plan, dict) else None, 0.0) or 0.0
+    value=_num(plan.get('estimate') if isinstance(plan,dict) else None)
+    return value if value is not None and value>=0 else None
 
 
 def _pass_fail(row: dict[str, Any], case: GoldenCase) -> tuple[bool, list[str]]:
@@ -248,22 +259,24 @@ def _pass_fail(row: dict[str, Any], case: GoldenCase) -> tuple[bool, list[str]]:
     hue = _num(row.get("hue_accuracy_percent"), None)
     coverage = _num(row.get("coverage_percent"), None)
     p95 = _num(row.get("p95_delta_e_oklab"), None)
-    estimated = _num(row.get("estimated_draw_seconds"), 0.0) or 0.0
-    usable = _num(row.get("usable_seconds"), case.time_budget_seconds) or float(case.time_budget_seconds)
-    if visual is None or visual < case.min_visual_accuracy_percent:
+    estimated = _num(row.get("estimated_draw_seconds"))
+    usable = _num(row.get("usable_seconds"))
+    if visual is None or not case.min_visual_accuracy_percent<=visual<=100:
         failures.append(f"visual {visual if visual is not None else 'n/a'} < {case.min_visual_accuracy_percent}")
-    if color is None or color < case.min_perceptual_color_accuracy_percent:
+    if color is None or not case.min_perceptual_color_accuracy_percent<=color<=100:
         failures.append(f"perceptual {color if color is not None else 'n/a'} < {case.min_perceptual_color_accuracy_percent}")
-    if case.min_hue_accuracy_percent is not None and (hue is None or hue < case.min_hue_accuracy_percent):
+    if case.min_hue_accuracy_percent is not None and (hue is None or not case.min_hue_accuracy_percent<=hue<=100):
         failures.append(f"hue {hue if hue is not None else 'n/a'} < {case.min_hue_accuracy_percent}")
-    if case.min_coverage_percent is not None and (coverage is None or coverage < case.min_coverage_percent):
+    if case.min_coverage_percent is not None and (coverage is None or not case.min_coverage_percent<=coverage<=100):
         failures.append(f"coverage {coverage if coverage is not None else 'n/a'} < {case.min_coverage_percent}")
-    if case.max_p95_delta_e_oklab is not None and p95 is not None and p95 > case.max_p95_delta_e_oklab:
-        failures.append(f"p95 ΔE {p95:.3f} > {case.max_p95_delta_e_oklab:.3f}")
-    if estimated > usable * case.max_estimated_draw_seconds_ratio:
+    if case.max_p95_delta_e_oklab is not None and (p95 is None or not 0<=p95<=case.max_p95_delta_e_oklab):
+        failures.append(f"p95 ΔE {p95 if p95 is not None else 'n/a'} outside required range 0..{case.max_p95_delta_e_oklab:.3f}")
+    if estimated is None or estimated<0 or usable is None or usable<=0:
+        failures.append('finite estimated draw time and positive usable budget are required')
+    elif estimated > usable * case.max_estimated_draw_seconds_ratio:
         failures.append(f"time {estimated:.1f}s > {usable * case.max_estimated_draw_seconds_ratio:.1f}s")
-    if case.requires_correction_safe and row.get("correction_safe") is False:
-        failures.append("correction marked unsafe")
+    if case.requires_correction_safe and row.get("correction_safe") is not True:
+        failures.append("correction safety was not verified")
     return not failures, failures
 
 
@@ -274,14 +287,16 @@ def run(make_plan: Callable[..., dict], base_options: dict[str, Any] | None = No
         cancelled: Callable[[], bool] = lambda: False,
         ensure_assets: bool = True) -> dict[str, Any]:
     """Run the golden-image regression suite through the supplied planner."""
+    if cancelled():raise InterruptedError('Golden image regression cancelled.')
+    cases=tuple(cases)
     if ensure_assets:
-        ensure_local_golden_images(directory)
+        ensure_local_golden_images(directory,cases=cases,cancelled=cancelled)
     rows = []
     started_all = time.monotonic()
     for case in cases:
         if cancelled():
             raise InterruptedError("Golden image regression cancelled.")
-        options = dict(base_options or {})
+        options = deepcopy(base_options or {})
         options.update({
             "_preview_plan": True,
             "_preview_mode": "Golden image regression",
@@ -294,23 +309,25 @@ def run(make_plan: Callable[..., dict], base_options: dict[str, Any] | None = No
             "draw_quality": options.get("draw_quality", "Pixel Accurate"),
             "color_fidelity": options.get("color_fidelity", "Faithful"),
         })
-        image = load_golden_image(case, directory)
-        started = time.monotonic()
-        plan = make_plan(image, tuple(target_area), options, cancelled)
-        elapsed = time.monotonic() - started
+        with closing(load_golden_image(case, directory)) as image:
+            started = time.monotonic()
+            plan = make_plan(image, tuple(target_area), options, cancelled)
+            elapsed = time.monotonic() - started
+        if cancelled():raise InterruptedError('Golden image regression cancelled.')
         acc = _accuracy_meta(plan)
         de = _delta_e_meta(plan)
         plan_options = plan.get("options") if isinstance(plan, dict) and isinstance(plan.get("options"), dict) else {}
-        usable = _num(plan_options.get("deadline_render_budget_seconds"), case.time_budget_seconds) or float(case.time_budget_seconds)
+        usable = _num(plan_options.get("deadline_render_budget_seconds",case.time_budget_seconds))
+        estimate=_draw_seconds(plan)
         correction = plan_options.get("post_draw_correction_meta") if isinstance(plan_options.get("post_draw_correction_meta"), dict) else {}
         row = {
             "case": case.name,
             "description": case.description,
             "target_seconds": int(case.time_budget_seconds),
-            "usable_seconds": round(float(usable), 3),
+            "usable_seconds": None if usable is None else round(usable, 3),
             "planning_seconds": round(elapsed, 4),
             "planned_paths": int(plan.get("count", 0) or 0) if isinstance(plan, dict) else 0,
-            "estimated_draw_seconds": round(_draw_seconds(plan), 3),
+            "estimated_draw_seconds": None if estimate is None else round(estimate, 3),
             "visual_accuracy_percent": acc.get("visual_accuracy_percent"),
             "source_pixel_accuracy_percent": acc.get("source_pixel_accuracy_percent"),
             "perceptual_color_accuracy_percent": acc.get("perceptual_color_accuracy_percent"),
@@ -321,7 +338,7 @@ def run(make_plan: Callable[..., dict], base_options: dict[str, Any] | None = No
             "plan_execution_accuracy_percent": acc.get("plan_execution_accuracy_percent"),
             "mean_delta_e_oklab": de.get("mean_delta_e_oklab"),
             "p95_delta_e_oklab": de.get("p95_delta_e_oklab"),
-            "correction_safe": None if not correction else bool(correction.get("safe", True)),
+            "correction_safe": correction.get('safe') if type(correction.get('safe')) is bool else None,
             "privacy": "synthetic fixture only; no user image stored",
         }
         passed, failures = _pass_fail(row, case)
@@ -339,7 +356,7 @@ def run(make_plan: Callable[..., dict], base_options: dict[str, Any] | None = No
         "case_count": len(rows),
         "passed_count": passed_count,
         "failed_count": len(rows) - passed_count,
-        "passed": passed_count == len(rows),
+        "passed": bool(rows) and passed_count == len(rows),
         "total_seconds": round(time.monotonic() - started_all, 4),
         "rows": rows,
     }
@@ -354,8 +371,8 @@ def format_result(result: dict[str, Any]) -> str:
         visual = row.get("visual_accuracy_percent")
         color = row.get("perceptual_color_accuracy_percent")
         hue = row.get("hue_accuracy_percent")
-        estimate = _num(row.get("estimated_draw_seconds"), 0.0) or 0.0
-        usable = _num(row.get("usable_seconds"), 0.0) or 0.0
+        estimate = _num(row.get("estimated_draw_seconds"))
+        usable = _num(row.get("usable_seconds"))
         metrics = []
         if visual is not None:
             metrics.append(f"visual {float(visual):.1f}%")
@@ -363,7 +380,9 @@ def format_result(result: dict[str, Any]) -> str:
             metrics.append(f"color {float(color):.1f}%")
         if hue is not None:
             metrics.append(f"hue {float(hue):.1f}%")
-        metrics.append(f"time {estimate:.1f}s/{usable:.0f}s")
+        estimate_label='n/a' if estimate is None else f'{estimate:.1f}s'
+        usable_label='n/a' if usable is None else f'{usable:.0f}s'
+        metrics.append(f"time {estimate_label}/{usable_label}")
         line = f"{row.get('case')} {status} · " + " · ".join(metrics)
         if row.get("failures"):
             line += " · " + "; ".join(map(str, row.get("failures") or []))

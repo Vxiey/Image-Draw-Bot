@@ -311,9 +311,24 @@ def benchmark_allocation(cpu_workers: str = "Auto", cpu_engine: str = "Auto",
             "benchmark_checksum": checksum}
 
 
-def parallel_map(function: Callable[[_T], _U], tasks: Sequence[_T], *, backend: str, workers: int) -> list[_U]:
+def parallel_map(function: Callable[[_T], _U], tasks: Sequence[_T], *, backend: str, workers: int,
+                 cancelled: Callable[[], bool] | None = None) -> list[_U]:
+    """Ordered, bounded submission with cooperative cancellation while waiting.
+
+    Queued work is cancelled promptly; already-running tasks finish during
+    executor shutdown. This does not attempt to kill native worker threads.
+    """
+    def check_cancelled():
+        if cancelled is not None and cancelled():
+            raise InterruptedError('Parallel planning cancelled.')
+    check_cancelled()
     if backend == "serial" or workers <= 1 or len(tasks) <= 1:
-        return [function(task) for task in tasks]
+        result = []
+        for task in tasks:
+            check_cancelled()
+            result.append(function(task))
+            check_cancelled()
+        return result
     executor_cls = ProcessPoolExecutor if backend == "processes" else ThreadPoolExecutor
     workers = min(len(tasks), max(1, int(workers)))
     if backend == 'processes' and sys.platform == 'win32':
@@ -321,22 +336,43 @@ def parallel_map(function: Callable[[_T], _U], tasks: Sequence[_T], *, backend: 
     pending = deque()
     iterator = iter(tasks)
     result = []
+    current = None
     with executor_cls(max_workers=workers) as executor:
         try:
             for _ in range(workers * 2):
+                check_cancelled()
                 try:
                     task = next(iterator)
                 except StopIteration:
                     break
                 pending.append(executor.submit(function, task))
             while pending:
-                result.append(pending.popleft().result())
+                check_cancelled()
+                current = pending.popleft()
+                if cancelled is None:
+                    value = current.result()
+                else:
+                    while True:
+                        check_cancelled()
+                        try:
+                            value = current.result(timeout=.05)
+                            break
+                        except TimeoutError:
+                            # A worker can itself raise TimeoutError; do not
+                            # mistake a completed failed task for a wait timeout.
+                            if current.done():
+                                raise
+                current = None
+                check_cancelled()
+                result.append(value)
                 try:
                     task = next(iterator)
                 except StopIteration:
                     continue
                 pending.append(executor.submit(function, task))
         finally:
+            if current is not None and cancelled is not None:
+                current.cancel()
             for future in pending:
                 future.cancel()
     return result

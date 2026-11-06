@@ -8,6 +8,7 @@ server/app stops.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 import ipaddress
@@ -22,6 +23,7 @@ from urllib.parse import urlsplit
 MOBILE_PREVIEW_MAX_DIMENSION = 1600
 MOBILE_PREVIEW_MAX_CLIENTS = 12
 MOBILE_PREVIEW_CLIENT_TIMEOUT = 5.0
+MOBILE_PREVIEW_HEADER_DEADLINE = 5.0
 _PRIVATE_NETWORKS = tuple(ipaddress.IPv4Network(value) for value in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'))
 
 
@@ -104,20 +106,34 @@ class _PreviewHTTPServer(ThreadingHTTPServer):
 def _image_png_bytes(image) -> Optional[bytes]:
     if image is None:
         return None
-    copy = image.convert('RGBA')
-    if max(copy.size) > MOBILE_PREVIEW_MAX_DIMENSION:
-        ratio = MOBILE_PREVIEW_MAX_DIMENSION / float(max(copy.size))
-        target = (max(1, round(copy.width * ratio)), max(1, round(copy.height * ratio)))
-        from PIL import Image
-        copy = copy.resize(target, Image.Resampling.LANCZOS)
+    from PIL import Image
+    target = None
+    if max(image.size) > MOBILE_PREVIEW_MAX_DIMENSION:
+        ratio = MOBILE_PREVIEW_MAX_DIMENSION / float(max(image.size))
+        target = (max(1, round(image.width * ratio)), max(1, round(image.height * ratio)))
+    if target is not None and image.mode in ('RGB', 'L') and 'transparency' not in image.info:
+        # Opaque sources do not need a full-size RGBA conversion before reduction.
+        # Alpha/color-key sources retain the original premultiplied-alpha path.
+        with closing(image.resize(target, Image.Resampling.LANCZOS)) as reduced:
+            copy = reduced.convert('RGBA')
+    else:
+        copy = image.convert('RGBA')
+        if target is not None:
+            previous = copy
+            try:
+                copy = previous.resize(target, Image.Resampling.LANCZOS)
+            finally:
+                previous.close()
     # Flatten transparency because phone browsers can otherwise show a black
     # background depending on theme/rendering path.
-    from PIL import Image
-    background = Image.new('RGBA', copy.size, 'white')
-    background.alpha_composite(copy)
-    out = BytesIO()
-    background.convert('RGB').save(out, format='PNG', optimize=True)
-    return out.getvalue()
+    try:
+        with closing(Image.new('RGBA', copy.size, 'white')) as background:
+            background.alpha_composite(copy)
+            with closing(background.convert('RGB')) as flattened, BytesIO() as out:
+                flattened.save(out, format='PNG', optimize=True)
+                return out.getvalue()
+    finally:
+        copy.close()
 
 
 @dataclass(frozen=True)
@@ -225,19 +241,55 @@ class MobilePreviewServer:
             server_version = 'ImageDrawBotMobilePreview/1.0'
             sys_version = ''
 
+            def setup(self):
+                super().setup()
+                # Socket timeouts limit inactivity, not a client continuously
+                # trickling an unfinished header. Bound the whole header phase.
+                self._header_timer = threading.Timer(MOBILE_PREVIEW_HEADER_DEADLINE, self._expire_headers)
+                self._header_timer.daemon = True
+                self._header_timer.start()
+
+            def _expire_headers(self):
+                try:
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+            def parse_request(self):
+                try:
+                    return super().parse_request()
+                finally:
+                    self._header_timer.cancel()
+
+            def finish(self):
+                self._header_timer.cancel()
+                try:
+                    super().finish()
+                except OSError:
+                    pass
+
+            def handle_one_request(self):
+                try:
+                    super().handle_one_request()
+                except OSError:
+                    self.close_connection = True
+
             def log_message(self, _format, *_args):
                 return
 
             def _send(self, code: int, content_type: str, body: bytes):
-                self.send_response(code)
-                self.send_header('Content-Type', content_type)
-                self.send_header('Content-Length', str(len(body)))
-                self.send_header('Cache-Control', 'no-store, max-age=0')
-                self.send_header('X-Content-Type-Options', 'nosniff')
-                self.send_header('Referrer-Policy', 'no-referrer')
-                self.end_headers()
-                if self.command != 'HEAD':
-                    self.wfile.write(body)
+                try:
+                    self.send_response(code)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.send_header('Cache-Control', 'no-store, max-age=0')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.send_header('Referrer-Policy', 'no-referrer')
+                    self.end_headers()
+                    if self.command != 'HEAD':
+                        self.wfile.write(body)
+                except OSError:
+                    self.close_connection = True
 
             def do_HEAD(self):
                 self.do_GET()
@@ -247,7 +299,11 @@ class MobilePreviewServer:
                 if not _is_local_client(client_ip):
                     self._send(403, 'text/plain; charset=utf-8', b'Local network access only')
                     return
-                path = urlsplit(self.path).path
+                try:
+                    path = urlsplit(self.path).path
+                except ValueError:
+                    self._send(400, 'text/plain; charset=utf-8', b'Invalid request target')
+                    return
                 prefix = f'/{session_token}/'
                 if not path.startswith(prefix):
                     self._send(404, 'text/plain; charset=utf-8', b'Not found')
@@ -287,8 +343,8 @@ class MobilePreviewServer:
         self._token = session_token
         self._port = int(server.server_address[1])
         self._addresses = addresses
-        self._thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .1}, name='mobile-preview', daemon=True)
         try:
+            self._thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .1}, name='mobile-preview', daemon=True)
             self._thread.start()
         except BaseException:
             server.server_close()

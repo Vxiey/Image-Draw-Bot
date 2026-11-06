@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from CompletedDrawLearning import has_completed_drawing_work
 from ProfileStorage import profile_auto_tuner_feedback_file, safe_profile_key
 from RuntimePaths import atomic_write_text, file_transaction, is_finite_number, read_json
 
@@ -281,6 +282,8 @@ def record_completed_feedback(plan: dict[str, Any], actual_seconds: float, *, co
         return {"recorded": False, "reason": "Auto tuner inactive"}
     if bool(options.get("test_run")) or bool(options.get("dry_run_sampled")) or options.get("render_resume_state"):
         return {"recorded": False, "reason": "test/dry-run/resume sample"}
+    if not has_completed_drawing_work(options, completed_paths):
+        return {"recorded": False, "reason": "no completed drawing work"}
     actual = _finite(actual_seconds, 0.0)
     if actual < 1.0:
         return {"recorded": False, "reason": "sample too small"}
@@ -289,8 +292,15 @@ def record_completed_feedback(plan: dict[str, Any], actual_seconds: float, *, co
     predicted = _finite(draw_time.get("projected_seconds", plan.get("estimate")), 0.0)
     if predicted < 1.0:
         return {"recorded": False, "reason": "missing predicted time"}
-    source_kind = str((tuner.get("source_features") or {}).get("source_kind") or "unknown")
-    strategy = str(tuner.get("selected_strategy") or "unknown")
+    source_features = tuner.get('source_features')
+    source_features = source_features if isinstance(source_features, dict) else {}
+    source_kind = str(source_features.get("source_kind") or "unknown")
+    selected_strategy = str(tuner.get("selected_strategy") or "unknown")
+    base_strategy = tuner.get('base_strategy')
+    # The next tuning decision reads the base policy's context. Feed adjusted
+    # outcomes back into that context, while keeping rescue strategies separate.
+    strategy = (base_strategy if isinstance(base_strategy, str) and base_strategy
+                and selected_strategy.startswith(base_strategy + '+feedback-') else selected_strategy)
     usable = _usable_deadline(plan)
     dim = _context_dimensions(options, source_kind, strategy, usable)
     key = _context_key(dim)
@@ -354,6 +364,7 @@ def record_completed_feedback(plan: dict[str, Any], actual_seconds: float, *, co
             "last_deadline_met": bool(deadline_pass),
             "last_accepted": bool(accepted),
             "last_result_source": result_source,
+            "last_selected_strategy": selected_strategy,
             "last_result_visual_percent": None if result_visual is None else round(float(result_visual), 3),
             "last_plan_visual_percent": None if planned_visual is None else round(float(planned_visual), 3),
             "last_actual_snapshot_visual_percent": None if not snapshot.get("available") else round(float(snapshot.get("visual")), 3),
@@ -400,7 +411,8 @@ def record_completed_feedback(plan: dict[str, Any], actual_seconds: float, *, co
 
         return {
             "recorded": True, "profile_key": dim["profile_key"], "context_key": key,
-            "samples": item["samples"], "strategy": strategy, "source_kind": source_kind,
+            "samples": item["samples"], "strategy": strategy, "selected_strategy": selected_strategy,
+            "source_kind": source_kind,
             "budget_class": dim["budget_class"], "predicted_seconds": round(predicted, 3),
             "actual_seconds": round(actual, 3), "time_ratio": round(ratio, 4),
             "deadline_met": bool(deadline_pass), "accepted": bool(accepted),

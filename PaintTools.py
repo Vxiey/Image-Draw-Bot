@@ -10,8 +10,9 @@ import json
 import tempfile
 from pathlib import Path
 
-from RuntimePaths import data_dir
+from RuntimePaths import data_dir, read_json, atomic_write_text
 from CalibrationAnchors import validate_anchor, resolve_point
+from CalibrationValidation import finite_confidence,point_in_rect
 
 LEGACY_TOOL_FILE = data_dir() / 'paint-tools.json'
 TOOL_FILE = data_dir() / 'paint-tools-microsoft-paint.json'
@@ -29,7 +30,7 @@ def _point(value, label):
 
 
 def validate_tool_calibration(data):
-    if not isinstance(data, dict) or data.get('version') not in (1,2,3):
+    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] not in (1,2,3):
         raise ValueError('Invalid Paint tool calibration. Recalibrate Paint tools.')
     version=data['version']
     tools=data.get('tools')
@@ -58,7 +59,7 @@ def validate_tool_calibration(data):
             for key in ('method','layout_signature'):
                 if isinstance(auto.get(key),str):clean_auto[key]=auto[key]
             conf=auto.get('confidence')
-            if isinstance(conf,(int,float)):clean_auto['confidence']=max(0.0,min(1.0,float(conf)))
+            if conf is not None:clean_auto['confidence']=finite_confidence(conf)
             detected=auto.get('detected')
             if isinstance(detected,list):clean_auto['detected']=[str(x) for x in detected[:16]]
             if clean_auto:clean['auto']=clean_auto
@@ -70,19 +71,14 @@ def load_tool_calibration(path=TOOL_FILE):
     source=path
     if path==TOOL_FILE and not path.exists() and LEGACY_TOOL_FILE.exists():
         source=LEGACY_TOOL_FILE
-    data=json.loads(source.read_text(encoding='utf-8'))
+    data=read_json(source,max_bytes=128*1024,max_items=2000)
     clean=validate_tool_calibration(data)
     # Safe one-time migration of the dedicated Paint calibration. No other
     # profile reads either filename.
     if source==LEGACY_TOOL_FILE and path==TOOL_FILE and clean.get('version',0)>=2:
         try:
-            path.parent.mkdir(parents=True,exist_ok=True)
-            with tempfile.NamedTemporaryFile('w',encoding='utf-8',delete=False,dir=path.parent,suffix='.tmp') as handle:
-                tmp=Path(handle.name);json.dump(clean,handle,ensure_ascii=False,indent=2);handle.flush()
-            tmp.replace(path)
-        except OSError:
-            try:tmp.unlink(missing_ok=True)
-            except Exception:pass
+            atomic_write_text(path,json.dumps(clean,ensure_ascii=False,indent=2,allow_nan=False))
+        except OSError:pass
     return clean
 
 
@@ -101,21 +97,17 @@ def save_tool_calibration(tools, opacity_100=None, path=TOOL_FILE, *, anchor=Non
     if opacity_100 is not None:data['opacity_100']=list(_point(opacity_100,'100% opacity'))
     if auto is not None:data['auto']=dict(auto)
     clean=validate_tool_calibration(data)
-    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
-    temporary=None
-    try:
-        with tempfile.NamedTemporaryFile('w',encoding='utf-8',delete=False,dir=path.parent,suffix='.tmp') as handle:
-            temporary=Path(handle.name);json.dump(clean,handle,ensure_ascii=False,indent=2);handle.flush()
-        temporary.replace(path)
-    finally:
-        if temporary is not None:temporary.unlink(missing_ok=True)
+    atomic_write_text(Path(path),json.dumps(clean,ensure_ascii=False,indent=2,allow_nan=False))
     return clean
 
 
 def _resolve(value,data,current_client_rect,label):
     if current_client_rect is None:
         raise ValueError('The current Paint window geometry is unavailable. Select the drawing area again.')
-    return resolve_point(value,data['anchor'],current_client_rect)
+    point=resolve_point(value,data['anchor'],current_client_rect)
+    if not point_in_rect(point,current_client_rect):
+        raise ValueError(f'The calibrated Paint {label} is outside the current client. Recalibrate Paint tools.')
+    return point
 
 
 def _auto_tool(data):

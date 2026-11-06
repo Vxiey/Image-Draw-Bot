@@ -114,12 +114,16 @@ def collect_source_gate_errors(root: Path, *, app_version: str, file_version: st
         errors.append("source tree: temporary one-shot files are present: " + ", ".join(one_shot_files[:12]))
 
     major, minor, patch = _version_tuple(file_version)
+    base_version = app_version.split('-', 1)[0]
+    if base_version != file_version:
+        errors.append('Version.py: APP_VERSION base must match FILE_VERSION.')
     _assert_contains(version_info, f"filevers=({major},{minor},{patch},0)", "version_info", errors)
     _assert_contains(version_info, f"prodvers=({major},{minor},{patch},0)", "version_info", errors)
     _assert_contains(version_info, f"StringStruct('FileVersion', '{file_version}')", "version_info", errors)
     _assert_contains(version_info, f"StringStruct('ProductVersion', '{file_version}')", "version_info", errors)
 
     _assert_contains(installer, f'#define MyAppVersion "{app_version}"', "installer", errors)
+    _assert_contains(installer, f'VersionInfoVersion={major}.{minor}.{patch}.0', 'installer', errors)
     _assert_contains(installer, "AppId={{6A4AD303-4F16-4ED7-A9AF-5B912352D83E}", "installer", errors)
     _assert_contains(installer, "PrivilegesRequired=lowest", "installer", errors)
 
@@ -317,19 +321,19 @@ def validate_windows_zip(path: Path) -> dict:
         raise ReleaseGateError(f"Windows ZIP is missing: {path}")
     with zipfile.ZipFile(path, "r") as archive:
         _validate_zip_entries(archive.infolist())
-        bad = archive.testzip()
-        if bad:
-            raise ReleaseGateError(f"Windows ZIP integrity failed at {bad}")
         names = archive.namelist()
         exe_name = next((name for name in names if name.replace("\\", "/") == "ImageDrawBot/ImageDrawBot.exe"), None)
         if not exe_name:
             raise ReleaseGateError("Windows ZIP is missing ImageDrawBot/ImageDrawBot.exe")
-        with archive.open(exe_name) as executable:
-            if executable.read(2) != b"MZ":
-                raise ReleaseGateError("Packaged ImageDrawBot.exe is not a PE executable")
         leaked = [name for name in names if _forbidden_archive_name(name)]
         if leaked:
             raise ReleaseGateError("Runtime/source-only files leaked into Windows ZIP: " + ", ".join(leaked[:8]))
+        with archive.open(exe_name) as executable:
+            if executable.read(2) != b"MZ":
+                raise ReleaseGateError("Packaged ImageDrawBot.exe is not a PE executable")
+        bad = archive.testzip()
+        if bad:
+            raise ReleaseGateError(f"Windows ZIP integrity failed at {bad}")
     return {"path": str(path), "sha256": _sha256(path), "entries": len(names), "integrity": "PASS"}
 
 

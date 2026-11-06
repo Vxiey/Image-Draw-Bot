@@ -1,0 +1,320 @@
+{
+  "after_source_sha256": {
+    "CanvasGuard": "90d5b27143f2660be9190082eb8213fd8ad5556ff47e9fcae904dcb97012a46a",
+    "PostDrawCorrectionPass": "feed833db09e308fd0852b36e55d591b3f2848f17d5c65fb96787794675943fd",
+    "PreviewDetailEngine": "4a9375df0134f46fc35aade59f6e01ab313960eb529af4dae7c96761e12805e1",
+    "SafetyDebugOverlay": "ca10ce8c81304a463d1c3b72dabc566f3321a140ff83e5d84192c47696ddece5",
+    "VisualVerification": "7d94b9966b1d67a4953d9dbaacbec812abf0be5514a5411b3db5d9518853dce4"
+  },
+  "baseline": "1c09774ad22088c5c30a8f8220b6b451fdee9659",
+  "detail_repeats": 3,
+  "measurements": {
+    "correction64x64_palette256_one_active": {
+      "after_median_ms": 33.78118199907476,
+      "after_peak_python_bytes": 8903118,
+      "after_samples_ms": [
+        33.78118199907476,
+        34.01673999906052,
+        33.81318899846519,
+        34.471861999918474,
+        31.271703002857976,
+        33.458915000665,
+        31.106047998036956
+      ],
+      "before_median_ms": 33.269224000832764,
+      "before_peak_python_bytes": 17238814,
+      "before_samples_ms": [
+        33.269224000832764,
+        33.0065870002727,
+        33.932435002498096,
+        35.490647998813074,
+        33.86183099792106,
+        33.05667100357823,
+        32.4908239999786
+      ],
+      "exact_execution_group_parity": true,
+      "parameters": {
+        "actual": "64x64 RGB white",
+        "max_area_fraction": 1,
+        "max_paths": 10000,
+        "max_pixels": 4096,
+        "options": {
+          "brush_px": 1,
+          "gpu_mode": "CPU"
+        },
+        "palette": "black then 255 white entries",
+        "post_draw_meta": {
+          "actual_coverage_percent": 0.0,
+          "available": true,
+          "feedback_trust": "high",
+          "trusted": true,
+          "visual_accuracy_percent": 60.0
+        },
+        "source": "64x64 RGB black"
+      },
+      "selected_pixels_after": 4096,
+      "selected_pixels_before": 4096
+    },
+    "debug_sample_100000_points_limit80": {
+      "after_median_ms": 0.05899700045119971,
+      "after_peak_python_bytes": 1560,
+      "after_samples_ms": [
+        0.06127099914010614,
+        0.06175200178404339,
+        0.05899700045119971,
+        0.059939000493614,
+        0.058966998039977625,
+        0.05530199996428564,
+        0.055762000556569546
+      ],
+      "before_median_ms": 40.926207999291364,
+      "before_peak_python_bytes": 9720864,
+      "before_samples_ms": [
+        40.57978499986348,
+        42.637357000785414,
+        41.68936600035522,
+        40.963272000226425,
+        40.926207999291364,
+        38.13181599980453,
+        38.58431600019685
+      ],
+      "exact_sample_parity": true,
+      "parameters": {
+        "limit": 80,
+        "point": "(i,i%61)",
+        "points": 100000
+      }
+    },
+    "detail_rgba4000x2000_to240x120": {
+      "after_median_ms": 174.41238700121175,
+      "after_peak_python_bytes": 7956731,
+      "after_samples_ms": [
+        174.41238700121175,
+        180.73467800059007,
+        164.23784799917485
+      ],
+      "before_median_ms": 166.39522700279485,
+      "before_peak_python_bytes": 7957400,
+      "before_samples_ms": [
+        164.76834300192422,
+        166.39522700279485,
+        185.78521800009185
+      ],
+      "parameters": {
+        "mode": "Detailed",
+        "output": [
+          240,
+          120
+        ],
+        "seed": 14802,
+        "source": "uint8 random RGBA 4000x2000"
+      }
+    },
+    "rectangle_contains_20000_probes": {
+      "after_median_ms": 8.387678000872256,
+      "after_peak_python_bytes": 173192,
+      "after_samples_ms": [
+        7.237388002977241,
+        8.741100999031914,
+        7.440608998876996,
+        8.387678000872256,
+        10.49124900237075,
+        8.433084996795515,
+        7.953506999911042
+      ],
+      "before_median_ms": 49.17154500071774,
+      "before_peak_python_bytes": 174312,
+      "before_samples_ms": [
+        49.04725099913776,
+        42.703663999418495,
+        49.17154500071774,
+        51.70179500055383,
+        56.05035799817415,
+        54.80528300176957,
+        48.10836400065455
+      ],
+      "exact_membership_parity": true,
+      "parameters": {
+        "area": [
+          100,
+          200,
+          1000,
+          700
+        ],
+        "probe": "(100+i%1000,200+i%700)",
+        "probes": 20000
+      }
+    },
+    "visual_samples_10000_paths_limit130": {
+      "after_last_sample": [
+        9999,
+        20
+      ],
+      "after_median_ms": 70.10301199989044,
+      "after_peak_python_bytes": 163172,
+      "after_sample_count": 130,
+      "after_samples_ms": [
+        70.10301199989044,
+        74.43111300017335,
+        45.91422000157763,
+        46.926065002480755,
+        78.70780500161345,
+        75.87383600184694,
+        45.61984500105609
+      ],
+      "before_last_sample": [
+        9918,
+        15
+      ],
+      "before_median_ms": 44.03721600101562,
+      "before_peak_python_bytes": 8649048,
+      "before_sample_count": 130,
+      "before_samples_ms": [
+        44.03721600101562,
+        61.762435998389265,
+        49.523805999342585,
+        41.24827299892786,
+        43.32398699989426,
+        68.64082399988547,
+        42.988004999642726
+      ],
+      "output_contract": "Bounded representative evidence; current sampling intentionally includes the batch tail.",
+      "parameters": {
+        "path": "((i,0),(i,20))",
+        "paths": 10000,
+        "sample_limit": 130
+      }
+    }
+  },
+  "method": "One warm call, alternating before/after timed calls, then separate traced-peak calls after gc.collect. Owned returned image disposal is included on both sides.",
+  "numpy": "2.5.4",
+  "parity": {
+    "preview_detail_seed14802_67x91_to31x23": [
+      {
+        "changed_channels": 0,
+        "detail_mode": "Fast",
+        "maximum_delta": 0,
+        "source_mode": "RGB"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Balanced",
+        "maximum_delta": 0,
+        "source_mode": "RGB"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Detailed",
+        "maximum_delta": 0,
+        "source_mode": "RGB"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Micro detail",
+        "maximum_delta": 0,
+        "source_mode": "RGB"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Fast",
+        "maximum_delta": 0,
+        "source_mode": "RGBA"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Balanced",
+        "maximum_delta": 0,
+        "source_mode": "RGBA"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Detailed",
+        "maximum_delta": 0,
+        "source_mode": "RGBA"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Micro detail",
+        "maximum_delta": 0,
+        "source_mode": "RGBA"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Fast",
+        "maximum_delta": 0,
+        "source_mode": "L"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Balanced",
+        "maximum_delta": 0,
+        "source_mode": "L"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Detailed",
+        "maximum_delta": 0,
+        "source_mode": "L"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Micro detail",
+        "maximum_delta": 0,
+        "source_mode": "L"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Fast",
+        "maximum_delta": 0,
+        "source_mode": "LA"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Balanced",
+        "maximum_delta": 0,
+        "source_mode": "LA"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Detailed",
+        "maximum_delta": 0,
+        "source_mode": "LA"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Micro detail",
+        "maximum_delta": 0,
+        "source_mode": "LA"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Fast",
+        "maximum_delta": 0,
+        "source_mode": "P"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Balanced",
+        "maximum_delta": 0,
+        "source_mode": "P"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Detailed",
+        "maximum_delta": 0,
+        "source_mode": "P"
+      },
+      {
+        "changed_channels": 0,
+        "detail_mode": "Micro detail",
+        "maximum_delta": 0,
+        "source_mode": "P"
+      }
+    ]
+  },
+  "pillow": "13.0.0",
+  "platform": "linux",
+  "python": "3.12.14",
+  "repeats": 7,
+  "scope": "Changed modules with current shared dependencies; synthetic CPU fixtures, not Windows input time or physical GPU throughput. Tracemalloc does not include all native image memory."
+}

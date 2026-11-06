@@ -6,7 +6,9 @@ import re
 import subprocess
 import tempfile
 import time
+import math
 from WindowsSystem import system_directory
+from CalibrationValidation import LONG_MIN,LONG_MAX,nonnegative_integer
 
 # Kept inline so frozen builds need no PowerShell resource or Python COM package.
 _SCRIPT = r'''
@@ -18,16 +20,17 @@ $root=[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]HANDLE)
 $process=Get-Process -Id $root.Current.ProcessId
 if ($process.ProcessName -notmatch '^(mspaint|PaintApp|Paint)$') { throw 'Target is not Microsoft Paint.' }
 $all=$root.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
-$rows=@()
+if($all.Count -gt 10000){throw 'Paint exposed too many controls for a bounded preparation scan.'}
+$rows=[System.Collections.Generic.List[object]]::new()
 for($i=0;$i -lt $all.Count;$i++) {
  $e=$all.Item($i); $c=$e.Current; $b=$c.BoundingRectangle
  if($c.IsOffscreen -or !$c.IsEnabled -or $b.Width -le 0 -or $b.Height -le 0){continue}
  $label=''; if($c.LabeledBy){$label=$c.LabeledBy.Current.Name}
  $v=''; if($c.ControlType -eq [System.Windows.Automation.ControlType]::Edit) {try{$v=$e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value}catch{}}
- $rows+=@{id=$i;name=$c.Name;label=$label;kind=$c.ControlType.ProgrammaticName;rect=@($b.Left,$b.Top,$b.Right,$b.Bottom);value=$v}
+ $rows.Add(@{id=$i;name=$c.Name;label=$label;kind=$c.ControlType.ProgrammaticName;rect=@($b.Left,$b.Top,$b.Right,$b.Bottom);value=$v})
 }
 ACTION
-ConvertTo-Json -InputObject @($rows) -Depth 5 -Compress
+ConvertTo-Json -InputObject @($rows.ToArray()) -Depth 5 -Compress
 '''
 
 
@@ -102,6 +105,10 @@ if(!$activated) {
         $e.SetFocus()
         Start-Sleep -Milliseconds 60
         Add-Type -AssemblyName System.Windows.Forms
+        $focused=[System.Windows.Automation.AutomationElement]::FocusedElement
+        if(!$focused -or $focused.Current.ProcessId -ne $root.Current.ProcessId -or -not ([System.Windows.Automation.Automation]::Compare($focused,$e))) {
+            throw 'Paint control lost focus before the bounded Enter fallback.'
+        }
         [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
         $activated=$true
     } catch {}
@@ -123,8 +130,11 @@ def _powershell_json_literal(value):
 
 
 def _automation_script(handle, *, element=None, action=None, size_px=1):
+    handle=nonnegative_integer(handle,'Paint window handle',maximum=(1<<63)-1)
+    if not handle:raise ValueError('Paint window handle must be nonzero.')
     command=''
     if element is not None:
+        center(element)
         # Re-resolve by identity and rectangle; never trust an old tree index.
         command=f"$wanted=ConvertFrom-Json -InputObject {_powershell_json_literal(element)}\n"
         command+=r'''
@@ -174,10 +184,19 @@ def _run_powershell(script, *, action=None, cancelled=lambda:False):
                 if time.monotonic()>deadline:raise TimeoutError('Paint controls did not respond during '+(action or 'control scan')+'. Keep Paint visible; if Edit colors is open, leave it in RGB mode and retry calibration.')
                 try:out,err=process.communicate(timeout=.1);break
                 except subprocess.TimeoutExpired:pass
+            if cancelled():raise InterruptedError('Paint preparation cancelled.')
             if process.returncode:raise ValueError(err.decode('utf-8',errors='replace').strip()[-1200:])
+            if len(out)>8*1024*1024:raise ValueError('Paint control scan exceeded its output budget.')
             return out
         finally:
-            if process.poll() is None:process.kill();process.communicate()
+            if process.poll() is None:
+                process.kill()
+                try:process.communicate(timeout=1)
+                except subprocess.TimeoutExpired:
+                    # A compiler child may briefly retain an inherited pipe.
+                    # Reap the killed parent without an unbounded pipe wait.
+                    try:process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:pass
 
 
 def automation(handle, *, element=None, action=None, size_px=1, cancelled=lambda:False):
@@ -186,7 +205,9 @@ def automation(handle, *, element=None, action=None, size_px=1, cancelled=lambda
     script=_automation_script(handle,element=element,action=action,size_px=size_px)
     out=_run_powershell(script,action=action,cancelled=cancelled)
     data=json.loads(out.decode('utf-8-sig'))
-    return data if isinstance(data,list) else [data]
+    nodes=data if isinstance(data,list) else [data]
+    if len(nodes)>10000 or any(not isinstance(node,dict) for node in nodes):raise ValueError('Paint returned an invalid control scan.')
+    return nodes
 
 
 def _normalized_name(node):
@@ -217,13 +238,20 @@ def find_custom_color_opener(nodes):
 
 
 def center(node):
-    l,t,r,b=node['rect']
+    if not isinstance(node,dict):raise ValueError('Invalid Paint control.')
+    rect=node.get('rect')
+    if not isinstance(rect,(tuple,list)) or len(rect)!=4:raise ValueError('Invalid Paint control rectangle.')
+    if any(isinstance(v,bool) or not isinstance(v,(int,float)) or not LONG_MIN<=v<=LONG_MAX or not math.isfinite(v) for v in rect):raise ValueError('Invalid Paint control coordinates.')
+    l,t,r,b=rect
+    if r<=l or b<=t:raise ValueError('Paint control rectangle must have a positive area.')
     return round((l+r)/2),round((t+b)/2)
 
 
 def rgb_controls(nodes):
     result={}
     for key,names in (('RedField',('red','röd')),('GreenField',('green','grön')),('BlueField',('blue','blå'))):
+        explicit=[n for n in nodes if _normalized_name(n) in names and str(n.get('kind','')).endswith('Edit')]
+        if len(explicit)>1:raise ValueError('Paint RGB field is ambiguous: '+key)
         try:field=find_control(nodes,names,kind='Edit')
         except ValueError:
             label=find_control(nodes,names,kind='Text')
@@ -268,11 +296,22 @@ def find_add_custom_color(nodes):
 
 def edit_colors_dialog_open(nodes):
     """Return True only when Paint's numeric Edit colors dialog is still exposed."""
-    try:
-        rgb_controls(nodes)
+    # Invalid/temporarily blank values do not mean that the modal disappeared.
+    names={_normalized_name(node) for node in nodes}
+    if any(str(n.get('kind','')).endswith(('Window','Pane')) and _normalized_name(n) in _CUSTOM_COLOR_NAMES for n in nodes):return True
+    groups=(('red','röd'),('green','grön'),('blue','blå'))
+    if sum(any(name in names for name in group) for group in groups)>=2 and any(str(n.get('kind','')).endswith('Edit') for n in nodes):return True
+    try:rgb_controls(nodes);return True
+    except ValueError:return False
+
+
+def _edit_colors_closed(nodes):
+    if edit_colors_dialog_open(nodes):return False
+    # An empty/transient provider tree cannot prove that Paint is ready again.
+    try:find_control(nodes,('pencil','penna','blyertspenna'),kind='Button');return True
     except ValueError:
-        return False
-    return True
+        try:find_custom_color_opener(nodes);return True
+        except ValueError:return False
 
 
 def close_edit_colors(handle, *, accept=False, cancelled=lambda:False, backend=automation,
@@ -287,16 +326,16 @@ def close_edit_colors(handle, *, accept=False, cancelled=lambda:False, backend=a
     to disappear; it never clicks or guesses a canvas coordinate.
     """
     names=('ok',) if accept else ('cancel','avbryt')
-    attempts=max(1,min(5,int(max_attempts)))
+    attempts=max(1,min(5,nonnegative_integer(max_attempts,'Paint dialog close attempt count')))
     last_nodes=None
     for _ in range(attempts):
         if cancelled():raise InterruptedError('Paint preparation cancelled.')
         nodes=backend(handle,cancelled=cancelled);last_nodes=nodes
-        if not edit_colors_dialog_open(nodes):
+        if _edit_colors_closed(nodes):
             wait(.12)
             if cancelled():raise InterruptedError('Paint preparation cancelled.')
             verify=backend(handle,cancelled=cancelled)
-            if not edit_colors_dialog_open(verify):return True
+            if _edit_colors_closed(verify):return True
             last_nodes=verify
         try:button=find_control(last_nodes,names,kind='Button')
         except ValueError:
@@ -305,8 +344,10 @@ def close_edit_colors(handle, *, accept=False, cancelled=lambda:False, backend=a
         wait(.12)
     if cancelled():raise InterruptedError('Paint preparation cancelled.')
     nodes=backend(handle,cancelled=cancelled)
-    if not edit_colors_dialog_open(nodes):
-        wait(.12);return True
+    if _edit_colors_closed(nodes):
+        wait(.12)
+        if cancelled():raise InterruptedError('Paint preparation cancelled.')
+        if _edit_colors_closed(backend(handle,cancelled=cancelled)):return True
     action='OK' if accept else 'Cancel'
     raise ValueError(f'Paint Edit colors did not close after {action}. Close the dialog and retry; no canvas input was sent.')
 

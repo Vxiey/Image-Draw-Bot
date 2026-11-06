@@ -108,16 +108,25 @@ def inspect_delivery(mouse, start, end, expected, brush_px: int, policy: Deliver
     payload = dict(result)
     payload['supported'] = True
     payload['checked'] = True
-    payload['matched'] = bool(payload.get('matched'))
+    payload['matched'] = payload.get('matched') is True
+    if type(result.get('matched')) is not bool:
+        payload['reason'] = 'invalid verifier response: matched must be a boolean'
     return payload
 
 
 def retry_parameters(policy: DeliveryVerificationPolicy, base_step_px: float, base_delay: float) -> dict:
     """Return a denser/slower one-stroke retry policy."""
-    step = max(2.0, min(float(base_step_px), float(base_step_px) * policy.retry_step_scale))
+    try:
+        base = float(base_step_px)
+        delay = float(base_delay)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError('Retry spacing and delay must be finite and non-negative.') from error
+    if not math.isfinite(base) or base <= 0 or not math.isfinite(delay) or delay < 0:
+        raise ValueError('Retry spacing and delay must be finite and non-negative.')
+    step = min(base, max(min(2.0, base), base * policy.retry_step_scale))
     return {
         'step_px': step,
-        'path_delay': max(float(base_delay), policy.retry_min_delay),
+        'path_delay': max(delay, policy.retry_min_delay),
         'press_settle': policy.retry_press_settle,
         'release_settle': policy.retry_release_settle,
     }

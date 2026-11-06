@@ -363,10 +363,12 @@ def _parallel_color_strokes(rgb_image, *, lines, skip_white, color_rendering, co
             tasks.append((y0, rgb_image.width, raw[y0 * stride:y1 * stride], bool(lines),
                           bool(skip_white), color_rendering, color_layers,
                           custom_color_workflow, color_fidelity, palette, names))
-        chunks = parallel_map(_color_rows_worker, tasks, backend=backend, workers=workers)
+        chunks = parallel_map(_color_rows_worker, tasks, backend=backend, workers=workers, cancelled=cancelled)
         if cancelled():
             return None
         return _merge_color_chunks(chunks, len(palette)) + (backend, len(tasks))
+    except InterruptedError:
+        raise
     except Exception:
         # Fall back to the old serial implementation. Planning must remain safe
         # even on Python installations where process spawning is restricted.

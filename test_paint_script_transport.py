@@ -63,7 +63,7 @@ class PaintScriptTransportTests(unittest.TestCase):
             with self.assertRaises(InterruptedError):
                 _run_powershell('Start-Sleep -Seconds 60',cancelled=Mock(side_effect=[False,True]))
         process.kill.assert_called_once_with()
-        process.communicate.assert_called_once_with()
+        process.communicate.assert_called_once_with(timeout=1)
         self.assertTrue(captured['stdin'].closed)
 
     def test_twelve_second_timeout_kills_process_and_closes_temporary_input(self):
@@ -76,7 +76,7 @@ class PaintScriptTransportTests(unittest.TestCase):
             with self.assertRaisesRegex(TimeoutError,'during invoke'):
                 _run_powershell('Start-Sleep -Seconds 60',action='invoke')
         process.kill.assert_called_once_with()
-        process.communicate.assert_called_once_with()
+        process.communicate.assert_called_once_with(timeout=1)
         self.assertTrue(captured['stdin'].closed)
 
     def test_process_failure_reports_utf8_error_and_closes_input(self):

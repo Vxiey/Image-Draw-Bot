@@ -5,12 +5,15 @@ representative set of calibrated palette swatches immediately before drawing.
 It never emits mouse or keyboard input.
 """
 from __future__ import annotations
+from CalibrationValidation import calibration_screenshot
 
 from dataclasses import dataclass
 from math import ceil, sqrt
 from typing import Iterable, Sequence
 
 from BrowserAutoCalibration import SUPPORTED_BROWSER_PROFILES, detect_browser_setup, detect_browser_canvas
+from CalibrationValidation import (screen_rect, screen_point, contained_rect, point_in_rect,
+                                   bounded_number, nonnegative_integer, rgb_value, finite_confidence)
 
 
 @dataclass(frozen=True)
@@ -31,12 +34,7 @@ class BrowserVisualPreflightResult:
 
 
 def _rect(value: Sequence[int], label: str) -> tuple[int, int, int, int]:
-    if not isinstance(value, (tuple, list)) or len(value) != 4:
-        raise ValueError(f'{label} rectangle is unavailable.')
-    l, t, r, b = map(int, value)
-    if r <= l or b <= t:
-        raise ValueError(f'{label} rectangle is invalid.')
-    return l, t, r, b
+    return screen_rect(value,label)
 
 
 def _distance(a, b) -> float:
@@ -44,10 +42,11 @@ def _distance(a, b) -> float:
 
 
 def _sample_indices(count: int, max_samples: int = 6) -> tuple[int, ...]:
-    count = max(0, int(count))
-    max_samples = max(1, int(max_samples))
+    count = nonnegative_integer(count,'Palette count',maximum=96)
+    max_samples = max(1,nonnegative_integer(max_samples,'Palette sample count',maximum=96))
     if count <= max_samples:
         return tuple(range(count))
+    if max_samples==1:return (0,)
     # Evenly distribute checks across the palette so one color group/row cannot
     # accidentally make the whole preflight pass.
     raw = [round(i * (count - 1) / (max_samples - 1)) for i in range(max_samples)]
@@ -85,6 +84,7 @@ def verify_browser_visual_preflight(
     canvas_tolerance_px: int = 7,
     palette_tolerance: float = 42.0,
     max_palette_samples: int = 6,
+    cancelled=lambda:False,
 ) -> BrowserVisualPreflightResult:
     """Verify visible canvas + representative palette colors without input.
 
@@ -92,80 +92,88 @@ def verify_browser_visual_preflight(
     The check tolerates one transient/selected-swatch mismatch when six or more
     swatches are sampled, but never accepts fewer than three verified swatches.
     """
+    if cancelled():raise InterruptedError('Browser visual preflight cancelled.')
+    palette_tolerance=bounded_number(palette_tolerance,'Palette tolerance',minimum=0,maximum=442)
+    canvas_tolerance_px=nonnegative_integer(canvas_tolerance_px,'Canvas tolerance')
     profile_key = str(profile_key or '').lower()
     if profile_key not in SUPPORTED_BROWSER_PROFILES:
         raise ValueError('Browser Visual Preflight is not available for this profile.')
     client = _rect(target_metadata.get('client_rect'), 'Browser client')
-    expected_canvas = _rect(expected_canvas_box, 'Expected canvas')
+    expected_canvas = contained_rect(expected_canvas_box,client,'Expected canvas')
     left, top, right, bottom = client
 
-    if screenshot is None:
-        from PIL import ImageGrab
-        screenshot = ImageGrab.grab(bbox=client, all_screens=True).convert('RGB')
-    else:
-        screenshot = screenshot.convert('RGB')
-    expected_size = (right-left, bottom-top)
-    if screenshot.size != expected_size:
-        raise ValueError(f'Browser screenshot size changed during visual preflight ({screenshot.size} != {expected_size}).')
+    with calibration_screenshot(screenshot,client) as screenshot:
+        reasons: list[str] = []
+        try:
+            detector=detect_browser_setup if require_palette else detect_browser_canvas
+            detected = detector(profile_key, screenshot, screen_origin=(left, top),cancelled=cancelled)
+            detected_canvas = contained_rect(detected.get('canvas_box'),client,'Detected canvas')
+            canvas_confidence = finite_confidence(detected.get('canvas_confidence'))
+        except InterruptedError:
+            raise
+        except Exception as error:
+            detected_canvas = None
+            canvas_confidence = 0.0
+            reasons.append(f'canvas/palette detector could not verify the page: {error}')
 
-    reasons: list[str] = []
-    try:
-        detector=detect_browser_setup if require_palette else detect_browser_canvas
-        detected = detector(profile_key, screenshot, screen_origin=(left, top))
-        detected_canvas = detected.get('canvas_box')
-        canvas_confidence = float(detected.get('canvas_confidence') or 0.0)
-    except Exception as error:
-        detected_canvas = None
-        canvas_confidence = 0.0
-        reasons.append(f'canvas/palette detector could not verify the page: {error}')
+        shift = _canvas_shift(expected_canvas, detected_canvas)
+        canvas_ok = detected_canvas is not None and canvas_confidence >= .68 and shift <= max(0, int(canvas_tolerance_px))
+        if not canvas_ok:
+            if detected_canvas is None:
+                reasons.append('canvas was not visually detected')
+            elif canvas_confidence < .68:
+                reasons.append(f'canvas confidence too low ({canvas_confidence*100:.0f}%)')
+            else:
+                reasons.append(f'canvas moved/reflowed by {shift}px')
 
-    shift = _canvas_shift(expected_canvas, detected_canvas)
-    canvas_ok = detected_canvas is not None and canvas_confidence >= .68 and shift <= max(0, int(canvas_tolerance_px))
-    if not canvas_ok:
-        if detected_canvas is None:
-            reasons.append('canvas was not visually detected')
-        elif canvas_confidence < .68:
-            reasons.append(f'canvas confidence too low ({canvas_confidence*100:.0f}%)')
-        else:
-            reasons.append(f'canvas moved/reflowed by {shift}px')
+        entries=[]
+        if require_palette:
+            seen=set()
+            for index,entry in enumerate(palette_entries):
+                if index>=96:raise ValueError('Visual preflight supports at most 96 palette entries.')
+                if not isinstance(entry,(tuple,list)) or len(entry)!=2:raise ValueError('Invalid palette verification entry.')
+                position=screen_point(entry[0],'palette control point');rgb=rgb_value(entry[1])
+                if position in seen:raise ValueError('Duplicate palette verification points.')
+                if not point_in_rect(position,client):raise ValueError('Palette verification point is outside the browser client.')
+                seen.add(position);entries.append((position,rgb))
+        indices = _sample_indices(len(entries), max_palette_samples)
+        verified = 0
+        errors: list[float] = []
+        for index in indices:
+            if cancelled():raise InterruptedError('Browser visual preflight cancelled.')
+            position, expected_rgb = entries[index]
+            sx, sy = int(position[0]), int(position[1])
+            lx, ly = sx-left, sy-top
+            if not (0 <= lx < screenshot.size[0] and 0 <= ly < screenshot.size[1]):
+                errors.append(float('inf'))
+                continue
+            error = _best_nearby_error(screenshot, lx, ly, tuple(map(int, expected_rgb[:3])), radius=2)
+            errors.append(error)
+            if error <= float(palette_tolerance):
+                verified += 1
 
-    entries = list(palette_entries) if require_palette else []
-    indices = _sample_indices(len(entries), max_palette_samples)
-    verified = 0
-    errors: list[float] = []
-    for index in indices:
-        position, expected_rgb = entries[index]
-        sx, sy = int(position[0]), int(position[1])
-        lx, ly = sx-left, sy-top
-        if not (0 <= lx < screenshot.size[0] and 0 <= ly < screenshot.size[1]):
-            errors.append(float('inf'))
-            continue
-        error = _best_nearby_error(screenshot, lx, ly, tuple(map(int, expected_rgb[:3])), radius=2)
-        errors.append(error)
-        if error <= float(palette_tolerance):
-            verified += 1
+        tested = len(indices)
+        required = tested if tested <= 4 else max(3, ceil(tested * .80))
+        palette_ok = (tested >= 3 and verified >= required) if require_palette else True
+        max_error = max(errors,default=float('inf'))
+        if require_palette and tested < 3:
+            reasons.append(f'only {tested} palette control points were available')
+        elif not palette_ok:
+            reasons.append(f'palette verification matched only {verified}/{tested} control swatches')
 
-    tested = len(indices)
-    required = tested if tested <= 4 else max(3, ceil(tested * .80))
-    palette_ok = (tested >= 3 and verified >= required) if require_palette else True
-    max_error = max((e for e in errors if e != float('inf')), default=float('inf'))
-    if require_palette and tested < 3:
-        reasons.append(f'only {tested} palette control points were available')
-    elif not palette_ok:
-        reasons.append(f'palette verification matched only {verified}/{tested} control swatches')
-
-    canvas_score = max(0.0, min(1.0, canvas_confidence)) if canvas_ok else 0.0
-    palette_score = verified / tested if tested else 0.0
-    confidence = .55 * canvas_score + .45 * palette_score if require_palette else canvas_score
-    passed = bool(canvas_ok and palette_ok)
-    return BrowserVisualPreflightResult(
-        passed=passed,
-        profile_key=profile_key,
-        confidence=float(confidence),
-        canvas_ok=bool(canvas_ok),
-        palette_verified=int(verified),
-        palette_tested=int(tested),
-        max_palette_error=float(max_error),
-        reasons=tuple(reasons),
-        detected_canvas=tuple(map(int, detected_canvas)) if detected_canvas is not None else None,
-    )
+        canvas_score = max(0.0, min(1.0, canvas_confidence)) if canvas_ok else 0.0
+        palette_score = verified / tested if tested else 0.0
+        confidence = .55 * canvas_score + .45 * palette_score if require_palette else canvas_score
+        passed = bool(canvas_ok and palette_ok)
+        if cancelled():raise InterruptedError('Browser visual preflight cancelled.')
+        return BrowserVisualPreflightResult(
+            passed=passed,
+            profile_key=profile_key,
+            confidence=float(confidence),
+            canvas_ok=bool(canvas_ok),
+            palette_verified=int(verified),
+            palette_tested=int(tested),
+            max_palette_error=float(max_error),
+            reasons=tuple(reasons),
+            detected_canvas=tuple(map(int, detected_canvas)) if detected_canvas is not None else None,
+        )

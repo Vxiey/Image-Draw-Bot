@@ -19,7 +19,7 @@ import warnings
 from contextlib import contextmanager
 from pathlib import Path
 
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import atomic_write_text, data_dir, file_transaction, read_json
 
 SCHEMA = 3
 SUPPORTED_SCHEMAS = (1, 2, 3)
@@ -69,6 +69,8 @@ def _clean_area(value):
         return None
     if any(type(v) is not int or abs(v) > 200000 for p in value for v in p):
         return None
+    if value[0][0] == value[1][0] or value[0][1] == value[1][1]:
+        return None
     return [list(p) for p in value]
 
 
@@ -97,29 +99,7 @@ def _clean_target_lock(value):
 
 def _read_json(path, limit):
     """Bound both bytes read and decoded container depth/items."""
-    with Path(path).open('rb') as stream:
-        raw = stream.read(limit + 1)
-    if len(raw) > limit:
-        raise ValueError('Recovery file is too large.')
-    value = json.loads(raw.decode('utf-8'))
-    pending = [(value, 0)]
-    count = 0
-    while pending:
-        item, depth = pending.pop()
-        count += 1
-        if depth > 16 or count > 100000:
-            raise ValueError('Recovery data is too deeply nested or contains too many items.')
-        if isinstance(item, dict):
-            if len(pending) + count + len(item) > 100000:
-                raise ValueError('Recovery data contains too many items.')
-            pending.extend((v, depth + 1) for v in item.values())
-        elif isinstance(item, list):
-            if len(pending) + count + len(item) > 100000:
-                raise ValueError('Recovery data contains too many items.')
-            pending.extend((v, depth + 1) for v in item)
-        elif type(item) is float and not math.isfinite(item):
-            raise ValueError('Recovery numbers must be finite.')
-    return value
+    return read_json(path, max_bytes=limit, max_depth=16)
 
 
 def _read_state():
@@ -157,35 +137,10 @@ def _image_reference(raw):
 def _snapshot_guard():
     """Serialize publishers/cleanup across threads and local app processes."""
     with _SNAPSHOT_LOCK:
-        RECOVERY_DIR.mkdir(parents=True, exist_ok=True)
-        with (RECOVERY_DIR / '.snapshot.lock').open('a+b') as stream:
-            if os.name == 'nt':
-                import msvcrt
-                stream.seek(0, os.SEEK_END)
-                if stream.tell() == 0:
-                    stream.write(b'\0'); stream.flush()
-                def lock():
-                    stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-                def unlock():
-                    stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-                def lock():
-                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                def unlock():
-                    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-            deadline = time.monotonic() + 2.0
-            while True:
-                try:
-                    lock(); break
-                except OSError:
-                    if time.monotonic() >= deadline:
-                        raise
-                    time.sleep(.02)
-            try:
-                yield
-            finally:
-                unlock()
+        # Keep the historical sidecar name while sharing bounded contention,
+        # reentrancy and error-preserving unlock behavior with local state.
+        with file_transaction(RECOVERY_DIR / '.snapshot', timeout=2.0):
+            yield
 
 
 def _stream_digest(stream):
@@ -340,10 +295,8 @@ def save_render_progress(progress: dict) -> Path:
     return RENDER_FILE
 
 def clear_render_progress() -> None:
-    try:
+    with _snapshot_guard():
         RENDER_FILE.unlink(missing_ok=True)
-    except OSError:
-        pass
 
 def load_render_progress() -> dict | None:
     return _load_render_resume()
@@ -428,13 +381,14 @@ def clear_snapshot() -> None:
 
 
 def diagnostics_summary() -> dict:
+    from LocalSanitization import sanitize_text
     state = load_snapshot()
     if not state:
         return {"available": False}
     return {
         "available": True,
-        "created_at": state.get('created_at', ''),
-        "profile": state.get('profile', ''),
+        "created_at": sanitize_text(state.get('created_at', '')),
+        "profile": sanitize_text(state.get('profile', '')),
         "has_cached_image": bool(state.get('has_image')),
         "saved_area_available": state.get('saved_area') is not None,
         "render_resume": {

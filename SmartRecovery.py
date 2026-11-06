@@ -37,6 +37,9 @@ def classify_interruption(error: BaseException, profile_key: str) -> RecoveryDec
     text=str(error or '').strip().lower()
     name=error.__class__.__name__.lower()
 
+    if isinstance(error, (KeyboardInterrupt, SystemExit)) or 'time limit reached' in text:
+        return RecoveryDecision(False,'explicit/time-budget stop',False,False)
+
     # Hard safety/geometry failures must never become an automatic "just resume"
     # condition.  The normal target/canvas safety workflow must be completed.
     hard_tokens=(
@@ -44,7 +47,8 @@ def classify_interruption(error: BaseException, profile_key: str) -> RecoveryDec
         'target window geometry changed','drawing area','dpi changed','client area changed',
         'canvas moved','canvas changed','target changed','select the drawing area again','title bar/window border',
     )
-    if any(token in text for token in hard_tokens):
+    from CanvasGuard import CanvasSafetyStop
+    if isinstance(error, CanvasSafetyStop) or any(token in text for token in hard_tokens):
         return RecoveryDecision(False,'canvas/target safety changed',True,True)
 
     if 'target window no longer exists' in text or 'target window is not visible' in text:

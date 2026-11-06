@@ -36,6 +36,7 @@ class Step30ReleaseCandidateHardeningTests(unittest.TestCase):
             "StringStruct('ProductVersion', '1.0.131')\n", encoding='utf-8')
         (root/'installer/ImageDrawBot.iss').write_text(
             '#define MyAppVersion "1.0.131-beta"\n'
+            'VersionInfoVersion=1.0.131.0\n'
             'AppId={{6A4AD303-4F16-4ED7-A9AF-5B912352D83E}\nPrivilegesRequired=lowest\n', encoding='utf-8')
         (root/'UpdateCenter.py').write_text(f'GITHUB_REPOSITORY = "{updater_repo}"\n', encoding='utf-8')
         (root/'build_release.py').write_text('run_source_release_gate\nvalidate_windows_release\n', encoding='utf-8')

@@ -1,0 +1,25 @@
+{
+  "python": "3.12.14",
+  "platform": "linux",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "baseline": "1c09774ad22088c5c30a8f8220b6b451fdee9659",
+  "repeats": 5,
+  "timing_statistic": "median",
+  "scope": "Isolated changed modules with current shared dependencies; no RSS or whole-application measurement.",
+  "measurements": {
+    "sequence_checkpoint_5000_ops_rgb2400x1600": {
+      "baseline_seconds": 0.13374207600281807,
+      "new_seconds": 0.04438423100145883,
+      "baseline_traced_peak_bytes": 31279219,
+      "new_traced_peak_bytes": 2522306,
+      "exact_output_equal": true
+    },
+    "mobile_png_rgb2400x1600_to1600": {
+      "baseline_seconds": 0.3513883129999158,
+      "new_seconds": 0.3227087470004335,
+      "exact_output_equal": true,
+      "avoided_full_size_rgba_nominal_pixel_bytes": 15360000
+    }
+  }
+}
