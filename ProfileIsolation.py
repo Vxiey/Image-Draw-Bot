@@ -1,5 +1,5 @@
 """Complete defaults reset and scoped profile control visibility."""
-from UICompactLayout import install_compact_layout, _pack_options
+from UICompactLayout import install_compact_layout, _pack_options, pack_in_order
 from tkinter import TclError
 
 SETTING_NAMES=('quality', 'speed', 'precision', 'mode', 'shape_order', 'shape_model', 'max_stroke_cap', 'progressive_rendering', 'planning_watchdog', 'time_budget_mode', 'adaptive_deadline_renderer', 'deadline_safety_reserve', 'target_stroke_count', 'target_stroke_custom', 'drawing_style', 'render_style', 'hybrid_mode', 'draw_quality', 'human_mode', 'gpu_mode', 'gpu_vram', 'gpu_performance', 'cpu_workers', 'cpu_engine', 'ram_budget', 'ram_custom_mb', 'planning_resolution', 'resource_scheduler', 'background_fill', 'fill_engine', 'use_region_fill_engine', 'fill_aggressiveness', 'background_simplification', 'color_grouping', 'color_workflow', 'stroke_optimizer', 'adaptive_detail', 'detail_zoom', 'quick_sketch_style', 'quick_sketch_fill_preference', 'visual_verification', 'color_rendering', 'color_fidelity', 'color_layers', 'profile_engine', 'edge_behavior', 'custom_color_workflow', 'exact_color_limit', 'tool_strategy', 'portrait_focus', 'skip_white', 'contrast', 'outline', 'brush_px', 'gartic_opacity', 'max_seconds', 'paint_simple', 'paint_tool', 'sketch_detail', 'read_gartic_timer', 'render_preset', 'subject_focus', 'ui_mode', 'preview_show_background', 'preview_show_fill', 'preview_show_strokes', 'preview_detail_level')
@@ -128,7 +128,7 @@ def update_visibility(app,key):
             next_widget=next((w for w in siblings[index+1:] if w.winfo_manager()=='pack'),None)
             args=dict(options)
             if next_widget is not None:args['before']=next_widget
-            widget.pack(**args)
+            pack_in_order(widget, **args)
         except TclError:
             continue
     app._profile_visibility_key=key

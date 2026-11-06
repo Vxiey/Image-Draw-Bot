@@ -113,6 +113,26 @@ def _pack_options(widget):
     return options
 
 
+def pack_in_order(widget, **options):
+    """Apply sibling ordering once, without retaining it for CTk DPI replay.
+
+    ``before``/``after`` identify a currently packed sibling. Once Tk has
+    positioned the widget, an ordinary pack reconfiguration preserves that
+    position. CTk replays its last pack call when scaling changes, potentially
+    after that sibling has been hidden by a profile or disclosure group.
+    Keep the logical sizing/padding options, but discard these transient
+    ordering dependencies only after the initial pack succeeds.
+    """
+    result = widget.pack(**options)
+    if isinstance(widget, ctk.CTkBaseClass):
+        previous = getattr(widget, '_last_geometry_manager_call', None)
+        if (isinstance(previous, dict) and isinstance(previous.get('kwargs'), dict)
+                and getattr(previous.get('function'), '__name__', '') in ('pack', 'pack_configure')):
+            previous['kwargs'] = {key: value for key, value in previous['kwargs'].items()
+                                  if key not in ('before', 'after')}
+    return result
+
+
 def _slice_children(parent, first, stop):
     children = list(parent.winfo_children())
     if first not in children or stop not in children:
@@ -159,7 +179,7 @@ class CompactGroup:
                 pack['before'] = before
             elif after is not None and after.winfo_manager() == 'pack':
                 pack['after'] = after
-            self.shell.pack(**pack)
+            pack_in_order(self.shell, **pack)
         except BaseException as error:
             problems=self.rollback()
             if problems:error.add_note('Sidebar rollback: '+'; '.join(problems))
@@ -177,7 +197,7 @@ class CompactGroup:
                 if id(widget) in wanted:
                     options=dict(self.saved_pack[id(widget)])
                     if following is not None:options['before']=following
-                    widget.pack(**options)
+                    pack_in_order(widget, **options)
                 if widget.winfo_manager()=='pack':following=widget
             except Exception as error:problems.append(str(error))
         for widget in self.items:
@@ -228,7 +248,7 @@ class CompactGroup:
             options = dict(self.saved_pack.get(id(widget), {}))
             options['after'] = previous
             try:
-                widget.pack(**options)
+                pack_in_order(widget, **options)
                 if widget in order:order.remove(widget)
                 if previous in order:order.insert(order.index(previous)+1,widget)
                 else:order.append(widget)

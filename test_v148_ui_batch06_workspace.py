@@ -200,7 +200,7 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
             root=ctk.CTk()
             try:
                 app=DrawBotApp(root,NoInput(),NoInput());root.minsize(500,400)
-                root.update_idletasks()
+                root.update()
                 def inside(widget):
                     self.assertTrue(widget.winfo_ismapped(),widget)
                     self.assertGreaterEqual(widget.winfo_rootx(),root.winfo_rootx())
@@ -208,7 +208,7 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
                     self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(),root.winfo_rootx()+root.winfo_width()+1)
                     self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),root.winfo_rooty()+root.winfo_height()+1)
                 for scale,width,height in ((1,1024,700),(1,650,500),(1.5,1024,700),(1.5,650,500),(1,1560,960)):
-                    ctk.set_widget_scaling(scale);root.geometry(f'{width}x{height}');root.update_idletasks()
+                    ctk.set_widget_scaling(scale);root.geometry(f'{width}x{height}');root.update()
                     with self.subTest(scale=scale,width=width,height=height):
                         inside(app.start);inside(app.stop_button)
                         bar=app.draw_action_bar
@@ -219,18 +219,18 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
                             for index,button in enumerate(bar.overflow):
                                 self.assertEqual(bar.menu.entrycget(index,'state'),button.cget('state'))
                         for button in bar.visible:inside(button)
-                        app.pause_button.configure(state='normal',text='Resume · F6');bar.schedule();root.update_idletasks()
+                        app.pause_button.configure(state='normal',text='Resume · F6');bar.schedule();root.update()
                         inside(app.pause_button)
-                        app.pause_button.configure(state='disabled');bar.schedule();root.update_idletasks()
+                        app.pause_button.configure(state='disabled');bar.schedule();root.update()
                         self.assertEqual(app.start.cget('state'),'disabled')
                         self.assertEqual(app.stop_button.cget('state'),'normal')
                         if app.workspace_layout.compact:
                             inside(app.workspace_layout.selector)
                             for name,panel in app.workspace_layout.panels.items():
-                                app.workspace_layout.select(name);root.update_idletasks()
+                                app.workspace_layout.select(name);root.update()
                                 outer=getattr(panel,'_parent_frame',panel)
                                 inside(outer)
-                            app.show_tools();root.update_idletasks()
+                            app.show_tools();root.update()
                             self.assertEqual(app.workspace_layout.selected,'Workspace')
                 self.assertFalse(errors,errors)
             finally:

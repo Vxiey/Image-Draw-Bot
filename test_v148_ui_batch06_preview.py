@@ -231,12 +231,14 @@ class WindowsWorkspaceLayoutTests(unittest.TestCase):
                             and any(isinstance(t,ast.Name) and t.id=='preview_specs' for t in n.targets))
             names=[name for name,_ in ast.literal_eval(assignment.value)]
             for name in names:deck.add(name)
-            root.update_idletasks()
+            # Windows must deliver Map/Configure events as well as idle layout
+            # callbacks before native visibility and grid geometry are known.
+            root.update()
             self.assertEqual(len(names),12);self.assertEqual(tuple(deck.selector['values']),tuple(names))
             self.assertGreater(deck.selector.winfo_width(),80)
             self.assertLessEqual(deck.selector.winfo_rootx()+deck.selector.winfo_width(),root.winfo_rootx()+root.winfo_width())
             for index,name in enumerate(names):
-                deck.selector.current(index);deck.selector.event_generate('<<ComboboxSelected>>');root.update_idletasks()
+                deck.selector.current(index);deck.selector.event_generate('<<ComboboxSelected>>');root.update()
                 self.assertEqual(deck.get(),name)
                 self.assertEqual([n for n,p in deck.pages.items() if p.winfo_ismapped()],[name])
             self.assertEqual(changed.call_count,11)
@@ -252,7 +254,7 @@ class WindowsWorkspaceLayoutTests(unittest.TestCase):
                 row=ctk.CTkFrame(root);row.pack(fill='x',padx=8)
                 buttons=[ctk.CTkButton(row,text=f'Tool {i}',width=width) for i,width in enumerate((105,112,115,112,112,96,112,118,105))]
                 for button in buttons:button.pack(side='left')
-                ResponsiveRows.wrap_action_rows(row,recursive=False);root.update_idletasks()
+                ResponsiveRows.wrap_action_rows(row,recursive=False);root.update()
                 self.assertGreater(len({button.grid_info()['row'] for button in buttons}),1)
                 right=row.winfo_rootx()+row.winfo_width()
                 self.assertTrue(all(button.winfo_ismapped() and button.winfo_rootx()+button.winfo_width()<=right for button in buttons))

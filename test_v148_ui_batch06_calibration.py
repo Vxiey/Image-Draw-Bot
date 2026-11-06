@@ -277,10 +277,11 @@ class WindowsCalibrationLayoutTests(unittest.TestCase):
                     stack.enter_context(patch.object(exact,'load',side_effect=FileNotFoundError))
                     app=exact.App(root,'generic')
                 else:app=palette.CalibrationApp(root,path=Path(temporary)/'colours.json')
-                root.geometry('650x500');root.update_idletasks()
+                # A Windows toplevel is not mapped by idle-only geometry work.
+                root.geometry('650x500');root.update()
                 self.assert_inside(app.save_button,root);self.assert_inside(app.close_button,root)
                 self.assertLess(app.layout.canvas.yview()[1],1.0)
-                app.layout.canvas.yview_moveto(1);root.update_idletasks()
+                app.layout.canvas.yview_moveto(1);root.update()
                 self.assert_inside(app.save_button,root);self.assert_inside(app.close_button,root)
                 if kind=='exact':
                     last=app.remove_buttons['Eyedropper'];self.assert_inside(last,app.layout.canvas)
