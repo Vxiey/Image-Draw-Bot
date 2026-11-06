@@ -6,7 +6,7 @@ from PIL import Image,ImageDraw
 from PixelAccuratePlanner import build_pixel_map
 from PixelStrokeEngine import build_pixel_stroke_plan
 from PixelAccuracyEngine import simulate_strokes
-from ExecutionCostModel import build_cost_model
+from ExecutionCostModel import build_cost_model, EXECUTION_MODEL_VERSION
 from Version import APP_VERSION
 
 PALETTE=((255,255,255),(0,0,0),(255,0,0),(0,0,255))
@@ -32,7 +32,7 @@ class Rc20PixelExecutionCostTests(unittest.TestCase):
         im=self.image();pm=build_pixel_map(im,PALETTE,gpu_mode='CPU',skip_white=True)
         plan=build_pixel_stroke_plan(pm,len(PALETTE),options=opts())
         meta=plan['metadata'];self.assertTrue(meta['cost_aware'])
-        self.assertEqual(meta['cost_policy'],'ExecutionCostModel stateful v3')
+        self.assertEqual(meta['cost_policy'],f'ExecutionCostModel stateful v{EXECUTION_MODEL_VERSION}')
         self.assertEqual(meta['cost_model']['model'],'ExecutionCostModel')
         self.assertAlmostEqual(meta['cost_model']['scale_x'],4.0);self.assertAlmostEqual(meta['cost_model']['scale_y'],3.0)
 

@@ -152,7 +152,7 @@ def _run_case(name: str, image: Image.Image, *, cancelled=lambda:False) -> dict:
         fill_regions,fill_meta=_build_fill_regions(source_groups,PALETTE,image.size,fitted,options,cancelled)
         if cancelled():raise InterruptedError()
         work=remove_filled_region_strokes(source_groups,fill_regions) if fill_regions else source_groups
-        work_pm=pixel_map_from_groups(image,work,PALETTE,cancelled=cancelled)
+        work_pm=pixel_map_from_groups(image,work,PALETTE,gpu_mode=options.get('gpu_mode','CPU'),cancelled=cancelled)
         adaptive=build_adaptive_execution(work_pm,PALETTE,options,fitted,fill_regions=fill_regions,
                                           reference_pixel_map=pm,cancelled=cancelled)
         return adaptive,fill_regions,fill_meta

@@ -104,7 +104,7 @@ def _network_chunks(response):
     reader=getattr(getattr(response,'raw',None),'read1',None)
     if callable(reader):
         while True:
-            chunk=reader(_BLOCK_BYTES,decode_content=True)
+            chunk=reader(_BLOCK_BYTES,decode_content=False)
             if not chunk:break
             yield chunk
     else:
@@ -164,10 +164,18 @@ def _download(stream,url,limit,cancelled):
         response=session.get(url,timeout=(10,15),stream=True,hooks={'response':inspect_response},headers={
             'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36',
             'Accept':'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+            # Raster formats already provide compression. HTTP decompression
+            # can loop over empty-output members without returning to our
+            # Stop/deadline checks, so read only an identity transfer here.
+            'Accept-Encoding':'identity',
         })
         _check(cancelled,deadline)
         response.raise_for_status()
         headers=response.headers
+        encoding=headers.get('Content-Encoding','identity')
+        if not isinstance(encoding,str) or encoding.strip().casefold() not in ('','identity'):
+            raise ValueError('The server sent a compressed download that this importer does not support. '
+                             'Save the image locally, then open it here.')
         if 'text/html' in headers.get('Content-Type','').lower():
             raise ValueError('The link points to a web page. Right-click the image and choose Copy image address.')
         declared=headers.get('Content-Length')
@@ -180,7 +188,7 @@ def _download(stream,url,limit,cancelled):
             declared=int(declared)
             if declared>limit:raise ValueError('The image download exceeds its supported file-size limit. Choose a smaller image.')
         total=_write_chunks(stream,_network_chunks(response),limit,cancelled,deadline)
-        if headers.get('Content-Encoding','identity').lower() in ('','identity') and declared is not None and total!=declared:
+        if declared is not None and total!=declared:
             raise ValueError('The image download did not match its declared size. Try again.')
     except (requests.RequestException,HTTPError) as error:
         raise ValueError(f'Could not download the image: {error}') from error

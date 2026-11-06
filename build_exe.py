@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 from Version import APP_VERSION, FILE_VERSION
+from BuildEnvironment import BuildEnvironmentError, Builder, prepare_builder
 
 
 def documentation_data(base: Path) -> list[tuple[Path, str]]:
@@ -54,39 +55,27 @@ def main(argv=None):
         raise SystemExit('Use 64-bit Python to build the Windows x64 release.')
 
     base = Path(__file__).resolve().parent
+    _validate_version_info(base)
+    try:
+        builder = prepare_builder(base, gpu=args.gpu)
+    except BuildEnvironmentError as error:
+        raise SystemExit(str(error)) from error
+    build_application(base, builder, onefile=args.onefile, gpu_build=args.gpu)
+
+
+def _validate_version_info(base):
     version_text=(base/'version_info.txt').read_text(encoding='utf-8')
     if f"FileVersion', '{FILE_VERSION}'" not in version_text or f"ProductVersion', '{FILE_VERSION}'" not in version_text:
         raise SystemExit('Version mismatch: update version_info.txt to match Version.py before building.')
-    onefile = args.onefile
-    gpu_build = args.gpu
-    builder = base / '.build-venv' / 'Scripts' / 'python.exe'
-    if not builder.exists():
-        subprocess.run([sys.executable, '-m', 'venv', str(base / '.build-venv')], check=True)
-    builder_check = subprocess.run([
-        str(builder), '-c',
-        'import sys; sys.exit(sys.version_info < (3, 11) or sys.maxsize <= 2**32)',
-    ], check=False)
-    if builder_check.returncode:
-        raise SystemExit(
-            'The private .build-venv must use 64-bit Python 3.11 or later. '
-            'Rename .build-venv and run the build again to recreate it.'
-        )
 
-    subprocess.run([str(builder), '-m', 'pip', 'install', '--upgrade', 'pip'], check=True)
-    subprocess.run([
-        str(builder), '-m', 'pip', 'install', '--upgrade', '--upgrade-strategy', 'eager', '-r', str(base / 'requirements.txt'),
-        '-r', str(base / 'requirements-build.txt')
-    ], check=True)
-    # Step 22 is part of the standard Windows build: bundle PyOpenCL so AMD,
-    # Intel and NVIDIA OpenCL devices can be benchmarked without modifying the
-    # user's Python environment. The vendor driver/ICD is still system-provided.
-    subprocess.run([str(builder), '-m', 'pip', 'install', '-r', str(base / 'requirements-gpu-universal.txt')], check=True)
-    if gpu_build:
-        subprocess.run([str(builder), '-m', 'pip', 'install', '-r', str(base / 'requirements-gpu-nvidia.txt')], check=True)
 
+def build_application(base: Path, builder: Builder, *, onefile=False, gpu_build=False):
+    """Package with the same prepared environment used by release tests."""
+    base = Path(base).resolve()
+    _validate_version_info(base)
     mode = '--onefile' if onefile else '--onedir'
     command = [
-        str(builder), '-m', 'PyInstaller',
+        str(builder.python), '-m', 'PyInstaller',
         '--noconfirm', '--clean', '--noupx', '--log-level', 'WARN', mode, '--windowed',
         '--name', 'ImageDrawBot',
         '--icon', str(base / 'assets' / 'image-draw-bot-icon.ico'),
@@ -318,7 +307,7 @@ def main(argv=None):
         if docs.is_dir():
             command.extend(['--add-data', str(docs) + ';docs'])
         command.append(str(base / 'DrawBot.py'))
-        subprocess.run(command, cwd=base, check=True)
+        subprocess.run(command, cwd=base, env=builder.source_environment(), check=True)
 
     output = base / 'dist' / ('ImageDrawBot.exe' if onefile else 'ImageDrawBot/ImageDrawBot.exe')
     valid_header = False

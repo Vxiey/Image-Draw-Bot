@@ -667,6 +667,9 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
 
     for phase in PHASES:
         remaining = sorted((c for c in components if c.phase == phase and c.paths), key=lambda c: (-_priority(c), c.component_id))
+        # execute_plan reselects the first colour at each retained phase.
+        if remaining and cost_model is not None:
+            current_color = None
         while remaining:
             if cancelled():
                 raise InterruptedError()
@@ -689,8 +692,8 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
                         moved=float(cost_model.path_seconds(first,cursor=cursor))
                         base=float(cost_model.path_seconds(first,cursor=None))
                         seconds+=max(0.0,moved-base)
-                    if current_color not in (None,comp.color_index):
-                        seconds+=float(cost_model.color_change_seconds)
+                    if current_color != comp.color_index:
+                        seconds+=sum(cost_model.color_selection_cost(comp.color_index))
                     # Keep the multi-pass contract, but within each phase choose
                     # the component with highest visual value per millisecond.
                     value=max(.001,float(_priority(comp)))
@@ -731,7 +734,7 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
         try:
             _initial_brush=max(1,int(getattr(cost_model,'options',{}).get('brush_px',1) or 1))
             estimated_total=float(cost_model.sequence_cost(
-                sequence,initial_brush=_initial_brush).total_seconds)
+                sequence,initial_brush=_initial_brush,include_color_verification=True).total_seconds)
         except Exception:
             # The geometry/order remains valid even if diagnostics cannot be costed.
             estimated_total=sum(float(cost_model.paths_seconds(c.paths)) for c in components if c.paths)
@@ -745,7 +748,7 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
         "phase_component_counts": component_counts,
         "scheduled_paths": len(sequence),
         "cost_aware": bool(cost_model is not None),
-        "cost_policy": "ExecutionCostModel stateful v3" if cost_model is not None else "legacy geometry scheduler",
+        "cost_policy": f"ExecutionCostModel stateful v{cost_model.model_version}" if cost_model is not None else "legacy geometry scheduler",
         "cost_model": cost_model.as_dict() if cost_model is not None else None,
         "estimated_execution_seconds": round(estimated_total,4) if cost_model is not None else None,
         "scheduled_color_switches": sum(1 for a,b in zip(sequence,sequence[1:]) if a["color_index"]!=b["color_index"]),

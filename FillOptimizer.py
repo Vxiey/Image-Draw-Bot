@@ -288,8 +288,8 @@ def _component_row_spans(points, w):
     return tuple(spans)
 
 
-def _simplify_closed_loop(loop):
-    """Remove collinear grid vertices while keeping a closed polygon."""
+def _simplify_closed_loop(loop, *, cancelled=lambda: False):
+    """Remove only between-neighbour vertices; retain reversals and closure."""
     if len(loop) < 5:
         return tuple(loop)
     pts = list(loop[:-1])
@@ -297,8 +297,10 @@ def _simplify_closed_loop(loop):
     while changed and len(pts) >= 4:
         changed = False; out = []; n = len(pts)
         for i, cur in enumerate(pts):
+            if i % 1024 == 0 and cancelled(): raise InterruptedError()
             prev = pts[(i - 1) % n]; nxt = pts[(i + 1) % n]
-            if (prev[0] == cur[0] == nxt[0]) or (prev[1] == cur[1] == nxt[1]):
+            if ((prev[0] == cur[0] == nxt[0] and min(prev[1],nxt[1]) < cur[1] < max(prev[1],nxt[1]))
+                    or (prev[1] == cur[1] == nxt[1] and min(prev[0],nxt[0]) < cur[0] < max(prev[0],nxt[0]))):
                 changed = True; continue
             out.append(cur)
         pts = out
@@ -308,31 +310,74 @@ def _simplify_closed_loop(loop):
     return tuple(pts)
 
 
-def _trace_component_contours(points, w, h):
-    """Trace exact cell-edge contours for one 4-connected palette component.
+def _pixel_center_contour(loop, cells, *, cancelled=lambda: False):
+    """Map clockwise unit cell edges onto their owning interior pixels.
+
+    A convex corner has one shared owner. A concave corner has diagonal
+    owners: join them through the unique in-component orthogonal neighbour,
+    so native input never draws an outside diagonal shortcut.
+    """
+    centers = []
+
+    def append(center):
+        if center not in cells: return False
+        if centers:
+            previous = centers[-1]
+            distance = abs(previous[0]-center[0]) + abs(previous[1]-center[1])
+            if distance == 0: return True
+            if distance == 2 and previous[0] != center[0] and previous[1] != center[1]:
+                bridge = next((p for p in ((center[0],previous[1]),(previous[0],center[1])) if p in cells),None)
+                if bridge is None: return False
+                centers.append(bridge)
+            elif distance != 1:
+                return False
+        centers.append(center)
+        return True
+
+    for number,(a,b) in enumerate(zip(loop,loop[1:])):
+        if number % 1024 == 0 and cancelled(): raise InterruptedError()
+        x,y = a; dx,dy = b[0]-x,b[1]-y
+        if (dx,dy) == (1,0): owner = (x,y)
+        elif (dx,dy) == (0,1): owner = (x-1,y)
+        elif (dx,dy) == (-1,0): owner = (x-1,y-1)
+        elif (dx,dy) == (0,-1): owner = (x,y-1)
+        else: return ()
+        if not append(owner): return ()
+    if not centers or not append(centers[0]): return ()
+    return _simplify_closed_loop(centers,cancelled=cancelled)
+
+
+def _trace_component_contours(points, w, h, *, cancelled=lambda: False):
+    """Trace pixel-center contours for one 4-connected palette component.
 
     Ambiguous self-touching grid vertices are rejected instead of guessed. That
     keeps bucket Fill conservative: an unsafe shape simply retains its original
     scanline strokes.
     """
-    cells = {(pos % w, pos // w) for pos in points}
+    cells = set()
+    for number,pos in enumerate(points):
+        if number % 1024 == 0 and cancelled(): raise InterruptedError()
+        cells.add((pos % w,pos // w))
     edges = []
-    for x, y in cells:
+    for number,(x,y) in enumerate(cells):
+        if number % 1024 == 0 and cancelled(): raise InterruptedError()
         if (x, y - 1) not in cells: edges.append(((x, y), (x + 1, y)))
         if (x + 1, y) not in cells: edges.append(((x + 1, y), (x + 1, y + 1)))
         if (x, y + 1) not in cells: edges.append(((x + 1, y + 1), (x, y + 1)))
         if (x - 1, y) not in cells: edges.append(((x, y + 1), (x, y)))
     outgoing = defaultdict(list); incoming = defaultdict(int)
-    for a, b in edges:
+    for number,(a,b) in enumerate(edges):
+        if number % 1024 == 0 and cancelled(): raise InterruptedError()
         outgoing[a].append(b); incoming[b] += 1
     vertices = set(outgoing) | set(incoming)
     if any(len(outgoing.get(v, ())) != 1 or incoming.get(v, 0) != 1 for v in vertices):
         return (), "ambiguous boundary"
     remaining = set(edges); loops = []
     while remaining:
-        a, b = next(iter(remaining)); loop = [a]; cur = a; nxt = b
+        a, b = min(remaining); loop = [a]; cur = a; nxt = b
         guard = 0
         while True:
+            if guard % 1024 == 0 and cancelled(): raise InterruptedError()
             edge = (cur, nxt)
             if edge not in remaining:
                 return (), "open boundary"
@@ -343,7 +388,7 @@ def _trace_component_contours(points, w, h):
             if len(choices) != 1 or guard > len(edges) + 2:
                 return (), "open boundary"
             nxt = choices[0]
-        simplified = _simplify_closed_loop(loop)
+        simplified = _pixel_center_contour(loop,cells,cancelled=cancelled)
         if len(simplified) < 5:
             return (), "degenerate boundary"
         loops.append(simplified)
@@ -354,8 +399,38 @@ def _loop_perimeter(loop):
     return int(round(sum(abs(b[0] - a[0]) + abs(b[1] - a[1]) for a, b in zip(loop, loop[1:]))))
 
 
-def _interior_seed(points, w, h, cx, cy):
-    cells = {(pos % w, pos // w) for pos in points}
+def _interior_seed(points, w, h, cx, cy, *, contour=None, cancelled=lambda: False):
+    cells = set()
+    for number,pos in enumerate(points):
+        if number % 1024 == 0 and cancelled(): raise InterruptedError()
+        cells.add((pos % w,pos // w))
+    if contour is not None:
+        # The one-pixel contour itself is already painted. A single bucket
+        # click must reach every remaining source pixel; a thin wall that
+        # divides two chambers must leave the original scanlines intact.
+        interior = cells.copy()
+        for a,b in zip(contour,contour[1:]):
+            if cancelled(): raise InterruptedError()
+            if a[0] == b[0]:
+                samples = ((a[0],y) for y in range(min(a[1],b[1]),max(a[1],b[1])+1))
+            elif a[1] == b[1]:
+                samples = ((x,a[1]) for x in range(min(a[0],b[0]),max(a[0],b[0])+1))
+            else:
+                return None
+            for number,p in enumerate(samples):
+                if number % 1024 == 0 and cancelled(): raise InterruptedError()
+                if p not in cells: return None
+                interior.discard(p)
+        if not interior: return None
+        seed = min(interior,key=lambda p:(abs(p[0]-cx)+abs(p[1]-cy),p[1],p[0]))
+        interior.remove(seed); pending = [seed]; visited = 0
+        while pending:
+            if visited % 1024 == 0 and cancelled(): raise InterruptedError()
+            x,y = pending.pop(); visited += 1
+            for p in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
+                if p in interior:
+                    interior.remove(p); pending.append(p)
+        return seed if not interior else None
     interior = [(x, y) for x, y in cells
                 if x > 0 and y > 0 and x + 1 < w and y + 1 < h
                 and (x - 1, y) in cells and (x + 1, y) in cells
@@ -383,11 +458,12 @@ def _outside_guard_pixels(points, w, h, limit=8):
 
 
 def _rectangle_contour(x0, y0, x1, y1):
-    # Grid-edge perimeter, closed explicitly.
-    return ((x0, y0), (x1 + 1, y0), (x1 + 1, y1 + 1), (x0, y1 + 1), (x0, y0))
+    # All consumers map integer coordinates as source pixel centres.
+    return ((x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0))
 
 
-def _component_to_region(color, points, w, h, mode, engine, safe_margin_px=0, rgb_override=None):
+def _component_to_region(color, points, w, h, mode, engine, safe_margin_px=0, rgb_override=None,
+                         *, cancelled=lambda: False):
     normalized = _normalize_fill_mode(mode)
     x_values = [p % w for p in points]; y_values = [p // w for p in points]
     x0, x1 = min(x_values), max(x_values); y0, y1 = min(y_values), max(y_values)
@@ -425,15 +501,15 @@ def _component_to_region(color, points, w, h, mode, engine, safe_margin_px=0, rg
     }[normalized]
     min_area, max_vertices, min_saved, max_shape_ratio = cfg
     if area < min_area or bw < 4 or bh < 4: return None, "small"
-    loops, why = _trace_component_contours(points, w, h)
+    loops, why = _trace_component_contours(points,w,h,cancelled=cancelled)
     if not loops: return None, why or "untraceable"
     if len(loops) != 1: return None, "holes"
     contour = loops[0]; vertices = len(contour) - 1; perimeter = _loop_perimeter(contour)
     if vertices > max_vertices: return None, "complex contour"
     shape_ratio = perimeter / max(1.0, sqrt(area))
     if shape_ratio > max_shape_ratio: return None, "high perimeter"
-    seed = _interior_seed(points, w, h, (x0+x1)//2, (y0+y1)//2)
-    if seed is None: return None, "no interior seed"
+    seed = _interior_seed(points,w,h,(x0+x1)//2,(y0+y1)//2,contour=contour,cancelled=cancelled)
+    if seed is None: return None, "no connected interior seed"
     # One continuous contour plus one Fill click replaces the source scanline runs.
     estimated_saved = max(0, run_count - 1)
     if estimated_saved < min_saved: return None, "low savings"
@@ -496,7 +572,8 @@ def detect_fill_regions(image, mode="Balanced", *, engine="Auto", max_regions=12
             interior_components += 1
         if touches_border or len(points) < floor:
             continue
-        region, why = _component_to_region(color, points, w, h, normalized, resolved, safe_margin_px=safe_margin)
+        region, why = _component_to_region(color,points,w,h,normalized,resolved,
+                                          safe_margin_px=safe_margin,cancelled=cancelled)
         if region is None:
             fallback += 1; rejected[why or "unsafe"] += 1
             continue
@@ -580,7 +657,8 @@ def detect_fill_regions_from_groups(groups, palette_rgb, image_size, mode="Balan
         if not touches_border:interior_components+=1
         if touches_border or len(points)<floor:continue
         rgb=palette_rgb[color] if 0<=color<len(palette_rgb) else (0,0,0)
-        region,why=_component_to_region(color,points,w,h,normalized,resolved,safe_margin_px=safe_margin,rgb_override=rgb)
+        region,why=_component_to_region(color,points,w,h,normalized,resolved,
+            safe_margin_px=safe_margin,rgb_override=rgb,cancelled=cancelled)
         if region is None:
             fallback+=1;rejected[why or 'unsafe']+=1;continue
         candidates.append(region)

@@ -928,9 +928,9 @@ def make_plan(original, area, options, cancelled=lambda: False):
     image, fitted = prepare_image(original, area, options['detail'], sample_limit=options.get('planner_sample_limit'), max_pixels=options.get('planner_max_pixels'),
                                   preview_detail_mode=preview_detail_mode,preview_detail_meta=preview_detail_meta,cancelled=cancelled)
     if preview_detail_meta:options['preview_detail_meta']=preview_detail_meta
-    alpha = image.getchannel('A')
-    image = ImageEnhance.Contrast(image.convert('RGB')).enhance(options['contrast'])
-    image.putalpha(alpha)
+    from VisibleContrast import enhance_contrast
+    with closing(image) as prepared_source:
+        image = enhance_contrast(prepared_source, options['contrast'], cancelled=cancelled)
     profiler_stop(options, 'preprocessing', _prof_pre)
     if options.get('paint_current_color'):
         from PixelData import monochrome_strokes
@@ -1092,7 +1092,7 @@ def make_plan(original, area, options, cancelled=lambda: False):
     # RGB is already composited on white for matching and smoothing. Retain
     # only the zero-alpha drawable mask afterwards; restoring partial alpha
     # would composite those visible colours a second time and wash them out.
-    with closing(alpha):
+    with closing(image.getchannel('A')) as alpha:
         source_has_transparency = alpha.getextrema()[0] == 0
         with closing(image) as rgba_source, closing(Image.new('RGBA',image.size,'white')) as backdrop:
             backdrop.alpha_composite(rgba_source)
@@ -2022,30 +2022,40 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     # Charge controls that the retained plan actually uses. Unused custom
     # colours must not consume the drawing budget; progressive phase changes
     # explicitly reselect their colour even when its index is unchanged.
+    from ExecutionCostModel import build_cost_model
+    timing_options=dict(options)
+    # This raw summary is later calibrated once by DrawTimeEstimate. Keep
+    # per-operation learning out of the cold summary as well as its final ETA.
+    timing_options['_execution_cost_calibration_override']={}
+    timing_model=build_cost_model(timing_options,image.size,fitted)
     selection_counts={i:1 for i in active_stroke_indexes}
+    sequence_timing=None
     if execution_sequence:
-        selection_counts={};previous_selection=None
-        for entry in execution_sequence:
-            if cancelled():raise InterruptedError()
-            selection=(int(entry['color_index']),str(entry.get('phase','details')))
-            if selection!=previous_selection:
-                index=selection[0]
-                selection_counts[index]=selection_counts.get(index,0)+1
-            previous_selection=selection
-    if options.get('fill_tool_actions'):
+        if cancelled():raise InterruptedError()
+        sequence_timing=timing_model.sequence_cost(execution_sequence,
+            initial_brush=max(1,int(options.get('brush_px') or 1)),include_color_verification=True,
+            include_geometry=False,cancelled=cancelled)
+        selection_counts={}
+    if options.get('fill_tool_actions') or options.get('fill_tool_available'):
         for index in fill_color_indexes:
             selection_counts[index]=selection_counts.get(index,0)+1
         if fill_meta.get('enabled') and fill_meta.get('color_index') is not None:
             index=int(fill_meta['color_index'])
             selection_counts[index]=selection_counts.get(index,0)+1
-    palette_batches=sum(selection_counts.values())
-    palette_seconds=0.0 if options.get('paint_current_color') else palette_batches*estimate_delivery.palette_click_delay
+    palette_seconds=sum(times*timing_model.color_selection_cost(index)[0]
+                        for index,times in selection_counts.items())
+    custom_color_seconds=sum(times*timing_model.color_selection_cost(index)[1]
+                             for index,times in selection_counts.items())
+    if sequence_timing is not None:
+        palette_seconds+=sequence_timing.palette_seconds
+        custom_color_seconds+=sequence_timing.custom_color_seconds
 
     fill_seconds=0.0;fill_timing_meta={}
     if fill_regions:
         try:
             from RegionFillEngine import estimate_fill_execution_seconds
-            fill_timing_meta=estimate_fill_execution_seconds(fill_regions,image.size,fitted,options)
+            fill_timing_meta=estimate_fill_execution_seconds(fill_regions,image.size,fitted,timing_options,
+                                                           use_cached_cost=False)
             fill_seconds=float(fill_timing_meta.get('total_seconds',0.0) or 0.0)
         except Exception:
             # Legacy fallback remains operation-count based if a custom/old plan
@@ -2059,14 +2069,10 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
 
     tool_seconds=len(options.get('tool_actions') or ())*estimate_delivery.ui_control_delay
     clear_seconds=max(0.0,float(options.get('canvas_clear_estimate_seconds',0.0) or 0.0))
-    selectors=options.get('color_selectors') or ()
-    custom_selectors=sum(times for index,times in selection_counts.items()
-                         if 0<=index<len(selectors) and isinstance(selectors[index],dict)
-                         and selectors[index].get('kind')=='custom')
-    custom_color_seconds=custom_selectors*(.78 if options.get('exact_color_available') and not options.get('paint_current_color') else .0)
     verification_seconds=0.0
     if options.get('adaptive_color_verification') and not options.get('paint_current_color'):
-        verification_seconds += colors*(estimate_delivery.palette_click_delay+.14)
+        verification_seconds += (sequence_timing.verification_seconds if sequence_timing is not None
+                                 else colors*(estimate_delivery.palette_click_delay+.14))
     if (options.get('visual_verification_enabled') and not options.get('paint_current_color')
             and str(options.get('visual_verification_resolved') or options.get('visual_verification','Auto'))!='Off'):
         if not execution_sequence:
@@ -2748,7 +2754,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
     def draw_closed_contour(points):
         """Draw a closed region perimeter with one continuous mouse-down gesture.
 
-        Better Fill v1.0.41 uses the component's traced grid boundary instead of
+        Better Fill uses the component's traced pixel-center boundary instead of
         assuming an axis-aligned rectangle. Keeping the perimeter in one press
         avoids tiny gaps at corners that could let Paint's bucket leak outside.
         """
@@ -6912,14 +6918,13 @@ class DrawBotApp:
         brush_auto=brush_raw.casefold()=='auto'
         try:
             brush=None if brush_auto else int(brush_raw)
-            limit=int(self.max_seconds.get())
         except (TypeError,ValueError,tk.TclError) as error:
-            raise ValueError('Brush width must be Auto or a whole number, and time limit must be a whole number.') from error
+            raise ValueError('Brush width must be Auto or a whole number.') from error
         _profile_key_for_brush=PROFILES[self.game.get()][0]
         _brush_limit=5 if _profile_key_for_brush in ('gartic-phone','gartic-io') else 50
-        if (brush is not None and not 1<=brush<=_brush_limit) or not 5<=limit<=3600:
+        if brush is not None and not 1<=brush<=_brush_limit:
             _label='Gartic level 1–5' if _brush_limit==5 else '1–50 px'
-            raise ValueError(f'Brush width: Auto or {_label}. Time limit: 5–3600 seconds.')
+            raise ValueError(f'Brush width: Auto or {_label}.')
         auto_brush_width_meta=None
         quality=self.quality.get();speed=normalize_speed(self.speed.get());precision=self.precision.get();mode=self.mode.get();shape_order=getattr(getattr(self,'shape_order',None),'get',lambda:'Fill first')();shape_model=getattr(getattr(self,'shape_model',None),'get',lambda:'Auto')();max_stroke_cap=getattr(getattr(self,'max_stroke_cap',None),'get',lambda:'Auto')();progressive_rendering=getattr(getattr(self,'progressive_rendering',None),'get',lambda:'Auto')();planning_watchdog=getattr(getattr(self,'planning_watchdog',None),'get',lambda:'Auto')();time_budget_mode=getattr(getattr(self,'time_budget_mode',None),'get',lambda:'Manual')();target_stroke_count=getattr(getattr(self,'target_stroke_count',None),'get',lambda:'Auto')();target_stroke_custom=getattr(getattr(self,'target_stroke_custom',None),'get',lambda:'2500')();render_style=self.render_style.get();draw_quality=getattr(getattr(self,'draw_quality',None),'get',lambda:'High likeness')();human_mode='Off';gpu_mode=getattr(getattr(self,'gpu_mode',None),'get',lambda:'Auto')();gpu_vram=getattr(getattr(self,'gpu_vram',None),'get',lambda:'Auto')();gpu_performance=getattr(getattr(self,'gpu_performance',None),'get',lambda:'High throughput')();cpu_workers=getattr(getattr(self,'cpu_workers',None),'get',lambda:'Auto')();cpu_engine=getattr(getattr(self,'cpu_engine',None),'get',lambda:'Auto')();ram_budget=getattr(getattr(self,'ram_budget',None),'get',lambda:'Auto')();ram_custom_mb=getattr(getattr(self,'ram_custom_mb',None),'get',lambda:'4096')();planning_resolution=getattr(getattr(self,'planning_resolution',None),'get',lambda:'High')();resource_scheduler=getattr(getattr(self,'resource_scheduler',None),'get',lambda:'Auto')();profile_engine=getattr(getattr(self,'profile_engine',None),'get',lambda:'Manual settings')();edge_behavior=getattr(getattr(self,'edge_behavior',None),'get',lambda:'Auto')();background_fill=getattr(getattr(self,'background_fill',None),'get',lambda:'Balanced')();fill_engine=getattr(getattr(self,'fill_engine',None),'get',lambda:'Auto')();background_simplification=getattr(getattr(self,'background_simplification',None),'get',lambda:'Balanced')();color_grouping=getattr(getattr(self,'color_grouping',None),'get',lambda:'Smart')();color_workflow=getattr(getattr(self,'color_workflow',None),'get',lambda:'Finish color first')();stroke_optimizer=getattr(getattr(self,'stroke_optimizer',None),'get',lambda:'Auto')();adaptive_detail=getattr(getattr(self,'adaptive_detail',None),'get',lambda:'Auto')();detail_zoom=getattr(getattr(self,'detail_zoom',None),'get',lambda:'Auto')();quick_sketch_style=getattr(getattr(self,'quick_sketch_style',None),'get',lambda:'Balanced')();quick_sketch_fill_preference=getattr(getattr(self,'quick_sketch_fill_preference',None),'get',lambda:'Safe Fill First')();hybrid_mode=getattr(getattr(self,'hybrid_mode',None),'get',lambda:'Auto Hybrid')();visual_verification=getattr(getattr(self,'visual_verification',None),'get',lambda:'Auto')();color_rendering=getattr(getattr(self,'color_rendering',None),'get',lambda:'Perceptual match')();color_fidelity=getattr(getattr(self,'color_fidelity',None),'get',lambda:'Faithful')();color_layers=getattr(getattr(self,'color_layers',None),'get',lambda:'Off')();custom_color_workflow=getattr(getattr(self,'custom_color_workflow',None),'get',lambda:'Calibrated palette')();exact_color_limit=getattr(getattr(self,'exact_color_limit',None),'get',lambda:'Auto')();preview_mode=getattr(getattr(self,'preview_mode',None),'get',lambda:'Manual')();preview_detail_level=getattr(getattr(self,'preview_detail_level',None),'get',lambda:'Detailed')();tool_strategy=getattr(getattr(self,'tool_strategy',None),'get',lambda:'Auto')()
         use_region_fill_engine=bool(getattr(getattr(self,'use_region_fill_engine',None),'get',lambda:True)())
@@ -6969,6 +6974,19 @@ class DrawBotApp:
         validate_progressive_rendering(progressive_rendering)
         validate_planning_watchdog(planning_watchdog)
         validate_time_budget_mode(time_budget_mode)
+        # The numeric control belongs to Manual/Custom. Fixed presets and
+        # Unlimited must not depend on stale text in that inactive control.
+        manual_budget=time_budget_mode in ('Manual','Custom')
+        try:
+            limit=int(self.max_seconds.get())
+        except (TypeError,ValueError) as error:
+            if manual_budget:
+                raise ValueError('Time limit must be a whole number.') from error
+            limit=180
+        if not 5<=limit<=3600:
+            if manual_budget:
+                raise ValueError('Time limit: 5–3600 seconds.')
+            limit=180
         validate_target_stroke_count(target_stroke_count)
         if render_style not in ('Auto','Portrait / shaded','Standard / pixel',QUICK_SKETCH_RENDER_STYLE,SKETCH_FILL_RENDER_STYLE,HYBRID_RENDER_STYLE):
             raise ValueError('Choose a valid rendering style.')
@@ -7066,7 +7084,11 @@ class DrawBotApp:
         contrast=float(self.contrast.get())
         if not math.isfinite(contrast) or not .5<=contrast<=2:
             raise ValueError('Contrast must stay between 0.5 and 2.0.')
-        effective_limit, time_budget_active = resolve_time_budget_seconds(time_budget_mode, limit)
+        from TimeBudget import resolve_time_budget_details
+        budget_details=resolve_time_budget_details(time_budget_mode,limit,deadline_safety_reserve)
+        effective_limit=(3600 if budget_details.get('unlimited') else
+                         max(1,int(round(float(budget_details['render_budget_seconds'])))))
+        time_budget_active=bool(budget_details['active'])
         target_cap, target_meta = resolve_target_stroke_count(
             target_stroke_count, target_stroke_custom,
             time_budget_mode=time_budget_mode, effective_time_seconds=effective_limit,
@@ -7105,13 +7127,15 @@ class DrawBotApp:
         result={'detail':QUALITY[quality],'delay':SPEED[speed],'speed':speed,'precision':precision,'profile_name':self.game.get(),'profile_key':profile_key,'paint_profile':bool(paint_profile),'calibration_fingerprint':calibration_fingerprint,'calibration_state':calibration_state,
                 'lines':mode!=DOT_MODE,'drawing_mode':mode,'smart_paths':mode==SMART_PATH_MODE,'shape_order':shape_order,'shape_model':shape_model,'max_stroke_cap':max_stroke_cap,'progressive_rendering':progressive_rendering,'planning_watchdog':planning_watchdog,'planning_timeout_seconds':45 if mode==SHAPE_PATH_MODE else 75,'drawing_style':getattr(getattr(self,'drawing_style',None),'get',lambda:'Auto')(),'render_style':render_style,'draw_quality':draw_quality,'human_mode':human_mode,'gpu_mode':gpu_mode,'gpu_vram':gpu_vram,'gpu_performance':gpu_performance,'cpu_workers':cpu_workers,'cpu_engine':cpu_engine,'ram_budget':ram_budget,'ram_custom_mb':ram_custom_mb,'planning_resolution':planning_resolution,'resource_scheduler':resource_scheduler,'profile_engine':profile_engine,'profile_policy_meta':profile_policy_meta,'profile_polish_meta':profile_polish_meta,**allocation,'background_fill':background_fill,'fill_engine':fill_engine,'background_simplification':background_simplification,'color_grouping':color_grouping,'color_workflow':color_workflow,'stroke_optimizer':stroke_optimizer,'stroke_optimizer_resolved':resolve_stroke_optimizer(stroke_optimizer,drawing_mode=mode),'adaptive_detail':adaptive_detail,'detail_zoom':detail_zoom,'quick_sketch_style':quick_sketch_style,'quick_sketch_fill_preference':quick_sketch_fill_preference,'hybrid_mode':hybrid_mode,'visual_verification':visual_verification,'visual_verification_resolved':resolve_visual_verification(visual_verification,paint_profile=paint_profile,dry_run=False,test=False),'color_rendering':color_rendering,'color_fidelity':color_fidelity,'color_layers':color_layers,'custom_color_workflow':custom_color_workflow,'exact_color_limit':exact_color_limit,'exact_color_limit_resolved':resolve_exact_color_limit(exact_color_limit,draw_quality=draw_quality,preview=False),'exact_color_available':custom_rgb_available(PROFILES[self.game.get()][0]),'preview_mode':preview_mode,'preview_detail_level':preview_detail_level,'auto_clear_canvas':bool(getattr(getattr(self,'auto_clear_canvas',None),'get',lambda:False)()),'canvas_clear_strategy':'pending','canvas_clear_actions':[],'canvas_clear_restore_actions':[],'canvas_clear_estimate_seconds':0.0,'tool_strategy':tool_strategy,'subject_focus':self.subject_focus.get() if hasattr(self,'subject_focus') else 'Off','subject_region':getattr(self,'subject_region',None),'portrait_focus':bool(self.portrait_focus.get()),'skip_white':bool(self.skip_white.get()),'contrast':contrast,'outline':bool(self.outline.get()),'sketch_detail':getattr(getattr(self,'sketch_detail',None),'get',lambda:'Auto')(),'brush_px':brush,'brush_px_requested':brush_raw,'auto_brush_width_meta':auto_brush_width_meta,'gartic_opacity':getattr(getattr(self,'gartic_opacity',None),'get',lambda:'Auto')(),'canvas_edge_verification':'Auto','canvas_edge_margin_px':24,'canvas_edge_tolerance_px':4,'canvas_edge_search_px':24,'edge_behavior':edge_behavior,'edge_behavior_resolved':resolve_edge_behavior(edge_behavior, profile_name=self.game.get(), drawing_mode=mode, outline=bool(self.outline.get())),'max_seconds':effective_limit,'manual_max_seconds':limit,'time_budget_mode':time_budget_mode,'time_budget_seconds':effective_limit,'time_budget_active':time_budget_active,'adaptive_deadline_renderer':adaptive_deadline_renderer,'deadline_safety_reserve':deadline_safety_reserve,'target_stroke_count':target_stroke_count,'target_stroke_custom':target_stroke_custom,'target_stroke_count_resolved':target_cap,**target_meta,
                 **anchor_options,
-                'render_preset':getattr(getattr(self,'render_preset',None),'get',lambda:'Manual')(),'unlimited_time':time_budget_mode=='Unlimited',
+                'render_preset':getattr(getattr(self,'render_preset',None),'get',lambda:'Manual')(),'unlimited_time':bool(budget_details.get('unlimited')),
                 'read_gartic_timer':bool(getattr(getattr(self,'read_gartic_timer',None),'get',lambda:True)()),
                 'paint_current_color':uses_paint_color(self) or erase_mode,'erase_mode':erase_mode,
                 'adaptive_color_verification':bool(paint_profile and not erase_mode),'strict_color_verification':bool(paint_profile and not erase_mode),'visual_verification_enabled':bool(paint_profile and not erase_mode and resolve_visual_verification(visual_verification,paint_profile=paint_profile,dry_run=False,test=False)!='Off'),'color_verification_tolerance':48,'color_probe_source_span':4,
                 'color_session_cache':getattr(self,'color_session_cache',{}),
                 'render_resume_state':getattr(self,'pending_render_resume',None),
                 'paint_tool':selected_tool,'effective_paint_tool':effective_paint_tool,'tool_actions':[],'fill_tool_available':fill_available,'fill_tool_actions':[],'fill_restore_actions':[]}
+        result['use_region_fill_engine']=use_region_fill_engine
+        result['fill_aggressiveness']=fill_aggressiveness
         from PicturePalettePlanning import active_picture_palette
         prepared=active_picture_palette(self)
         if prepared and not result.get('paint_current_color') and not result.get('outline'):
@@ -7629,6 +7653,7 @@ class DrawBotApp:
             self.status.set(f'Could not paste. Copy an image first. {error}')
 
     def capture_screen(self):
+        if not DrawBotApp._profile_action_ready(self):return False
         if len(self.corners)!=2:
             self.status.set('Select the drawing area first.');return
         area=self.area()
@@ -7640,14 +7665,28 @@ class DrawBotApp:
         self.begin_worker('screen',work)
 
     def display_screen(self,image):
+        if self.closing:
+            image.close();return False
         from PIL import ImageTk
-        window=tk.Toplevel(self.root);window.title('Captured drawing area')
-        view=image.copy();view.thumbnail((800,480))
-        photo=ImageTk.PhotoImage(view)
+        try:
+            window=tk.Toplevel(self.root)
+        except BaseException:
+            image.close();raise
+        window.title('Captured drawing area')
+        window.bind('<Destroy>',lambda event:image.close() if event.widget is window else None,add='+')
+        try:
+            with closing(image.copy()) as view:
+                view.thumbnail((800,480))
+                photo=ImageTk.PhotoImage(view)
+        except BaseException:
+            try:window.destroy()
+            except (tk.TclError,RuntimeError):pass
+            image.close()
+            raise
         label=ttk.Label(window,image=photo);label.image=photo;label.pack(padx=12,pady=12)
         ttk.Label(window,text='Check that the correct drawing area is selected. This is a screenshot, not automatic application recognition.').pack(padx=12)
         def use():
-            if self.activity:return
+            if not DrawBotApp._profile_action_ready(self):return False
             self._suppress_recovery=False;self.original=image.convert('RGBA');self.plan=None;self.file_label.set('Image from screen')
             self.subject_region=None;self.upscale_original=None
             self.background_removal_original=None;self.background_removal_meta=None
@@ -7655,20 +7694,42 @@ class DrawBotApp:
             DrawBotApp._clear_render_resume(self,'new screen image')
             window.destroy();self._mark_plan_stale('Screen image captured. Press Build preview when ready.');self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40);self._maybe_auto_preview(delay=900, reason='screen-image')
         def save():
-            path=filedialog.asksaveasfilename(defaultextension='.png',filetypes=[('PNG','*.png')])
-            if path:
-                try:image.save(path)
-                except OSError as error:messagebox.showerror('Could not save',str(error))
+            return DrawBotApp._save_captured_png(self,image)
         ttk.Button(window,text='Use as source image',command=use).pack(side='left',padx=12,pady=12)
         ttk.Button(window,text='Save screenshot',command=save).pack(side='left',padx=12)
         ttk.Button(window,text='Close',command=window.destroy).pack(side='right',padx=12)
 
+    def _save_captured_png(self,image):
+        if not DrawBotApp._profile_action_ready(self):return False
+        path=filedialog.asksaveasfilename(defaultextension='.png',filetypes=[('PNG','*.png')])
+        if not path or not DrawBotApp._profile_action_ready(self):return False
+        try:snapshot=image.copy()
+        except (ValueError,OSError):
+            self.status.set('The captured image is no longer available. Capture the area again.');return False
+        def work():
+            from RuntimePaths import atomic_binary_writer
+            with closing(snapshot):
+                with atomic_binary_writer(Path(path),cancelled=self.stop.is_set) as stream:
+                    snapshot.save(stream,format='PNG')
+            self.events.put(('png_saved',path))
+        started=False
+        try:
+            started=bool(self.begin_worker('png-export',work))
+            return started
+        finally:
+            if not started:snapshot.close()
+
     def record_screen(self):
+        if not DrawBotApp._profile_action_ready(self):return False
         if len(self.corners)!=2:
             self.status.set('Select the drawing area first.');return
+        area=tuple(self.area())
+        profile=getattr(self,'_active_profile_name',None)
         path=filedialog.asksaveasfilename(defaultextension='.gif',filetypes=[('Animated GIF','*.gif')],initialfile='ImageDrawBot-recording.gif')
         if not path:return
-        area=self.area()
+        if (not DrawBotApp._profile_action_ready(self) or
+                getattr(self,'_active_profile_name',None)!=profile or
+                len(self.corners)!=2 or tuple(self.area())!=area):return False
         def work():
             for second in (3,2,1):
                 self.events.put(('status',f'Recording starts in {second} s. Move this window away from the drawing area.'))
@@ -7701,7 +7762,7 @@ class DrawBotApp:
             finally:
                 for frame in frames:frame.close()
             self.events.put(('terminal_status',('record',f'Recording saved: {destination.name}')))
-        self.begin_worker('record',work)
+        return bool(self.begin_worker('record',work))
 
     def paste_url(self):
         try:self.url.set(self.root.clipboard_get().strip())
@@ -8106,6 +8167,7 @@ class DrawBotApp:
         try:
             from PIL import Image,ImageTk
             from PreviewNavigation import clear_viewport
+            from PreviewBitmapCache import clear_bitmap,photo_for
             from PreviewViews import VIEW_SPECS,view_images
             photos=[]
             images=view_images(self);pairs=[]
@@ -8114,12 +8176,14 @@ class DrawBotApp:
                 if canvas is not None:pairs.append((canvas,images[name]))
             for canvas,im in pairs:
                 try:
-                    if not canvas.winfo_exists():continue
-                    if im is None:clear_viewport(canvas)
+                    if not canvas.winfo_exists():
+                        clear_bitmap(canvas);continue
+                    if im is None:
+                        clear_viewport(canvas);clear_bitmap(canvas)
                     if not canvas.winfo_ismapped():
-                        canvas.delete('all');canvas._preview_photo=None
+                        canvas.delete('all');clear_bitmap(canvas)
                         continue
-                    canvas.delete('all');canvas._preview_photo=None
+                    canvas.delete('all')
                     w,h=max(1,canvas.winfo_width()),max(1,canvas.winfo_height())
                     if im is None:
                         is_original=canvas is self.original_canvas
@@ -8161,25 +8225,23 @@ class DrawBotApp:
                         canvas.create_text(w/2,h/2+2,text=title,fill='#f0f4fb',font=('Segoe UI',19,'bold'),justify='center',width=max(100,w-30))
                         canvas.create_text(w/2,h/2+38,text=hint,fill='#a6b2c5',font=('Segoe UI',11),justify='center',width=max(100,w-30))
                         continue
-                    from PreviewQuality import viewport_image
                     from PreviewNavigation import record_viewport
                     zoom=float(getattr(getattr(self,'preview_zoom',None),'get',lambda:0)())
                     viewport_size=(max(1,w-16),max(1,h-16))
                     pan=getattr(canvas,'_preview_pan',(0,0))
-                    copy,scale=viewport_image(im,viewport_size,zoom,pan)
-                    try:photo=ImageTk.PhotoImage(copy)
-                    finally:copy.close()
+                    photo=photo_for(canvas,im,viewport_size,zoom,pan,make_photo=ImageTk.PhotoImage)
                     photos.append(photo);canvas.create_image(w/2,h/2,image=photo)
                     canvas._preview_photo=photo
                     record_viewport(canvas,im.size,viewport_size,zoom,pan)
                 except (ValueError,TypeError,MemoryError,OverflowError,OSError,RuntimeError) as error:
-                    clear_viewport(canvas)
+                    clear_viewport(canvas);clear_bitmap(canvas)
                     log_event(f'Preview render failed safely: {type(error).__name__}: {error}')
                     try:
                         canvas.create_text(max(1,canvas.winfo_width())/2,max(1,canvas.winfo_height())/2,text='This view could not be rendered. Try Fit or rebuild preview.',fill='#f0f4fb',width=280)
                     except tk.TclError:
                         pass  # The canvas may have been destroyed during rendering.
                 except tk.TclError as error:
+                    clear_bitmap(canvas)
                     # A canvas can disappear while the application is closing or a
                     # tab is being rebuilt. That should not terminate the GUI.
                     log_event(f'Preview canvas redraw skipped after TclError: {error}')
@@ -9466,11 +9528,13 @@ class DrawBotApp:
             return False
         if self.activity:
             self.root.after(100,lambda:DrawBotApp._install_checked_update(self,payload));return False
-        self.update_request=None
-        try:self.save_settings()
+        try:
+            if self.save_settings() is False:
+                raise OSError('Current settings could not be saved. Nothing was installed.')
         except Exception as error:
             self.update_summary.set(f'Could not save settings before update: {error}')
             return False
+        self.update_request=None
         self.update_summary.set('Verifying installer and starting the update…')
         def work():
             from UpdateCenter import launch_installer

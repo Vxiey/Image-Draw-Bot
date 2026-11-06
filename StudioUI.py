@@ -8,10 +8,11 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
-from UiKeyboardNavigation import KeyboardButton
+from UiKeyboardNavigation import KeyboardButton, KeyboardOptionMenu
 from GameProfiles import PROFILES, profile_ui, profile_defaults
 from ProfileEngine import PROFILE_ENGINE_MODES, policy_summary
-from ProfilePortability import export_profile_dialog, import_profile_dialog, reset_profile_dialog
+from ProfilePortability import (export_profile_dialog, import_profile_dialog, reset_profile_dialog,
+                                rename_custom_profile_dialog, remove_custom_profile_dialog)
 from EdgeBehavior import EDGE_BEHAVIOR_MODES
 from Version import APP_VERSION
 from PictureCustomPalette import start_picture_custom_palette
@@ -51,7 +52,7 @@ class ToolTip:
         widget.bind('<ButtonPress>', self._leave, add='+')
         widget.bind('<Destroy>', self._leave, add='+')
         for sequence, callback in (('<FocusIn>', self._enter), ('<FocusOut>', self._leave)):
-            if isinstance(widget, KeyboardButton):
+            if isinstance(widget, (KeyboardButton, KeyboardOptionMenu)):
                 tk.Misc.bind(widget, sequence, callback, add='+')
             else:
                 widget.bind(sequence, callback, add='+')
@@ -183,7 +184,7 @@ def build_ui(a, quality, speed):
                                     text_color=TEXT, font=('Segoe UI', 12)))
 
     def menu(parent, var, values, command=None, width=190):
-        return control(ctk.CTkOptionMenu(
+        return control(KeyboardOptionMenu(
             parent, variable=var, values=list(values),
             command=command or (lambda _value: a.options_changed()), width=width,
             height=39, corner_radius=9, fg_color=FIELD, button_color=FIELD,
@@ -375,6 +376,14 @@ def build_ui(a, quality, speed):
     import_btn.pack(side='left', fill='x', expand=True, padx=(4, 0))
     reset_profile_btn = btn(step1, '↺  Reset profile to defaults', lambda: reset_profile_dialog(a), height=31)
     reset_profile_btn.pack(fill='x', pady=(0, 5))
+    custom_profile_actions = frame(step1)
+    custom_profile_actions.pack(fill='x', pady=(0, 5))
+    rename_profile_btn = btn(custom_profile_actions, 'Rename…', lambda: rename_custom_profile_dialog(a), height=31, width=125)
+    rename_profile_btn.pack(side='left', fill='x', expand=True, padx=(0, 4))
+    remove_profile_btn = btn(custom_profile_actions, 'Remove…', lambda: remove_custom_profile_dialog(a), height=31, width=125)
+    remove_profile_btn.pack(side='left', fill='x', expand=True, padx=(4, 0))
+    tooltip(rename_profile_btn, 'Rename this custom profile while keeping its saved settings and calibration.')
+    tooltip(remove_profile_btn, 'Remove this custom profile and its local settings/calibration after confirmation. Export first to keep a backup.')
     tooltip(export_btn, 'Step 27: export only this profile to a portable .drawprofile/JSON file. Hardware/timing state and input authorization are excluded.')
     tooltip(import_btn, 'Step 27: validate and import a .drawprofile. Existing names can be replaced or imported as an isolated copy.')
     tooltip(reset_profile_btn, 'Delete only this profile’s saved settings/calibration/cache files and restore Image Draw Bot defaults. Other profiles are untouched.')
@@ -1139,7 +1148,7 @@ def build_ui(a, quality, speed):
     a.paint_tool_text.trace_add('write', refresh_ui_state)
     a.summary.trace_add('write', refresh_ui_state)
     from ProfileIsolation import register_controls
-    register_controls(a,[(a.paint_tool_menu,'paint'),(a.paint_tool_label,'paint'),
+    register_controls(a,[(custom_profile_actions,'custom'),(a.paint_tool_menu,'paint'),(a.paint_tool_label,'paint'),
         (a.paint_auto_button,'paint'),(a.paint_tool_button,'paint'),(a.picture_palette_button,'paint'),
         (a.one_click_setup_button,'oneclick'),(a.one_click_setup_label,'oneclick'),
         (one_click,'browser-auto'),(a.browser_one_click_label,'browser-auto'),

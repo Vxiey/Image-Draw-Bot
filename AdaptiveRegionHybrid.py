@@ -91,7 +91,7 @@ def _raster_line(index: np.ndarray, color: int, stroke, *, cancelled=lambda: Fal
 
 
 def pixel_map_from_groups(image: Image.Image, groups, palette_rgb: Sequence[Sequence[int]], *,
-                          cancelled=lambda: False) -> PixelMap:
+                          gpu_mode: str = "Auto", cancelled=lambda: False) -> PixelMap:
     """Reconstruct the exact quantized target raster from already-built groups."""
     _cancel(cancelled)
     palette_count=validate_palette_count(len(palette_rgb))
@@ -125,7 +125,7 @@ def pixel_map_from_groups(image: Image.Image, groups, palette_rgb: Sequence[Sequ
         with closing(visible_rgb_image(image)) as source_rgb:
             visible=np.asarray(source_rgb,dtype=np.float32)
         lum=(visible[...,0]*.2126+visible[...,1]*.7152+visible[...,2]*.0722)/255.0
-        source_edge,route=edge_magnitude(lum,gpu_mode="Auto",cancelled=cancelled)
+        source_edge,route=edge_magnitude(lum,gpu_mode=gpu_mode,cancelled=cancelled)
         source_edge=np.asarray(source_edge,dtype=np.float32)
         if source_edge.shape!=edge.shape:source_edge=np.zeros_like(edge)
         source_edge=np.clip(source_edge/max(.001,float(np.percentile(source_edge,95)) if source_edge.size else 1.0),0,1)
@@ -239,23 +239,57 @@ def _paint_path(mask:np.ndarray,path,brush_px:int,*,value=True,cancelled=lambda:
         mask[y0:y1+1,x0:x1+1]=value
 
 
-def _eroded_centers(target:np.ndarray,brush_px:int) -> np.ndarray:
-    """Centres whose simulated brush footprint stays entirely in target.
+def _axis_footprint(mask,brush_px,axis,require_all,*,cancelled):
+    """Rolling Boolean window counts with at most 16x1024 int64 scratch.
 
-    For even brushes _paint_path uses an asymmetric footprint (for 2 px: the
-    centre pixel plus +1).  The erosion must use that same direction or the
-    planner approves the wrong border and leaves the opposite border uncovered.
+    A count changes only when one source value enters and another leaves. The
+    cumulative delta is evaluated in bounded chunks, so neither brush size nor
+    a very wide source creates an expanded window tensor or full-frame shifts.
+    Missing source coordinates contribute zero, matching the physical border.
     """
-    b=max(1,int(brush_px));lo=(b-1)//2;hi=b//2
-    valid=np.ones_like(target,dtype=np.bool_);h,w=target.shape
-    for dy in range(-lo,hi+1):
-        for dx in range(-lo,hi+1):
-            shifted=np.zeros_like(target,dtype=np.bool_)
-            yd=slice(max(0,-dy),min(h,h-dy));ys=slice(max(0,dy),min(h,h+dy))
-            xd=slice(max(0,-dx),min(w,w-dx));xs=slice(max(0,dx),min(w,w+dx))
-            shifted[yd,xd]=target[ys,xs]
-            valid &= shifted
-    return valid
+    view=mask if axis==1 else mask.T
+    rows,width=view.shape
+    result=np.empty(view.shape,dtype=np.bool_)
+    before=(brush_px-1)//2;after=brush_px//2
+    for top in range(0,rows,16):
+        _cancel(cancelled)
+        block=view[top:top+16]
+        # At x=0, the entering value at +after is handled by the first delta.
+        carry=np.count_nonzero(block[:,:min(after,width)],axis=1).astype(np.int64)
+        for left in range(0,width,1024):
+            _cancel(cancelled)
+            right=min(width,left+1024)
+            deltas=np.zeros((len(block),right-left),dtype=np.int64)
+            enter_end=min(right,width-after)
+            if enter_end>left:
+                deltas[:,:enter_end-left]=block[:,left+after:enter_end+after]
+            leave_start=max(left,before+1)
+            if leave_start<right:
+                deltas[:,leave_start-left:]-=block[:,leave_start-before-1:right-before-1]
+            np.cumsum(deltas,axis=1,out=deltas)
+            deltas+=carry[:,None]
+            result[top:top+len(block),left:right]=(deltas==brush_px) if require_all else (deltas>0)
+            carry=deltas[:,-1].copy()
+            del deltas
+    _cancel(cancelled)
+    return result if axis==1 else result.T
+
+
+def _square_footprint(mask,brush_px,require_all,*,cancelled):
+    _cancel(cancelled)
+    mask=np.asarray(mask,dtype=np.bool_)
+    brush=max(1,int(brush_px))
+    if brush==1 or (require_all and brush>min(mask.shape)):
+        result=mask.copy() if brush==1 else np.zeros_like(mask)
+        _cancel(cancelled)
+        return result
+    vertical=_axis_footprint(mask,brush,0,require_all,cancelled=cancelled)
+    return _axis_footprint(vertical,brush,1,require_all,cancelled=cancelled)
+
+
+def _eroded_centers(target:np.ndarray,brush_px:int,*,cancelled=lambda:False) -> np.ndarray:
+    """Centres whose entire asymmetric square brush footprint stays in target."""
+    return _square_footprint(target,brush_px,True,cancelled=cancelled)
 
 
 def _runs_from_mask(mask:np.ndarray,row_stride:int=1,row_offset:int=0,orientation:str="horizontal"):
@@ -281,18 +315,9 @@ def _runs_from_mask(mask:np.ndarray,row_stride:int=1,row_offset:int=0,orientatio
     return out
 
 
-def _centers_touching_mask(mask:np.ndarray,brush_px:int) -> np.ndarray:
+def _centers_touching_mask(mask:np.ndarray,brush_px:int,*,cancelled=lambda:False) -> np.ndarray:
     """Return centres whose simulated footprint touches at least one wanted pixel."""
-    b=max(1,int(brush_px));lo=(b-1)//2;hi=b//2
-    touch=np.zeros_like(mask,dtype=np.bool_);h,w=mask.shape
-    for dy in range(-lo,hi+1):
-        for dx in range(-lo,hi+1):
-            shifted=np.zeros_like(mask,dtype=np.bool_)
-            yd=slice(max(0,-dy),min(h,h-dy));ys=slice(max(0,dy),min(h,h+dy))
-            xd=slice(max(0,-dx),min(w,w-dx));xs=slice(max(0,dx),min(w,w+dx))
-            shifted[yd,xd]=mask[ys,xs]
-            touch |= shifted
-    return touch
+    return _square_footprint(mask,brush_px,False,cancelled=cancelled)
 
 
 
@@ -315,8 +340,8 @@ def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:in
     """
     _cancel(cancelled)
     brush=max(1,int(brush_px))
-    safe=_eroded_centers(target,brush)
-    useful=safe & _centers_touching_mask(residual,brush)
+    safe=_eroded_centers(target,brush,cancelled=cancelled)
+    useful=safe & _centers_touching_mask(residual,brush,cancelled=cancelled)
     if not np.any(useful):return [],np.zeros_like(target,dtype=np.bool_),0.0
     if final_size:
         strides=(1,)
@@ -550,7 +575,6 @@ def _budget_seconds(options,model,choices,fill_regions,image_size,fitted):
                 render_budget=max(0.0,total-reserve)
                 deadline_source="legacy active deadline fields"
 
-    colors=len({c.color_index for c in choices})
     fixed=model.fixed_overhead(active_colors=0,fill_actions=0)
     fill_meta={"fill_regions":0,"fill_color_batches":0,"total_seconds":0.0}
     if fill_regions:
@@ -563,18 +587,19 @@ def _budget_seconds(options,model,choices,fill_regions,image_size,fitted):
     fill_seconds=max(0.0,float(fill_meta.get("total_seconds",0.0) or 0.0))
     fill_colors={int(r.get("color_index",-1)) for r in (fill_regions or ())
                  if isinstance(r,dict) and int(r.get("color_index",-1))>=0}
-    fill_palette_seconds=(0.0 if options.get("paint_current_color") else
-                          len(fill_colors)*model.switch_cost("palette_change"))
-    verification_seconds=(colors*model.switch_cost("verification")
-                          if options.get("adaptive_color_verification") else 0.0)
+    fill_selections=[model.color_selection_cost(color) for color in fill_colors]
+    fill_palette_seconds=sum(palette for palette,_custom in fill_selections)
+    fill_custom_seconds=sum(custom for _palette,custom in fill_selections)
     clear_seconds=max(0.0,float(options.get("canvas_clear_estimate_seconds",0.0) or 0.0))
     outside_seconds=(fixed.total_seconds+fill_seconds+fill_palette_seconds+
-                     verification_seconds+clear_seconds)
+                     fill_custom_seconds+clear_seconds)
     usable=max(0.0,render_budget-outside_seconds) if active else float('inf')
     return active,usable,{
         "base_fixed":fixed.as_dict(),"fill":fill_meta,
         "fill_palette_seconds":round(fill_palette_seconds,6),
-        "adaptive_verification_seconds":round(verification_seconds,6),
+        "fill_custom_color_seconds":round(fill_custom_seconds,6),
+        "adaptive_verification_seconds":0.0,
+        "adaptive_verification_policy":"once per retained sequence color",
         "canvas_clear_seconds":round(clear_seconds,6),
         "outside_sequence_seconds":round(outside_seconds,6),
         "deadline":{"source":deadline_source,"total_seconds":round(total,6),
@@ -617,8 +642,9 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
             travel=min(.10,px*.000045)*float(getattr(model,"multiplier",1.0) or 1.0)
         palette=0.0
         if (not options.get("paint_current_color") and
-            (current_color is None or int(current_color)!=int(c.color_index))):
-            palette=float(model.switch_cost("palette_change"))
+            (current_color is None or int(current_color)!=int(c.color_index)
+             or model.brush_resets_color(current_brush,first_brush))):
+            palette=sum(model.color_selection_cost(int(c.color_index)))
         brush=0.0 if current_brush is None or int(current_brush)==int(first_brush) else float(model.switch_cost("brush_change"))
         return travel+palette+brush
 
@@ -629,6 +655,7 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
         cursor=None;current_color=None;current_brush=initial_brush;ordered=[]
         for phase in PHASES:
             phase_rows=[c for c in selected_rows if c.phase==phase]
+            if phase_rows:current_color=None
             colors={int(c.color_index) for c in phase_rows}
             while colors:
                 _cancel(cancelled)
@@ -679,7 +706,7 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
 
     def exact_cost(sequence):
         _cancel(cancelled)
-        raw=model.sequence_cost(sequence,initial_brush=initial_brush)
+        raw=model.sequence_cost(sequence,initial_brush=initial_brush,include_color_verification=True)
         _cancel(cancelled)
         risk=(model.risk_adjusted_seconds(raw.total_seconds)
               if active and hasattr(model,"risk_adjusted_seconds") else raw.total_seconds)
@@ -962,6 +989,7 @@ def _build_fill_regions(groups,palette_rgb,image_size,fitted,options,cancelled,*
             groups,palette_rgb,image_size,mode,engine=options.get("fill_engine","Closed regions v2"),
             max_regions=384,cancelled=cancelled,return_meta=True,safe_margin_px=margin)
         accepted,meta=evaluate_region_candidates(candidates,image_size,fitted,options,base_meta=base,cancelled=cancelled)
+        cost_accepted_count=len(accepted)
         accepted,mask_meta=filter_fill_regions_by_source_mask(accepted,image_size,margin_px=margin)
         if source_image is not None:
             from SafeFillMask import filter_fill_regions_by_source_alpha
@@ -970,8 +998,32 @@ def _build_fill_regions(groups,palette_rgb,image_size,fitted,options,cancelled,*
         accepted,fill_order_meta=_order_fill_regions_for_execution(accepted)
         accepted,state_meta=filter_stateful_fill_regions(accepted,image_size,brush_px=max(1,int(options.get("brush_px") or 1)),cancelled=cancelled)
         meta=dict(meta);meta["safe_fill_mask"]=mask_meta;meta["stateful_fill_simulation"]=state_meta
-        meta["fill_execution_order"]=fill_order_meta
-        meta["fill_safe_regions"]=len(accepted);meta["fill_actions"]=len(accepted)
+        # All reported savings/coverage describe the surviving executable
+        # regions, not a proposal that a later source/brush proof rejected.
+        by_color={}
+        for region in accepted:by_color.setdefault(int(region['color_index']),[]).append(region)
+        fill_order_meta=dict(fill_order_meta,color_batches=len(by_color),batches=[
+            {'color_index':color,'regions':len(rows),'pixels':sum(int(r.get('area_pixels',0)) for r in rows)}
+            for color,rows in by_color.items()])
+        rejected_after_cost=max(0,cost_accepted_count-len(accepted))
+        meta.update(fill_execution_order=fill_order_meta,accepted_regions=len(accepted),
+            fill_safe_regions=len(accepted),fill_actions=len(accepted),outline_paths=len(accepted),
+            contour_regions=sum(r.get('strategy')=='closed-contour' for r in accepted),
+            rectangle_regions=sum(r.get('strategy')=='rectangle' for r in accepted),
+            fill_color_batches=len(by_color),fill_sealed_regions=sum(bool(r.get('fill_seal_count')) for r in accepted),
+            fill_seal_paths=sum(int(r.get('fill_seal_count',0)) for r in accepted),
+            fill_coverage_percent=round(sum(int(r.get('area_pixels',0)) for r in accepted)/max(1,image_size[0]*image_size[1])*100,3),
+            estimated_saved_strokes=sum(int(r.get('estimated_saved_strokes',0)) for r in accepted),
+            estimated_time_saved_seconds=round(sum(float(r.get('estimated_time_saved_seconds',0)) for r in accepted),3),
+            rejected_by_safety=int(meta.get('rejected_by_safety',0))+rejected_after_cost,
+            fallback_stroke_regions=int(meta.get('fallback_stroke_regions',0))+rejected_after_cost,
+            fallback_scanline_regions=int(meta.get('fallback_scanline_regions',0))+rejected_after_cost)
+        retained_ids={r.get('region_fill_id') for r in accepted}
+        reasons={r.get('region_id'):r.get('reason') for r in state_meta.get('rejections',())}
+        meta['decisions']=[dict(row,accepted=False,render_method='CONNECTED_SCANLINES',
+            estimated_time_saved_seconds=0.0,reason=reasons.get(row.get('region_id')) or 'source mask excludes Fill')
+            if row.get('accepted') and row.get('region_id') not in retained_ids else row
+            for row in meta.get('decisions',())]
         return list(accepted),meta
     except InterruptedError:raise
     except Exception as exc:
@@ -1023,12 +1075,13 @@ def build_adaptive_hybrid_plan(original:Image.Image,area,options:dict[str,Any],m
                                       or outer.get('pixel_accurate')) else None)
         fill_regions,fill_meta=_build_fill_regions(groups,palette,base["image"].size,base["fitted"],outer,cancelled,
                                                  source_image=alpha_source)
-        reference_pixel_map=pixel_map_from_groups(base["image"],groups,palette,cancelled=cancelled)
+        gpu_mode=str(outer.get('gpu_mode') or 'Auto')
+        reference_pixel_map=pixel_map_from_groups(base["image"],groups,palette,gpu_mode=gpu_mode,cancelled=cancelled)
         work_groups=groups
         if fill_regions:
             from FillOptimizer import remove_filled_region_strokes
             work_groups=remove_filled_region_strokes(work_groups,fill_regions)
-        pixel_map=(pixel_map_from_groups(base["image"],work_groups,palette,cancelled=cancelled)
+        pixel_map=(pixel_map_from_groups(base["image"],work_groups,palette,gpu_mode=gpu_mode,cancelled=cancelled)
                    if fill_regions else reference_pixel_map)
         result=build_adaptive_execution(pixel_map,palette,outer,base["fitted"],fill_regions=fill_regions,
                                         reference_pixel_map=reference_pixel_map,cancelled=cancelled)

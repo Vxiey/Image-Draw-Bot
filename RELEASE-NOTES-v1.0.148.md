@@ -1,6 +1,18 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 745 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06 and 16 changes in batch 07. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 759 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07 and 14 changes in batch 08. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 08: executable Fill, consistent controls and reliable release builds
+
+- Produce Fill contours in the same pixel-center coordinates used by actual drawing. Safe closed regions now pass the existing flood proof; disconnected interiors, transparent holes and unsafe brush footprints retain scanlines. Final diagnostics describe only retained Fill operations.
+- Respect the chosen GPU policy in regional reconstruction. Compute contrast from visible pixels while retaining alpha. Replace repeated square-brush full-map shifts with bounded exact rolling reductions; the saved benchmark states both timing and allocation limits.
+- Transfer the existing private background-removal buffer into its result and reuse unchanged desktop preview bitmaps. Preserve source ownership, invalidate changed/closed/hidden views and release temporary images after Tk copies them.
+- Preserve custom-profile registrations after transient disk-read failures. Add UUID-preserving rename and scoped, confirmed removal with rollback. Validate Manual text only when Manual/Custom is active, carry Region Fill controls into planning and use the selected safety reserve consistently through final admission.
+- Enable local keyboard selection in settings menus, including visible logical focus, scroll reveal, bounded arrows/Home/End, native popup and explanatory tooltips. Existing callbacks and disabled-state checks remain authoritative.
+- Build release candidates in one staging workspace and verify the complete artifact set before rollback-capable publication. Use one verified private Python environment for dependency installation, tests and packaging.
+- Complete existing capture/export ownership, updater save-failure handling, private source startup and bounded network Stop/deadline policies. Raw time estimates reprice retained color/brush/phase/Fill work before measured correction. These completions do not add duplicate improvement IDs.
+
+Batch 08: final frozen-source discovery passed 3,462 tests in 81.280 seconds (39 platform/hardware skips), with unchanged source hashes. All four counted-area source reviews are closed; review findings were corrected with regressions. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. The earlier full-suite failure was an outdated fake cost-model interface; its swap-selection assertions are preserved. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
 
 ## Batch 07: faithful imports, useful drawing plans and responsive controls
 
@@ -12,7 +24,7 @@
 - Queue bounded mobile-preview snapshots and publish the latest accepted source/plan consistently. Reuse unchanged view encoding, coalesce obsolete requests and preserve session identity through stop/restart.
 - Restrict public image imports to the supported raster decoder set, preventing unintended EPS/metafile renderer dispatch from misleading extensions or MIME labels. Preserve real APNG/MPO/AVIF inputs. Complete existing ICO pre-decode pixel bounds and HTTP redirect-body limits without duplicate improvement counts.
 
-Batch 07: final frozen-source discovery passed 3,355 tests in 71.096 seconds (35 platform/hardware skips), with unchanged source hashes. All four area reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
+Batch 07: final frozen-source discovery passed 3,355 tests in 71.096 seconds (35 platform/hardware skips), with unchanged source hashes. All four area reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. Checkpoint `73788a51c1a3502f03f007e4d2ffe0152f56b7e6` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop checks in [run 42302890291](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42302890291). No 1.0.148 release is published.
 
 ## Batch 06: color-correct imports, useful previews and responsive workflows
 

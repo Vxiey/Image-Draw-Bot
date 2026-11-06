@@ -21,7 +21,7 @@ from StrokeDelivery import resolve_stroke_delivery
 from Precision import effective_step, precision_path_count, round_screen
 
 Point = tuple[int, int]
-EXECUTION_MODEL_VERSION = 5
+EXECUTION_MODEL_VERSION = 6
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -58,6 +58,7 @@ class CostBreakdown:
     travel_seconds: float = 0.0
     press_release_seconds: float = 0.0
     palette_seconds: float = 0.0
+    custom_color_seconds: float = 0.0
     tool_seconds: float = 0.0
     brush_seconds: float = 0.0
     fill_seconds: float = 0.0
@@ -66,6 +67,9 @@ class CostBreakdown:
     operations: int = 0
     moves: int = 0
     palette_switches: int = 0
+    custom_color_switches: int = 0
+    custom_selection_seconds: float = 0.0
+    color_verifications: int = 0
     tool_switches: int = 0
     brush_switches: int = 0
     source: str = "deterministic profile model"
@@ -111,6 +115,10 @@ class ExecutionCostModel:
         self.source = ("measured local calibration" if self.samples >= 3 else
                        f"learning local calibration ({self.samples}/3)" if self.samples else
                        "deterministic profile model")
+        from AdaptiveBrushEngine import verified_brush_sizes
+        sizes,dynamic=verified_brush_sizes(str(self.options.get('profile_key') or ''),
+            self.options.get('browser_brush_plan'),max(1,int(self.options.get('brush_px') or 1)))
+        self._color_reset_brushes=frozenset(sizes) if dynamic else frozenset()
 
     def _learned_average(self, kind: str, fallback: float) -> float:
         aliases = {
@@ -286,20 +294,57 @@ class ExecutionCostModel:
         learned = self._learned_average(kind, 0.0)
         return learned if learned > 0.0 else base * self.multiplier
 
+    def is_custom_color(self, color_index: int | None) -> bool:
+        selectors = self.options.get('color_selectors') or ()
+        selector = (selectors[color_index] if color_index is not None
+                    and 0 <= color_index < len(selectors) else None)
+        return bool(not self.options.get('paint_current_color')
+                    and self.options.get('exact_color_available')
+                    and isinstance(selector, dict) and selector.get('kind') == 'custom')
+
+    def color_selection_cost(self, color_index: int | None) -> tuple[float,float]:
+        """Palette/custom portions of one actual selection, including learned UI time.
+
+        Runtime records a complete non-palette select() call as color_change,
+        before verification or drawing. Such a measurement must replace the
+        complete default selection, not receive another custom-dialog surcharge.
+        """
+        if self.options.get('paint_current_color'):
+            return 0.0,0.0
+        palette=self.switch_cost('palette_change')
+        if not self.is_custom_color(color_index):return palette,0.0
+        learned=self._learned_average('color_change',0.0)
+        if learned>0:
+            # Keep the diagnostic split nonnegative even when a learned custom
+            # selector is faster than the palette default or historical average.
+            palette=min(palette,learned)
+            return palette,learned-palette
+        return palette,.78*self.multiplier
+
+    def brush_resets_color(self, previous: int | None, requested: int) -> bool:
+        return previous is not None and previous!=requested and requested in self._color_reset_brushes
+
     def sequence_cost(self, sequence: Iterable[dict[str, Any]], *,
                       initial_cursor: Point | None = None,
                       initial_color: int | None = None,
-                      initial_brush: int | None = None) -> CostBreakdown:
+                      initial_brush: int | None = None,
+                      include_color_verification: bool = False,
+                      include_geometry: bool = True,
+                      cancelled=None) -> CostBreakdown:
         cursor = initial_cursor
         color = initial_color
         brush = initial_brush
+        phase = None
+        verified_colors = set()
         totals = {
-            "drag": 0.0, "travel": 0.0, "press": 0.0, "palette": 0.0,
+            "drag": 0.0, "travel": 0.0, "press": 0.0, "palette": 0.0, "custom": 0.0,
             "tool": 0.0, "brush": 0.0, "fill": 0.0, "verification": 0.0,
             "target": 0.0, "ops": 0, "moves": 0, "palette_n": 0,
-            "tool_n": 0, "brush_n": 0,
+            "tool_n": 0, "brush_n": 0, "custom_n": 0, "custom_selection": 0.0,
         }
         for raw in sequence or ():
+            if cancelled is not None and cancelled():
+                raise InterruptedError()
             entry = dict(raw)
             operation = str(entry.get("operation_type") or "stroke")
             if operation in ("fill", "fill_action"):
@@ -312,47 +357,70 @@ class ExecutionCostModel:
                 totals["tool"] += self.switch_cost("tool_change"); totals["tool_n"] += 1; totals["ops"] += 1
                 continue
             if operation == "palette_change":
-                totals["palette"] += self.switch_cost("palette_change"); totals["palette_n"] += 1; totals["ops"] += 1
+                selected_color=int(entry['color_index']) if entry.get('color_index') is not None else color
+                palette,custom=self.color_selection_cost(selected_color)
+                totals["palette"] += palette; totals["custom"] += custom
+                totals["palette_n"] += 1; totals["ops"] += 1
+                if self.is_custom_color(selected_color):
+                    totals['custom_n'] += 1
+                    totals['custom_selection'] += palette + custom
                 if entry.get("color_index") is not None:
                     color = int(entry.get("color_index"))
                 continue
             if operation == "brush_change":
                 totals["brush"] += self.switch_cost("brush_change"); totals["brush_n"] += 1; totals["ops"] += 1
                 if entry.get("brush_px") is not None:
-                    brush = max(1, int(entry.get("brush_px")))
+                    requested=max(1,int(entry.get('brush_px')))
+                    if self.brush_resets_color(brush,requested):color=None
+                    brush=requested
                 continue
             path = entry.get("path") or ()
             if not path:
                 continue
             new_color = int(entry.get("color_index", color if color is not None else 0))
             new_brush = max(1, int(entry.get("brush_px") or brush or self.options.get("brush_px") or 1))
-            if color is not None and new_color != color and not self.options.get("paint_current_color"):
-                totals["palette"] += self.switch_cost("palette_change"); totals["palette_n"] += 1
-            elif color is None and not self.options.get("paint_current_color"):
-                totals["palette"] += self.switch_cost("palette_change"); totals["palette_n"] += 1
+            new_phase=str(entry.get('phase','details'))
+            if (phase is not None and new_phase!=phase) or self.brush_resets_color(brush,new_brush):
+                color=None
+            if new_color!=color and not self.options.get('paint_current_color'):
+                palette,custom=self.color_selection_cost(new_color)
+                totals['palette']+=palette;totals['custom']+=custom;totals['palette_n']+=1
+                if self.is_custom_color(new_color):
+                    totals['custom_n'] += 1
+                    totals['custom_selection'] += palette + custom
+            if (include_color_verification and self.options.get('adaptive_color_verification')
+                    and not self.options.get('paint_current_color') and new_color not in verified_colors):
+                totals['verification']+=self.switch_cost('verification')
+                verified_colors.add(new_color)
             if brush is not None and new_brush != brush:
                 totals["brush"] += self.switch_cost("brush_change"); totals["brush_n"] += 1
-            piece = self.path_cost(entry.get("path") or (), cursor=cursor, brush_px=new_brush)
-            totals["drag"] += piece.drag_seconds
-            totals["travel"] += piece.travel_seconds
-            totals["press"] += piece.press_release_seconds
-            totals["target"] += piece.target_processing_seconds
-            totals["ops"] += piece.operations
-            totals["moves"] += piece.moves
+            if include_geometry:
+                piece = self.path_cost(path, cursor=cursor, brush_px=new_brush)
+                totals["drag"] += piece.drag_seconds
+                totals["travel"] += piece.travel_seconds
+                totals["press"] += piece.press_release_seconds
+                totals["target"] += piece.target_processing_seconds
+                totals["ops"] += piece.operations
+                totals["moves"] += piece.moves
             path = entry.get("path") or ()
             if path:
                 cursor = tuple(map(int, path[-1]))
             color = new_color
             brush = new_brush
-        total = sum(totals[k] for k in ("drag","travel","press","palette","tool","brush","fill","verification","target"))
+            phase = new_phase
+        total = sum(totals[k] for k in ("drag","travel","press","palette","custom","tool","brush","fill","verification","target"))
         return CostBreakdown(
             total_seconds=total, drag_seconds=totals["drag"],
             travel_seconds=totals["travel"], press_release_seconds=totals["press"],
             palette_seconds=totals["palette"], tool_seconds=totals["tool"],
+            custom_color_seconds=totals['custom'],
             brush_seconds=totals["brush"], fill_seconds=totals["fill"],
             verification_seconds=totals["verification"],
             target_processing_seconds=totals["target"], operations=totals["ops"],
             moves=totals["moves"], palette_switches=totals["palette_n"],
+            custom_color_switches=totals['custom_n'],
+            custom_selection_seconds=totals['custom_selection'],
+            color_verifications=len(verified_colors),
             tool_switches=totals["tool_n"], brush_switches=totals["brush_n"],
             source=self.source)
 

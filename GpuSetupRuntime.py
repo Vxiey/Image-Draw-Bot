@@ -60,6 +60,44 @@ def require_virtual_environment(python: str, runner) -> None:
         raise SetupEnvironmentError("GPU setup requires a virtual-environment Python; a system Python is not an install target.")
 
 
+_PRIVATE_ENVIRONMENT_PROBE = (
+    "import json,sys,site; print(json.dumps({"
+    "'prefix':sys.prefix,'base_prefix':getattr(sys,'base_prefix',sys.prefix),"
+    "'version':list(sys.version_info[:2]),'user_site':site.ENABLE_USER_SITE,"
+    "'site_packages':site.getsitepackages(),'frozen':bool(getattr(sys,'frozen',False))}))"
+)
+
+
+def require_private_environment(python: str, directory: Path, runner) -> None:
+    """Verify the source launcher's actual private prefix and package sites."""
+    try:
+        completed = runner([python, '-I', '-c', _PRIVATE_ENVIRONMENT_PROBE], timeout=30.0)
+        raw = completed.stdout
+        if completed.returncode or not isinstance(raw, str) or len(raw) > 16384:
+            raise ValueError('invalid interpreter response')
+        details = json.loads(raw)
+        prefix, base = details['prefix'], details['base_prefix']
+        version, sites = details['version'], details['site_packages']
+        expected = Path(directory).resolve()
+        if (not isinstance(prefix, str) or not Path(prefix).is_absolute()
+                or not isinstance(base, str) or not Path(base).is_absolute()
+                or Path(prefix).resolve() != expected
+                or Path(prefix).resolve() == Path(base).resolve()
+                or not isinstance(version, list) or len(version) != 2
+                or any(type(value) is not int for value in version)
+                or tuple(version) < (3, 11)
+                or details['user_site'] is not False or details['frozen'] is not False
+                or not isinstance(sites, list) or not sites
+                or any(not isinstance(path, str) or not Path(path).is_absolute()
+                       or not Path(path).resolve().is_relative_to(expected) for path in sites)):
+            raise ValueError('unexpected interpreter environment')
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, KeyError) as error:
+        raise SetupEnvironmentError(
+            'The private .venv must be an isolated Python 3.11+ environment. '
+            'Rename .venv and run Start.bat again to recreate it.'
+        ) from error
+
+
 _RELOCATION_OPTIONS = frozenset(("target", "prefix", "root", "user", "python"))
 _CONFIG_SELECTORS = frozenset(("PIP_GLOBAL", "PIP_SITE"))
 

@@ -16,15 +16,18 @@ import zipfile
 from Version import APP_VERSION, FILE_VERSION, BUILD_CHANNEL
 from ReleaseCandidateHardening import run_source_release_gate, validate_windows_release
 from RuntimePaths import _replace_with_retry, atomic_write_text
+from BuildEnvironment import prepare_builder
+from build_exe import build_application
+from ReleasePublication import publish_release
 
 BASE = Path(__file__).resolve().parent
 DIST = BASE / "dist" / "ImageDrawBot"
 RELEASE = BASE / "release"
 
 
-def run(command: list[str], *, cwd: Path = BASE) -> None:
+def run(command: list[str], *, cwd: Path = BASE, env=None) -> None:
     print("+", " ".join(map(str, command)))
-    subprocess.run(command, cwd=cwd, check=True)
+    subprocess.run(command, cwd=cwd, env=env, check=True)
 
 
 def sha256(path: Path) -> str:
@@ -95,16 +98,16 @@ def find_iscc() -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
-def _clean_current_release_outputs(*, keep=()) -> None:
-    RELEASE.mkdir(exist_ok=True)
-    for pattern in (f"ImageDrawBot-{APP_VERSION}-*",):
-        for path in RELEASE.glob(pattern):
-            if path.is_file() and path.name not in keep:
-                path.unlink()
+def _current_release_outputs() -> set[str]:
+    # Retire only generated variants of this exact version, never arbitrary
+    # user files sharing a prefix or finished artifacts of another version.
+    return {f'ImageDrawBot-{APP_VERSION}-{suffix}' for suffix in (
+        'Windows-x64.zip', 'Windows-x64-CUDA.zip', 'Windows-x64-Setup.exe',
+        'SHA256.txt', 'manifest.json')}
 
 
-def _write_manifest(artifacts: list[dict], *, signed=False) -> Path:
-    path=RELEASE / f"ImageDrawBot-{APP_VERSION}-manifest.json"
+def _write_manifest(artifacts: list[dict], *, signed=False, directory=None) -> Path:
+    path=Path(RELEASE if directory is None else directory) / f"ImageDrawBot-{APP_VERSION}-manifest.json"
     payload={
         "schema":1,
         "app":"Image Draw Bot",
@@ -148,14 +151,13 @@ def main() -> int:
     # The ZIP writer validates its staging file before replacing the old ZIP.
     RELEASE.mkdir(exist_ok=True)
 
-    run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-    run([sys.executable, "-m", "pip", "install", "--upgrade", "--upgrade-strategy", "eager", "-r", str(BASE / "requirements.txt")])
+    builder=prepare_builder(BASE,gpu=args.gpu)
 
     if not args.skip_tests:
-        run([sys.executable, "-m", "unittest", "discover", "-v"])
-        run([sys.executable, "DrawBot.py", "--self-test"])
+        run([str(builder.python), "-m", "unittest", "discover", "-v"],cwd=BASE,env=builder.source_environment())
+        run([str(builder.python), "DrawBot.py", "--self-test"],cwd=BASE,env=builder.source_environment())
 
-    run([sys.executable, "build_exe.py"] + (["--gpu"] if args.gpu else []))
+    build_application(BASE,builder,gpu_build=args.gpu)
     exe = DIST / "ImageDrawBot.exe"
     if not is_pe_executable(exe):
         raise SystemExit("Release build did not produce a valid ImageDrawBot.exe.")
@@ -165,37 +167,43 @@ def main() -> int:
         from CodeSigning import sign_distribution
         sign_distribution(DIST,signing)
 
-    suffix = "-CUDA" if args.gpu else ""
-    zip_path = RELEASE / f"ImageDrawBot-{APP_VERSION}-Windows-x64{suffix}.zip"
-    zip_onedir(zip_path)
-    artifacts=[{"name":zip_path.name,"type":"windows-zip","sha256":sha256(zip_path),"bytes":zip_path.stat().st_size}]
-    hash_rows = [f"{artifacts[-1]['sha256']}  {zip_path.name}"]
+    # No finished output is replaced until the complete selected variant has
+    # been compiled, signed if requested, hashed and validated as one set.
+    with tempfile.TemporaryDirectory(prefix='.release-stage-',dir=RELEASE,ignore_cleanup_errors=True) as temporary:
+        staging=Path(temporary)
+        suffix = "-CUDA" if args.gpu else ""
+        zip_path = staging / f"ImageDrawBot-{APP_VERSION}-Windows-x64{suffix}.zip"
+        zip_onedir(zip_path)
+        artifacts=[{"name":zip_path.name,"type":"windows-zip","sha256":sha256(zip_path),"bytes":zip_path.stat().st_size}]
+        hash_rows = [f"{artifacts[-1]['sha256']}  {zip_path.name}"]
 
-    if args.installer:
-        iscc = find_iscc()
-        if iscc is None:
-            raise SystemExit("Inno Setup 6 was not found. Install it or run without --installer.")
-        signing_args=[]
-        if signing:
-            from CodeSigning import inno_arguments
-            signing_args=inno_arguments(signing)
-        run([str(iscc), f"/DMyAppVersion={APP_VERSION}", *signing_args, str(BASE / "installer" / "ImageDrawBot.iss")])
-        setup = RELEASE / f"ImageDrawBot-{APP_VERSION}-Windows-x64-Setup.exe"
-        if not is_pe_executable(setup):
-            raise SystemExit("Installer build did not produce the expected Setup.exe.")
-        if signing:
-            from CodeSigning import verify
-            if not verify(setup,signing):raise SystemExit("Installer signature verification failed.")
-        digest=sha256(setup)
-        hash_rows.append(f"{digest}  {setup.name}")
-        artifacts.append({"name":setup.name,"type":"inno-setup","sha256":digest,"bytes":setup.stat().st_size})
+        if args.installer:
+            iscc = find_iscc()
+            if iscc is None:
+                raise SystemExit("Inno Setup 6 was not found. Install it or run without --installer.")
+            signing_args=[]
+            if signing:
+                from CodeSigning import inno_arguments
+                signing_args=inno_arguments(signing)
+            run([str(iscc), f"/DMyAppVersion={APP_VERSION}", f'/O{staging}', *signing_args,
+                 str(BASE / "installer" / "ImageDrawBot.iss")],cwd=BASE)
+            setup = staging / f"ImageDrawBot-{APP_VERSION}-Windows-x64-Setup.exe"
+            if not is_pe_executable(setup):
+                raise SystemExit("Installer build did not produce the expected Setup.exe.")
+            if signing:
+                from CodeSigning import verify
+                if not verify(setup,signing):raise SystemExit("Installer signature verification failed.")
+            digest=sha256(setup)
+            hash_rows.append(f"{digest}  {setup.name}")
+            artifacts.append({"name":setup.name,"type":"inno-setup","sha256":digest,"bytes":setup.stat().st_size})
 
-    checksum = RELEASE / f"ImageDrawBot-{APP_VERSION}-SHA256.txt"
-    atomic_write_text(checksum, "\n".join(hash_rows) + "\n")
-    manifest=_write_manifest(artifacts,signed=bool(signing))
-
-    validate_windows_release(RELEASE,app_version=APP_VERSION,require_installer=args.installer,gpu=args.gpu)
-    _clean_current_release_outputs(keep={item['name'] for item in artifacts} | {checksum.name, manifest.name})
+        checksum = staging / f"ImageDrawBot-{APP_VERSION}-SHA256.txt"
+        atomic_write_text(checksum, "\n".join(hash_rows) + "\n")
+        manifest=_write_manifest(artifacts,signed=bool(signing),directory=staging)
+        validate_windows_release(staging,app_version=APP_VERSION,require_installer=args.installer,gpu=args.gpu)
+        names=[item['name'] for item in artifacts]+[checksum.name,manifest.name]
+        publish_release(staging,RELEASE,names,obsolete=sorted(_current_release_outputs()-set(names)))
+        checksum,manifest=RELEASE/checksum.name,RELEASE/manifest.name
     print("RC Windows artifact gate: PASS")
     print("\nRelease artifacts:")
     for row in hash_rows:

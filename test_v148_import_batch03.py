@@ -113,10 +113,10 @@ class ImageImportTests(unittest.TestCase):
         item=response(png_data(),reader=True)
         with patch('requests.Session.get',return_value=item):result=imports.read_image('https://example.test/image.png')
         self.assertEqual(result.size,(5,4));item.iter_content.assert_not_called()
-        item.raw.read1.assert_called_with(imports._BLOCK_BYTES,decode_content=True)
+        item.raw.read1.assert_called_with(imports._BLOCK_BYTES,decode_content=False)
         item.close.assert_called_once()
 
-    def test_content_length_is_checked_and_compressed_lengths_are_not_decoded_lengths(self):
+    def test_content_length_is_checked_and_unrequested_http_compression_is_rejected(self):
         data=png_data()
         for length in ('-1','x','12, 12','9'*21,str(len(data)+1)):
             item=response(data,{'Content-Length':length})
@@ -124,7 +124,9 @@ class ImageImportTests(unittest.TestCase):
                 imports.read_image('https://example.test/image.png')
             item.close.assert_called_once()
         item=response(data,{'Content-Length':'20','Content-Encoding':'gzip'})
-        with patch('requests.Session.get',return_value=item):self.assertEqual(imports.read_image('https://example.test/image.png').size,(5,4))
+        with patch('requests.Session.get',return_value=item), self.assertRaisesRegex(ValueError,'compressed download'):
+            imports.read_image('https://example.test/image.png')
+        item.iter_content.assert_not_called()
         item=response(data,{'Content-Length':f'\t {len(data)} '})
         with patch('requests.Session.get',return_value=item):self.assertEqual(imports.read_image('https://example.test/image.png').size,(5,4))
 

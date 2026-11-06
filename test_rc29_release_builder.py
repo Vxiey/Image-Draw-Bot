@@ -11,7 +11,7 @@ class Rc29ReleaseBuilderTests(unittest.TestCase):
         with patch.object(build_exe.sys, 'platform', 'win32'), \
              patch.object(build_exe.sys, 'version_info', (3, 12, 0)), \
              patch.object(build_exe.sys, 'maxsize', 2**63 - 1), \
-             patch.object(build_exe.Path, 'exists', return_value=True), \
+             patch.object(build_exe.Path, 'is_file', return_value=True), \
              patch.object(build_exe.subprocess, 'run', return_value=SimpleNamespace(returncode=1)) as run:
             with self.assertRaisesRegex(SystemExit, 'Rename .build-venv'):
                 build_exe.main([])
@@ -19,7 +19,7 @@ class Rc29ReleaseBuilderTests(unittest.TestCase):
         run.assert_called_once()
         command = run.call_args.args[0]
         self.assertIn('.build-venv', command[0])
-        self.assertEqual(command[1], '-c')
+        self.assertEqual(command[1:3], ['-I', '-c'])
         self.assertNotIn('pip', command)
 
     def test_dynamic_modules_are_explicit_hidden_imports(self):

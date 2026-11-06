@@ -420,7 +420,11 @@ def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", f
         after = sum(alpha.histogram()[9:])
         if after / total < .005:
             return finish(_preserve(source, mode, strength, "foreground safety guard rejected the cut; original preserved", extra))
-        result = own(source.copy()); result.putalpha(alpha)
+        # EXIF preparation already created our private RGBA image. Transfer
+        # that buffer after the safety gates instead of duplicating a complete
+        # source-sized pixel core merely to replace its alpha channel.
+        result = source
+        result.putalpha(alpha)
         removed = max(0, before - after); bbox = alpha.getbbox()
         meta = {
             "mode": mode, "strength": strength, **extra, "removed_pixels": removed,

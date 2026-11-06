@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import build_release
+from BuildEnvironment import Builder
 import ReleaseCandidateHardening as hardening
 from Version import APP_VERSION
 
@@ -17,16 +18,20 @@ class ReleaseVariantTests(unittest.TestCase):
         dist = root / 'dist/ImageDrawBot'
         release = root / 'release'
         commands = []
+        prepared = Builder(root/'.build-venv/Scripts/python.exe', root, {})
+
+        def build_application(_root, _prepared, **kwargs):
+            dist.mkdir(parents=True)
+            (dist / 'ImageDrawBot.exe').write_bytes(b'MZ synthetic application')
 
         def external_command(command, **kwargs):
             # None of these synthetic files is executable. The production ZIP,
             # checksum, manifest and validation steps run normally around them.
             commands.append(command)
-            if len(command) > 1 and command[1] == 'build_exe.py':
-                dist.mkdir(parents=True)
-                (dist / 'ImageDrawBot.exe').write_bytes(b'MZ synthetic application')
-            elif Path(command[0]).name == 'ISCC.exe':
-                (release / f'ImageDrawBot-{APP_VERSION}-Windows-x64-Setup.exe').write_bytes(
+            if Path(command[0]).name == 'ISCC.exe':
+                output = Path(next(argument[2:] for argument in command if argument.startswith('/O')))
+                self.assertNotEqual(output, release)
+                (output / f'ImageDrawBot-{APP_VERSION}-Windows-x64-Setup.exe').write_bytes(
                     b'MZ synthetic installer'
                 )
 
@@ -44,13 +49,19 @@ class ReleaseVariantTests(unittest.TestCase):
              patch.object(build_release.sys, 'argv', argv), \
              patch.dict(build_release.os.environ, {'GITHUB_REF_TYPE': '', 'GITHUB_REF_NAME': ''}), \
              patch.object(build_release, 'run_source_release_gate', return_value=report), \
+             patch.object(build_release, 'prepare_builder', return_value=prepared), \
+             patch.object(build_release, 'build_application', side_effect=build_application) as build, \
              patch.object(build_release, 'run', side_effect=external_command), \
              patch.object(build_release, 'find_iscc', return_value=root / 'ISCC.exe'), \
              patch.object(build_release, 'validate_windows_release', wraps=hardening.validate_windows_release) as validate, \
              patch('builtins.print'):
             self.assertEqual(build_release.main(), 0)
-        validate.assert_called_once_with(release, app_version=APP_VERSION,
-                                         require_installer=installer, gpu=gpu)
+        build.assert_called_once_with(root, prepared, gpu_build=gpu)
+        validate.assert_called_once()
+        self.assertEqual(validate.call_args.args[0].parent, release)
+        self.assertFalse(validate.call_args.args[0].exists())
+        self.assertEqual(validate.call_args.kwargs, dict(app_version=APP_VERSION,
+                         require_installer=installer, gpu=gpu))
         return release, commands
 
     def test_cuda_builder_produces_and_validates_only_the_selected_zip(self):
@@ -59,7 +70,6 @@ class ReleaseVariantTests(unittest.TestCase):
             name = f'ImageDrawBot-{APP_VERSION}-Windows-x64-CUDA.zip'
             self.assertTrue((release / name).is_file())
             self.assertFalse((release / f'ImageDrawBot-{APP_VERSION}-Windows-x64.zip').exists())
-            self.assertTrue(any(command[1:] == ['build_exe.py', '--gpu'] for command in commands))
             report = hardening.validate_windows_release(release, gpu=True, require_installer=False)
             self.assertNotIn('installer', report)
             self.assertEqual(report['checksums']['files'], [name])
@@ -112,7 +122,7 @@ class ReleaseVariantTests(unittest.TestCase):
     def test_gpu_installer_combination_fails_before_any_build_side_effect(self):
         with patch.object(build_release.sys, 'argv', ['build_release.py', '--gpu', '--installer']), \
              patch.object(build_release, 'run_source_release_gate') as gate, \
-             patch.object(build_release, '_clean_current_release_outputs') as clean, \
+             patch.object(build_release, '_current_release_outputs') as clean, \
              patch.object(build_release, 'run') as run, \
              patch('sys.stderr', new_callable=StringIO) as error_output:
             with self.assertRaises(SystemExit) as caught:

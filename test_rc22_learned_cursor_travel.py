@@ -58,7 +58,7 @@ class Rc22LearnedCursorTravelTests(unittest.TestCase):
         self.assertGreater(model.path_seconds(path,cursor=(-1000,20)),model.path_seconds(path,cursor=(20,20)))
 
     def test_version(self):
-        self.assertEqual(EXECUTION_MODEL_VERSION,5)
+        self.assertEqual(EXECUTION_MODEL_VERSION,6)
         self.assertEqual(APP_VERSION,'1.0.148')
 
 

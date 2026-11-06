@@ -667,7 +667,7 @@ def enrich_region_stats(meta: dict[str, Any] | None, *, source_strokes: int, fin
     return out
 
 
-def estimate_fill_execution_seconds(regions: Iterable[dict[str, Any]], image_size: tuple[int, int], fitted: tuple[int, int], options: dict[str, Any]) -> dict[str, Any]:
+def estimate_fill_execution_seconds(regions: Iterable[dict[str, Any]], image_size: tuple[int, int], fitted: tuple[int, int], options: dict[str, Any], *, use_cached_cost: bool = True) -> dict[str, Any]:
     """Batch-aware Fill estimate using the same configured delays as execution."""
     rows = [dict(r) for r in (regions or ())]
     delivery = resolve_stroke_delivery(options, dry_run=False)
@@ -676,13 +676,15 @@ def estimate_fill_execution_seconds(regions: Iterable[dict[str, Any]], image_siz
     model=_cost_model(options,image_size,fitted)
     inferred_batchable = _batchable_tool_cost(options,cost_model=model)
     for region in rows:
-        stored_core = _finite_cost(region.get("fill_core_cost_seconds"),positive=True)
+        # Candidate caches may contain learned timings. A raw, cold ETA must
+        # reprice the retained contour and seal geometry before calibration.
+        stored_core = _finite_cost(region.get("fill_core_cost_seconds"),positive=True) if use_cached_cost else None
         stored_batchable = _finite_cost(region.get("fill_batchable_overhead_seconds",0.0))
         if stored_core is not None and stored_batchable is not None:
             fill_seconds += stored_core
             removed_per_region_switch += stored_batchable
             continue
-        stored = _finite_cost(region.get("fill_cost_seconds"),positive=True)
+        stored = _finite_cost(region.get("fill_cost_seconds"),positive=True) if use_cached_cost else None
         if stored is not None:
             batchable = max(0.0, min(inferred_batchable, stored * .50))
             fill_seconds += max(0.0, stored - batchable)

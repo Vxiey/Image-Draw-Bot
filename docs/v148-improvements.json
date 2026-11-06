@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 745,
+  "implemented": 759,
   "release_published": false,
-  "validation": "Batch 07: final frozen-source discovery passed 3,355 tests in 71.096 seconds (35 platform/hardware skips), with unchanged source hashes. All four area reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.",
+  "validation": "Batch 08: final frozen-source discovery passed 3,462 tests in 81.280 seconds (39 platform/hardware skips), with unchanged source hashes. All four counted-area source reviews are closed; review findings were corrected with regressions. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. The earlier full-suite failure was an outdated fake cost-model interface; its swap-selection assertions are preserved. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.",
   "improvements": [
     {
       "id": 1,
@@ -5779,6 +5779,118 @@
       "local_id": "MP03",
       "description": "Public image import tried every Pillow plugin. An EPS document named `.png`, labeled `image/png` in a data URL, or returned as `image/png` over HTTP reached Pillow's Ghostscript renderer even though the application advertises raster-image input. This renderer was outside the import worker's cooperative Stop handling. `ImageImport.read_image` passes an explicit raster-format tuple to `Image.open`, preserving PNG/APNG, JPEG/MPO, WEBP, BMP/DIB, GIF, TIFF, ICO and AVIF. Unsupported documents/vector formats get a useful export-to-raster message before a document decoder or renderer runs. Four policy regression tests in `test_v148_platform_batch07_image_decoders.py` exercise local/data/HTTP EPS and WMF rejection with mocked renderer boundaries, all advertised raster decoders, AVIF, animated PNG and actual two-frame MPO files. Existing ICC, unsigned 16-bit, orientation, pixel/byte budgets and cancellation stay in place.",
       "ledger": "v148-batch07-platform.md"
+    },
+    {
+      "id": 746,
+      "area": "batch08-application",
+      "batch": 8,
+      "local_id": "AZ01",
+      "description": "A successful background-removal cut copied its already-private, oriented RGBA source a second time immediately before replacing alpha. That full-image allocation served no remaining consumer; a 320×240 cut copied 614,400 bytes of RGBA pixel payload across two copies. Transfer the existing private buffer into the result after all cut/safety checks and write its final alpha there. Borrowed input remains unchanged. Independent expected pixels, RGB/RGBA and partial alpha, EXIF orientation, no-op, Stop and alpha-write failure regressions verify the ownership transfer and cleanup. Successful cut fixtures now make one full RGBA copy (307,200 bytes), while no-op fixtures retain their existing single copy.",
+      "ledger": "v148-batch08-application.md"
+    },
+    {
+      "id": 747,
+      "area": "batch08-application",
+      "batch": 8,
+      "local_id": "AZ02",
+      "description": "Every ordinary desktop preview redraw recomputed the visible bitmap and uploaded it to Tk, even when the same immutable accepted image, viewport and canvas were unchanged. Repeating the actual `show_previews` call performed two rasterizations/uploads per image. Each canvas retains one bitmap keyed by a weak source identity, source mode and normalized viewport geometry. Repeated accepted-image redraws reuse that bitmap; replacement sources, zoom/pan/size changes, closed sources, hidden/destroyed canvases and construction failures invalidate it. Owned intermediate viewport images close after Tk copies their data. The actual controller test retains Original across a new plan and rerenders only the changed result. Public `viewport_image` retains its fresh-render contract for arbitrary mutable callers.",
+      "ledger": "v148-batch08-application.md"
+    },
+    {
+      "id": 748,
+      "area": "batch08-rendering",
+      "batch": 8,
+      "local_id": "RD01",
+      "description": "Respect the selected CPU/Auto/explicit GPU policy in both regional PixelMap reconstructions and the benchmark caller; actual CPU planning cannot open a saved preferred OpenCL backend.",
+      "ledger": "v148-batch08-rendering.md"
+    },
+    {
+      "id": 749,
+      "area": "batch08-rendering",
+      "batch": 8,
+      "local_id": "RD02",
+      "description": "Calculate source contrast from visible, white-composited pixels and restore original alpha; hidden RGB no longer changes visible drawing colors while opaque and identity results stay exact.",
+      "ledger": "v148-batch08-rendering.md"
+    },
+    {
+      "id": 750,
+      "area": "batch08-rendering",
+      "batch": 8,
+      "local_id": "RD03",
+      "description": "Replace per-offset full-ROI square brush shifts with exact separable rolling reductions and bounded numeric work storage, preserving even-brush geometry, Stop and executable results.",
+      "ledger": "v148-batch08-rendering.md"
+    },
+    {
+      "id": 751,
+      "area": "batch08-rendering",
+      "batch": 8,
+      "local_id": "RD04",
+      "description": "Convert detected cell-edge Fill polygons to executable pixel-center contours with safe concave bridges and reachable interior seeds; unchanged flood/halo gates preserve fallback and final reports reflect accepted regions.",
+      "ledger": "v148-batch08-rendering.md"
+    },
+    {
+      "id": 752,
+      "area": "batch08-ui-workflow",
+      "batch": 8,
+      "local_id": "UW801",
+      "description": "A transient startup read failure left valid custom profiles on disk but absent from `PROFILES`. The next ordinary Add or Import as copy built the complete replacement registry from that incomplete in-memory view and erased the old registrations. A real `load_custom_profiles` → Add reproduction retained the original bytes after the failed read, then lost the existing name on the next Add. `GameProfiles` freshly reads and strictly validates the disk registry for each mutation, merges compatible current registrations, rejects conflicting identities and preserves unreadable/invalid files. Add and import-copy hold one process-local registry lock through publication and in-memory registration. Previously unseen disk registrations become available in the UI only after successful publication. P exercises the actual Add dialog and public import-copy path, a fresh disk addition, casefold collisions, malformed/ambiguous data, read/write failure and missing-file recovery. The tolerant startup loader remains compatible. Existing file-set publication rollback remains the shared original067 contract; no cross-process or crash-atomic registry guarantee is claimed.",
+      "ledger": "v148-batch08-ui-workflow.md"
+    },
+    {
+      "id": 753,
+      "area": "batch08-ui-workflow",
+      "batch": 8,
+      "local_id": "UW802",
+      "description": "Empty or nonnumeric Manual time text blocked every drawing mode before the effective profile policy was resolved. Fixed game presets and Unlimited therefore failed even though their policy never uses the manual numeric field. `DrawBot.options` validates the field after the effective profile policy is known and requires its whole-number/range contract only for Manual/Custom. Inactive invalid text stays unchanged in the UI and uses a bounded internal fallback. B covers every supported fixed/unlimited spelling, valid/invalid active Manual/Custom, unknown modes, brush validation and both directions of an automatic profile override.",
+      "ledger": "v148-batch08-ui-workflow.md"
+    },
+    {
+      "id": 754,
+      "area": "batch08-ui-workflow",
+      "batch": 8,
+      "local_id": "UW803",
+      "description": "Use Region Fill Engine and Fill aggressiveness were displayed, saved and validated, but omitted from the final options dictionary. Actual `options` → `make_plan` with the switch off and Safe still enabled the region engine at Balanced when Auto Fill was enabled. Transfer both existing controls to effective planner options. C uses real saved anchored Brush/Fill calibration and the real planner to verify the disabled branch, all three aggressiveness values, independence from legacy Auto Fill, and settings save/read. This is one Region Fill control-propagation group, distinct from UP02's profile-default isolation. No detector, leak-safety algorithm or input gate changes.",
+      "ledger": "v148-batch08-ui-workflow.md"
+    },
+    {
+      "id": 755,
+      "area": "batch08-ui-workflow",
+      "batch": 8,
+      "local_id": "UW804",
+      "description": "Options and target-stroke admission always resolved the Auto reserve, while planning later honored the selected reserve. The final draw guard still compared against the earlier options. Actual `draw` rejected a 56-second plan for Skribbl60/Off because its outer limit remained53 seconds even though the plan correctly allowed60. Resolve the existing complete budget policy once in `options`, including the selected reserve, and derive its numeric limit, active/unlimited state and target cap consistently. B verifies all advertised reserve choices across fixed/custom/manual/unlimited modes and exercises the actual draw worker through its final guard with a56-second plan. Auto interpolation and explicit reserve policy remain unchanged; RB02 owns the interpolation correction.",
+      "ledger": "v148-batch08-ui-workflow.md"
+    },
+    {
+      "id": 756,
+      "area": "batch08-ui-workflow",
+      "batch": 8,
+      "local_id": "UW805",
+      "description": "Custom profiles could be added, imported, exported or reset, but had no rename/removal flow. Unwanted names remained permanently in the selector and occupied the1000-profile allowance. Reset removed contents while preserving the registry entry. The active custom-profile section now provides Rename and Remove. Rename preserves the storage UUID and owned file bytes, permits case-only changes and saves current settings before reload. Remove confirms the exact name/UUID, publishes deletion of only canonical per-profile paths together with the registry, then selects the generic profile. Builtins, collisions, stale modal identity, busy/closing/pending contexts and failed publications preserve data. M verifies actual dialog callbacks, capacity recovery, ordinary/case-only/no-op renames, byte-for-byte rollback, unaffected other profiles/source/export/shared recovery files and revocation of transient input authorization through existing controller methods. Rename and Remove count together as one custom-profile maintenance flow.",
+      "ledger": "v148-batch08-ui-workflow.md"
+    },
+    {
+      "id": 757,
+      "area": "batch08-ui-workflow",
+      "batch": 8,
+      "local_id": "UW806",
+      "description": "CustomTkinter option selectors in the actual settings factory had no local keyboard selection and focused decorative children. Mouse-only selectors prevented keyboard access to the existing options. Use one logical Tab stop with bounded arrows/Home/End through the original variable and command callback, native menu opening, Escape, live disabled/value/lifetime checks and shared focus-ring/scroll-reveal helpers. Tooltips bind to logical focus. The actual factory, callback semantics, unchanged global bindings and native Windows focus/traversal/reveal are covered in `test_v148_ui_batch08_keyboard.py`. All option selectors and gestures form one behavior group; existing button behavior remains UK01.",
+      "ledger": "v148-batch08-ui-workflow.md"
+    },
+    {
+      "id": 758,
+      "area": "batch08-platform",
+      "batch": 8,
+      "local_id": "BP01",
+      "description": "`build_release.main` replaced the finished ZIP before compiling its installer or writing the related metadata. Starting with a complete gate-valid release and injecting an ISCC failure left a new ZIP beside the old installer, checksum and manifest; the previously valid set then failed its checksum gate. Build every selected artifact and metadata file in one unique staging directory, direct ISCC output there with `/O`, and run the actual variant/checksum/manifest gate before publication. `ReleasePublication.publish_release` keeps the old files in a private backup while moving the complete new set into place under a cooperating file transaction. On move errors it restores previous files and previous absence. Retire only known obsolete standard/CUDA/installer outputs of this exact version; preserve unrelated notes and other versions. Real public-builder tests mock external tools only and use real ZIPs, hashes, manifests and gates. They inject compiler, signer, metadata, final-gate and every backup/candidate-move failure.",
+      "ledger": "v148-batch08-platform.md"
+    },
+    {
+      "id": 759,
+      "area": "batch08-platform",
+      "batch": 8,
+      "local_id": "BP02",
+      "description": "`Build-Release.bat` selected base Python, then `build_release` upgraded pip and installed requirements into that caller environment. Release tests ran there while PyInstaller used a separate `.build-venv`, so the build could alter unrelated host packages and test different dependencies from those being bundled. `BuildEnvironment.prepare_builder` creates/reuses the private environment, verifies its actual prefix, architecture, supported Python and isolated site directories, and applies the existing pip-target policy before any package changes. Install build/runtime/selected GPU requirements once into that interpreter. Both release test processes and `build_exe.build_application` use it and an explicit trusted source path. Direct `build_exe.main` uses the same preparation; the batch launcher ignores inherited Python startup overrides. Proxy, CA, index and ordinary pip configuration remain available, while target/prefix/root/user/interpreter relocation and inherited Python startup overrides cannot redirect installation. Public-entry tests replace external processes, assert that every pip operation targets the private interpreter, and check shared test/packaging execution. A real no-pip temporary venv probe also distinguishes isolated environments from ones exposing system site packages.",
+      "ledger": "v148-batch08-platform.md"
     }
   ]
 }

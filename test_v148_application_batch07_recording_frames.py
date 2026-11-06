@@ -73,7 +73,8 @@ class RecordingFrameRetentionTests(unittest.TestCase):
                 with self.assertRaises(ValueError): old.getpixel((0, 0))
             return save_gif_atomic(destination, frames, durations)
         jobs=[]
-        app=SimpleNamespace(corners=[(0, 0), (64, 40)], area=lambda: (0, 0, 64, 40),
+        app=SimpleNamespace(activity=None, closing=False,
+            corners=[(0, 0), (64, 40)], area=lambda: (0, 0, 64, 40),
             stop=Stop(), events=queue.Queue(), begin_worker=lambda activity, work: jobs.append(work))
         with ExitStack() as stack:
             stack.enter_context(patch('DrawBot.filedialog.asksaveasfilename', return_value=str(path)))

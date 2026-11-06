@@ -166,7 +166,8 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
 
     try:initial_brush=max(1,int(options.get("brush_px",1) or 1))
     except Exception:initial_brush=1
-    breakdown=model.sequence_cost(sequence,initial_brush=initial_brush)
+    breakdown=model.sequence_cost(sequence,initial_brush=initial_brush,
+                                  include_color_verification=True)
     sequence_seconds=max(0.0,float(breakdown.total_seconds or 0.0))
     total=sequence_seconds
 
@@ -183,7 +184,8 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
     if fill_regions:
         try:
             from RegionFillEngine import estimate_fill_execution_seconds
-            fill_meta=dict(estimate_fill_execution_seconds(fill_regions,image_size,fitted,model_options) or {})
+            fill_meta=dict(estimate_fill_execution_seconds(fill_regions,image_size,fitted,model_options,
+                                                           use_cached_cost=False) or {})
         except Exception:
             fill_meta={"fill_regions":len(fill_regions),"fill_color_batches":0,
                        "total_seconds":len(fill_regions)*model.switch_cost("fill"),
@@ -203,6 +205,26 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
                             background_tool_changes*model.switch_cost("tool_change"))
         total+=background_seconds
 
+    # Fill preludes select their own colours before the stroke sequence starts.
+    # The RegionFill cost covers contour/tool/bucket/verification work, but
+    # excludes these palette or custom-dialog selections.
+    fill_selection_indexes=[]
+    if options.get('fill_tool_actions') or options.get('fill_tool_available'):
+        fill_selection_indexes=sorted({int(row['color_index']) for row in fill_regions
+                                       if int(row.get('color_index',-1)) >= 0})
+        if isinstance(background,dict) and background.get('enabled') and background.get('color_index') is not None:
+            fill_selection_indexes.append(int(background['color_index']))
+    fill_palette_n=fill_custom_n=0
+    fill_palette_seconds=fill_custom_seconds=0.0
+    if not options.get('paint_current_color'):
+        for index in fill_selection_indexes:
+            selection_seconds=sum(model.color_selection_cost(index))
+            if model.is_custom_color(index):
+                fill_custom_n+=1;fill_custom_seconds+=selection_seconds
+            else:
+                fill_palette_n+=1;fill_palette_seconds+=selection_seconds
+        total+=fill_palette_seconds+fill_custom_seconds
+
     deadline_meta=options.get("adaptive_deadline_meta") or {}
     fixed=deadline_meta.get("fixed_overhead") or {}
     outside_sequence=0.0
@@ -219,12 +241,18 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
     if path_rows:
         avg=path_seconds/max(1,len(path_rows))
         for kind in path_kinds:model_average_seconds[str(kind)]=avg
-    palette_n=max(0,int(breakdown.palette_switches or 0))
+    custom_n=max(0,int(breakdown.custom_color_switches or 0))+fill_custom_n
+    palette_n=max(0,int(breakdown.palette_switches or 0)-int(breakdown.custom_color_switches or 0))+fill_palette_n
     brush_n=max(0,int(breakdown.brush_switches or 0))
     tool_n=max(0,int(breakdown.tool_switches or 0))+background_tool_changes
     if palette_n:
         operation_counts["palette_change"]=palette_n
-        model_average_seconds["palette_change"]=max(0.0,float(breakdown.palette_seconds))/palette_n
+        palette_only_seconds=(breakdown.palette_seconds+breakdown.custom_color_seconds
+                              -breakdown.custom_selection_seconds+fill_palette_seconds)
+        model_average_seconds["palette_change"]=max(0.0,palette_only_seconds)/palette_n
+    if custom_n:
+        operation_counts['color_change']=custom_n
+        model_average_seconds['color_change']=(breakdown.custom_selection_seconds+fill_custom_seconds)/custom_n
     if brush_n:
         operation_counts["tool_change"]=operation_counts.get("tool_change",0)+brush_n
         model_average_seconds["tool_change"]=max(0.0,float(breakdown.brush_seconds))/brush_n
@@ -238,7 +266,8 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
         operation_counts["fill_action"]=fill_n
         fill_seconds=max(0.0,float(fill_meta.get("fill_contour_and_click_seconds") or 0.0))+background_fill_actions*model.switch_cost("fill")
         model_average_seconds["fill_action"]=fill_seconds/max(1,fill_n)
-    verification_n=max(0,int(fill_meta.get("fill_regions") or 0))+background_verifications
+    verification_n=(max(0,int(fill_meta.get("fill_regions") or 0))+background_verifications
+                    +int(breakdown.color_verifications))
     if verification_n:
         operation_counts["verification"]=verification_n
         model_average_seconds["verification"]=model.switch_cost("verification")
@@ -249,7 +278,9 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
         "used":True,"model":"stateful ExecutionCostModel + RegionFill batch model",
         "execution_cost_model":"ExecutionCostModel","execution_cost_calibration":"cold override; measured correction applied once",
         "path_count":len(path_rows),"stroke_sequence_paths":len(path_rows),
-        "color_changes":palette_n,"brush_changes":brush_n,
+        "color_changes":palette_n+custom_n,"brush_changes":brush_n,
+        "palette_changes":palette_n,"custom_color_changes":custom_n,
+        "fill_selection_seconds":round(fill_palette_seconds+fill_custom_seconds,5),
         "fill_actions":fill_n,"fill_color_batches":int(fill_meta.get("fill_color_batches") or 0),
         "tool_changes":tool_n,"verification_actions":verification_n,
         "sequence_seconds":round(sequence_seconds,5),"fill_seconds":round(max(0.0,float(fill_meta.get("total_seconds") or 0.0)),5),

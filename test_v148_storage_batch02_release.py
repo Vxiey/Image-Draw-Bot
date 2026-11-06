@@ -84,7 +84,7 @@ class StorageReleaseBatch02Tests(unittest.TestCase):
              patch.object(builder.sys, 'argv', ['build_release.py', '--skip-tests']), \
              patch.dict(builder.os.environ, {'GITHUB_REF_TYPE': '', 'GITHUB_REF_NAME': ''}), \
              patch.object(builder, 'run_source_release_gate', return_value=report), \
-             patch.object(builder, 'run', side_effect=subprocess.CalledProcessError(1, ['pip'])), \
+             patch.object(builder, 'prepare_builder', side_effect=subprocess.CalledProcessError(1, ['pip'])), \
              patch('builtins.print'):
             with self.assertRaises(subprocess.CalledProcessError):
                 builder.main()

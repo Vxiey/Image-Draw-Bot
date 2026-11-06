@@ -19,6 +19,7 @@ import PIL
 from PIL import Image, ImageChops, ImageSequence
 
 import ScreenRecording
+from DrawBot import DrawBotApp
 
 
 BASELINE = '8a9c848b9dd0f2c4738aee729dace75be2a5778d'
@@ -53,11 +54,13 @@ def main():
             clock.captures += 1; clock.now += .25949
             return ImageChops.offset(base, clock.captures * 7, 0) if changing else base.copy()
         observed = {}; jobs = []
-        app = SimpleNamespace(corners=[(0, 0), base.size], area=lambda: (0, 0, *base.size),
+        app = SimpleNamespace(activity=None, closing=False,
+            corners=[(0, 0), base.size], area=lambda: (0, 0, *base.size),
             stop=Stop(), events=queue.Queue(), begin_worker=lambda activity, work: jobs.append(work))
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / 'recording.gif'
-            namespace = {'Path': Path, 'time': SimpleNamespace(monotonic=lambda: clock.now),
+            namespace = {'Path': Path, 'DrawBotApp': DrawBotApp,
+                'time': SimpleNamespace(monotonic=lambda: clock.now),
                 'grab_area': capture, 'filedialog': SimpleNamespace(asksaveasfilename=lambda **kwargs: str(destination))}
             exec(compile(ast.Module(body=[nodes[label]], type_ignores=[]), 'record_screen.py', 'exec'), namespace)
             namespace['record_screen'](app)

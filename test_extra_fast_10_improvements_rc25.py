@@ -41,6 +41,8 @@ class FakeBreakdown:
 class FakeModel:
     scale_x=1.0;scale_y=1.0;multiplier=1.0;uncertainty_multiplier=1.0
     def switch_cost(self,kind):return {'palette_change':.1,'brush_change':.2,'verification':.1,'fill':.1}.get(kind,.1)
+    def color_selection_cost(self,color_index):return self.switch_cost('palette_change'),0.0
+    def brush_resets_color(self,previous,requested):return False
     def fixed_overhead(self,**kwargs):return FakeBreakdown(0.0)
     def risk_adjusted_seconds(self,value):return float(value)
     def sequence_cost(self,sequence,**kwargs):

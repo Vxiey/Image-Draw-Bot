@@ -71,7 +71,8 @@ class RecordingClockTests(unittest.TestCase):
             clock.captures += 1
             return Image.new('RGB', (3, 3), 'red' if clock.captures % 2 else 'blue')
         jobs = []
-        app = SimpleNamespace(corners=[(0, 0), (10, 10)], area=lambda: (0, 0, 10, 10),
+        app = SimpleNamespace(activity=None, closing=False,
+                              corners=[(0, 0), (10, 10)], area=lambda: (0, 0, 10, 10),
                               stop=Stop(), events=queue.Queue(),
                               begin_worker=lambda activity, work: jobs.append(work))
         with tempfile.TemporaryDirectory() as folder:

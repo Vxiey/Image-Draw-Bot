@@ -1,0 +1,368 @@
+{
+  "baseline": "73788a51c1a3502f03f007e4d2ffe0152f56b7e6",
+  "python": "3.12.14",
+  "pillow": "13.0.0",
+  "numpy": "2.5.4",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "repeats": 5,
+  "scope": "Public CPU remove_background, including output hashing/closure. Generated local RGBA images; no captures, network, GPU or UI timing.",
+  "method": "One warm exact-output pair, then alternating before/after order. Copy accounting is a separate instrumented call, outside elapsed measurements.",
+  "memory_scope": "Counts only full-source RGBA Image.copy outputs and their width*height*4 pixel payload. Other output/intermediate/native allocations and process RSS are not measured; copied byte volume is not peak memory.",
+  "baseline_source_sha256": "dfa4864ebbcea25ecb60e012afcbf419b2ef4cab1d7882874b7ea319569dd0e5",
+  "source_sha256": {
+    "BackgroundRemoval.py": "477220e63ae744ce703f028a9f0b019a4daa5807e40fa2e4c6de23deca64427a",
+    "benchmark_v148_background.py": "4216e36e58d8778e4b823e88396119c0ff1decf3847aac24b88aa91ba6490745",
+    "benchmark_v148_image_workflow.py": "ccba17da2b50a22c3c967e51994121bc23a95a7c4b2a496dc3eb1b2918346da5"
+  },
+  "cases": {
+    "opaque_cut": {
+      "size": [
+        320,
+        240
+      ],
+      "exact_output_parity": true,
+      "output": {
+        "size": [
+          320,
+          240
+        ],
+        "mode": "RGBA",
+        "pixels_sha256": "109eb2bf83ae56024a3587a7da7bf651f07b25752a09c784c9fba2e50b7c6c85",
+        "metadata": {
+          "mode": "Auto",
+          "strength": "Balanced",
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "threshold": null,
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "proxy_size": [
+            320,
+            240
+          ],
+          "edge_limit": 27.0,
+          "region_pixels_processed": 57600,
+          "largest_foreground_component_percent": 25.0,
+          "largest_foreground_bbox_proxy": [
+            80,
+            60,
+            240,
+            180
+          ],
+          "definite_background_percent": 75.0,
+          "uncertain_percent": 0.0,
+          "definite_foreground_percent": 25.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed",
+          "removed_pixels": 57600,
+          "removed_percent": 75.0,
+          "estimated_work_reduction_percent": 75.0,
+          "drawable_after_percent": 25.0,
+          "foreground_bbox": [
+            80,
+            60,
+            240,
+            180
+          ],
+          "no_op_reason": null,
+          "method": "classical edge-aware multi-colour border segmentation",
+          "ai_used": false
+        }
+      },
+      "samples_ms": {
+        "before": [
+          94.15790600178298,
+          110.76356199919246,
+          96.3815830036765,
+          94.5121209952049,
+          95.2203670021845
+        ],
+        "after": [
+          92.52235999883851,
+          95.81484499358339,
+          96.67867299867794,
+          95.2339560026303,
+          94.60469600162469
+        ]
+      },
+      "median_ms": {
+        "before": 95.2203670021845,
+        "after": 95.2339560026303
+      },
+      "copy_accounting": {
+        "before": {
+          "full_source_rgba_copy_count": 2,
+          "copied_rgba_pixel_payload_bytes": 614400
+        },
+        "after": {
+          "full_source_rgba_copy_count": 1,
+          "copied_rgba_pixel_payload_bytes": 307200
+        }
+      }
+    },
+    "partial_alpha_cut": {
+      "size": [
+        320,
+        240
+      ],
+      "exact_output_parity": true,
+      "output": {
+        "size": [
+          320,
+          240
+        ],
+        "mode": "RGBA",
+        "pixels_sha256": "92be6fa72a5a1d0c7a9f207dcb024515e14ebf1bb814b411917b6455906f6454",
+        "metadata": {
+          "mode": "Auto",
+          "strength": "Balanced",
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "threshold": null,
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "proxy_size": [
+            320,
+            240
+          ],
+          "edge_limit": 27.0,
+          "region_pixels_processed": 57600,
+          "largest_foreground_component_percent": 25.0,
+          "largest_foreground_bbox_proxy": [
+            80,
+            60,
+            240,
+            180
+          ],
+          "definite_background_percent": 75.0,
+          "uncertain_percent": 0.0,
+          "definite_foreground_percent": 25.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed",
+          "removed_pixels": 57599,
+          "removed_percent": 75.0,
+          "estimated_work_reduction_percent": 75.0,
+          "drawable_after_percent": 25.0,
+          "foreground_bbox": [
+            80,
+            60,
+            240,
+            180
+          ],
+          "no_op_reason": null,
+          "method": "classical edge-aware multi-colour border segmentation",
+          "ai_used": false
+        }
+      },
+      "samples_ms": {
+        "before": [
+          93.15108800365124,
+          93.88030599802732,
+          92.75451199937379,
+          93.45943700463977,
+          94.83774299587822
+        ],
+        "after": [
+          95.40929699869594,
+          91.94699799991213,
+          96.55334699345985,
+          97.70003499579616,
+          95.61330900032772
+        ]
+      },
+      "median_ms": {
+        "before": 93.45943700463977,
+        "after": 95.61330900032772
+      },
+      "copy_accounting": {
+        "before": {
+          "full_source_rgba_copy_count": 2,
+          "copied_rgba_pixel_payload_bytes": 614400
+        },
+        "after": {
+          "full_source_rgba_copy_count": 1,
+          "copied_rgba_pixel_payload_bytes": 307200
+        }
+      }
+    },
+    "transparent_noop": {
+      "size": [
+        320,
+        240
+      ],
+      "exact_output_parity": true,
+      "output": {
+        "size": [
+          320,
+          240
+        ],
+        "mode": "RGBA",
+        "pixels_sha256": "c680d91a942fb827abae9fd83131bf31aaf56ecfbf1c925180f19c25b9a38b99",
+        "metadata": {
+          "mode": "Auto",
+          "strength": "Balanced",
+          "removed_pixels": 0,
+          "removed_percent": 0.0,
+          "estimated_work_reduction_percent": 0.0,
+          "drawable_after_percent": 0.0,
+          "foreground_bbox": null,
+          "no_op_reason": "image already contains substantial transparency; original alpha preserved",
+          "method": "existing alpha preserved",
+          "ai_used": false
+        }
+      },
+      "samples_ms": {
+        "before": [
+          0.3588800027500838,
+          0.334063995978795,
+          0.31479499739361927,
+          0.3969870012952015,
+          0.31919100001687184
+        ],
+        "after": [
+          0.3229670037399046,
+          0.31480500183533877,
+          0.3102589980699122,
+          0.32606199965812266,
+          0.33579599403310567
+        ]
+      },
+      "median_ms": {
+        "before": 0.334063995978795,
+        "after": 0.3229670037399046
+      },
+      "copy_accounting": {
+        "before": {
+          "full_source_rgba_copy_count": 1,
+          "copied_rgba_pixel_payload_bytes": 307200
+        },
+        "after": {
+          "full_source_rgba_copy_count": 1,
+          "copied_rgba_pixel_payload_bytes": 307200
+        }
+      }
+    },
+    "uniform_safety_noop": {
+      "size": [
+        320,
+        240
+      ],
+      "exact_output_parity": true,
+      "output": {
+        "size": [
+          320,
+          240
+        ],
+        "mode": "RGBA",
+        "pixels_sha256": "a682fa570213181c0f6fd50f7da5ef6f263c855222c8f7441f19227d925383a3",
+        "metadata": {
+          "mode": "Auto",
+          "strength": "Balanced",
+          "removed_pixels": 0,
+          "removed_percent": 0.0,
+          "estimated_work_reduction_percent": 0.0,
+          "drawable_after_percent": 100.0,
+          "foreground_bbox": [
+            0,
+            0,
+            320,
+            240
+          ],
+          "no_op_reason": "segmentation would remove over 98.5% of the image; original preserved",
+          "method": "safety guard preserved original",
+          "ai_used": false,
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "threshold": null,
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "proxy_size": [
+            320,
+            240
+          ],
+          "edge_limit": 27.0,
+          "region_pixels_processed": 76800,
+          "largest_foreground_component_percent": 0.0,
+          "largest_foreground_bbox_proxy": null,
+          "definite_background_percent": 100.0,
+          "uncertain_percent": 0.0,
+          "definite_foreground_percent": 0.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed"
+        }
+      },
+      "samples_ms": {
+        "before": [
+          89.91132500523236,
+          89.01562599930912,
+          92.68955999868922,
+          87.73092300543794,
+          88.5351510005421
+        ],
+        "after": [
+          86.82115899864584,
+          86.22176399512682,
+          88.08163600042462,
+          87.89406400319422,
+          89.0835620011785
+        ]
+      },
+      "median_ms": {
+        "before": 89.01562599930912,
+        "after": 87.89406400319422
+      },
+      "copy_accounting": {
+        "before": {
+          "full_source_rgba_copy_count": 1,
+          "copied_rgba_pixel_payload_bytes": 307200
+        },
+        "after": {
+          "full_source_rgba_copy_count": 1,
+          "copied_rgba_pixel_payload_bytes": 307200
+        }
+      }
+    }
+  }
+}

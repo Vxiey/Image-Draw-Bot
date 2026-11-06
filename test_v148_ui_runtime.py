@@ -219,7 +219,8 @@ class RecordingRuntimeTests(unittest.TestCase):
     def test_partial_capture_failure_closes_all_owned_frames(self):
         raw = Image.new('RGB', (5, 5), 'red'); quantized = raw.quantize()
         worker = []
-        app = SimpleNamespace(corners=[(0, 0), (10, 10)], area=lambda: (0, 0, 10, 10),
+        app = SimpleNamespace(activity=None, closing=False,
+                              corners=[(0, 0), (10, 10)], area=lambda: (0, 0, 10, 10),
                               stop=Mock(), events=queue.Queue(), begin_worker=lambda activity, work: worker.append(work))
         app.stop.wait.return_value = False; app.stop.is_set.return_value = False
         with patch('DrawBot.filedialog.asksaveasfilename', return_value='unused.gif'):

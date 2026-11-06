@@ -1,7 +1,8 @@
-"""Keyboard behavior for the application's own CustomTkinter buttons.
+"""Local keyboard behavior for application buttons and option selectors.
 
 Bindings belong to each button and end with its lifetime. A button is one Tab
 stop; Return, keypad Enter and Space use its existing state-checked invoke().
+Selectors share focus visibility and use their existing variable/command path.
 """
 from __future__ import annotations
 
@@ -11,42 +12,8 @@ from weakref import WeakSet
 import customtkinter as ctk
 
 
-class KeyboardButton(ctk.CTkButton):
+class _KeyboardFocusSupport:
     _focus_tag = 'imagedrawbot_keyboard_focus'
-
-    def __init__(self, *args, focus_color='#72e2bd', **kwargs):
-        self._keyboard_ready = False
-        self._keyboard_closed = False
-        self._keyboard_pressed = None
-        self._keyboard_job = None
-        self._keyboard_focus_active = False
-        self._keyboard_focus_displayed = False
-        self._keyboard_nodes = WeakSet()
-        self._keyboard_focus_color = focus_color
-        super().__init__(*args, **kwargs)
-        self._keyboard_ready = True
-        # CTk forwards configure()/bind()/focus_set() to decorative children.
-        # Native Frame operations give the logical button one traversal stop.
-        tk.Frame.configure(self, takefocus=self._keyboard_focusable)
-        for sequence, callback in (
-                ('<FocusIn>', self._keyboard_focus_in),
-                ('<FocusOut>', self._keyboard_focus_out),
-                ('<KeyPress-Return>', self._keyboard_key_press),
-                ('<KeyRelease-Return>', self._keyboard_key_release),
-                ('<KeyPress-KP_Enter>', self._keyboard_key_press),
-                ('<KeyRelease-KP_Enter>', self._keyboard_key_release),
-                ('<KeyPress-space>', self._keyboard_key_press),
-                ('<KeyRelease-space>', self._keyboard_key_release)):
-            tk.Misc.bind(self, sequence, callback, add='+')
-        self._keyboard_sync_children()
-
-    def _keyboard_focusable(self, _path=None):
-        try:
-            return bool(not self._keyboard_closed and self.winfo_exists()
-                        and self.winfo_ismapped() and self.cget('state') != 'disabled'
-                        and callable(self.cget('command')))
-        except (tk.TclError, RuntimeError):
-            return False
 
     def _keyboard_has_focus(self):
         try:
@@ -59,12 +26,14 @@ class KeyboardButton(ctk.CTkButton):
             widget = getattr(widget, 'master', None)
         return False
 
+
     def _keyboard_scroll_frames(self):
         parent = getattr(self, 'master', None)
         while parent is not None:
             if isinstance(parent, ctk.CTkScrollableFrame):
                 yield parent
             parent = getattr(parent, 'master', None)
+
 
     def _keyboard_reveal_focus(self):
         """Reveal a Tab target inside owned CTk scroll frames, inside out."""
@@ -103,6 +72,7 @@ class KeyboardButton(ctk.CTkButton):
         except (tk.TclError, RuntimeError, AttributeError):
             return  # The activation guard still rejects a clipped/gone target.
 
+
     def _keyboard_in_view(self):
         """A mapped canvas child may still be completely scrolled out of view."""
         frames = tuple(self._keyboard_scroll_frames())
@@ -121,28 +91,17 @@ class KeyboardButton(ctk.CTkButton):
         except (tk.TclError, RuntimeError, AttributeError):
             return False
 
+
     def focus_set(self):
         return tk.Misc.focus_set(self)
 
+
     focus = focus_set
+
 
     def focus_force(self):
         return tk.Misc.focus_force(self)
 
-    def _keyboard_sync_children(self):
-        # CTk can replace text/image labels during configure(). Its persistent
-        # canvas and each new label remain decorative rather than extra stops.
-        for child in (self._canvas, self._text_label, self._image_label):
-            if child is not None and child not in self._keyboard_nodes:
-                child.configure(takefocus=0)
-                child.bind('<ButtonPress-1>', self._keyboard_pointer_focus, add='+')
-                self._keyboard_nodes.add(child)
-
-    def _draw(self, *args, **kwargs):
-        super()._draw(*args, **kwargs)
-        if getattr(self, '_keyboard_ready', False) and not self._keyboard_closed:
-            self._keyboard_sync_children()
-            self._keyboard_draw_focus()
 
     def _keyboard_draw_focus(self):
         try:
@@ -162,6 +121,67 @@ class KeyboardButton(ctk.CTkButton):
                 self._keyboard_focus_displayed = True
         except (tk.TclError, RuntimeError):
             pass  # Destruction can occur between a focus event and its repaint.
+
+
+class KeyboardButton(_KeyboardFocusSupport, ctk.CTkButton):
+    _focus_tag = 'imagedrawbot_keyboard_focus'
+
+    def __init__(self, *args, focus_color='#72e2bd', **kwargs):
+        self._keyboard_ready = False
+        self._keyboard_closed = False
+        self._keyboard_pressed = None
+        self._keyboard_job = None
+        self._keyboard_focus_active = False
+        self._keyboard_focus_displayed = False
+        self._keyboard_nodes = WeakSet()
+        self._keyboard_focus_color = focus_color
+        super().__init__(*args, **kwargs)
+        self._keyboard_ready = True
+        # CTk forwards configure()/bind()/focus_set() to decorative children.
+        # Native Frame operations give the logical button one traversal stop.
+        tk.Frame.configure(self, takefocus=self._keyboard_focusable)
+        for sequence, callback in (
+                ('<FocusIn>', self._keyboard_focus_in),
+                ('<FocusOut>', self._keyboard_focus_out),
+                ('<KeyPress-Return>', self._keyboard_key_press),
+                ('<KeyRelease-Return>', self._keyboard_key_release),
+                ('<KeyPress-KP_Enter>', self._keyboard_key_press),
+                ('<KeyRelease-KP_Enter>', self._keyboard_key_release),
+                ('<KeyPress-space>', self._keyboard_key_press),
+                ('<KeyRelease-space>', self._keyboard_key_release)):
+            tk.Misc.bind(self, sequence, callback, add='+')
+        self._keyboard_sync_children()
+
+    def _keyboard_focusable(self, _path=None):
+        try:
+            return bool(not self._keyboard_closed and self.winfo_exists()
+                        and self.winfo_ismapped() and self.cget('state') != 'disabled'
+                        and callable(self.cget('command')))
+        except (tk.TclError, RuntimeError):
+            return False
+
+
+
+
+
+
+
+
+    def _keyboard_sync_children(self):
+        # CTk can replace text/image labels during configure(). Its persistent
+        # canvas and each new label remain decorative rather than extra stops.
+        for child in (self._canvas, self._text_label, self._image_label):
+            if child is not None and child not in self._keyboard_nodes:
+                child.configure(takefocus=0)
+                child.bind('<ButtonPress-1>', self._keyboard_pointer_focus, add='+')
+                self._keyboard_nodes.add(child)
+
+    def _draw(self, *args, **kwargs):
+        super()._draw(*args, **kwargs)
+        if getattr(self, '_keyboard_ready', False) and not self._keyboard_closed:
+            self._keyboard_sync_children()
+            self._keyboard_draw_focus()
+
 
     def _keyboard_focus_in(self, _event=None):
         self._keyboard_focus_active = True
@@ -233,4 +253,134 @@ class KeyboardButton(ctk.CTkButton):
     def destroy(self):
         self._keyboard_closed = True
         self._keyboard_cancel()
+        super().destroy()
+
+
+class KeyboardOptionMenu(_KeyboardFocusSupport, ctk.CTkOptionMenu):
+    """One Tab stop, bounded arrows, and a keyboard-opened native Tk menu."""
+
+    def __init__(self, *args, focus_color='#72e2bd', **kwargs):
+        self._keyboard_ready = False
+        self._keyboard_closed = False
+        self._keyboard_focus_active = False
+        self._keyboard_focus_displayed = False
+        self._keyboard_focus_color = focus_color
+        super().__init__(*args, **kwargs)
+        self._keyboard_ready = True
+        tk.Frame.configure(self, takefocus=self._keyboard_focusable)
+        for sequence, callback in (('<FocusIn>', self._keyboard_focus_in),
+                                   ('<FocusOut>', self._keyboard_focus_out),
+                                   ('<KeyPress>', self._keyboard_key_press)):
+            tk.Misc.bind(self, sequence, callback, add='+')
+        self._dropdown_menu.bind('<Unmap>', self._keyboard_popup_unmapped, add='+')
+        self._keyboard_sync_children()
+
+    def _keyboard_focusable(self, _path=None):
+        try:
+            return bool(not self._keyboard_closed and self.winfo_exists()
+                        and self.winfo_ismapped() and self.cget('state') != 'disabled'
+                        and self.cget('values'))
+        except (tk.TclError, RuntimeError):
+            return False
+
+    def _keyboard_sync_children(self):
+        for child in (self._canvas, self._text_label):
+            child.configure(takefocus=0)
+
+    def _draw(self, *args, **kwargs):
+        super()._draw(*args, **kwargs)
+        if getattr(self, '_keyboard_ready', False) and not self._keyboard_closed:
+            self._keyboard_sync_children()
+            self._keyboard_draw_focus()
+
+    def _keyboard_focus_in(self, _event=None):
+        self._keyboard_focus_active = True
+        self._keyboard_reveal_focus()
+        self._keyboard_draw_focus()
+
+    def _keyboard_focus_out(self, _event=None):
+        self._keyboard_focus_active = False
+        self._keyboard_draw_focus()
+
+    def _keyboard_popup_unmapped(self, _event=None):
+        self._close_on_next_click = False
+
+    def _keyboard_close_popup(self):
+        self._close_on_next_click = False
+        try:
+            self._dropdown_menu.unpost()
+            if self._dropdown_menu.grab_current() is self._dropdown_menu:
+                self._dropdown_menu.grab_release()
+        except (tk.TclError, RuntimeError, KeyError):
+            pass
+
+    def _keyboard_open_popup(self):
+        values = self.cget('values')
+        if not self._keyboard_focusable() or not self._keyboard_has_focus() or not self._keyboard_in_view():
+            return
+        if self._close_on_next_click:
+            self._keyboard_close_popup()
+            return
+        try:
+            selected = values.index(self.get())
+        except ValueError:
+            selected = 0
+        self._close_on_next_click = True
+        try:
+            # tk_popup handles menu arrows/Return/Escape and focus restoration.
+            # Selecting the current entry preserves the native menu's semantics.
+            self._dropdown_menu.tk_popup(self.winfo_rootx(),
+                self.winfo_rooty() + self.winfo_height(), selected)
+        except (tk.TclError, RuntimeError):
+            self._keyboard_close_popup()
+
+    def _keyboard_key_press(self, event):
+        key = getattr(event, 'keysym', '')
+        state = getattr(event, 'state', 0) or 0
+        modified = state & (4 | 8 | 128 | 0x20000)
+        alt_down = key == 'Down' and bool(state & (8 | 0x20000)) and not state & (4 | 128)
+        if modified and not alt_down:
+            return None
+        if key not in ('Up','Down','Left','Right','Home','End','Return','KP_Enter','space','F4','Escape'):
+            return None
+        if not self._keyboard_has_focus() or not self._keyboard_focusable() or not self._keyboard_in_view():
+            return 'break'
+        if key == 'Escape':
+            self._keyboard_close_popup()
+        elif alt_down or key in ('Return','KP_Enter','space','F4'):
+            self._keyboard_open_popup()
+        else:
+            values = list(self.cget('values'))
+            current = self.get()
+            try:
+                index = values.index(current)
+            except ValueError:
+                index = -1 if key in ('Down','Right','Home') else len(values)
+            if key == 'Home': index = 0
+            elif key == 'End': index = len(values)-1
+            else: index += 1 if key in ('Down','Right') else -1
+            value = values[max(0,min(len(values)-1,index))]
+            if value != current:
+                self._dropdown_callback(value)
+        return 'break'
+
+    def _dropdown_callback(self, value):
+        self._close_on_next_click = False
+        if self._keyboard_focusable() and value in self.cget('values'):
+            return super()._dropdown_callback(value)
+
+    def _clicked(self, event=0):
+        if self._keyboard_focusable():
+            self.focus_set()
+            return super()._clicked(event)
+
+    def configure(self, *args, **kwargs):
+        result = super().configure(*args, **kwargs)
+        if getattr(self, '_keyboard_ready', False) and not self._keyboard_focusable():
+            self._keyboard_close_popup()
+        return result
+
+    def destroy(self):
+        self._keyboard_closed = True
+        self._keyboard_close_popup()
         super().destroy()

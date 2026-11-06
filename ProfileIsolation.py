@@ -80,6 +80,7 @@ def scope_visible(scope,key):
         'browser-manual':is_browser_target(key) and cap.setup_mode=='manual',
         'oneclick':supports_one_click_setup(key),
         'nonpaint':key!='microsoft-paint',
+        'custom':key.startswith('custom-'),
     }[scope]
 
 
