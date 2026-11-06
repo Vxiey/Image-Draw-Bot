@@ -3,6 +3,8 @@
 No AI model, cloud API or model download is used. The remover models colours
 from the image border, protects chromatic edges, grows only border-connected
 background and fails closed when the cut looks destructive.
+Corner color uses the dominant colour sampled at the four actual corners;
+Auto models multiple colours across the full border.
 """
 from __future__ import annotations
 
@@ -90,6 +92,16 @@ def _border_samples(a: np.ndarray, edge: np.ndarray) -> np.ndarray:
     if len(samples) > _MAX_BORDER_SAMPLES:
         samples = samples[np.linspace(0, len(samples) - 1, _MAX_BORDER_SAMPLES, dtype=np.int32)]
     return samples
+
+
+def _corner_samples(a: np.ndarray) -> np.ndarray:
+    """Small patches at the four actual corners, independent of side colours."""
+    h, w, _ = a.shape
+    band = max(1, min(12, round(min(w, h) * .03)))
+    return np.concatenate([
+        a[:band, :band].reshape(-1, 3), a[:band, -band:].reshape(-1, 3),
+        a[-band:, :band].reshape(-1, 3), a[-band:, -band:].reshape(-1, 3),
+    ]).astype(np.float32, copy=False)
 
 
 def _cluster_border(samples: np.ndarray):
@@ -261,17 +273,28 @@ def _preserve(source, mode, strength, reason, extra=None, method="safety guard p
 def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", feather_px=.6,
                       cancelled: Callable[[], bool] = lambda: False) -> BackgroundRemovalResult:
     mode = validate_mode(mode); strength = validate_strength(strength)
+    if cancelled(): raise InterruptedError()
+    def finish(result):
+        if cancelled(): raise InterruptedError()
+        return result
     source = ImageOps.exif_transpose(image).convert("RGBA")
     w, h = source.size; total = max(1, w * h)
     if cancelled(): raise InterruptedError()
     old_alpha = source.getchannel("A").tobytes(); before = sum(a > 8 for a in old_alpha)
     if 1.0 - before / total >= .20:
-        return _preserve(source, mode, strength, "image already contains substantial transparency; original alpha preserved", method="existing alpha preserved")
+        return finish(_preserve(source, mode, strength, "image already contains substantial transparency; original alpha preserved", method="existing alpha preserved"))
 
     proxy = _proxy(source.convert("RGB")); a = np.asarray(proxy, np.float32)
-    edge = _edge_strength(a); samples = _border_samples(a, edge)
+    edge = _edge_strength(a)
+    samples = _corner_samples(a) if mode == "Corner color" else _border_samples(a, edge)
     centers, spreads, weights = _cluster_border(samples)
+    if mode == "Corner color":
+        # Use the dominant corner colour rather than adding every side colour
+        # to the background model. Border connectivity and safety guards remain.
+        chosen = int(np.argmax(weights))
+        centers, spreads, weights = centers[chosen:chosen + 1], spreads[chosen:chosen + 1], weights[chosen:chosen + 1]
     centers, spreads, weights = _filter_mode(centers, spreads, weights, mode)
+    if cancelled(): raise InterruptedError()
     mask, best_dist, best_norm, processed, edge_limit = _grow(a, centers, spreads, strength, mode, edge, cancelled)
     mask = _cleanup(mask, strength)
 
@@ -300,7 +323,7 @@ def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", f
     elif fg_fraction < .01 and bg_fraction > .50: reason = "remaining foreground is implausibly small"
     elif largest_fraction < .003 and bg_fraction > .20: reason = "remaining foreground has no sufficiently large connected subject region"
     if reason:
-        return _preserve(source, mode, strength, reason + "; original preserved", extra)
+        return finish(_preserve(source, mode, strength, reason + "; original preserved", extra))
 
     alpha = _alpha(mask, (w, h), feather_px)
     new = np.frombuffer(alpha.tobytes(), np.uint8).astype(np.uint16)
@@ -308,7 +331,7 @@ def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", f
     alpha = Image.frombytes("L", (w, h), (((new * old + 127) // 255).astype(np.uint8)).tobytes())
     after = sum(v > 8 for v in alpha.tobytes())
     if after / total < .005:
-        return _preserve(source, mode, strength, "foreground safety guard rejected the cut; original preserved", extra)
+        return finish(_preserve(source, mode, strength, "foreground safety guard rejected the cut; original preserved", extra))
     result = source.copy(); result.putalpha(alpha)
     removed = max(0, before - after); bbox = alpha.getbbox()
     meta = {
@@ -319,7 +342,7 @@ def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", f
         "foreground_bbox": list(bbox) if bbox else None, "no_op_reason": None,
         "method": "classical edge-aware multi-colour border segmentation", "ai_used": False,
     }
-    return BackgroundRemovalResult(result, meta)
+    return finish(BackgroundRemovalResult(result, meta))
 
 
 def png_export_ready(image: Image.Image) -> Image.Image:

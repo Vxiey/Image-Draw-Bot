@@ -46,6 +46,6 @@ class Rc12EtaCalibrationTests(unittest.TestCase):
         self.assertGreater(a['confidence'],b['confidence'])
 
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc3')
+        self.assertEqual(APP_VERSION,'1.0.146-rc4')
 
 if __name__=='__main__':unittest.main()

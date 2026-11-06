@@ -5,6 +5,7 @@ common local identifiers/secrets from text before a diagnostics ZIP is created.
 """
 from __future__ import annotations
 from pathlib import Path
+import math
 import re
 
 
@@ -18,6 +19,10 @@ _AUTHORIZATION_RE = re.compile(
 _CREDENTIAL_RE = re.compile(
     r'''(?i)((?:api[_-]?key|token|password|passwd|secret)["']?\s*[:=]\s*)'''
     r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)'''
+)
+_COOKIE_RE = re.compile(
+    r'''(?im)((?<![\w-])(?:set-cookie|cookie)["']?\s*[:=]\s*)'''
+    r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n]+)'''
 )
 
 
@@ -47,13 +52,17 @@ def sanitize_text(text: str) -> str:
     text = _RELATIVE_URL_RE.sub(
         lambda match: match.group(1) + _redact_url_value(match.group(2)), text
     )
-    home = str(Path.home())
+    try:
+        home = str(Path.home())
+    except (OSError, RuntimeError):
+        home = ''
     if home:
         text = text.replace(home, "<USER_HOME>")
         text = text.replace(home.replace("\\", "/"), "<USER_HOME>")
-    text = re.sub(r"(?i)C:\\Users\\[^\\\r\n]+", r"C:\\Users\\<user>", text)
-    text = re.sub(r"(?i)C:/Users/[^/\r\n]+", r"C:/Users/<user>", text)
+    text = re.sub(r'(?i)([a-z]:[\\/]Users[\\/])[^\\/\r\n"<>]+', r'\1<user>', text)
+    text = re.sub(r'(/(?:home|Users)/)[^/\r\n"<>]+', r'\1<user>', text)
     text = _AUTHORIZATION_RE.sub(r'\1<redacted>', text)
+    text = _COOKIE_RE.sub(_redact_credential, text)
     text = _CREDENTIAL_RE.sub(_redact_credential, text)
     return text
 
@@ -76,6 +85,8 @@ def safe_context(context: object) -> dict:
         if key not in context:
             continue
         value=context[key]
+        if type(value) is float and not math.isfinite(value):
+            continue
         if isinstance(value,bool) or type(value) in (int,float):
             cleaned[key]=value
         elif isinstance(value,str):

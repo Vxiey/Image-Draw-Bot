@@ -13,6 +13,7 @@ from pathlib import Path
 
 from CalibrationAnchors import validate_anchor, resolve_point
 from RuntimePaths import data_dir
+from ProfileStorage import safe_profile_key
 
 APP_TOOL_SCHEMA = 1
 GENERIC_TOOLS = ("Brush", "Fill", "Eraser", "Clear")
@@ -39,8 +40,7 @@ def capability(profile_key: str) -> dict:
 
 
 def tool_file(profile_key: str) -> Path:
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in str(profile_key).lower())[:80]
-    return data_dir() / f"app-tools-{safe or 'generic'}.json"
+    return data_dir() / f"app-tools-{safe_profile_key(profile_key)}.json"
 
 
 def _point(value, label: str) -> tuple[int, int]:

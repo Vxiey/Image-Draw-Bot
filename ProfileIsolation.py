@@ -1,5 +1,6 @@
 """Complete defaults reset and scoped profile control visibility."""
 from UICompactLayout import install_compact_layout
+from tkinter import TclError
 
 SETTING_NAMES=('quality', 'speed', 'precision', 'mode', 'shape_order', 'shape_model', 'max_stroke_cap', 'progressive_rendering', 'planning_watchdog', 'time_budget_mode', 'adaptive_deadline_renderer', 'deadline_safety_reserve', 'target_stroke_count', 'target_stroke_custom', 'drawing_style', 'render_style', 'hybrid_mode', 'draw_quality', 'human_mode', 'gpu_mode', 'gpu_vram', 'gpu_performance', 'cpu_workers', 'cpu_engine', 'ram_budget', 'ram_custom_mb', 'planning_resolution', 'resource_scheduler', 'background_fill', 'fill_engine', 'background_simplification', 'color_grouping', 'color_workflow', 'stroke_optimizer', 'adaptive_detail', 'visual_verification', 'color_rendering', 'color_fidelity', 'color_layers', 'profile_engine', 'edge_behavior', 'custom_color_workflow', 'exact_color_limit', 'tool_strategy', 'portrait_focus', 'skip_white', 'contrast', 'outline', 'brush_px', 'gartic_opacity', 'max_seconds', 'paint_simple', 'paint_tool', 'sketch_detail', 'read_gartic_timer', 'render_preset', 'subject_focus', 'ui_mode', 'preview_show_background', 'preview_show_fill', 'preview_show_strokes', 'preview_detail_level')
 
@@ -15,6 +16,17 @@ def capture_defaults(app):
 
 
 def reset_settings(app):
+    # Cancel before resetting the token: otherwise the previous profile's setup
+    # callback can still execute against the newly selected profile.
+    token = getattr(app, 'one_click_setup_after', None)
+    if token is not None:
+        root = getattr(app, 'root', None)
+        cancel = getattr(root, 'after_cancel', None)
+        if callable(cancel):
+            try:
+                cancel(token)
+            except (RuntimeError, ValueError, TclError):
+                pass
     for name,value in getattr(app,'_profile_defaults',EXTRA_DEFAULTS).items():
         var=getattr(app,name,None)
         if callable(getattr(var,'set',None)):var.set(value)

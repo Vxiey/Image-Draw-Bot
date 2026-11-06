@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 
@@ -9,6 +10,18 @@ from Colors import DATA_DIR
 from RuntimePaths import helper_command
 
 BASE=DATA_DIR
+
+
+def _window_rectangle(value):
+    if (not isinstance(value, (list, tuple)) or len(value) != 4
+            or not all(type(item) is int and -(2**31) <= item < 2**31 for item in value)):
+        return None
+    left, top, right, bottom = value
+    return tuple(value) if right > left and bottom > top else None
+
+
+def _native_id(value, bits):
+    return type(value) is int and 0 < value < 2**bits
 
 
 def _describe_exit(code):
@@ -48,22 +61,25 @@ def _run(command, timeout=8):
     if not payload or payload.get('ok') is not True:
         raise OSError('The Windows check returned no valid response.')
     handle=payload.get('handle');rect=payload.get('rect');client=payload.get('client_rect')
-    if (not isinstance(handle,int) or not isinstance(rect,list) or len(rect)!=4 or
-            not all(isinstance(v,int) for v in rect) or not isinstance(client,list) or len(client)!=4 or
-            not all(isinstance(v,int) for v in client)):
+    rect = _window_rectangle(rect)
+    client = _window_rectangle(client)
+    if not _native_id(handle, 64) or rect is None or client is None:
         raise OSError('The Windows check returned invalid window data.')
+    target_pid = payload.get('target_pid')
+    if target_pid is not None and not _native_id(target_pid, 32):
+        raise OSError('The Windows check returned an invalid process identifier.')
     dpi=payload.get('dpi')
     if dpi is not None and (type(dpi) is not int or not 48<=dpi<=768):
         raise OSError('The Windows check returned invalid DPI data.')
+    scale = payload.get('dpi_scale')
+    if scale is not None and (type(scale) not in (int, float) or not 0.5 <= scale <= 8
+                              or (dpi is not None and not math.isclose(scale, dpi/96, abs_tol=0.001))):
+        raise OSError('The Windows check returned inconsistent DPI scaling.')
     monitor_rect=payload.get('monitor_rect');work_rect=payload.get('monitor_work_rect')
-    def optional_rect(value):
-        if isinstance(value,list) and len(value)==4 and all(isinstance(v,int) for v in value):
-            return tuple(value)
-        return None
-    return {'handle':handle,'rect':tuple(rect),'client_rect':tuple(client),
-            'target_pid':payload.get('target_pid'),'dpi':dpi,
-            'dpi_source':payload.get('dpi_source'),'dpi_scale':payload.get('dpi_scale'),
-            'monitor_rect':optional_rect(monitor_rect),'monitor_work_rect':optional_rect(work_rect)}
+    return {'handle':handle,'rect':rect,'client_rect':client,
+            'target_pid':target_pid,'dpi':dpi,
+            'dpi_source':payload.get('dpi_source'),'dpi_scale':scale,
+            'monitor_rect':_window_rectangle(monitor_rect),'monitor_work_rect':_window_rectangle(work_rect)}
 
 
 def capture_target_metadata_isolated(area,exclude_pid=None,timeout=8):
@@ -79,5 +95,10 @@ def capture_target_isolated(area,exclude_pid=None,timeout=8):
 
 
 def probe_handle_isolated(handle,timeout=8):
+    if not _native_id(handle, 64):
+        raise ValueError('A valid target window handle is required.')
     command=helper_command('target','--handle',str(int(handle)))
-    return _run(command,timeout)
+    result = _run(command,timeout)
+    if result['handle'] != handle:
+        raise OSError('The Windows check returned a different target window.')
+    return result

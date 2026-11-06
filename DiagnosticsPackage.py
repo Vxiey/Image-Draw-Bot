@@ -3,11 +3,16 @@ from __future__ import annotations
 
 import hashlib
 import importlib.metadata
+from contextlib import contextmanager
+from itertools import islice
 import json
+import math
 import os
 import platform
+import stat
 import sys
 import time
+import tempfile
 import uuid
 import zipfile
 from pathlib import Path
@@ -19,6 +24,50 @@ from Version import APP_VERSION, BUILD_CHANNEL, FILE_VERSION
 
 DIAGNOSTICS_DIR = data_dir() / 'diagnostics'
 MAX_LOG_CHARS = 500_000
+MAX_JSON_BYTES = 4 * 1024 * 1024
+MAX_SUMMARY_FILES = 100
+
+
+def _regular_input(path: Path, base: Path) -> bool:
+    """Collect local regular files, without following substituted links."""
+    try:
+        relative = path.relative_to(base)
+        current = base
+        for part in relative.parts:
+            current = current / part
+            metadata = current.lstat()
+            if (stat.S_ISLNK(metadata.st_mode)
+                    or getattr(metadata, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)):
+                return False
+        return path.is_file() and path.resolve().is_relative_to(base.resolve())
+    except (OSError, ValueError):
+        return False
+
+
+def _json_input(path: Path, base: Path):
+    if not _regular_input(path, base):
+        return None
+    try:
+        with path.open('rb') as stream:
+            data = stream.read(MAX_JSON_BYTES + 1)
+        if len(data) > MAX_JSON_BYTES:
+            return None
+        return data, json.loads(data)
+    except (OSError, ValueError, UnicodeDecodeError, TypeError, RecursionError):
+        return None
+
+
+@contextmanager
+def _atomic_archive(path: Path):
+    descriptor, temporary = tempfile.mkstemp(prefix='.diagnostics-', suffix='.tmp', dir=path.parent)
+    os.close(descriptor)
+    temporary = Path(temporary)
+    try:
+        with zipfile.ZipFile(temporary, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+            yield archive
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _package_versions():
@@ -106,11 +155,11 @@ def _read_text(path: Path, limit=MAX_LOG_CHARS):
 def _settings_summary():
     result={}
     base=data_dir()
-    for path in sorted(base.glob('settings*.json')):
-        try:
-            raw=json.loads(path.read_text(encoding='utf-8'))
-        except (OSError,ValueError,TypeError):
+    for path in islice(sorted(base.glob('settings*.json')), MAX_SUMMARY_FILES):
+        loaded = _json_input(path, base)
+        if loaded is None:
             continue
+        _, raw = loaded
         if not isinstance(raw,dict):continue
         # Screen coordinates and any future path/url-like fields are intentionally removed.
         raw.pop('corners',None)
@@ -121,16 +170,20 @@ def _settings_summary():
 def _calibration_summary():
     result={}
     base=data_dir()
-    for path in sorted(base.glob('calibration*.json')):
-        try:
-            data=path.read_bytes()
-            raw=json.loads(data.decode('utf-8'))
-        except (OSError,ValueError,UnicodeDecodeError,TypeError):
+    for path in islice(sorted(base.glob('calibration*.json')), MAX_SUMMARY_FILES):
+        loaded = _json_input(path, base)
+        if loaded is None:
             continue
+        data, raw = loaded
         summary={'sha256':hashlib.sha256(data).hexdigest(),'size_bytes':len(data)}
         if isinstance(raw,dict):
             colors=raw.get('colors')
-            summary['version']=raw.get('version')
+            version = raw.get('version')
+            if isinstance(version, str):
+                version = sanitize_text(version)[:200]
+            elif type(version) not in (int, float) or (isinstance(version, float) and not math.isfinite(version)):
+                version = None
+            summary['version']=version
             summary['color_count']=len(colors) if isinstance(colors,list) else None
             summary['has_anchor']=bool(raw.get('anchor') or raw.get('client_rect'))
         result[path.name]=summary
@@ -141,7 +194,7 @@ def create_diagnostics_package(context=None) -> Path:
     DIAGNOSTICS_DIR.mkdir(parents=True,exist_ok=True)
     stamp=time.strftime('%Y%m%d-%H%M%S')
     path=DIAGNOSTICS_DIR/f'ImageDrawBot-Diagnostics-{stamp}-{uuid.uuid4().hex[:8]}.zip'
-    with zipfile.ZipFile(path,'w',compression=zipfile.ZIP_DEFLATED) as archive:
+    with _atomic_archive(path) as archive:
         archive.writestr('system.json',json.dumps(_technical_info(context),indent=2,ensure_ascii=False))
         archive.writestr('settings-summary.json',json.dumps(_settings_summary(),indent=2,ensure_ascii=False))
         archive.writestr('calibration-summary.json',json.dumps(_calibration_summary(),indent=2,ensure_ascii=False))
@@ -151,7 +204,10 @@ def create_diagnostics_package(context=None) -> Path:
             'Logs are sanitized for user-home paths and credential-like strings.\n')
         log_dir=data_dir()/'logs'
         for name in ('ImageDrawBot-session.log','ImageDrawBot-session.log.1','ImageDrawBot-crash.log','ImageDrawBot-crash.log.1',
+                     'ImageDrawBot-debug-errors.log','ImageDrawBot-debug-errors.log.1',
                      'ImageDrawBot-target-probe.log','ImageDrawBot-mouse-probe.log'):
+            if not _regular_input(log_dir/name, data_dir()):
+                continue
             text=_read_text(log_dir/name)
             if text:
                 archive.writestr(f'logs/{name}',text)

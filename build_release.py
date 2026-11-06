@@ -32,6 +32,13 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def is_pe_executable(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    with path.open('rb') as stream:
+        return stream.read(2) == b'MZ'
+
+
 def zip_onedir(destination: Path) -> None:
     if destination.exists():
         destination.unlink()
@@ -117,7 +124,7 @@ def main() -> int:
 
     run([sys.executable, "build_exe.py"] + (["--gpu"] if args.gpu else []))
     exe = DIST / "ImageDrawBot.exe"
-    if not exe.is_file() or exe.read_bytes()[:2] != b"MZ":
+    if not is_pe_executable(exe):
         raise SystemExit("Release build did not produce a valid ImageDrawBot.exe.")
     run([str(exe), "--self-test"], cwd=DIST)
 
@@ -141,7 +148,7 @@ def main() -> int:
             signing_args=inno_arguments(signing)
         run([str(iscc), f"/DMyAppVersion={APP_VERSION}", *signing_args, str(BASE / "installer" / "ImageDrawBot.iss")])
         setup = RELEASE / f"ImageDrawBot-{APP_VERSION}-Windows-x64-Setup.exe"
-        if not setup.is_file() or setup.read_bytes()[:2] != b"MZ":
+        if not is_pe_executable(setup):
             raise SystemExit("Installer build did not produce the expected Setup.exe.")
         if signing:
             from CodeSigning import verify

@@ -185,7 +185,7 @@ class Step30ReleaseCandidateHardeningTests(unittest.TestCase):
 
     def test_release_version_is_v10131_beta(self):
         from Version import APP_VERSION, FILE_VERSION, BUILD_CHANNEL
-        self.assertEqual(APP_VERSION,'1.0.146-rc3')
+        self.assertEqual(APP_VERSION,'1.0.146-rc4')
         self.assertEqual(FILE_VERSION,'1.0.146')
         self.assertEqual(BUILD_CHANNEL,'rc')
 

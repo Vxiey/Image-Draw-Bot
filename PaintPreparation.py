@@ -6,6 +6,7 @@ import re
 import subprocess
 import tempfile
 import time
+from WindowsSystem import system_directory
 
 # Kept inline so frozen builds need no PowerShell resource or Python COM package.
 _SCRIPT = r'''
@@ -158,7 +159,7 @@ def _run_powershell(script, *, action=None, cancelled=lambda:False):
             "try {\n"+script+"\n} catch {\n"
             "[Console]::Error.WriteLine($_.ToString())\nexit 1\n}\n}\n\n")
     source=source.encode('ascii')
-    executable=os.path.join(os.environ.get('SystemRoot',r'C:\Windows'),'System32','WindowsPowerShell','v1.0','powershell.exe')
+    executable=str(system_directory()/'WindowsPowerShell'/'v1.0'/'powershell.exe')
     # A regular input file avoids communicate(input=...) blocking synchronously
     # on Windows when a child stops reading its stdin pipe. No script is added to
     # the command line, downloaded, or kept after this operation finishes.
@@ -319,7 +320,7 @@ def ensure_paint(enumerate_windows, *, cancelled=lambda:False, launch=None, wait
     found=candidates()
     if found:return choose_paint_window(found)
     if launch is None:
-        launch=lambda:subprocess.Popen([os.path.join(os.environ.get('SystemRoot',r'C:\Windows'),'System32','mspaint.exe')])
+        launch=lambda:subprocess.Popen([str(system_directory()/'mspaint.exe')])
     launch()
     for _ in range(40):
         if cancelled():raise InterruptedError('Paint preparation cancelled.')

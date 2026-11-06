@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
+import ipaddress
 import json
 import secrets
 import socket
@@ -19,20 +20,25 @@ from urllib.parse import urlsplit
 
 
 MOBILE_PREVIEW_MAX_DIMENSION = 1600
+MOBILE_PREVIEW_MAX_CLIENTS = 12
+MOBILE_PREVIEW_CLIENT_TIMEOUT = 5.0
+_PRIVATE_NETWORKS = tuple(ipaddress.IPv4Network(value) for value in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'))
 
 
 def _is_private_ipv4(value: str) -> bool:
     try:
-        parts = [int(p) for p in value.split('.')]
-    except (TypeError, ValueError):
+        address = ipaddress.IPv4Address(value)
+    except (ipaddress.AddressValueError, TypeError):
         return False
-    if len(parts) != 4 or any(p < 0 or p > 255 for p in parts):
+    return any(address in network for network in _PRIVATE_NETWORKS)
+
+
+def _is_local_client(value: str) -> bool:
+    try:
+        address = ipaddress.IPv4Address(value)
+    except (ipaddress.AddressValueError, TypeError):
         return False
-    return (
-        parts[0] == 10
-        or (parts[0] == 172 and 16 <= parts[1] <= 31)
-        or (parts[0] == 192 and parts[1] == 168)
-    )
+    return address.is_loopback or address.is_link_local or _is_private_ipv4(value)
 
 
 def local_ipv4_addresses() -> list[str]:
@@ -57,10 +63,42 @@ def local_ipv4_addresses() -> list[str]:
         pass
     result: list[str] = []
     for value in found:
-        if value and value != '0.0.0.0' and not value.startswith('127.') and value not in result:
+        if isinstance(value,str) and _is_local_client(value) and not value.startswith('127.') and value not in result:
             result.append(value)
-    result.sort(key=lambda ip: (not _is_private_ipv4(ip), ip))
+    result.sort(key=lambda ip: (not _is_private_ipv4(ip), int(ipaddress.IPv4Address(ip))))
     return result
+
+
+class _PreviewHTTPServer(ThreadingHTTPServer):
+    """Bound LAN connections and expire clients that stop sending/reading."""
+    daemon_threads = True
+    request_queue_size = MOBILE_PREVIEW_MAX_CLIENTS
+
+    def __init__(self, *args, **kwargs):
+        self._client_slots = threading.BoundedSemaphore(MOBILE_PREVIEW_MAX_CLIENTS)
+        super().__init__(*args, **kwargs)
+
+    def get_request(self):
+        connection, address = super().get_request()
+        connection.settimeout(MOBILE_PREVIEW_CLIENT_TIMEOUT)
+        return connection, address
+
+    def process_request(self, request, client_address):
+        if not self._client_slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._client_slots.release()
+            self.shutdown_request(request)
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._client_slots.release()
 
 
 def _image_png_bytes(image) -> Optional[bytes]:
@@ -99,10 +137,12 @@ class MobilePreviewServer:
         self._images: Dict[str, Optional[bytes]] = {'original': None, 'preview': None, 'safety': None}
         self._revision = 0
         self._generation = 0
+        self._update_sequence = 0
         self._token = ''
         self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self._port = 0
+        self._addresses: tuple[str, ...] = ()
 
     @property
     def running(self) -> bool:
@@ -119,6 +159,8 @@ class MobilePreviewServer:
     def update_images(self, *, original=None, preview=None, safety=None) -> int:
         with self._lock:
             generation = self._generation
+            self._update_sequence += 1
+            sequence = self._update_sequence
         encoded = {
             'original': _image_png_bytes(original),
             'preview': _image_png_bytes(preview),
@@ -127,31 +169,54 @@ class MobilePreviewServer:
         with self._lock:
             # Encoding happens outside the lock. A stop must not be undone by
             # an older, slower encode completing after its session was cleared.
-            if generation != self._generation:
+            if generation != self._generation or sequence != self._update_sequence:
+                return self._revision
+            if encoded == self._images:
                 return self._revision
             self._images.update(encoded)
             self._revision += 1
             return self._revision
 
     def urls(self) -> list[str]:
-        if not self.running:
-            return []
-        addresses = local_ipv4_addresses()
-        if not addresses:
-            addresses = ['127.0.0.1']
-        return [f'http://{ip}:{self.port}/{self.token}/' for ip in addresses]
+        with self._lock:
+            if not self.running:
+                return []
+            return [f'http://{ip}:{self.port}/{self.token}/' for ip in self._addresses]
 
     def state(self) -> MobilePreviewState:
         with self._lock:
             return MobilePreviewState(self.running, self.port, self.token, self._revision, tuple(self.urls()))
 
+    def refresh_addresses(self) -> MobilePreviewState:
+        """Refresh the share links when the user reopens the preview panel."""
+        with self._lock:
+            server, generation = self._server, self._generation
+            if server is None:
+                return self.state()
+        addresses = tuple(local_ipv4_addresses()) or ('127.0.0.1',)
+        with self._lock:
+            if self._server is server and self._generation == generation:
+                self._addresses = addresses
+            return self.state()
+
     def start(self, port: int = 0) -> MobilePreviewState:
         with self._lock:
             if self.running:
                 return self.state()
-            return self._start(port)
+            generation = self._generation
+        if type(port) is not int or not 0 <= port <= 65535:
+            raise ValueError('Mobile preview port must be an integer from 0 to 65535.')
+        # DNS/interface discovery may block. Never perform it while holding the
+        # lock used by image encoding, HTTP responses, state() and stop().
+        addresses = tuple(local_ipv4_addresses()) or ('127.0.0.1',)
+        with self._lock:
+            if generation != self._generation:
+                raise InterruptedError('Mobile preview start was cancelled.')
+            if self.running:
+                return self.state()
+            return self._start(port, addresses)
 
-    def _start(self, port: int) -> MobilePreviewState:
+    def _start(self, port: int, addresses: tuple[str, ...]) -> MobilePreviewState:
         """Create one session while holding the state lock."""
         owner = self
         session_token = secrets.token_urlsafe(12).replace('-', '').replace('_', '')
@@ -179,7 +244,7 @@ class MobilePreviewServer:
 
             def do_GET(self):
                 client_ip = str(self.client_address[0]) if self.client_address else ''
-                if not (client_ip.startswith('127.') or _is_private_ipv4(client_ip) or client_ip.startswith('169.254.')):
+                if not _is_local_client(client_ip):
                     self._send(403, 'text/plain; charset=utf-8', b'Local network access only')
                     return
                 path = urlsplit(self.path).path
@@ -210,15 +275,29 @@ class MobilePreviewServer:
                     else:
                         response = (404, 'text/plain; charset=utf-8', b'Not found')
                 # Never hold the state lock while writing to a slow client.
-                self._send(*response)
+                try:
+                    self._send(*response)
+                except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                    # A tab closing or a slow phone must not produce a server
+                    # traceback or hold the image lock/worker indefinitely.
+                    self.close_connection = True
 
-        server = ThreadingHTTPServer(('0.0.0.0', int(port)), Handler)
-        server.daemon_threads = True
+        server = _PreviewHTTPServer(('0.0.0.0', port), Handler)
         self._server = server
         self._token = session_token
         self._port = int(server.server_address[1])
-        self._thread = threading.Thread(target=server.serve_forever, name='mobile-preview', daemon=True)
-        self._thread.start()
+        self._addresses = addresses
+        self._thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .1}, name='mobile-preview', daemon=True)
+        try:
+            self._thread.start()
+        except BaseException:
+            server.server_close()
+            self._server = None
+            self._thread = None
+            self._token = ''
+            self._port = 0
+            self._addresses = ()
+            raise
         return self.state()
 
     def stop(self) -> None:
@@ -228,6 +307,7 @@ class MobilePreviewServer:
             self._server = None
             self._thread = None
             self._port = 0
+            self._addresses = ()
             self._token = ''
             self._generation += 1
             self._images = {name: None for name in self._images}
@@ -261,9 +341,9 @@ footer{{padding:0 16px 24px;color:var(--muted);font-size:11px;line-height:1.5}}
 <main><div class="viewer"><img id="image" alt="Image Draw Bot preview"><div class="empty" id="empty" hidden>Preview not available yet. Build a preview in Image Draw Bot.</div></div></main>
 <footer>Local-network preview only. This page contains no cloud scripts, analytics or telemetry. Keep the PC and phone on the same Wi-Fi/LAN.</footer>
 <script>
-const token={json.dumps(token)}; let view='preview', revision=-1; const img=document.getElementById('image'), empty=document.getElementById('empty'), status=document.getElementById('status');
-function loadImage(){{img.src=`/${{token}}/${{view}}.png?v=${{revision}}`; img.hidden=false; empty.hidden=true;}}
-img.onerror=()=>{{img.hidden=true;empty.hidden=false}};
-document.querySelectorAll('button[data-view]').forEach(b=>b.onclick=()=>{{document.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');view=b.dataset.view;loadImage();}});
-async function poll(){{try{{const r=await fetch(`/${{token}}/status.json?x=${{Date.now()}}`,{{cache:'no-store'}});const s=await r.json();status.textContent='Connected locally · live refresh';if(s.revision!==revision){{revision=s.revision;loadImage();}}}}catch(e){{status.textContent='Connection lost · keep Image Draw Bot running';}}setTimeout(poll,1000)}} poll();
+const token={json.dumps(token)}; let view='preview', revision=-1, available={{}}; const img=document.getElementById('image'), empty=document.getElementById('empty'), status=document.getElementById('status');
+function loadImage(){{if(available[view]!==true){{img.hidden=true;img.removeAttribute('src');empty.hidden=false;return;}}img.alt=view==='original'?'Original image':view==='safety'?'Drawing safety map':'Planned drawing preview';img.src=`/${{token}}/${{view}}.png?v=${{revision}}`; img.hidden=false; empty.hidden=true;}}
+img.onerror=()=>{{revision=-1;img.hidden=true;empty.hidden=false}};
+document.querySelectorAll('button[data-view]').forEach(b=>{{b.setAttribute('aria-pressed',String(b.dataset.view===view));b.onclick=()=>{{document.querySelectorAll('button[data-view]').forEach(x=>{{x.classList.remove('active');x.setAttribute('aria-pressed','false');}});b.classList.add('active');b.setAttribute('aria-pressed','true');view=b.dataset.view;loadImage();}};}});
+async function poll(){{if(document.hidden){{setTimeout(poll,1000);return;}}const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),5000);try{{const r=await fetch(`/${{token}}/status.json?x=${{Date.now()}}`,{{cache:'no-store',signal:controller.signal}});if(!r.ok)throw new Error('Preview unavailable');const s=await r.json();available=s.available||{{}};status.textContent=Object.values(available).some(Boolean)?'Connected locally · live refresh':'Connected locally · waiting for preview…';if(s.revision!==revision){{revision=s.revision;loadImage();}}}}catch(e){{status.textContent='Connection lost · keep Image Draw Bot running';revision=-1;img.hidden=true;empty.hidden=false;}}finally{{clearTimeout(timer);setTimeout(poll,1000);}}}} loadImage();poll();
 </script></body></html>'''

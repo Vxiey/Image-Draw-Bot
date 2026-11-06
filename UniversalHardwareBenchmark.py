@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import hashlib
+from importlib import metadata
 import json
 import math
 import os
@@ -27,6 +28,7 @@ import numpy as np
 from GpuHardware import GpuDevice, detect_gpus
 from ResourceAllocation import available_ram_mb, logical_cpu_count
 from RuntimePaths import data_dir
+from WindowsSystem import load_system_library
 
 PROFILE_VERSION = 1
 PROFILE_FILE = data_dir() / "hardware-performance-profile-v1.json"
@@ -64,14 +66,17 @@ def _total_ram_mb() -> int | None:
 
             class MEMORYSTATUSEX(ctypes.Structure):
                 _fields_ = [
-                    ("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                    ("dwLength", ctypes.c_uint32), ("dwMemoryLoad", ctypes.c_uint32),
                     ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
                     ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
                     ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
                     ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
                 ]
             stat = MEMORYSTATUSEX(); stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+            memory_status = load_system_library("kernel32.dll").GlobalMemoryStatusEx
+            memory_status.argtypes = [ctypes.POINTER(MEMORYSTATUSEX)]
+            memory_status.restype = ctypes.c_int32
+            if memory_status(ctypes.byref(stat)):
                 return max(0, int(stat.ullTotalPhys // (1024 * 1024)))
         except Exception:
             return None
@@ -84,34 +89,47 @@ def _total_ram_mb() -> int | None:
 
 
 def cpu_name() -> str:
-    values = [
-        os.environ.get("PROCESSOR_IDENTIFIER", ""),
-        platform.processor(),
-        platform.machine(),
-    ]
-    for value in values:
-        value = str(value or "").strip()
+    identifier = str(os.environ.get("PROCESSOR_IDENTIFIER", "") or "").strip()
+    if identifier:
+        return identifier
+    # platform.processor() uses WMI on Windows. Do not query it eagerly when
+    # the standard process environment already supplies the CPU description.
+    for probe in (platform.processor, platform.machine):
+        try:
+            value = str(probe() or "").strip()
+        except (OSError, RuntimeError):
+            continue
         if value:
             return value
     return "Unknown CPU"
 
 
 def runtime_versions() -> dict[str, str]:
+    """Read installed versions without initializing optional GPU libraries."""
     result = {"python": platform.python_version(), "numpy": str(np.__version__)}
-    try:
-        import cupy as cp
-        result["cupy"] = str(getattr(cp, "__version__", "unknown"))
-        try:
-            result["cuda_runtime"] = str(int(cp.cuda.runtime.runtimeGetVersion()))
-        except Exception:
-            pass
-    except Exception:
-        result["cupy"] = "unavailable"
-    try:
-        import pyopencl as cl
-        result["pyopencl"] = str(getattr(cl, "VERSION_TEXT", getattr(cl, "__version__", "available")))
-    except Exception:
-        result["pyopencl"] = "unavailable"
+
+    def installed_version(*distributions: str) -> str:
+        for distribution in distributions:
+            try:
+                value = metadata.version(distribution)
+            except (metadata.PackageNotFoundError, OSError, ValueError):
+                continue
+            if value:
+                return str(value)
+        return ""
+
+    result["cupy"] = installed_version("cupy", "cupy-cuda13x", "cupy-cuda12x", "cupy-cuda11x")
+    result["pyopencl"] = installed_version("pyopencl")
+    # Frozen distributions can omit metadata; already-loaded modules are an
+    # acceptable fallback, but probing versions must not import them itself.
+    for name, attribute in (("cupy", "__version__"), ("pyopencl", "VERSION_TEXT")):
+        if not result[name]:
+            module = sys.modules.get(name)
+            result[name] = str(getattr(module, attribute, "") or "unavailable")
+    for distribution in ("nvidia-cuda-runtime-cu12", "nvidia-cuda-runtime-cu13"):
+        value = installed_version(distribution)
+        if value:
+            result[distribution] = value
     return result
 
 
@@ -456,20 +474,38 @@ def benchmark_opencl(*, size: int = 512, repeats: int = 2) -> list[BackendScore]
 def _scores_by_workload(scores: list[BackendScore]) -> dict[str, list[BackendScore]]:
     grouped: dict[str, list[BackendScore]] = {workload: [] for workload in WORKLOADS}
     for score in scores:
-        if score.workload in grouped and not score.error and score.throughput_mp_s > 0:
+        try:
+            valid = (math.isfinite(score.throughput_mp_s) and score.throughput_mp_s > 0
+                     and math.isfinite(score.elapsed_ms) and score.elapsed_ms >= 0)
+        except (TypeError, ValueError, OverflowError):
+            valid = False
+        if score.workload in grouped and not score.error and valid:
             grouped[score.workload].append(score)
     return grouped
 
 
 def _safe_gpu_budget_mb(score: BackendScore) -> int | None:
-    total = score.total_memory_mb
-    if not total or total < 256:
+    try:
+        total = int(score.total_memory_mb or 0)
+    except (TypeError, ValueError, OverflowError):
         return None
-    total = int(total)
+    if total < 256:
+        return None
     if score.integrated:
-        return max(256, min(4096, int(total * 0.20)))
-    reserve = max(768, min(2048, int(total * 0.10)))
-    return max(256, min(int(total * 0.68), total - reserve))
+        budget = min(4096, int(total * 0.20))
+    else:
+        reserve = min(total // 4, max(768, min(2048, int(total * 0.10))))
+        budget = min(int(total * 0.68), total - reserve)
+    # A large card may already be occupied by another application. A measured
+    # free-memory value, including zero, is stricter than total VRAM capacity.
+    if score.free_memory_mb is not None:
+        try:
+            free = int(score.free_memory_mb)
+        except (TypeError, ValueError, OverflowError):
+            free = -1
+        if free >= 0:
+            budget = min(budget, int(free * 0.80))
+    return max(0, budget)
 
 
 def _tile_from_budget(memory_mb: int | None) -> int:
@@ -621,11 +657,8 @@ def save_hardware_profile(result: dict[str, Any], *, path: Path | None = None) -
 
 def load_hardware_profile(*, path: Path | None = None, validate_current: bool = True) -> dict[str, Any] | None:
     target=Path(path or PROFILE_FILE)
-    try:
-        payload=json.loads(target.read_text(encoding="utf-8"))
-    except (OSError,json.JSONDecodeError):
-        return None
-    if not isinstance(payload,dict) or int(payload.get("version",0) or 0)!=PROFILE_VERSION:
+    payload = _read_profile(target)
+    if not _current_profile_version(payload):
         return None
     if validate_current:
         try:
@@ -639,11 +672,10 @@ def load_hardware_profile(*, path: Path | None = None, validate_current: bool = 
 
 def profile_needs_benchmark(*, path: Path | None = None) -> tuple[bool,str]:
     target=Path(path or PROFILE_FILE)
-    try:
-        raw=json.loads(target.read_text(encoding="utf-8"))
-    except (OSError,json.JSONDecodeError):
+    raw = _read_profile(target)
+    if raw is None:
         return True,"no saved hardware profile"
-    if not isinstance(raw,dict) or int(raw.get("version",0) or 0)!=PROFILE_VERSION:
+    if not _current_profile_version(raw):
         return True,"hardware profile version changed"
     current=hardware_snapshot(refresh=True).get("hardware_signature")
     if str(raw.get("hardware_signature") or "")!=str(current or ""):
@@ -651,14 +683,44 @@ def profile_needs_benchmark(*, path: Path | None = None) -> tuple[bool,str]:
     return False,"saved hardware profile matches this machine"
 
 
+def _read_profile(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _current_profile_version(payload: dict[str, Any] | None) -> bool:
+    value = payload.get("version") if payload else None
+    return type(value) is int and value == PROFILE_VERSION
+
+
 def preferred_backend(workload: str, *, pixels: int, profile: dict[str,Any] | None = None) -> dict[str,Any]:
-    profile=profile or load_hardware_profile() or {}
-    item=dict((profile.get("workload_preferences") or {}).get(str(workload),{}) or {})
-    if not item:
-        return {"backend_id":"cpu:numpy","backend":"CPU/NumPy","vendor":"CPU","device":cpu_name(),"reason":"no benchmark preference"}
-    if item.get("backend_id")!="cpu:numpy" and int(pixels or 0)<int(item.get("min_pixels",0) or 0):
-        return {"backend_id":"cpu:numpy","backend":"CPU/NumPy","vendor":"CPU","device":cpu_name(),"reason":"workload below measured GPU crossover threshold"}
-    return item
+    def cpu(reason: str) -> dict[str, Any]:
+        return {"backend_id": "cpu:numpy", "backend": "CPU/NumPy", "vendor": "CPU",
+                "device": cpu_name(), "reason": reason}
+
+    if profile is None:
+        profile = load_hardware_profile() or {}
+    if not isinstance(profile, dict):
+        return cpu("invalid benchmark preference")
+    preferences = profile.get("workload_preferences")
+    if not isinstance(preferences, dict):
+        return cpu("no benchmark preference")
+    item = preferences.get(str(workload))
+    if not isinstance(item, dict) or not isinstance(item.get("backend_id"), str) or not item["backend_id"]:
+        return cpu("no benchmark preference")
+    try:
+        minimum = int(item.get("min_pixels", 0) or 0)
+        count = int(pixels or 0)
+    except (TypeError, ValueError, OverflowError):
+        return cpu("invalid benchmark crossover threshold")
+    if minimum < 0 or count < 0:
+        return cpu("invalid benchmark crossover threshold")
+    if item["backend_id"] != "cpu:numpy" and count < minimum:
+        return cpu("workload below measured GPU crossover threshold")
+    return dict(item)
 
 
 def format_hardware_summary(result: dict[str, Any]) -> str:

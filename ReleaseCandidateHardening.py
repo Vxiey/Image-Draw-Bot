@@ -12,6 +12,7 @@ from pathlib import Path
 import hashlib
 import json
 import re
+import stat
 import zipfile
 from typing import Iterable
 
@@ -269,11 +270,53 @@ def _forbidden_archive_name(name: str) -> bool:
     return False
 
 
+def _safe_windows_parts(name: str) -> tuple[str, ...]:
+    """Validate names before any extractor can reinterpret them on Windows."""
+    if not isinstance(name, str) or not name or any(ord(char) < 32 for char in name):
+        raise ReleaseGateError('Unsafe Windows artifact path.')
+    parts = tuple(name.replace('\\', '/').rstrip('/').split('/'))
+    reserved = re.compile(r'(?i)(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)')
+    if any(not part or part in ('.', '..') or part.endswith((' ', '.'))
+           or re.search(r'[<>:"|?*]', part) or reserved.match(part) for part in parts):
+        raise ReleaseGateError(f'Unsafe Windows artifact path: {name!r}')
+    return parts
+
+
+def _artifact_basename(name: str) -> str:
+    parts = _safe_windows_parts(name)
+    if len(parts) != 1 or '/' in name or '\\' in name:
+        raise ReleaseGateError(f'Artifact name must be a basename: {name!r}')
+    return name
+
+
+def _validate_zip_entries(entries: list[zipfile.ZipInfo]) -> None:
+    names = set()
+    files = set()
+    parents = set()
+    for entry in entries:
+        parts = _safe_windows_parts(entry.orig_filename)
+        if parts[0] != 'ImageDrawBot':
+            raise ReleaseGateError(f'Windows ZIP entry is outside ImageDrawBot/: {entry.filename!r}')
+        identity = '/'.join(parts).casefold()
+        if identity in names:
+            raise ReleaseGateError(f'Duplicate Windows ZIP path: {entry.filename!r}')
+        names.add(identity)
+        mode = stat.S_IFMT(entry.external_attr >> 16)
+        if mode not in (0, stat.S_IFREG, stat.S_IFDIR):
+            raise ReleaseGateError(f'Windows ZIP contains a link or special file: {entry.filename!r}')
+        if not entry.filename.replace('\\', '/').endswith('/'):
+            files.add(identity)
+        parents.update('/'.join(parts[:index]).casefold() for index in range(1, len(parts)))
+    if files & parents:
+        raise ReleaseGateError('Windows ZIP has a file/directory path collision.')
+
+
 def validate_windows_zip(path: Path) -> dict:
     path = Path(path)
     if not path.is_file():
         raise ReleaseGateError(f"Windows ZIP is missing: {path}")
     with zipfile.ZipFile(path, "r") as archive:
+        _validate_zip_entries(archive.infolist())
         bad = archive.testzip()
         if bad:
             raise ReleaseGateError(f"Windows ZIP integrity failed at {bad}")
@@ -281,8 +324,9 @@ def validate_windows_zip(path: Path) -> dict:
         exe_name = next((name for name in names if name.replace("\\", "/") == "ImageDrawBot/ImageDrawBot.exe"), None)
         if not exe_name:
             raise ReleaseGateError("Windows ZIP is missing ImageDrawBot/ImageDrawBot.exe")
-        if archive.read(exe_name)[:2] != b"MZ":
-            raise ReleaseGateError("Packaged ImageDrawBot.exe is not a PE executable")
+        with archive.open(exe_name) as executable:
+            if executable.read(2) != b"MZ":
+                raise ReleaseGateError("Packaged ImageDrawBot.exe is not a PE executable")
         leaked = [name for name in names if _forbidden_archive_name(name)]
         if leaked:
             raise ReleaseGateError("Runtime/source-only files leaked into Windows ZIP: " + ", ".join(leaked[:8]))
@@ -293,17 +337,20 @@ def validate_installer(path: Path, *, app_version: str) -> dict:
     path = Path(path)
     if not path.is_file():
         raise ReleaseGateError(f"Installer is missing: {path}")
-    if path.read_bytes()[:2] != b"MZ":
-        raise ReleaseGateError("Installer is not a PE executable")
+    with path.open('rb') as executable:
+        if executable.read(2) != b"MZ":
+            raise ReleaseGateError("Installer is not a PE executable")
     if app_version not in path.name:
         raise ReleaseGateError(f"Installer filename does not contain {app_version}: {path.name}")
     return {"path": str(path), "sha256": _sha256(path), "size": path.stat().st_size}
 
 
-def verify_checksum_file(path: Path, *, base_dir: Path | None = None) -> dict:
+def verify_checksum_file(path: Path, *, base_dir: Path | None = None,
+                         expected_files: Iterable[str] | None = None) -> dict:
     path = Path(path)
     base = Path(base_dir) if base_dir is not None else path.parent
     rows = []
+    seen = set()
     for raw in _read(path).splitlines():
         raw = raw.strip()
         if not raw:
@@ -312,8 +359,12 @@ def verify_checksum_file(path: Path, *, base_dir: Path | None = None) -> dict:
         if not match:
             raise ReleaseGateError(f"Malformed checksum row: {raw!r}")
         expected, name = match.groups()
+        _artifact_basename(name)
+        if name.casefold() in seen:
+            raise ReleaseGateError(f'Duplicate checksum target: {name}')
+        seen.add(name.casefold())
         target = base / name
-        if not target.is_file():
+        if target.is_symlink() or not target.is_file():
             raise ReleaseGateError(f"Checksum target is missing: {name}")
         actual = _sha256(target)
         if actual.lower() != expected.lower():
@@ -321,6 +372,8 @@ def verify_checksum_file(path: Path, *, base_dir: Path | None = None) -> dict:
         rows.append(name)
     if not rows:
         raise ReleaseGateError("Checksum file is empty")
+    if expected_files is not None and set(rows) != set(expected_files):
+        raise ReleaseGateError('Checksum file does not cover exactly the expected release artifacts.')
     return {"verified": len(rows), "files": rows}
 
 
@@ -332,7 +385,9 @@ def validate_manifest(path: Path, *, app_version: str, expected_files: Iterable[
         data = json.loads(_read(path))
     except json.JSONDecodeError as error:
         raise ReleaseGateError("Release manifest is not valid JSON") from error
-    if data.get("schema") != RELEASE_GATE_SCHEMA or data.get("version") != app_version:
+    if not isinstance(data, dict):
+        raise ReleaseGateError('Release manifest must be a JSON object.')
+    if type(data.get('schema')) is not int or data.get("schema") != RELEASE_GATE_SCHEMA or data.get("version") != app_version:
         raise ReleaseGateError("Release manifest metadata does not match this build")
     if file_version is not None and data.get("file_version") != file_version:
         raise ReleaseGateError("Release manifest file_version does not match Version.py")
@@ -343,22 +398,35 @@ def validate_manifest(path: Path, *, app_version: str, expected_files: Iterable[
     artifacts = data.get("artifacts")
     if not isinstance(artifacts, list) or not artifacts:
         raise ReleaseGateError("Release manifest artifacts are invalid")
-    rows = {str(item.get("name")): item for item in artifacts if isinstance(item, dict) and item.get("name")}
+    rows = {}
+    seen = set()
+    for item in artifacts:
+        if not isinstance(item, dict):
+            raise ReleaseGateError('Release manifest artifact rows must be objects.')
+        name = _artifact_basename(item.get('name'))
+        if name.casefold() in seen:
+            raise ReleaseGateError(f'Duplicate release manifest artifact: {name}')
+        seen.add(name.casefold())
+        rows[name] = item
+    expected_files = tuple(expected_files)
+    for name in expected_files:
+        _artifact_basename(name)
     missing = set(expected_files) - set(rows)
     if missing:
         raise ReleaseGateError("Release manifest is missing artifacts: " + ", ".join(sorted(missing)))
+    if set(rows) != set(expected_files):
+        raise ReleaseGateError('Release manifest contains unexpected artifacts.')
     base = Path(base_dir) if base_dir is not None else path.parent
     for name in expected_files:
         item = rows[name]
         target = base / name
-        if not target.is_file():
+        if target.is_symlink() or not target.is_file():
             raise ReleaseGateError(f"Release manifest target is missing: {name}")
         digest = str(item.get("sha256", "")).lower()
         if not re.fullmatch(r"[0-9a-f]{64}", digest) or digest != _sha256(target):
             raise ReleaseGateError(f"Release manifest SHA-256 mismatch for {name}")
-        try:
-            declared_bytes = int(item.get("bytes"))
-        except (TypeError, ValueError):
+        declared_bytes = item.get('bytes')
+        if type(declared_bytes) is not int or declared_bytes <= 0:
             raise ReleaseGateError(f"Release manifest byte size is invalid for {name}")
         if declared_bytes != target.stat().st_size:
             raise ReleaseGateError(f"Release manifest byte size mismatch for {name}")
@@ -383,7 +451,7 @@ def validate_windows_release(release_dir: Path, *, app_version: str | None = Non
     if require_installer:
         result["installer"] = validate_installer(setup_path, app_version=app_version)
         expected.append(setup_path.name)
-    result["checksums"] = verify_checksum_file(checksum_path, base_dir=release)
+    result["checksums"] = verify_checksum_file(checksum_path, base_dir=release, expected_files=expected)
     result["manifest"] = validate_manifest(manifest_path, app_version=app_version, expected_files=expected,
                                            file_version=FILE_VERSION, channel=BUILD_CHANNEL, base_dir=release)
     return result

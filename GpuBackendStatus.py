@@ -27,16 +27,24 @@ def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performan
             "benchmark": "skipped for preview",
         }
     key=(requested,str(vram_budget or "Auto"),str(performance or "Balanced"),int(pixels or 0)//160_000)
-    if key in _CACHE:
+    # Auto has measured, per-workload crossovers and runtime quarantine state.
+    # Re-resolve those inexpensive routes for the actual pixel count; the fixed
+    # legacy CUDA threshold is not a valid cache bucket for them.
+    cacheable=requested!="Auto"
+    if cacheable and key in _CACHE:
         return dict(_CACHE[key])
     # Step 23: Auto is vendor-neutral. Report the same measured per-workload
     # routing that real image analysis will use instead of equating GPU with CUDA.
     if requested == "Auto":
         try:
             from UniversalGpuAcceleration import select_route
+            from UniversalHardwareBenchmark import load_hardware_profile
+            # Resolve one consistent current profile for all six routes rather
+            # than reading and validating the same file six times per update.
+            profile=load_hardware_profile() or {}
             routes={}
             for workload in ("oklab","palette_match","delta_e","quantization","edge_map","pixel_math"):
-                routes[workload]=select_route(workload,pixels=max(1,int(pixels or 0)),gpu_mode="Auto").as_dict()
+                routes[workload]=select_route(workload,pixels=max(1,int(pixels or 0)),gpu_mode="Auto",profile=profile).as_dict()
             accelerated=[r for r in routes.values() if r.get("accelerated")]
             primary=(accelerated[0] if accelerated else routes.get("pixel_math") or {})
             result={
@@ -53,7 +61,6 @@ def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performan
                 "benchmark":{"policy":"Step 22 per-workload crossover","routes":routes},
                 "universal_routes":routes,
             }
-            _CACHE[key]=dict(result)
             return result
         except Exception:
             # Legacy CUDA verifier below remains a safe fallback if the hardware
@@ -101,7 +108,7 @@ def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performan
                 result["gpu_analysis_active"]=True
                 result["selected_backend"]="GPU"
                 result["fallback_reason"]=""
-        _CACHE[key]=dict(result)
+        if cacheable:_CACHE[key]=dict(result)
         return result
     except Exception as error:
         result={
@@ -110,5 +117,5 @@ def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performan
             "fallback_reason":f"GPU verification failed: {type(error).__name__}: {error}",
             "benchmark":"failed",
         }
-        _CACHE[key]=dict(result)
+        if cacheable:_CACHE[key]=dict(result)
         return result

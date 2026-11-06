@@ -72,22 +72,29 @@ def compile_swept_rectangles(sequence: Sequence[dict], brush_px: int, width: int
         if clipped is None:return
         x0,y0,x1,y1=clipped
         rects.append((x0,y0,x1,y1,int(color)))
+    def checked_path(points):
+        for point_index,point in enumerate(points):
+            if point_index%128==0 and cancelled():raise InterruptedError()
+            yield tuple(map(int,point))
     for n,entry in enumerate(sequence):
         if n%128==0 and cancelled():raise InterruptedError()
-        try:color=int(entry['color_index']);path=tuple(tuple(map(int,p)) for p in entry['path'])
+        try:color=int(entry['color_index']);path=tuple(checked_path(entry['path']))
         except (KeyError,TypeError,ValueError):continue
         if color<0 or not path:continue
         entry_brush=brush_for_entry(entry,brush_px);before,after=_brush_extents(entry_brush)
         if len(path)==1:
             x,y=path[0];add(x-before,y-before,x+after,y+after,color);continue
-        for a,b in zip(path,path[1:]):
+        for segment_index,(a,b) in enumerate(zip(path,path[1:])):
+            if segment_index%128==0 and cancelled():raise InterruptedError()
             x0,y0=a;x1,y1=b
             if y0==y1:
                 lo,hi=sorted((x0,x1));add(lo-before,y0-before,hi+after,y0+after,color)
             elif x0==x1:
                 lo,hi=sorted((y0,y1));add(x0-before,lo-before,x0+after,hi+after,color)
             else:
-                for x,y in _bresenham(a,b):add(x-before,y-before,x+after,y+after,color)
+                for point_index,(x,y) in enumerate(_bresenham(a,b)):
+                    if point_index%128==0 and cancelled():raise InterruptedError()
+                    add(x-before,y-before,x+after,y+after,color)
     if not rects:return np.empty((0,5),dtype=np.int32)
     return np.asarray(rects,dtype=np.int32)
 
@@ -268,14 +275,22 @@ def score_cuda_host(pixel_map, simulated: np.ndarray, coverage_count: np.ndarray
                 edge=cp.asarray(edge_h[y0:y1]);edge_mask=drawable&(edge>=edge_threshold)
                 protected=cp.asarray(protected_h[y0:y1])
                 def nz(value):return int(cp.count_nonzero(value).get())
-                totals['evaluation']+=nz(evaluation);totals['drawable']+=nz(drawable);totals['correct']+=nz(correct)
-                totals['covered']+=nz(drawable&coverage);totals['target_correct']+=nz(drawable&(sim==desired))
-                totals['edge']+=nz(edge_mask);totals['edge_correct']+=nz(edge_mask&(sim==desired))
-                totals['protected']+=nz(protected);totals['protected_correct']+=nz(protected&(sim==desired))
-                totals['overdraw']+=nz(counts>1);totals['touched']+=nz(coverage)
-                totals['hits']+=int(cp.sum(counts,dtype=cp.uint64).get())
-                totals['missing']+=nz(missing);totals['wrong']+=nz(wrong);totals['spill']+=nz(spill);totals['errors']+=nz(error)
-                error_host[y0:y1]=cp.asnumpy(error)
+                # Reductions and the host copy may fail after earlier reductions
+                # have completed. Commit a tile only after every operation has
+                # succeeded, so retrying y0 cannot count its pixels twice.
+                tile_totals={
+                    'evaluation':nz(evaluation),'drawable':nz(drawable),'correct':nz(correct),
+                    'covered':nz(drawable&coverage),'target_correct':nz(drawable&(sim==desired)),
+                    'edge':nz(edge_mask),'edge_correct':nz(edge_mask&(sim==desired)),
+                    'protected':nz(protected),'protected_correct':nz(protected&(sim==desired)),
+                    'overdraw':nz(counts>1),'touched':nz(coverage),
+                    'hits':int(cp.sum(counts,dtype=cp.uint64).get()),
+                    'missing':nz(missing),'wrong':nz(wrong),'spill':nz(spill),'errors':nz(error),
+                }
+                tile_error=cp.asnumpy(error)
+                next_totals={key:totals[key]+tile_totals[key] for key in totals}
+                error_host[y0:y1]=tile_error
+                totals=next_totals
                 del drawable,desired,sim,counts,coverage,missing,wrong,spill,error,evaluation,correct,edge,edge_mask,protected
                 y0=y1;tiles+=1
             except InterruptedError:

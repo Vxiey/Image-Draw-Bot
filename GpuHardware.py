@@ -9,14 +9,20 @@ backwards compatibility with the CUDA renderer.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import csv
+import io
 import json
+import math
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
+import threading
 from typing import Iterable
+
+from WindowsGpuDiscovery import enumerate_adapters as _windows_adapters
+from WindowsSystem import program_files_directories, system_directory
 
 
 @dataclass(frozen=True)
@@ -53,6 +59,7 @@ class GpuDevice:
 
 _CACHE: tuple[NvidiaGpu, ...] | None = None
 _ALL_CACHE: tuple[GpuDevice, ...] | None = None
+_CACHE_LOCK = threading.RLock()
 
 
 def _creationflags() -> int:
@@ -77,30 +84,52 @@ def _run(command: list[str], timeout: float = 3.0) -> str:
 
 
 def _nvidia_smi_candidates() -> Iterable[str]:
-    seen: set[str] = set()
-    found = shutil.which("nvidia-smi")
-    if found:
-        seen.add(os.path.normcase(found))
-        yield found
     if os.name != "nt":
+        found = shutil.which("nvidia-smi")
+        if found:
+            yield found
         return
-    candidates = [
-        Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "nvidia-smi.exe",
-        Path(os.environ.get("ProgramW6432", r"C:\Program Files")) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe",
-        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe",
-    ]
+
+    # Resolve trusted OS/vendor install locations through Windows APIs. PATH,
+    # the current directory, and environment-overridden Windows/Program Files
+    # paths must not choose the executable used for this background probe.
+    candidates = []
+    try:
+        candidates.append(system_directory() / "nvidia-smi.exe")
+    except OSError:
+        pass
+    try:
+        candidates.extend(path / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe"
+                          for path in program_files_directories())
+    except OSError:
+        pass
+    seen: set[str] = set()
     for candidate in candidates:
-        key = os.path.normcase(str(candidate))
-        if key not in seen and candidate.is_file():
+        key = str(candidate).replace("/", "\\").casefold()
+        try:
+            available = candidate.is_file()
+        except OSError:
+            available = False
+        if key not in seen and available:
             seen.add(key)
             yield str(candidate)
 
 
 def _parse_int(value: object) -> int | None:
     try:
-        return int(float(str(value).strip()))
-    except (TypeError, ValueError):
+        text = str(value).strip()
+        try:
+            return int(text)
+        except ValueError:
+            number = float(text)
+            return int(number) if math.isfinite(number) and number.is_integer() else None
+    except (TypeError, ValueError, OverflowError):
         return None
+
+
+def _smi_text(value: str) -> str:
+    text = value.strip()
+    return "" if text.casefold() in {"n/a", "[n/a]", "not supported", "[not supported]"} else text
 
 
 def _vendor_from_text(*values: object) -> tuple[str, str]:
@@ -125,78 +154,63 @@ def _detect_with_nvidia_smi() -> list[NvidiaGpu]:
         except (OSError, RuntimeError, subprocess.TimeoutExpired):
             continue
         result: list[NvidiaGpu] = []
-        for line in output.splitlines():
-            parts = [part.strip() for part in line.split(",")]
-            if len(parts) < 5:
-                continue
-            index, name, memory, driver = parts[:4]
-            bus = ",".join(parts[4:]).strip()
-            result.append(NvidiaGpu(_parse_int(index), name, _parse_int(memory), driver, bus, "nvidia-smi"))
+        try:
+            for parts in csv.reader(io.StringIO(output), skipinitialspace=True, strict=True):
+                if len(parts) != 5:
+                    continue
+                raw_index, name, raw_memory, driver, bus = map(_smi_text, parts)
+                index, memory = _parse_int(raw_index), _parse_int(raw_memory)
+                if index is None or index < 0 or not name:
+                    continue
+                memory = memory if memory is not None and memory > 0 else None
+                result.append(NvidiaGpu(index, name, memory, driver, bus, "nvidia-smi"))
+        except csv.Error:
+            # Keep any complete rows read before malformed diagnostic output.
+            pass
         if result:
             return result
     return []
 
 
-def _powershell_video_controllers() -> list[dict]:
+def _detect_all_with_windows() -> list[GpuDevice]:
+    """Best-effort native display discovery, independent of compute runtimes."""
     if os.name != "nt":
         return []
-    powershell = shutil.which("powershell") or shutil.which("powershell.exe") or shutil.which("pwsh")
-    if not powershell:
-        return []
-    script = (
-        "$g=Get-CimInstance Win32_VideoController | "
-        "Select-Object Name,DriverVersion,AdapterRAM,PNPDeviceID,AdapterCompatibility,VideoProcessor,DeviceID; "
-        "if($null -ne $g){$g | ConvertTo-Json -Compress}"
-    )
     try:
-        output = _run([powershell, "-NoProfile", "-NonInteractive", "-Command", script], timeout=5.0)
-        if not output:
-            return []
-        payload = json.loads(output)
-    except (OSError, RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        adapters = _windows_adapters()
+    except (OSError, AttributeError):
         return []
-    items = payload if isinstance(payload, list) else [payload]
-    return [item for item in items if isinstance(item, dict)]
-
-
-def _detect_with_powershell() -> list[NvidiaGpu]:
-    """Legacy NVIDIA-only CIM helper kept for existing callers/tests."""
-    result: list[NvidiaGpu] = []
-    for item in _powershell_video_controllers():
-        name = str(item.get("Name") or "").strip()
-        vendor, _vendor_id = _vendor_from_text(name, item.get("AdapterCompatibility"), item.get("PNPDeviceID"))
-        if vendor != "NVIDIA":
-            continue
-        adapter_bytes = _parse_int(item.get("AdapterRAM"))
-        memory_mb = int(adapter_bytes // (1024 * 1024)) if adapter_bytes and adapter_bytes > 0 else None
-        result.append(NvidiaGpu(None, name, memory_mb, str(item.get("DriverVersion") or ""),
-                                str(item.get("PNPDeviceID") or ""), "Windows CIM"))
-    return result
-
-
-def _detect_all_with_powershell() -> list[GpuDevice]:
     result: list[GpuDevice] = []
-    for ordinal, item in enumerate(_powershell_video_controllers()):
-        name = str(item.get("Name") or "").strip()
-        if not name:
-            continue
-        pnp = str(item.get("PNPDeviceID") or "")
-        compatibility = str(item.get("AdapterCompatibility") or "")
-        processor = str(item.get("VideoProcessor") or "")
-        vendor, vendor_id = _vendor_from_text(name, compatibility, pnp, processor)
-        adapter_bytes = _parse_int(item.get("AdapterRAM"))
-        memory_mb = int(adapter_bytes // (1024 * 1024)) if adapter_bytes and adapter_bytes > 0 else None
+    vendors = {0x10DE: "NVIDIA", 0x1002: "AMD", 0x8086: "Intel"}
+    for adapter in adapters:
+        name = adapter.name
+        vendor = vendors.get(adapter.vendor_id)
+        if vendor is None:
+            vendor, _ = _vendor_from_text(name)
+        vendor_id = f"{adapter.vendor_id:04X}" if adapter.vendor_id else ""
+        memory_mb = adapter.dedicated_video_memory // (1024 * 1024) or None
         integrated: bool | None = None
-        lower = f"{name} {processor}".lower()
+        lower = re.sub(r"\([^)]*\)", " ", name.lower())
+        lower = " ".join(lower.split())
         if vendor == "Intel":
-            integrated = not any(token in lower for token in (" arc a", " arc b", "max graphics", "data center gpu"))
+            integrated = not (re.search(r"\barc\s+(?:pro\s+)?[ab]\d", lower)
+                              or any(token in lower for token in ("max graphics", "data center gpu")))
         elif any(token in lower for token in ("integrated", "apu", "vega 7", "vega 8")):
             integrated = True
+        # DXGI does not expose PCI bus or PNP instance IDs. Keep those fields
+        # empty instead of treating a boot-local LUID as a persistent bus ID.
         result.append(GpuDevice(
-            ordinal, name, memory_mb, str(item.get("DriverVersion") or ""),
-            str(item.get("DeviceID") or ""), "Windows CIM", vendor, vendor_id, pnp, processor, integrated,
+            adapter.index, name, memory_mb, adapter.driver_version,
+            "", "Windows DXGI", vendor, vendor_id, "", "", bool(integrated) if integrated is not None else None,
         ))
     return result
+
+
+def _detect_with_windows() -> list[NvidiaGpu]:
+    # A DXGI ordinal is not a CUDA device index. Preserve the unknown-index
+    # contract of the old Windows fallback for CUDA-specific callers.
+    return [NvidiaGpu(None, gpu.name, gpu.memory_total_mb, gpu.driver_version, "", gpu.source)
+            for gpu in _detect_all_with_windows() if gpu.vendor == "NVIDIA"]
 
 
 def _detect_all_with_lspci() -> list[GpuDevice]:
@@ -222,17 +236,29 @@ def _detect_all_with_lspci() -> list[GpuDevice]:
     return result
 
 
-def detect_nvidia_gpus(*, refresh: bool = False) -> tuple[NvidiaGpu, ...]:
-    global _CACHE
+def _cached_nvidia_gpus(*, refresh: bool, windows_fallback: list[GpuDevice] | None = None) -> tuple[NvidiaGpu, ...]:
+    global _CACHE, _ALL_CACHE
     if _CACHE is not None and not refresh:
         return _CACHE
     found = _detect_with_nvidia_smi()
     if not found:
-        found = _detect_with_powershell()
+        if windows_fallback is None:
+            found = _detect_with_windows()
+        else:
+            found = [NvidiaGpu(None, gpu.name, gpu.memory_total_mb, gpu.driver_version, "", gpu.source)
+                     for gpu in windows_fallback if gpu.vendor == "NVIDIA"]
     found.sort(key=lambda gpu: (gpu.index is None, gpu.index if gpu.index is not None else 9999,
                                 -(gpu.memory_total_mb or 0), gpu.name.lower()))
     _CACHE = tuple(found)
+    # A direct NVIDIA refresh must not leave detect_gpus() returning an older
+    # merged snapshot. detect_gpus() publishes its new snapshot after this call.
+    _ALL_CACHE = None
     return _CACHE
+
+
+def detect_nvidia_gpus(*, refresh: bool = False) -> tuple[NvidiaGpu, ...]:
+    with _CACHE_LOCK:
+        return _cached_nvidia_gpus(refresh=refresh)
 
 
 def _norm_device_name(name: str) -> str:
@@ -252,22 +278,27 @@ def _merge_devices(generic: list[GpuDevice], nvidia: tuple[NvidiaGpu, ...]) -> l
             if idx in used or device.vendor != "NVIDIA":
                 continue
             dname = _norm_device_name(device.name)
-            if nname and dname and (nname in dname or dname in nname):
+            # A model prefix is not an identity: RTX 4080 and RTX 4080 SUPER,
+            # for example, must never exchange their memory/driver metadata.
+            if nname and dname and nname.replace(" ", "") == dname.replace(" ", ""):
                 best_index = idx
                 break
+        original = merged[best_index] if best_index is not None else None
         replacement = GpuDevice(
-            ngpu.index, ngpu.name, ngpu.memory_total_mb, ngpu.driver_version,
-            ngpu.bus_id, ngpu.source, "NVIDIA", "10DE",
-            merged[best_index].pnp_device_id if best_index is not None else "",
-            merged[best_index].video_processor if best_index is not None else "",
-            merged[best_index].integrated if best_index is not None else False,
+            ngpu.index if ngpu.index is not None else (original.index if original else None),
+            ngpu.name, ngpu.memory_total_mb or (original.memory_total_mb if original else None),
+            ngpu.driver_version or (original.driver_version if original else ""),
+            ngpu.bus_id or (original.bus_id if original else ""), ngpu.source, "NVIDIA", "10DE",
+            original.pnp_device_id if original else "",
+            original.video_processor if original else "",
+            original.integrated if original else False,
         )
         if best_index is None:
             merged.append(replacement)
         else:
             used.add(best_index)
             merged[best_index] = replacement
-    # De-duplicate identical CIM rows while preserving physically separate adapters.
+    # De-duplicate repeated discovery rows while preserving separate adapters.
     unique: list[GpuDevice] = []
     keys: set[tuple] = set()
     for device in merged:
@@ -282,20 +313,23 @@ def _merge_devices(generic: list[GpuDevice], nvidia: tuple[NvidiaGpu, ...]) -> l
 def detect_gpus(*, refresh: bool = False) -> tuple[GpuDevice, ...]:
     """Detect NVIDIA, AMD and Intel display adapters without compute dependencies."""
     global _ALL_CACHE
-    if _ALL_CACHE is not None and not refresh:
+    with _CACHE_LOCK:
+        if _ALL_CACHE is not None and not refresh:
+            return _ALL_CACHE
+        windows = os.name == "nt"
+        generic = _detect_all_with_windows() if windows else _detect_all_with_lspci()
+        nvidia = _cached_nvidia_gpus(refresh=refresh, windows_fallback=generic if windows else None)
+        found = _merge_devices(generic, nvidia)
+        vendor_rank = {"NVIDIA": 0, "AMD": 1, "Intel": 2, "Unknown": 9}
+        found.sort(key=lambda gpu: (
+            vendor_rank.get(gpu.vendor, 8),
+            gpu.integrated is True,
+            -(gpu.memory_total_mb or 0),
+            gpu.index if gpu.index is not None else 9999,
+            gpu.name.lower(),
+        ))
+        _ALL_CACHE = tuple(found)
         return _ALL_CACHE
-    generic = _detect_all_with_powershell() if os.name == "nt" else _detect_all_with_lspci()
-    found = _merge_devices(generic, detect_nvidia_gpus(refresh=refresh))
-    vendor_rank = {"NVIDIA": 0, "AMD": 1, "Intel": 2, "Unknown": 9}
-    found.sort(key=lambda gpu: (
-        vendor_rank.get(gpu.vendor, 8),
-        gpu.integrated is True,
-        -(gpu.memory_total_mb or 0),
-        gpu.index if gpu.index is not None else 9999,
-        gpu.name.lower(),
-    ))
-    _ALL_CACHE = tuple(found)
-    return _ALL_CACHE
 
 
 def best_nvidia_gpu(*, refresh: bool = False) -> NvidiaGpu | None:

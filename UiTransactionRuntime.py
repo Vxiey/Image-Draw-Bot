@@ -7,6 +7,7 @@ bounded retries, adaptive settle delays and lightweight telemetry.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 import time
 from typing import Any, Callable
 
@@ -40,6 +41,14 @@ class AdaptivePacer:
     failures: int = 0
 
     def __post_init__(self) -> None:
+        for name in ('base_delay','max_delay','growth','decay'):
+            try:
+                value=float(getattr(self,name))
+            except (ValueError,TypeError,OverflowError) as error:
+                raise ValueError(f'{name} must be a finite number.') from error
+            if not math.isfinite(value):
+                raise ValueError(f'{name} must be a finite number.')
+            setattr(self,name,value)
         self.base_delay = max(0.0, float(self.base_delay))
         self.max_delay = max(self.base_delay, float(self.max_delay))
         self.growth = max(1.0, float(self.growth))
@@ -111,7 +120,12 @@ class UiTransaction:
             self.check_cancelled(cancel_message)
             try:
                 result = operation(attempt)
+            except InterruptedError:
+                # Cancellation is never a transient UI failure, including when
+                # a caller explicitly chooses retry_on=(Exception,).
+                raise
             except retry_on as exc:
+                self.check_cancelled(cancel_message)
                 if attempt >= self.max_attempts:
                     self.transition("FAILED", attempt=attempt, item_index=item_index,
                                     detail=f"{type(exc).__name__}: {exc}")
@@ -119,10 +133,12 @@ class UiTransaction:
                 self.transition("RECOVER", attempt=attempt, item_index=item_index,
                                 detail=f"{type(exc).__name__}: {exc}")
                 if recover is not None:
+                    self.check_cancelled(cancel_message)
                     recover(attempt, exc)
                 self.check_cancelled(cancel_message)
                 self.wait(self.pacer.failed())
                 continue
+            self.check_cancelled(cancel_message)
             self.pacer.succeeded()
             return result
         raise RuntimeError("UI transaction retry loop exhausted unexpectedly.")
