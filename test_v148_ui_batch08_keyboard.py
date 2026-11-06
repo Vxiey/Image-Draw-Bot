@@ -176,7 +176,13 @@ class WindowsSelectorKeyboardTests(unittest.TestCase):
         last=menu(self.root,ctk.StringVar(value='CPU'),['CPU','Auto']);last.pack()
         before=self.root.bind_all('<KeyPress>')
         self.root.update()
-        self.assertIs(entry.tk_focusNext(),first)
+        # CTkEntry is a frame around its actual native text Entry. Start Tab
+        # from the focused input, not from that decorative outer container.
+        entry.focus_force();self.root.update()
+        focused=self.root.focus_get()
+        self.assertIs(focused,entry._entry)
+        focused.event_generate('<Tab>',when='now');self.root.update()
+        self.assertIs(self.root.focus_get(),first)
         self.assertIs(first.tk_focusNext(),last)
         self.assertIs(last.tk_focusPrev(),first)
         first.focus_force();self.root.update()
