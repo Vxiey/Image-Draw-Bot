@@ -2,15 +2,26 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import unittest
 from unittest import mock
+import venv
 
 import AutoGpuSetup as cuda
 import AutoUniversalGpuSetup as opencl
 import GpuSetupRuntime as runtime
 from test_gpu_setup_regressions import environment_result
+
+
+def temporary_pip_python(root):
+    """Use a real isolated target even when CI runs under a base interpreter.
+
+    ensurepip seeds only Python's bundled pip wheel; this fixture never resolves
+    or downloads a package. Create it before installing the hostile test env.
+    """
+    directory = Path(root) / "pip-venv"
+    venv.EnvBuilder(with_pip=True).create(directory)
+    return str(directory / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
 
 
 class PipTargetIsolationTests(unittest.TestCase):
@@ -60,6 +71,7 @@ class PipTargetIsolationTests(unittest.TestCase):
     def test_actual_pip_parser_cannot_reinherit_target_from_original_config(self):
         # Read-only option parsing; no pip install, resolver or network call.
         with tempfile.TemporaryDirectory() as tmp:
+            python = temporary_pip_python(tmp)
             conf = Path(tmp) / "pip.ini"
             conf.write_text("[global]\ntarget = /synthetic/outside\nproxy = http://proxy.example:8080\n", encoding="utf-8")
             environment = {key: value for key, value in os.environ.items() if not key.upper().startswith("PIP_")}
@@ -68,14 +80,14 @@ class PipTargetIsolationTests(unittest.TestCase):
                 kwargs.pop("capture_stderr", None)
                 return subprocess.run(command, text=True, capture_output=True, check=False, **kwargs)
             with mock.patch.dict(os.environ, environment, clear=True):
-                with runtime.pip_environment(sys.executable, runner) as policy:
+                with runtime.pip_environment(python, runner) as policy:
                     child_env = policy.for_command("install")
             probe = (
                 "import json; from pip._internal.commands import create_command; "
                 "o,_=create_command('install').parse_args(['--no-index','--no-deps','synthetic-never-installed']); "
                 "print(json.dumps({'target':o.target_dir,'prefix':o.prefix_path,'root':o.root_path,'proxy':o.proxy}))"
             )
-            completed = subprocess.run([sys.executable, "-I", "-c", probe], env=child_env,
+            completed = subprocess.run([python, "-I", "-c", probe], env=child_env,
                                        text=True, capture_output=True, check=True, timeout=30)
             parsed = json.loads(completed.stdout)
             self.assertIsNone(parsed["target"])
@@ -89,6 +101,7 @@ class PipTargetIsolationTests(unittest.TestCase):
         # still prevent importing arbitrary inherited startup modules there.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            python = temporary_pip_python(root)
             marker = root / "startup-was-executed.txt"
             (root / "sitecustomize.py").write_text(
                 "from pathlib import Path\nPath(" + repr(str(marker)) + ").write_text('unexpected startup')\n",
@@ -98,12 +111,12 @@ class PipTargetIsolationTests(unittest.TestCase):
                 kwargs.pop("capture_stderr", None)
                 return subprocess.run(command, text=True, capture_output=True, check=False, **kwargs)
             with mock.patch.dict(os.environ, environment, clear=True):
-                with runtime.pip_environment(sys.executable, runner) as policy:
+                with runtime.pip_environment(python, runner) as policy:
                     child_env = policy.for_command("install")
             self.assertFalse(marker.exists())
             probe = ("import json,sys; print(json.dumps({'inspect':sys.flags.inspect,"
                      "'no_user_site':sys.flags.no_user_site,'safe_path':sys.flags.safe_path}))")
-            completed = subprocess.run([sys.executable, "-c", probe], env=child_env,
+            completed = subprocess.run([python, "-c", probe], env=child_env,
                                        text=True, capture_output=True, check=True, timeout=30)
             self.assertEqual(json.loads(completed.stdout),
                              {"inspect": 0, "no_user_site": 1, "safe_path": True})
