@@ -163,7 +163,7 @@ class ImageExportTests(unittest.TestCase):
             app.plan['preview'].paste('red',(0,0,5,4))
             work[0][1]()
             with Image.open(Path(tmp)/'preview.png') as image:self.assertEqual(image.getpixel((0,0)),(0,0,255))
-            self.assertEqual(app.events.get_nowait(),('status','Preview saved.'))
+            self.assertEqual(app.events.get_nowait(),('status','Simulated final saved as PNG.'))
 
     def test_refused_workers_release_export_and_edit_snapshots(self):
         copy=Image.Image.copy

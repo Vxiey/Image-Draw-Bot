@@ -70,13 +70,21 @@ def _atomic_archive(path: Path):
         temporary.unlink(missing_ok=True)
 
 
-def _package_versions():
+def _package_versions(issues=None):
     result = {}
     for name in ('Pillow', 'requests', 'keyboard', 'tkinterdnd2', 'customtkinter', 'cupy-cuda12x', 'cupy'):
         try:
             result[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
             pass
+        except InterruptedError:
+            raise
+        except (OSError, ValueError, TypeError) as error:
+            # A broken optional distribution is itself useful diagnostic
+            # evidence, not a reason to lose the application's readable logs.
+            if issues is not None:
+                issues.append({'section': 'package-version', 'package': name,
+                               'error': type(error).__name__})
     return result
 
 
@@ -85,13 +93,17 @@ def _memory_total_mb():
         if os.name == 'nt':
             import ctypes
             class MEMORYSTATUSEX(ctypes.Structure):
-                _fields_=[('dwLength',ctypes.c_ulong),('dwMemoryLoad',ctypes.c_ulong),
+                _fields_=[('dwLength',ctypes.c_uint32),('dwMemoryLoad',ctypes.c_uint32),
                           ('ullTotalPhys',ctypes.c_ulonglong),('ullAvailPhys',ctypes.c_ulonglong),
                           ('ullTotalPageFile',ctypes.c_ulonglong),('ullAvailPageFile',ctypes.c_ulonglong),
                           ('ullTotalVirtual',ctypes.c_ulonglong),('ullAvailVirtual',ctypes.c_ulonglong),
                           ('ullAvailExtendedVirtual',ctypes.c_ulonglong)]
             status=MEMORYSTATUSEX();status.dwLength=ctypes.sizeof(status)
-            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            from WindowsSystem import load_system_library
+            memory_status=load_system_library('kernel32').GlobalMemoryStatusEx
+            memory_status.argtypes=[ctypes.POINTER(MEMORYSTATUSEX)]
+            memory_status.restype=ctypes.c_int
+            if memory_status(ctypes.byref(status)):
                 return int(status.ullTotalPhys // (1024*1024))
         pages=os.sysconf('SC_PHYS_PAGES'); page_size=os.sysconf('SC_PAGE_SIZE')
         return int(pages*page_size//(1024*1024))
@@ -100,13 +112,15 @@ def _memory_total_mb():
 
 
 def _technical_info(context=None):
+    collection_issues = []
     info = {
         'app':'Image Draw Bot', 'app_version':APP_VERSION, 'file_version':FILE_VERSION,
         'channel':BUILD_CHANNEL, 'created_at':time.strftime('%Y-%m-%dT%H:%M:%S%z'),
         'platform':platform.platform(), 'python':platform.python_version(),
         'architecture':platform.machine(), 'cpu_logical':os.cpu_count(),
         'ram_total_mb':_memory_total_mb(), 'frozen':bool(getattr(sys,'frozen',False)),
-        'packages':_package_versions(), 'recovery':diagnostics_summary(),
+        'packages':_package_versions(collection_issues), 'recovery':diagnostics_summary(),
+        'collection_issues':collection_issues,
         'privacy': {
             'source_images_included': False,
             'cached_recovery_image_included': False,
@@ -163,7 +177,10 @@ def _settings_summary():
         if not isinstance(raw,dict):continue
         # Screen coordinates and any future path/url-like fields are intentionally removed.
         raw.pop('corners',None)
-        result[path.name]=safe_context(raw)
+        # Filenames can contain the same local credentials as settings values.
+        # Opaque labels also preserve separate records when redaction would
+        # collapse two secret-bearing names to the same dictionary key.
+        result[f'settings-{len(result)+1:03d}.json']=safe_context(raw)
     return result
 
 
@@ -186,7 +203,7 @@ def _calibration_summary():
             summary['version']=version
             summary['color_count']=len(colors) if isinstance(colors,list) else None
             summary['has_anchor']=bool(raw.get('anchor') or raw.get('client_rect'))
-        result[path.name]=summary
+        result[f'calibration-{len(result)+1:03d}.json']=summary
     return result
 
 
@@ -195,9 +212,11 @@ def create_diagnostics_package(context=None) -> Path:
     stamp=time.strftime('%Y%m%d-%H%M%S')
     path=DIAGNOSTICS_DIR/f'ImageDrawBot-Diagnostics-{stamp}-{uuid.uuid4().hex[:8]}.zip'
     with _atomic_archive(path) as archive:
-        archive.writestr('system.json',json.dumps(_technical_info(context),indent=2,ensure_ascii=False))
-        archive.writestr('settings-summary.json',json.dumps(_settings_summary(),indent=2,ensure_ascii=False))
-        archive.writestr('calibration-summary.json',json.dumps(_calibration_summary(),indent=2,ensure_ascii=False))
+        # JSON escapes also represent an isolated surrogate from a damaged
+        # local record without making UTF-8 ZIP serialization fail.
+        archive.writestr('system.json',json.dumps(_technical_info(context),indent=2,ensure_ascii=True))
+        archive.writestr('settings-summary.json',json.dumps(_settings_summary(),indent=2,ensure_ascii=True))
+        archive.writestr('calibration-summary.json',json.dumps(_calibration_summary(),indent=2,ensure_ascii=True))
         archive.writestr('README.txt',
             'Image Draw Bot diagnostics package.\n\n'
             'Privacy: source images, the local recovery image cache, clipboard contents and raw palette/tool screen coordinates are not included. '
@@ -211,7 +230,8 @@ def create_diagnostics_package(context=None) -> Path:
             text=_read_text(log_dir/name)
             if text:
                 archive.writestr(f'logs/{name}',text)
-        dumps=Path(os.environ.get('LOCALAPPDATA',str(data_dir())))/'ImageDrawBot'/'dumps'
+        from CrashDumpConfig import user_dump_folder
+        dumps=user_dump_folder()
         def dump_candidates():
             for dump in dumps.glob('*.dmp'):
                 try:
@@ -228,14 +248,26 @@ def create_diagnostics_package(context=None) -> Path:
 def main():
     try:
         path=create_diagnostics_package()
-        print(f'Diagnostics ZIP: {path}')
-        if os.name=='nt':os.startfile(str(path.parent))
-        return 0
     except Exception as error:
         print(f'Could not collect diagnostics: {error}')
         if getattr(sys,'frozen',False):
             from tkinter import messagebox
             messagebox.showerror('Diagnostics failed',str(error))
         return 1
+    print(f'Diagnostics ZIP: {path}')
+    if os.name=='nt':
+        try:
+            os.startfile(str(path.parent))
+        except (OSError, NotImplementedError):
+            print('The ZIP was saved successfully. Its folder could not be opened automatically; use the path above.')
+            if getattr(sys,'frozen',False):
+                # The windowed helper has no console in which to read that
+                # path. Give it the same concrete result as the GUI workflow.
+                try:
+                    from tkinter import messagebox
+                    messagebox.showinfo('Diagnostics saved',f'Your diagnostics ZIP was saved at:\n{path}\n\nIts folder could not be opened automatically.')
+                except Exception:
+                    pass
+    return 0
 
 if __name__=='__main__':raise SystemExit(main())

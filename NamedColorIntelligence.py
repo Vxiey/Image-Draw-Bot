@@ -64,6 +64,15 @@ for _key, _rows in _aliases_by_key.items():
     _css = [r for r in _rows if r[2] == "css4"]
     _NAME_TO_RGB[_key] = (_css[0] if _css else _rows[0])[1]
 
+# CSS and X11 disagree on a few names (gray, green, maroon and purple).
+# Preserve CSS input precedence while giving the distinct X11 colors an
+# unambiguous name that can be copied from diagnostics back into the parser.
+for _name, _rgb, _source in _alias_rows:
+    if _source == "tk-x11" and _NAME_TO_RGB[normalize_color_name(_name)] != _rgb:
+        _qualified = "X11 " + _name
+        _NAME_TO_RGB[normalize_color_name(_qualified)] = _rgb
+        _aliases_by_rgb[_rgb].append(_qualified)
+
 # Friendly compatibility aliases found in published Tk colour lists. They are
 # accepted but never become canonical display names.
 _COMPAT_ALIASES = {
@@ -93,7 +102,8 @@ for _rgb, _css_names in _css_rgb_to_names.items():
 _EXTENDED_CANONICAL: dict[tuple[int, int, int], str] = dict(_CSS_CANONICAL)
 for _rgb, _names in _aliases_by_rgb.items():
     if _rgb not in _EXTENDED_CANONICAL:
-        _EXTENDED_CANONICAL[_rgb] = _prefer_alias(_names, _names[0])
+        _safe_names = [name for name in _names if _NAME_TO_RGB.get(normalize_color_name(name)) == _rgb]
+        _EXTENDED_CANONICAL[_rgb] = _prefer_alias(_safe_names, _safe_names[0])
 
 # Deduplicated tuples make nearest-colour scans much smaller than the raw alias
 # table. CSS4 contains 139 unique RGB values; the full Tk/X11 compatibility set
@@ -129,6 +139,8 @@ def aliases_for_rgb(rgb: Sequence[int]) -> tuple[str, ...]:
     found: dict[str, str] = {}
     for name in aliases:
         nk = normalize_color_name(name)
+        if _NAME_TO_RGB.get(nk) != key:
+            continue
         current = found.get(nk)
         if current is None or _prefer_alias((name,), name) == name:
             found[nk] = name
@@ -222,7 +234,7 @@ def nearest_named_color(rgb: Sequence[int], *, extended: bool = False) -> dict:
         "family": color_family(rgb3),
         "exact": delta <= 1e-12,
         "aliases": aliases_for_rgb(named_rgb) if delta <= 1e-12 else (),
-        "vocabulary": "extended-tk-x11" if extended else "css4",
+        "vocabulary": "extended-tk-x11" if extended or named_rgb not in _CSS_CANONICAL else "css4",
     }
 
 

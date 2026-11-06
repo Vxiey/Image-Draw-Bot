@@ -41,6 +41,6 @@ class Step10Tests(unittest.TestCase):
                 with zipfile.ZipFile(path) as z:
                     names=set(z.namelist());self.assertNotIn('recovery/last-image.png',names)
                     log=z.read('logs/ImageDrawBot-session.log').decode();self.assertNotIn('Felix',log);self.assertNotIn('abc123',log)
-                    settings=json.loads(z.read('settings-summary.json'));self.assertNotIn('corners',settings['settings.json'])
+                    settings=json.loads(z.read('settings-summary.json'));self.assertNotIn('corners',settings['settings-001.json'])
 
 if __name__=='__main__':unittest.main()

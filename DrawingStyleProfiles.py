@@ -127,7 +127,16 @@ def apply_drawing_style(image: Image.Image | None, options: dict[str,Any]) -> di
     # Explicit style selection is authoritative. Auto detection is advisory to the
     # existing Auto/Extra Fast engines, avoiding a second independent planner.
     if requested!='Auto':
-        out.update(_explicit_profile(resolved))
+        policy = _explicit_profile(resolved)
+        if (resolved == 'Portrait' and out.get('paint_current_color')
+                and not out.get('erase_mode')):
+            # Single-color portraits use the existing shaded stroke renderer.
+            # Subject first belongs to full-color component planning and would
+            # make this otherwise valid mode fail make_plan's compatibility
+            # check. Do not inject it; explicit user subject settings retain
+            # their normal validation instead of being silently discarded.
+            policy.pop('subject_focus', None)
+        out.update(policy)
     out['drawing_style']=requested
     out['drawing_style_resolved']=resolved
     out['drawing_style_meta']={

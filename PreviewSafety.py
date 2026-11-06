@@ -8,13 +8,14 @@ adaptive/outline edge-follow paths.  No AI/ML/OCR is used.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from copy import deepcopy
 from typing import Iterable, Sequence
+import math
 
 from PIL import Image, ImageDraw
 
-from CanvasGuard import CanvasGuard, CanvasSafetyStop, normalize_canvas_anchors
+from CanvasGuard import CanvasGuard, CanvasSafetyStop, normalize_canvas_anchors, normalize_canvas_polygon
 from EdgeBehavior import apply_edge_behavior, resolve_edge_behavior
 from SafetyDebugOverlay import record_debug_event, summarize_debug
 from Precision import CanvasTransform
@@ -34,64 +35,60 @@ class PreviewSafetyPlan:
         return deepcopy(self.meta)
 
 
-def _preview_polygon_options(options: dict, fitted: Sequence[int | float]) -> tuple[object | None, str | None, tuple]:
-    """Return polygon/space/anchors translated for preview-local coordinates."""
+def _canvas_size(options: dict, fitted: Sequence[int | float]) -> tuple[int, int]:
+    raw = options.get('_planning_canvas_size', fitted)
+    if not isinstance(raw, (list, tuple)) or len(raw) != 2:
+        raise ValueError('Planning canvas size must contain width and height.')
+    values = tuple(float(v) for v in raw)
+    if not all(math.isfinite(v) and v > 0 for v in values):
+        raise ValueError('Planning canvas size must be finite and positive.')
+    return tuple(max(1, int(round(v))) for v in values)
+
+
+def _target_area(options: dict, canvas_size: Sequence[int | float]) -> tuple:
+    """The coordinate frame in which saved polygon/anchor evidence was captured."""
+    for key in ('_target_screen_area', 'target_area', '_target_area'):
+        raw = options.get(key)
+        if isinstance(raw, (list, tuple)) and len(raw) == 4:
+            return tuple(raw)
+    corners = options.get('corners')
+    if isinstance(corners, (list, tuple)) and len(corners) == 2:
+        x0, y0 = corners[0]
+        x1, y1 = corners[1]
+        return min(x0, x1), min(y0, y1), abs(x1-x0), abs(y1-y0)
+    raw = options.get('_target_area')
+    if isinstance(raw, (list, tuple)) and len(raw) == 2:
+        return 0, 0, raw[0], raw[1]
+    return 0, 0, canvas_size[0], canvas_size[1]
+
+
+def _preview_polygon_options(options: dict, canvas_size: Sequence[int | float]) -> tuple[object | None, str | None, tuple]:
+    """Project whole-canvas evidence, independently of the image's fitted crop."""
     polygon = options.get('canvas_polygon') or options.get('canvas_safe_polygon')
     space = options.get('canvas_polygon_space') or options.get('canvas_coordinate_space')
     anchor_space = options.get('canvas_anchor_space') or space
     anchors = options.get('canvas_anchors') or ()
-    fitted_area = (0, 0, int(round(float(fitted[0]))), int(round(float(fitted[1]))))
-
-    # Normalized and area-relative data is already independent of the real window.
-    if polygon and str(space or 'auto').strip().lower() in ('normalized', 'relative', 'area', 'auto'):
-        return polygon, space, normalize_canvas_anchors(anchors, area=fitted_area, coordinate_space=anchor_space)
-
-    # Absolute/screen polygons can appear when a future detector writes screen
-    # geometry.  Convert via target_area -> local normalized -> current fitted.
-    target_area = options.get('_target_screen_area') or options.get('target_area') or options.get('_target_area')
-    corners = options.get('corners')
-    if (not isinstance(target_area, (list, tuple)) or len(target_area) != 4) and isinstance(corners, (list, tuple)) and len(corners) == 2:
-        x0, y0 = corners[0]
-        x1, y1 = corners[1]
-        target_area = (min(x0, x1), min(y0, y1), abs(x1-x0), abs(y1-y0))
-    preview_area = options.get('_preview_area') or fitted_area
-    try:
-        if polygon and target_area and str(space or '').strip().lower() in ('screen', 'absolute'):
-            tx, ty, tw, th = [float(v) for v in target_area]
-            fw, fh = float(fitted[0]), float(fitted[1])
-            converted = []
-            for raw in polygon:  # type: ignore[union-attr]
-                sx, sy = float(raw[0]), float(raw[1])
-                nx = 0.0 if tw <= 0 else (sx - tx) / tw
-                ny = 0.0 if th <= 0 else (sy - ty) / th
-                converted.append((nx * fw, ny * fh))
-            converted_anchors = normalize_canvas_anchors(anchors, area=tuple(target_area), coordinate_space=anchor_space)
-            # Re-normalize anchor centers from real target area into preview local area.
-            anchor_dicts = []
-            for anchor in converted_anchors:
-                cx = 0.0 if tw <= 0 else (anchor.center[0] - tx) / tw * fw
-                cy = 0.0 if th <= 0 else (anchor.center[1] - ty) / th * fh
-                tip = None
-                if anchor.tip is not None:
-                    tip = ((anchor.tip[0] - tx) / tw * fw if tw > 0 else 0.0,
-                           (anchor.tip[1] - ty) / th * fh if th > 0 else 0.0)
-                anchor_dicts.append({'kind': anchor.kind, 'center': (cx, cy), 'tip': tip,
-                                     'confidence': anchor.confidence, 'orientation': anchor.orientation})
-            return tuple(converted), 'area', normalize_canvas_anchors(anchor_dicts, area=fitted_area, coordinate_space='area')
-    except (TypeError, ValueError, ZeroDivisionError):
-        pass
-
-    if anchors:
-        try:
-            return polygon, space, normalize_canvas_anchors(anchors, area=fitted_area, coordinate_space=anchor_space)
-        except (TypeError, ValueError):
-            return polygon, space, ()
-    return polygon, space, ()
+    target_area = _target_area(options, canvas_size)
+    tx, ty, tw, th = map(float, target_area)
+    if not all(math.isfinite(v) for v in (tx, ty, tw, th)) or tw < 2 or th < 2:
+        raise ValueError('Target canvas geometry must be finite and at least two pixels per axis.')
+    # Polygons/anchors name pixel-index coordinates; endpoint scaling keeps the
+    # last target pixel on the last preview-canvas pixel, including reduced UI plans.
+    sx, sy = (float(canvas_size[0])-1)/(tw-1), (float(canvas_size[1])-1)/(th-1)
+    def local(point):
+        return (float(point[0])-tx)*sx, (float(point[1])-ty)*sy
+    converted = (tuple(local(p) for p in normalize_canvas_polygon(polygon, area=target_area, coordinate_space=space))
+                 if polygon else None)
+    converted_anchors = tuple(replace(anchor, center=local(anchor.center),
+                                     tip=local(anchor.tip) if anchor.tip is not None else None)
+                              for anchor in normalize_canvas_anchors(anchors, area=target_area, coordinate_space=anchor_space))
+    return converted, 'area' if converted else None, converted_anchors
 
 
 def preview_canvas_guard(options: dict, fitted: Sequence[int | float]) -> CanvasGuard:
-    area = (0, 0, int(round(float(fitted[0]))), int(round(float(fitted[1]))))
-    polygon, space, anchors = _preview_polygon_options(options, fitted)
+    canvas_size = _canvas_size(options, fitted)
+    area = (0, 0, *canvas_size)
+    polygon, space, anchors = _preview_polygon_options(options, canvas_size)
     confidence = 1.0
     anchor_meta = options.get('canvas_anchor_meta')
     if isinstance(anchor_meta, dict):
@@ -124,8 +121,18 @@ def build_preview_safety_plan(
     if cancelled():
         raise InterruptedError()
     width, height = int(image_size[0]), int(image_size[1])
+    canvas_size = _canvas_size(options, fitted)
+    image_offset = ((canvas_size[0]-float(fitted[0]))/2, (canvas_size[1]-float(fitted[1]))/2)
+    if min(image_offset) < 0:
+        raise ValueError('Fitted image must not exceed its planning canvas.')
     guard = preview_canvas_guard(options, fitted)
-    transform = CanvasTransform(width, height, fitted)
+    origin = tuple(map(float, _target_area(options, canvas_size)[:2]))
+    transform = CanvasTransform(width, height, fitted, origin[0]+image_offset[0], origin[1]+image_offset[1])
+    def canvas_point(x, y):
+        # Keep native half-pixel rounding even on a monitor left/above (0,0),
+        # then retain canvas-local coordinates for every report and layer.
+        point = transform.point(x, y)
+        return point[0]-origin[0], point[1]-origin[1]
     edge_mode = resolve_edge_behavior(
         options.get('edge_behavior', 'Hard Clip'),
         profile_name=options.get('profile_name'),
@@ -153,6 +160,9 @@ def build_preview_safety_plan(
         'source_outside_canvas': 0,
         'stopped': False,
         'canvas_guard': guard.model.as_dict(),
+        'fitted_size': tuple(map(float, fitted)),
+        'image_offset': image_offset,
+        'path_coordinate_space': 'canvas-local',
     }
     def source_paths():
         if execution_sequence is not None:
@@ -180,10 +190,10 @@ def build_preview_safety_plan(
             for number, (x, y) in enumerate(item):
                 if number % 512 == 0 and cancelled():
                     raise InterruptedError()
-                raw_canvas_points.append(transform.point(x, y))
+                raw_canvas_points.append(canvas_point(x, y))
         else:
             x1, y1, x2, y2 = item
-            raw_canvas_points = [transform.point(x1, y1), transform.point(x2, y2)]
+            raw_canvas_points = [canvas_point(x1, y1), canvas_point(x2, y2)]
         if physical_brush not in guards:
             guards[physical_brush] = preview_canvas_guard(dict(options, brush_px=physical_brush), fitted)
         used_brushes.add(physical_brush)
@@ -239,6 +249,7 @@ def draw_safe_paths(draw: ImageDraw.ImageDraw, safety_plan: PreviewSafetyPlan, f
         raise InterruptedError()
     path_count = 0
     dot_count = 0
+    image_offset = safety_plan.meta.get('image_offset') or (0, 0)
     def render_paths():
         if safety_plan.sequence is not None:
             scale = float(preview_size[0]) / float(fitted[0])
@@ -259,7 +270,7 @@ def draw_safe_paths(draw: ImageDraw.ImageDraw, safety_plan: PreviewSafetyPlan, f
         for number, p in enumerate(path):
             if number % 512 == 0 and cancelled():
                 raise InterruptedError()
-            mapped.append(canvas_to_preview(p, fitted, preview_size))
+            mapped.append(canvas_to_preview((p[0]-image_offset[0], p[1]-image_offset[1]), fitted, preview_size))
         def cap(point):
             x, y = point
             if width == 1:
@@ -301,16 +312,19 @@ def render_preview_safety_map(source: Image.Image, preview_size, safety_plan: Pr
     polygon = guard_meta.get('polygon') or ()
     safe_polygon = guard_meta.get('safe_polygon') or ()
     fitted = guard_meta.get('area') or (0, 0, w, h)
-    if len(fitted) == 4:
+    if safety_plan.meta.get('fitted_size'):
+        fitted_size = safety_plan.meta['fitted_size']
+    elif len(fitted) == 4:
         fitted_size = (max(1, int(fitted[2])), max(1, int(fitted[3])))
     else:
         fitted_size = preview_size
 
     def mapped_poly(poly):
         out = []
+        image_offset = safety_plan.meta.get('image_offset') or (0, 0)
         for p in poly:
             try:
-                out.append(canvas_to_preview(p, fitted_size, preview_size))
+                out.append(canvas_to_preview((p[0]-image_offset[0], p[1]-image_offset[1]), fitted_size, preview_size))
             except (TypeError, ValueError):
                 continue
         return out

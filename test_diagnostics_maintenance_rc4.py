@@ -53,7 +53,7 @@ class DiagnosticMaintenanceTests(unittest.TestCase):
         (self.base / 'settings-huge.json').write_text('{"quality":"' + 'x' * 1000 + '"}', encoding='utf-8')
         (self.base / 'calibration-huge.json').write_text('{"version":"' + 'x' * 1000 + '"}', encoding='utf-8')
         with mock.patch.object(diagnostics, 'MAX_JSON_BYTES', 64):
-            self.assertEqual(diagnostics._settings_summary(), {'settings-small.json': {'quality': 'High'}})
+            self.assertEqual(diagnostics._settings_summary(), {'settings-001.json': {'quality': 'High'}})
             self.assertEqual(diagnostics._calibration_summary(), {})
 
     def test_summary_file_count_is_bounded(self):
@@ -107,11 +107,11 @@ class DiagnosticMaintenanceTests(unittest.TestCase):
     def test_calibration_version_cannot_export_arbitrary_nested_private_data(self):
         path = self.base / 'calibration.json'
         path.write_text(json.dumps({'version': {'private': 'PRIVATE-CONTENT'}, 'colors': [1, 2]}), encoding='utf-8')
-        summary = diagnostics._calibration_summary()[path.name]
+        summary = diagnostics._calibration_summary()['calibration-001.json']
         self.assertIsNone(summary['version'])
         self.assertEqual(summary['color_count'], 2)
         path.write_text(json.dumps({'version': 'token=VERSION_SECRET ' + 'v' * 500}), encoding='utf-8')
-        version = diagnostics._calibration_summary()[path.name]['version']
+        version = diagnostics._calibration_summary()['calibration-001.json']['version']
         self.assertNotIn('VERSION_SECRET', version)
         self.assertLessEqual(len(version), 200)
 

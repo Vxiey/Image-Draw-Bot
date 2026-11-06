@@ -108,5 +108,5 @@ class ReviewRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             (Path(folder)/'settings.json').write_text(json.dumps({'quality':'High detail','api_key':'secret-key','password':'secret-password'}))
             with patch.object(dp,'data_dir',return_value=Path(folder)):
-                summary=dp._settings_summary()['settings.json']
+                summary=dp._settings_summary()['settings-001.json']
                 self.assertEqual(summary,{'quality':'High detail'})

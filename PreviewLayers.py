@@ -38,14 +38,17 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
     line_width = max(1, min(4, int(brush)))
     safety_groups = options.get("_preview_safety_groups") or None
     if safety_groups:
-        guard_meta = (options.get("preview_safety_meta") or {}).get("canvas_guard") or {}
+        safety_meta = options.get("preview_safety_meta") or {}
+        guard_meta = safety_meta.get("canvas_guard") or {}
         area = guard_meta.get("area") or (0, 0, w, h)
-        fitted_local = (int(area[2]), int(area[3])) if isinstance(area, (tuple, list)) and len(area) == 4 else (w, h)
+        fitted_local = safety_meta.get('fitted_size') or ((int(area[2]), int(area[3])) if isinstance(area, (tuple, list)) and len(area) == 4 else (w, h))
+        image_offset = safety_meta.get('image_offset') or (0, 0)
         fitted_width, fitted_height = max(1.0, float(fitted_local[0])), max(1.0, float(fitted_local[1]))
         def mapped(point):
             # Keep the original operation order: multiplying by a precomputed
             # ratio can put an exact pixel boundary just below its integer.
-            return float(point[0]) * w / fitted_width, float(point[1]) * h / fitted_height
+            return ((float(point[0])-image_offset[0]) * w / fitted_width,
+                    (float(point[1])-image_offset[1]) * h / fitted_height)
         total_segments = sum(max(1, len(path) - 1) for paths in safety_groups for path in paths)
         max_segments = int(options.get("_preview_stroke_map_limit", 12000)) if options.get("_preview_plan") else 24000
         stride = 1 if options.get('_full_detail_preview') else max(1, math.ceil(total_segments / max(1, max_segments)))

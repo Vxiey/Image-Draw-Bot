@@ -1,14 +1,20 @@
-"""Preview pages selected by a compact menu instead of nine wide tabs."""
+"""Preview pages selected by one compact, keyboard-accessible native menu."""
 import tkinter as tk
+from tkinter import ttk
 import customtkinter as ctk
 
 class PreviewDeck(ctk.CTkFrame):
-    def __init__(self,parent,**kwargs):
+    def __init__(self,parent,command=None,**kwargs):
         super().__init__(parent,**kwargs)
+        self._on_change=command
         self.pages={};self.current=tk.StringVar(value='Original');self._visible_name=None
-        self.selector=ctk.CTkOptionMenu(self,variable=self.current,values=['Original'],
-            command=self.set,dynamic_resizing=False,width=210,height=32,fg_color='#283548',button_color='#354966')
-        self.selector.pack(anchor='w',padx=8,pady=(6,4))
+        toolbar=ctk.CTkFrame(self,fg_color='transparent')
+        toolbar.pack(fill='x',padx=8,pady=(6,4))
+        ctk.CTkLabel(toolbar,text='Preview view',width=88,anchor='w').pack(side='left',padx=(0,8))
+        self.selector=ttk.Combobox(toolbar,textvariable=self.current,values=['Original'],
+            state='readonly',width=24,style='ImageDrawBot.TCombobox',takefocus=True)
+        self.selector.pack(side='left',fill='x',expand=True)
+        self.selector.bind('<<ComboboxSelected>>',lambda _event:self.set(self.current.get()))
         self.host=ctk.CTkFrame(self,fg_color='transparent')
         self.host.pack(fill='both',expand=True)
     def add(self,name):
@@ -34,8 +40,10 @@ class PreviewDeck(ctk.CTkFrame):
         return page
     def set(self,name):
         if name not in self.pages:raise ValueError(name)
-        # The option menu updates its StringVar before invoking this callback,
+        # The native menu updates its StringVar before invoking this callback,
         # so visible-page identity must be tracked separately from that value.
+        changed=name!=self._visible_name
+        initialized=self._visible_name is not None
         if name != self._visible_name:
             previous=self.pages.get(self._visible_name)
             try:
@@ -50,4 +58,6 @@ class PreviewDeck(ctk.CTkFrame):
                 except tk.TclError:pass
             self._visible_name=name
         self.current.set(name)
+        callback=getattr(self,'_on_change',None)
+        if changed and initialized and callable(callback):callback()
     def get(self):return self.current.get()

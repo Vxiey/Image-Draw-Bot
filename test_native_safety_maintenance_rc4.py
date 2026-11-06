@@ -146,7 +146,7 @@ class LocalDumpsMaintenanceTests(unittest.TestCase):
                                                   return_value=SimpleNamespace(IsUserAnAdmin=mock.Mock(return_value=1))))
 
     def written(self):
-        return {'DumpFolder': [str(self.folder), self.registry.REG_EXPAND_SZ],
+        return {'DumpFolder': [dumps.DUMP_FOLDER_TEMPLATE, self.registry.REG_EXPAND_SZ],
                 'DumpCount': [5, self.registry.REG_DWORD], 'DumpType': [1, self.registry.REG_DWORD]}
 
     def saved(self, original=None):

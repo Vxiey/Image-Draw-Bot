@@ -1,0 +1,110 @@
+{
+  "baseline_commit": "4c8aa247f852df7225b5e7d10ce4ac151e612226",
+  "baseline_DrawBot_sha256": "15286a9b2058b5f3bc7b8e3a4d4444f21d59a0e7edfd59c35600fbdf25c7d6f0",
+  "current_sources_sha256": {
+    "DrawBot.py": "5737906980bd603b692997a9c7c0ce43d9c85d7092c625d64753803f8b78f967",
+    "StrokeProbeGeometry.py": "7dc6eadb74f88bb2732545a564e1a6ad8721ab349a21f02b0258c682245d8803"
+  },
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "scope": "First three cases isolate scratch allocation and geometry selection. The last executes baseline/current execute_plan with current shared dependencies, a no-wait fake mouse and disabled persistence. It compares every mouse action and ink probe; it does not measure Windows painting, screen capture or real wall-clock drawing speed. Intentionally changed isolated-dot behavior is tested separately.",
+  "results": [
+    {
+      "case": "two-point strokes",
+      "iterations": 10000,
+      "points_per_iteration": 2,
+      "before_ms": [
+        8.305467003083322,
+        8.377982994716149,
+        8.71505699615227,
+        8.439424003881868,
+        8.873956998286303
+      ],
+      "after_ms": [
+        5.251043003227096,
+        5.166697003005538,
+        5.347865000658203,
+        5.683130002580583,
+        5.850927998835687
+      ],
+      "before_median_ms": 8.439424003881868,
+      "after_median_ms": 5.347865000658203,
+      "before_peak_python_bytes": 976,
+      "after_peak_python_bytes": 568,
+      "exact_output_parity": true
+    },
+    {
+      "case": "long compound stroke / one probe",
+      "iterations": 10,
+      "points_per_iteration": 10000,
+      "before_ms": [
+        24.446636001812294,
+        21.95487199787749,
+        25.071213996852748,
+        23.791997002263088,
+        22.757178005122114
+      ],
+      "after_ms": [
+        16.011807005270384,
+        16.03725500172004,
+        15.339723002398387,
+        15.866873000049964,
+        16.86658099788474
+      ],
+      "before_median_ms": 23.791997002263088,
+      "after_median_ms": 16.011807005270384,
+      "before_peak_python_bytes": 750808,
+      "after_peak_python_bytes": 592,
+      "exact_output_parity": true
+    },
+    {
+      "case": "long compound stroke / three probe consumers",
+      "iterations": 10,
+      "points_per_iteration": 10000,
+      "before_ms": [
+        49.97644200193463,
+        50.17865899571916,
+        52.540902004693635,
+        50.733921001665294,
+        48.66553399915574
+      ],
+      "after_ms": [
+        16.790923997177742,
+        16.968572002951987,
+        16.99542099959217,
+        18.339577996812295,
+        15.310550996218808
+      ],
+      "before_median_ms": 50.17865899571916,
+      "after_median_ms": 16.968572002951987,
+      "before_peak_python_bytes": 750808,
+      "after_peak_python_bytes": 592,
+      "exact_output_parity": true
+    },
+    {
+      "case": "actual execute_plan / fake device / 8 compound paths",
+      "before_ms": [
+        148.0400020009256,
+        148.97277999989456,
+        141.471012000693,
+        147.11232000263408,
+        151.78840199951082
+      ],
+      "after_ms": [
+        147.4325029994361,
+        139.20596400566865,
+        141.5774289998808,
+        145.77985100186197,
+        150.6978999968851
+      ],
+      "before_median_ms": 148.0400020009256,
+      "after_median_ms": 145.77985100186197,
+      "before_peak_python_bytes": 1155799,
+      "after_peak_python_bytes": 1134319,
+      "exact_output_parity": true,
+      "native_action_count": 5643,
+      "ink_probe_count": 1,
+      "native_actions_sha256": "5e9b0a339d0380d48f11c5684a4d534776621d0bce197c10d740e5e1c8aaca1d"
+    }
+  ]
+}

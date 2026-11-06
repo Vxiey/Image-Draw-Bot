@@ -50,9 +50,13 @@ class ManualCaptureRegressionTests(unittest.TestCase):
 
     def test_owned_palette_snapshot_is_closed_on_replacement_and_shutdown(self):
         app=self.palette_app();old=Image.new('RGB',(100,80),'red');new=Image.new('RGB',(100,80),'blue')
-        app.snapshot=((0,0,100,80),old);app.read_snapshot=Mock()
+        app.snapshot=((0,0,100,80),old)
+        app.preset=None;app.detect_mode=SimpleNamespace(get=lambda:'Auto detect');app.preview=Mock()
         meta={'handle':42,'client_rect':(0,0,600,400)}
-        with patch('TargetCapture.capture_target_metadata_isolated',return_value=meta),patch('RegionPicker.select_region',side_effect=lambda root,selected,error:selected((0,0,100,80),new)):
+        with patch('TargetCapture.capture_target_metadata_isolated',return_value=meta),\
+             patch('RegionPicker.select_region',side_effect=lambda root,selected,error:selected((0,0,100,80),new)),\
+             patch.object(palette,'detect_color_swatches',return_value=([(50,40)],[(0,0,255)],{'found':1,'duplicates':0})),\
+             patch.object(palette.ImageTk,'PhotoImage'):
             app.start_scan()
         with self.assertRaises(ValueError):old.getpixel((0,0))
         self.assertEqual(new.getpixel((0,0)),(0,0,255))

@@ -444,11 +444,18 @@ def detect_fill_regions(image, mode="Balanced", *, engine="Auto", max_regions=12
         if seen[start]: continue
         if cancelled(): raise InterruptedError()
         color = labels[start]; queue = [start]; seen[start] = 1; points = []
-        touches_border = False
+        touches_border = False; component_size = 0
         while queue:
-            pos = queue.pop(); x, y = pos % w, pos // w; points.append(pos)
-            if len(points)%1024==0 and cancelled(): raise InterruptedError()
-            touches_border = touches_border or x == 0 or y == 0 or x == w-1 or y == h-1
+            pos = queue.pop(); x, y = pos % w, pos // w; component_size += 1
+            if component_size%1024==0 and cancelled(): raise InterruptedError()
+            if not touches_border:
+                if x == 0 or y == 0 or x == w-1 or y == h-1:
+                    # Border-connected components cannot become bucket fills.
+                    # Keep visiting/counting them, but release geometry that no
+                    # later safety or contour stage can consume.
+                    touches_border = True; points.clear()
+                else:
+                    points.append(pos)
             for nx, ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
                 if 0 <= nx < w and 0 <= ny < h:
                     n = ny*w + nx
@@ -526,11 +533,14 @@ def detect_fill_regions_from_groups(groups, palette_rgb, image_size, mode="Balan
     for start,color in enumerate(labels):
         if color<0 or seen[start]:continue
         if cancelled():raise InterruptedError()
-        stack=[start];seen[start]=1;points=[];touches_border=False
+        stack=[start];seen[start]=1;points=[];touches_border=False;component_size=0
         while stack:
-            pos=stack.pop();x,y=pos%w,pos//w;points.append(pos)
-            if len(points)%1024==0 and cancelled():raise InterruptedError()
-            touches_border=touches_border or x==0 or y==0 or x==w-1 or y==h-1
+            pos=stack.pop();x,y=pos%w,pos//w;component_size+=1
+            if component_size%1024==0 and cancelled():raise InterruptedError()
+            if not touches_border:
+                if x==0 or y==0 or x==w-1 or y==h-1:
+                    touches_border=True;points.clear()
+                else:points.append(pos)
             for nx,ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
                 if 0<=nx<w and 0<=ny<h:
                     n=ny*w+nx

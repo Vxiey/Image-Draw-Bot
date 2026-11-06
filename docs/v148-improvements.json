@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 699,
+  "implemented": 729,
   "release_published": false,
-  "validation": "Batch 05: final frozen-source discovery passed 3,059 tests in 73.421 seconds (26 platform/hardware skips), with unchanged source hashes. All four independent area reviews and the final adaptive-probe/correction integration review are closed. Source gate passed 5,000 cycles; source-package hygiene passed for 918 files; eight exact-raster engine fixtures passed with zero mismatched pixels. New checkpoint Windows/Linux CI pending. Prior checkpoint 5f3fcfb passed Windows/Linux, dependencies, CodeQL and packaged Windows GUI/native drag-and-drop CI in run 42280910774.",
+  "validation": "Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.",
   "improvements": [
     {
       "id": 1,
@@ -5411,6 +5411,246 @@
       "local_id": "PR05",
       "description": "The one-shot source hygiene check traversed every private builder/output tree and treated an upstream `check_once.py` inside `.build-venv` or the frozen output as repository source. It also scanned `.git` fully before discarding findings. Prune the same excluded directory names and links as source packaging. Keep genuine source and workflow one-shot detection, reject included-directory traversal errors and avoid per-file metadata queries for irrelevant filenames.",
       "ledger": "v148-batch05-platform-release.md"
+    },
+    {
+      "id": 700,
+      "area": "batch06-application",
+      "batch": 6,
+      "local_id": "AX01",
+      "description": "A 120-second manual pause plus the three-second resume countdown made an otherwise completed 0.8-second fake-device run teach both speed and ETA models a 123.8-second duration. The analysis also recommended updating ETA from that idle time. Record each pause explicitly and exclude manually paused runs from throughput, ETA and strategy learning. Keep the honest wall time and canvas-quality analysis, classify pause time separately, and avoid misleading ETA/efficiency recommendations. Actual `execute_plan` and public persistent-model tests prove the exclusion; an uninterrupted run remains eligible and clears old pause metadata.",
+      "ledger": "v148-batch06-application.md"
+    },
+    {
+      "id": 701,
+      "area": "batch06-application",
+      "batch": 6,
+      "local_id": "AX02",
+      "description": "Strategy feedback counted only the report's `drawn` category as delivered. One hundred clipped or edge-following delivered paths plus one skipped path consequently produced a zero safety-delivery score. Include all three exclusive delivered categories. Tests feed actual `RuntimeSafetySession` output through the public strategy writer and prove equivalent accepted proxy scores for interior, clipped and edge-following geometry. The result remains explicitly labeled a runtime delivery proxy.",
+      "ledger": "v148-batch06-application.md"
+    },
+    {
+      "id": 702,
+      "area": "batch06-application",
+      "batch": 6,
+      "local_id": "AX03",
+      "description": "Queued worker status/progress could overwrite the explicit Stop status with “Drawing” or “Finished” before the worker exited. Ignore ordinary status/progress after Stop, then confirm the matching worker's exit. Explicit terminal events preserve real failures and the recording tool's intentional Stop-and-save result. Tests cover queued success/progress, unrelated completion, ordinary completion, timeout text and recording success/disk failure.",
+      "ledger": "v148-batch06-application.md"
+    },
+    {
+      "id": 703,
+      "area": "batch06-application",
+      "batch": 6,
+      "local_id": "AX04",
+      "description": "Export always saved the plan's base preview even when the user was inspecting a different layer, and it could differ from the displayed simulated final. Resolve rendering and export from one shared view map. Export the selected complete original/target/final/heatmap/coverage/safety/detail/stroke/fill/color view with a descriptive PNG name, honor layer toggles, and explain unavailable layers. Actual worker exports are decoded and compared pixel-for-pixel for all 12 views. The modal-time stale image/view checks complete existing lifecycle contracts without extra IDs.",
+      "ledger": "v148-batch06-application.md"
+    },
+    {
+      "id": 704,
+      "area": "batch06-application",
+      "batch": 6,
+      "local_id": "AX05",
+      "description": "Reset learned draw timing used raw UI options, whereas actual Auto planning records a resolved drawing-style/tool/brush context. Reset could erase a different record and retain both the learned current model and its displayed estimate. Prefer the current plan's effective context only for the same active profile, invalidate its estimate after successful reset, preserve the plan on a failed reset, and prevent reset during an active worker or shutdown. Tests record two real calibration contexts and verify that exactly the effective context is removed.",
+      "ledger": "v148-batch06-application.md"
+    },
+    {
+      "id": 705,
+      "area": "batch06-application",
+      "batch": 6,
+      "local_id": "AX06",
+      "description": "Image import copied an embedded non-sRGB ICC profile onto unchanged RGB numbers, but planners treated those numbers as sRGB. A generated valid RGB profile with exchanged red/blue primaries imported `(220,40,10)` instead of the independently expected `(10,40,220)`. Convert tagged file and bitmap-clipboard input to sRGB with Pillow's CMS and relative colorimetric intent. Preserve alpha/indexed transparency and the borrowed clipboard image; retag converted output with sRGB so exported/reimported images do not convert twice. Bound profile bytes, explain invalid profiles, retain exact untagged pixels and close cancelled outputs. The source label identifies successful conversion. Tests use a generated ICC fixture and its independent channel mapping; no external binary fixture is downloaded.",
+      "ledger": "v148-batch06-application.md"
+    },
+    {
+      "id": 706,
+      "area": "batch06-application",
+      "batch": 6,
+      "local_id": "AX07",
+      "description": "Verification flattened clipped paths, copied every adjacent pair and could search the same longest segment three times. When clipping left two isolated dots, its fallback sampled across the undrawn gap. Select the first longest delivered segment once with constant scratch space; fall back to the first delivered dot. Reuse it for delivery, color and exact-color sampling. Preserve path order and native actions, poll cancellation during long paths and many dots, and use pairwise iteration without path slices. A real CanvasGuard/execute_plan regression reproduces two clipped dots and proves that the gap is no longer sampled; an independent brute-force oracle covers ordinary geometry and tie ordering.",
+      "ledger": "v148-batch06-application.md"
+    },
+    {
+      "id": 707,
+      "area": "batch06-rendering",
+      "batch": 6,
+      "local_id": "RB01",
+      "description": "Canvas verification accepted RGB band contrast as an edge but located it using luminance only. A real rectangle with outside `(100,100,20)` and inside `(101,69,177)` has equal luminance; all sides were spuriously placed at search offset −24, stopping a correctly selected canvas. Locate adjacent boundaries with weighted RGB contrast, prefer the nearest expected position on exact strength ties and require nonzero local evidence. Existing weak/no-margin fallback and conservative-inset semantics remain.",
+      "ledger": "v148-batch06-rendering.md"
+    },
+    {
+      "id": 708,
+      "area": "batch06-rendering",
+      "batch": 6,
+      "local_id": "RB02",
+      "description": "Custom Auto reserves jumped at policy thresholds. Increasing the timer 30→31,80→81 or150→151 seconds reduced usable drawing time. Interpolate established generic timer anchors continuously, with reserve slope below1 and the existing30-second maximum. Fixed game presets and explicit Off/manual reserves retain their values.",
+      "ledger": "v148-batch06-rendering.md"
+    },
+    {
+      "id": 709,
+      "area": "batch06-rendering",
+      "batch": 6,
+      "local_id": "RB03",
+      "description": "Extra Fast evaluated the same complete final plan twice when every local candidate kept the original paths. The second pass repeated target capping, stroke ordering and stateful costing. Reuse the first complete evaluation only when every source group remains unchanged, including portrait semantics. Changed proposals still receive the complete downstream regression guard; Stop remains observable after the first evaluation.",
+      "ledger": "v148-batch06-rendering.md"
+    },
+    {
+      "id": 710,
+      "area": "batch06-rendering",
+      "batch": 6,
+      "local_id": "RB04",
+      "description": "X11 Gray, Maroon and Purple were displayed using names that parse as different CSS RGB values. Reports could say `Purple → Purple` for a visible color change, and an exact X11 match was labeled CSS. Preserve ordinary CSS input precedence, provide explicit `X11` names for collisions, publish only aliases that parse to the same RGB, and report the vocabulary of exact extended matches. Rendering colors and candidate scoring are unchanged.",
+      "ledger": "v148-batch06-rendering.md"
+    },
+    {
+      "id": 711,
+      "area": "batch06-rendering",
+      "batch": 6,
+      "local_id": "RB05",
+      "description": "Explicit Portrait style injected the full-color `Subject first` policy into Paint's supported current-color shaded renderer. Both Manual and Auto `make_plan` then failed with a subject-focus compatibility error. Do not inject that full-color policy into a compatible single-color portrait. Preserve any explicit user subject selection so the real planner still rejects an invalid combination. Full-color Portrait and Extra Fast's contour policy keep their behavior.",
+      "ledger": "v148-batch06-rendering.md"
+    },
+    {
+      "id": 712,
+      "area": "batch06-rendering",
+      "batch": 6,
+      "local_id": "RB06",
+      "description": "Preview safety treated the fitted image rectangle as the entire canvas. A 1×24 source centered in a 200×48 canvas raised `CanvasSafetyStop` because its fitted width was only 2 pixels, although the actual centered stroke was safe. Ordinary letterboxing also clipped legal image edges and projected saved polygons/anchors against the wrong rectangle. Keep full-canvas guard geometry and centered image placement separate. Project normalized/relative/screen evidence through the complete target canvas; render guarded paths and safety/debug/stroke layers back into the fitted image crop. Root forwards the current planning canvas through ordinary, recursive and test plans.",
+      "ledger": "v148-batch06-rendering.md"
+    },
+    {
+      "id": 713,
+      "area": "batch06-rendering",
+      "batch": 6,
+      "local_id": "RB07",
+      "description": "Both Fill detectors retained every pixel index of a component after it touched the canvas border, although border-connected components are unconditionally ineligible for bucket Fill. A large background therefore retained unusable candidate geometry for its entire flood traversal. Release that list on the first border contact and omit later coordinate retention. Continue the complete traversal, component accounting and bounded cancellation checks. Interior candidate point order and every subsequent safety/contour decision remain unchanged.",
+      "ledger": "v148-batch06-rendering.md"
+    },
+    {
+      "id": 714,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC01",
+      "description": "A failed palette rescan cleared reviewed colours, and selecting a replacement screenshot bound its new target before detection completed. A replacement now stages detection and the display image, then commits colours, screenshot, preview and anchor together. A failure leaves the old reviewed draft usable. `GetColorPositions.read_snapshot/start_scan`; C: invalid-grid, detection/photo/widget failure, successful replacement and same-snapshot refresh tests. Owned discarded thumbnails/crops are closed under the existing image-ownership contract.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 715,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC02",
+      "description": "The subject selector required three displayed pixels on both axes, so a 1×1, 2×2 or thin valid image could never be selected. Its minimum now respects each displayed extent, and an explicit Select whole image / Ctrl+A action works before Apply. Normal images retain the minimum-drag threshold. `SubjectSelector.select_subject`; C: real start/drag/apply and Ctrl+A/Return callbacks for tiny/thin images, plus the normal-image rejection and once-only callback assertions. One subject-selection workflow group.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 716,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC03",
+      "description": "Capturing an unwanted optional calibration point had no remove action. A lone brightness endpoint could make an otherwise valid RGB calibration unsaveable. Exact colour, Paint tool and generic tool dialogs now expose Remove and Start new calibration for the draft. Reset does not delete the saved calibration or bypass the new-capture requirement. `ExactColorCalibration`, `PaintToolCalibration`, `AppToolCalibration`; C: removed brightness can save, removed Brush/opacity fields are absent from the saved payload, generic Clear removal preserves Brush, fresh drafts require recapture, and pending/closed drafts cannot mutate. Repeated implementations count once.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 717,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC04",
+      "description": "Every progress status rewrite sent the same presentation properties to dozens of widgets. StudioUI now configures only changed properties that it owns, committing its cache after successful Tk calls. Readiness checks and controller-owned Start enablement continue on every refresh. `StudioUI._configure_presentation/_apply_ui_state`; P: 100 actual status-render callbacks keep unchanged configure counts fixed; Start/readiness are still refreshed 101 times. Changed/failed/retried property writes are checked separately. Paired measurement below.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 718,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC05",
+      "description": "Plus in Fit mode used the sentinel value 0 and could shrink a 100% fitted image to 25%; minus at the explicit minimum could jump back to a larger Fit view. Relative zoom now starts from the visible page's rendered scale and stays monotonic at the supported limits. `PreviewNavigation.relative_zoom`, actual `StudioUI` plus/minus closures; P: fitted scales below/inside/above the explicit range, visible-vs-hidden pages and minimum explicit zoom.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 719,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC06",
+      "description": "The renderer clamped a viewport but kept the unbounded requested pan. A large drag required hundreds of pixels of reversal before the image moved again. Drag events now store the effective source offset and consume every movement even at an edge; Fit recentres the pages. `PreviewQuality.viewport_geometry`, `PreviewNavigation`, `StudioUI`, root's `DrawBot.show_previews` hook; P: actual drag reversal within one gesture, unchanged edge event, Fit reset, real renderer metadata, and 72 pixel-for-pixel viewport comparisons against the independent baseline formula.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 720,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC07",
+      "description": "Twelve long horizontal preview tabs exceeded normal centre-panel widths. The active workspace now uses the existing compact page deck with a native keyboard-accessible selector, retaining all twelve named canvases and notifying rendering when the visible page changes. `StudioUI`, `PreviewDeck`; P: page-change callback and Windows narrow-deck registration, selection, width and one-visible-page assertions. Earlier UI05/UI06/IW33 page-registration/rollback optimizations remain the same counted improvements.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 721,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC08",
+      "description": "Nine Tools actions were packed into one row exceeding 1,000 pixels, making later actions inaccessible in the centre panel. The active Tools row now wraps into a coalesced grid using actual scaled requests and retains every command. `StudioUI`, `ResponsiveRows`; P: uneven-width/scaled-padding column bounds, resize batching/teardown and Windows actual nine-button layout at 100%/150%. One action-row workflow group, not one per button.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 722,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC09",
+      "description": "The palette table allowed multiple selection, but Remove discarded only its first selected row. Remove/Delete now removes the complete selection from both coordinate and RGB arrays in stable order and focuses the next remaining row. With no selection, the existing last-colour undo remains. `GetColorPositions.undo`; C: noncontiguous selected indices, preserved coordinate/RGB correspondence, next focus, no-selection fallback and closed-dialog guard.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 723,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC10",
+      "description": "Tall palette and exact-colour forms could put their final controls and Save/Close actions outside a smaller window. These forms now scroll independently above a persistent action footer; Tab focus reveals an off-screen input and the form uses only scoped window bindings. `CalibrationDialogLayout`, `GetColorPositions`, `ExactColorCalibration`; C: local/nested/fractional wheel handling, focus reveal, pending-job cleanup, Windows 650×500 form/footer access and repeated scoped callback teardown. Fitting the outer geometry itself completes IW34 without an extra count.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 724,
+      "area": "batch06-ui-calibration",
+      "batch": 6,
+      "local_id": "UC11",
+      "description": "The main grid imposed 1,096 pixels of column minimums before padding even when the fitted window was narrower, while one-row header/footer controls could be clipped. At narrow widths the same Setup, Workspace and Readiness panels share a native selector; a wide window restores the three columns. Start and Stop remain directly visible, enabled Pause/Resume is promoted, and other actions use a compact menu that reads the existing buttons' live text/state and invokes those same buttons. Header actions use the same mechanism. Workspace and Readiness can scroll at low heights. `ResponsiveWorkspace`, `ResponsiveActionBar`, `StudioUI`, `ResponsiveRows`' native-frame binding bridge; W: width/scaling transitions, focused-panel preservation, header reflow, coalescing/teardown, current menu permissions and late disable, active pause promotion, hidden-focus transfer and exact native CTk frame event binding. The Windows test constructs the complete `DrawBotApp` with NoInput backends at 650×500/1,024×700, 100%/150%, then wide 1,560×960, checking Start/Stop, live overflow state, active Resume and all selected panels. Root's controller integration review passed; all subparts count as one responsive workspace group.",
+      "ledger": "v148-batch06-ui-calibration.md"
+    },
+    {
+      "id": 725,
+      "area": "batch06-platform",
+      "batch": 6,
+      "local_id": "PF01",
+      "description": "Update checking inspected only the first 100 GitHub releases. A stable release after 100 newer prereleases was reported as absent, and an earlier-created higher semantic version could be missed. `UpdateCenter.check_for_updates` selects the best allowed version across linked pages. It rebuilds every request using the fixed repository endpoint and validated consecutive page numbers, including GitHub's numeric repository-link form. All pages share the existing 30-second cooperative deadline and 16 MiB decoded-body budget, with a ten-page maximum. An incomplete history raises an actionable error instead of claiming the current version is latest. `test_v148_platform_batch06_pagination.py`: real Requests adapter calls cover the 100-prerelease case, semantic selection across three pages, endpoint boundaries, repeated/skipped/ambiguous pages, total size, Stop/deadline and response closure.",
+      "ledger": "v148-batch06-platform.md"
+    },
+    {
+      "id": 726,
+      "area": "batch06-platform",
+      "batch": 6,
+      "local_id": "PF02",
+      "description": "Every update attempt downloaded and retained another uniquely named installer, even when identical verified bytes were already present. Successful loose downloads accumulated indefinitely. `InstallerCache` and `UpdateCenter.download_installer` reuse a file only after a complete size/SHA-256/MZ check, and recheck Stop at completion. A cache hit works without network access or additional download space. Cooperating cache operations use a stable file transaction; concurrent completed downloads publish one hash-named installer. Normally retain the current installer and one recently used previous installer in an explicitly marked cache directory. Unknown/unmarked directories, links, other filenames and legacy loose downloads are not adopted or deleted. Busy-file eviction is deferred. `test_v148_platform_batch06_installer_cache.py`: public downloader tests cover repeated reuse, same-size corruption, missing files, cancellation, ownership/links, concurrent publication, locked eviction and inventory failure. The existing Windows locked launcher still rehashes immediately before execution.",
+      "ledger": "v148-batch06-platform.md"
+    },
+    {
+      "id": 727,
+      "area": "batch06-platform",
+      "batch": 6,
+      "local_id": "PF03",
+      "description": "Elevated LocalDumps configuration wrote the administrator's already expanded absolute profile path into a machine-wide per-executable setting. An ordinary user running the app could therefore target another account's dump folder. `CrashDumpConfig` writes the expandable `REG_EXPAND_SZ` value `%LOCALAPPDATA%\\ImageDrawBot\\dumps`; normal Windows app startup prepares its own account's folder and diagnostics inventories that same location. An already owned absolute setting can migrate without losing the original undo values. A validated transitional `previous_written` record permits Disable to recover after partial native writes or a final undo-file publication failure, while preserving later external registry changes. The existing full preflight and transaction remain. `test_v148_platform_batch06_diagnostics.py`: two-account path expansion, normal startup/report inventory, undo-before-migration and failure injection at each native write plus final publication.",
+      "ledger": "v148-batch06-platform.md"
+    },
+    {
+      "id": 728,
+      "area": "batch06-platform",
+      "batch": 6,
+      "local_id": "PF04",
+      "description": "Invalid UTF-8 in a local dependency's real `METADATA` file caused `importlib.metadata.version` to abort the entire diagnostics ZIP, losing otherwise readable logs and other package versions. `DiagnosticsPackage._package_versions` contains ordinary per-distribution read/metadata failures. `system.json` records the affected fixed package name and exception class in `collection_issues`; raw exception messages, local paths and credentials are not copied. Missing optional packages retain their existing normal omission behavior, and cancellation is not swallowed. Public archive tests use a real malformed `PathDistribution` and verify retained session logs, other package versions and privacy-safe failure details.",
+      "ledger": "v148-batch06-platform.md"
+    },
+    {
+      "id": 729,
+      "area": "batch06-platform",
+      "batch": 6,
+      "local_id": "PF05",
+      "description": "The standalone diagnostics helper reported collection failure and returned exit code 1 when Explorer could not open the folder, even though the complete ZIP was already saved. `DiagnosticsPackage.main` separates archive creation from folder presentation. Successful publication retains exit code 0 and the concrete saved path when automatic opening fails; the windowed frozen helper also shows the saved path in a notice. A real public-main regression creates and validates the ZIP, injects the shell-open failure and checks success, console result and windowed notice.",
+      "ledger": "v148-batch06-platform.md"
     }
   ]
 }

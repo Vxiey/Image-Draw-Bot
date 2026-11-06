@@ -151,7 +151,10 @@ def _vertical_strength(image: Image.Image, boundary_x: int, top: int, bottom: in
     step = max(1, int(math.ceil((bottom - top) / max(1, int(max_samples)))))
     pixels = image.load(); total = 0.0; count = 0
     for yy in range(top, bottom, step):
-        total += abs(_luma(pixels[x, yy][:3]) - _luma(pixels[x - 1, yy][:3]))
+        # A chromatic canvas boundary can have exactly the same luminance on
+        # both sides. Use the same RGB evidence as the side-band contrast so
+        # that accepting a colored edge also gives it a real location.
+        total += _rgb_distance(pixels[x, yy][:3], pixels[x - 1, yy][:3])
         count += 1
     return total / max(1, count)
 
@@ -167,7 +170,7 @@ def _horizontal_strength(image: Image.Image, boundary_y: int, left: int, right: 
     step = max(1, int(math.ceil((right - left) / max(1, int(max_samples)))))
     pixels = image.load(); total = 0.0; count = 0
     for xx in range(left, right, step):
-        total += abs(_luma(pixels[xx, y][:3]) - _luma(pixels[xx, y - 1][:3]))
+        total += _rgb_distance(pixels[xx, y][:3], pixels[xx, y - 1][:3])
         count += 1
     return total / max(1, count)
 
@@ -176,10 +179,11 @@ def _best_vertical_edge(image: Image.Image, expected_x: int, top: int, bottom: i
     left = max(1, expected_x - search_px)
     right = min(image.width - 1, expected_x + search_px)
     best_x = expected_x
-    best_strength = -1.0
+    best_strength = 0.0
     for x in range(left, right + 1):
         strength = _vertical_strength(image, x, top, bottom)
-        if strength > best_strength:
+        if (strength > best_strength or
+                (strength == best_strength and abs(x - expected_x) < abs(best_x - expected_x))):
             best_x, best_strength = x, strength
     return best_x, max(0.0, best_strength)
 
@@ -188,10 +192,11 @@ def _best_horizontal_edge(image: Image.Image, expected_y: int, left: int, right:
     top = max(1, expected_y - search_px)
     bottom = min(image.height - 1, expected_y + search_px)
     best_y = expected_y
-    best_strength = -1.0
+    best_strength = 0.0
     for y in range(top, bottom + 1):
         strength = _horizontal_strength(image, y, left, right)
-        if strength > best_strength:
+        if (strength > best_strength or
+                (strength == best_strength and abs(y - expected_y) < abs(best_y - expected_y))):
             best_y, best_strength = y, strength
     return best_y, max(0.0, best_strength)
 
@@ -243,14 +248,23 @@ def verify_canvas_edges(
     """
     if screenshot is None:
         raise ValueError('No screenshot was provided for edge verification.')
-    image = screenshot.convert('RGB')
     selected = _rect(selected_box, 'selected canvas box')
     x, y, w, h = selected
-    if x < 0 or y < 0 or x + w > image.width or y + h > image.height:
+    if x < 0 or y < 0 or x + w > screenshot.width or y + h > screenshot.height:
         raise ValueError('Selected canvas box is outside the edge-verification screenshot.')
     tolerance = max(1, int(tolerance_px))
     search = max(tolerance + 2, int(search_px))
     band = max(2, int(band_px))
+    image = screenshot if screenshot.mode == 'RGB' else screenshot.convert('RGB')
+    try:
+        return _verify_rgb_edges(image, selected, tolerance, search, band, min_strength, min_contrast)
+    finally:
+        if image is not screenshot:
+            image.close()
+
+
+def _verify_rgb_edges(image, selected, tolerance, search, band, min_strength, min_contrast):
+    x, y, w, h = selected
     side_results: list[EdgeSideResult] = []
 
     specs = (
@@ -268,7 +282,9 @@ def verify_canvas_edges(
             best, strength = _best_vertical_edge(image, expected, y, y + h, search)
         else:
             best, strength = _best_horizontal_edge(image, expected, x, x + w, search)
-        strong = strength >= float(min_strength) or contrast >= float(min_contrast)
+        # Band contrast alone cannot localize a boundary when every sampled
+        # adjacent pair is identical. Keep that case on the normal fallback.
+        strong = strength > 0.0 and (strength >= float(min_strength) or contrast >= float(min_contrast))
         if not strong:
             side_results.append(EdgeSideResult(side, True, False, True, 0, strength, contrast, 'no strong visible edge'))
             continue

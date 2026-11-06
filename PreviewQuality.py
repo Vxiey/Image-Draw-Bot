@@ -1,7 +1,9 @@
 """Bounded native-resolution planning and viewport-only image rendering."""
 from PIL import Image
+from contextlib import closing
 import math
 from numbers import Integral
+from typing import NamedTuple
 
 from ResourceAllocation import resolve_cpu_workers
 
@@ -44,9 +46,17 @@ def full_preview_options(options,area):
     return out
 
 
-def viewport_image(image,size,zoom=0,pan=(0,0)):
+class ViewportGeometry(NamedTuple):
+    scale: float
+    pan: tuple[float, float]
+    box: tuple[float, float, float, float]
+    target: tuple[int, int]
+
+
+def viewport_geometry(image_size,size,zoom=0,pan=(0,0)):
+    """Resolve the exact visible source rectangle and its bounded pan offset."""
     w,h=[max(1,min(4096,int(v))) for v in size]
-    iw,ih=image.size
+    iw,ih=image_size
     if iw < 1 or ih < 1:
         raise ValueError("Source image must have positive dimensions.")
     try:
@@ -69,6 +79,14 @@ def viewport_image(image,size,zoom=0,pan=(0,0)):
     # Resize the source region directly; convert only the bounded result.
     # In Fit mode this also avoids an RGBA copy of a huge original image.
     target=(max(1,min(w,round(sw*scale))),max(1,min(h,round(sh*scale))))
-    crop=image.resize(target,Image.Resampling.NEAREST if scale>=1 else Image.Resampling.LANCZOS,box=box).convert('RGBA')
-    out=Image.new('RGBA',target,'white');out.alpha_composite(crop)
-    return out.convert('RGB'),scale
+    return ViewportGeometry(scale,(cx-iw/2,cy-ih/2),box,target)
+
+
+def viewport_image(image,size,zoom=0,pan=(0,0)):
+    geometry=viewport_geometry(image.size,size,zoom,pan)
+    with closing(image.resize(geometry.target,Image.Resampling.NEAREST if geometry.scale>=1 else Image.Resampling.LANCZOS,
+                              box=geometry.box)) as resized:
+        with closing(resized.convert('RGBA')) as crop:
+            with closing(Image.new('RGBA',geometry.target,'white')) as out:
+                out.alpha_composite(crop)
+                return out.convert('RGB'),geometry.scale

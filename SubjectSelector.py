@@ -66,15 +66,26 @@ def select_subject(parent,image,callback):
             x,y=point(event);sx,sy=state['start']
             canvas.coords(state['box'],sx,sy,x,y)
             x0,x1=sorted((x,sx));y0,y1=sorted((y,sy))
-            state['region']=(x0/width,y0/height,x1/width,y1/height) if x1-x0>=3 and y1-y0>=3 else None
+            # Thin and tiny source images may have fewer than three displayed
+            # pixels on an axis. Their complete valid extent is selectable too.
+            state['region']=(x0/width,y0/height,x1/width,y1/height) if x1-x0>=min(3,width) and y1-y0>=min(3,height) else None
             apply_button.configure(state='normal' if state['region'] is not None else 'disabled')
+        def select_all(event=None):
+            if state['closed']:return 'break'
+            if state['box'] is not None:canvas.delete(state['box'])
+            state['start']=(0,0)
+            state['box']=canvas.create_rectangle(0,0,width,height,outline='#4de0ae',width=3)
+            state['region']=(0.0,0.0,1.0,1.0)
+            apply_button.configure(state='normal')
+            return 'break'
         def apply(event=None):
             if state['closed'] or state['region'] is None:return
             region=state['region'];close();callback(region)
         apply_button=ctk.CTkButton(dialog,text='Use selection',command=apply,fg_color='#23664f',state='disabled')
         apply_button.pack(pady=12)
+        ctk.CTkButton(dialog,text='Select whole image · Ctrl+A',command=select_all).pack(pady=(0,12))
         canvas.bind('<Button-1>',start);canvas.bind('<B1-Motion>',drag);canvas.bind('<ButtonRelease-1>',drag)
-        dialog.bind('<Escape>',close);dialog.bind('<Return>',apply);dialog.protocol('WM_DELETE_WINDOW',close)
+        dialog.bind('<Escape>',close);dialog.bind('<Return>',apply);dialog.bind('<Control-a>',select_all);dialog.protocol('WM_DELETE_WINDOW',close)
         try:dialog.wait_visibility();dialog.grab_set()
         except tk.TclError:close()
         return dialog

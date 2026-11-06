@@ -175,7 +175,11 @@ def read_image(source,cancelled=lambda:False,*,max_download_bytes=20*1024*1024,
                 _check(cancelled)
                 detected=image.format or 'Unknown'
                 oriented=ImageOps.exif_transpose(image)
-                if oriented.mode=='RGBA':result=oriented
+                oriented.info.pop('draw_studio_color_managed',None)
+                if oriented.info.get('icc_profile'):
+                    from ImageColorManagement import srgb_source
+                    with closing(oriented):result=srgb_source(oriented,cancelled=cancelled)
+                elif oriented.mode=='RGBA':result=oriented
                 else:
                     with closing(oriented):result=oriented.convert('RGBA')
                 _check(cancelled)

@@ -29,26 +29,32 @@ class PaintToolCalibrationApp:
         root.title('Image Draw Bot · Calibrate Paint tools');root.geometry('680x760');root.minsize(590,620)
         try:root.configure(fg_color=BG)
         except Exception:root.configure(bg=BG)
-        body=ctk.CTkScrollableFrame(root,fg_color=PANEL,corner_radius=18);body.pack(fill='both',expand=True,padx=16,pady=16)
+        from UiCompatibility import scoped_scrollable_frame
+        body=scoped_scrollable_frame(root,fg_color=PANEL,corner_radius=18);body.pack(fill='both',expand=True,padx=16,pady=16)
         ttk.Label(body,text='Calibrate Microsoft Paint tools',font=('Segoe UI',18,'bold')).pack(anchor='w')
         ttk.Label(body,text='No clicks are generated while calibrating. During each countdown, switch to Paint and hover over the requested control.',wraplength=560).pack(anchor='w',pady=(6,12))
         self.status=tk.StringVar(value='Recommended setup: capture Pencil. Pencil is opaque and does not use the Brush opacity control. Capture 100% opacity only if you want Auto/Brush to use a brush preset. Keep Paint at the same window size while calibrating and drawing.')
-        self.labels={}
+        self.labels={};self.remove_buttons={}
         rows=[('Pencil','Pencil button'),('Eraser','Eraser button'),('Fill','Fill bucket button'),('brush_menu','Brushes menu button'),('brush_preset','one concrete Brush preset')]
         for key,title in rows:
             row=ctk.CTkFrame(body,fg_color=FIELD,corner_radius=12);row.pack(fill='x',pady=6)
             ctk.CTkLabel(row,text=title,text_color=TEXT,font=('Segoe UI',13,'bold')).pack(side='left',padx=14,pady=14)
             label=ctk.CTkLabel(row,text='',text_color='#a6b2c5');label.pack(side='left',padx=8);self.labels[key]=label
             button(row,text='Capture position',command=lambda n=key:self.capture(n,3),width=145,height=38).pack(side='right',padx=12,pady=10)
+            remove=button(row,text='Remove',command=lambda n=key:self.remove_control(n),width=76,height=38)
+            remove.pack(side='right',pady=10);self.remove_buttons[key]=remove
         ttk.Label(body,text='Brush is two-step: capture the Brushes dropdown button, then during the Brush preset countdown open that menu in Paint and hover over the exact solid brush preset you want Image Draw Bot to use.',wraplength=560).pack(anchor='w',pady=(4,10))
         row=ctk.CTkFrame(body,fg_color=FIELD,corner_radius=12);row.pack(fill='x',pady=(12,6))
         ctk.CTkLabel(row,text='100% opacity point',text_color=TEXT,font=('Segoe UI',13,'bold')).pack(side='left',padx=14,pady=14)
         self.opacity_label=ctk.CTkLabel(row,text='',text_color='#a6b2c5');self.opacity_label.pack(side='left',padx=8)
         button(row,text='Capture position',command=lambda:self.capture('opacity_100',3),width=145,height=38).pack(side='right',padx=12,pady=10)
+        remove=button(row,text='Remove',command=lambda:self.remove_control('opacity_100'),width=76,height=38)
+        remove.pack(side='right',pady=10);self.remove_buttons['opacity_100']=remove
         ttk.Label(body,text='For Brush only: select the brush preset in Paint, then hover over the 100% end of the opacity control. Pencil does not use this calibration because it is already opaque. Auto prefers Pencil when available.',wraplength=560).pack(anchor='w',pady=(6,10))
         ttk.Label(body,textvariable=self.status,wraplength=560).pack(anchor='w',pady=10)
         actions=ctk.CTkFrame(body,fg_color='transparent');actions.pack(fill='x',pady=(8,0))
         button(actions,text='Save calibration',command=self.save,primary=True).pack(side='left')
+        button(actions,text='Start new calibration',command=self.reset_controls).pack(side='left',padx=8)
         button(actions,text='Close',command=self.close).pack(side='right')
         root.protocol('WM_DELETE_WINDOW',self.close);self.refresh()
 
@@ -57,6 +63,28 @@ class PaintToolCalibrationApp:
                 'brush_menu':self.brush_menu,'brush_preset':self.brush_preset}
         for name,label in self.labels.items():label.configure(text=f'✓ {values[name]}' if values[name] else 'Not captured')
         self.opacity_label.configure(text=f'✓ {self.opacity_100}' if self.opacity_100 else 'Required for Brush only')
+        values['opacity_100']=self.opacity_100
+        for name,control in getattr(self,'remove_buttons',{}).items():
+            control.configure(state='normal' if values[name] is not None and self.job is None else 'disabled')
+
+    def remove_control(self,name):
+        if getattr(self,'closed',False) or self.job is not None:return False
+        if name in ('Pencil','Eraser','Fill'):
+            if name not in self.positions:return False
+            del self.positions[name]
+        elif name in ('brush_menu','brush_preset','opacity_100'):
+            if getattr(self,name) is None:return False
+            setattr(self,name,None)
+        else:raise ValueError('Unknown Paint control.')
+        self.status.set(f'Removed {name.replace("_"," ")}. Save calibration to keep this change.')
+        self.refresh();return True
+
+    def reset_controls(self):
+        if getattr(self,'closed',False) or self.job is not None:return False
+        self.positions={};self.brush_menu=None;self.brush_preset=None;self.opacity_100=None
+        self.anchor=None;self.anchor_handle=None
+        self.status.set('New calibration: capture the Paint tools you want to use, then save. Pencil is the recommended starting point.')
+        self.refresh();return True
 
     def capture(self,name,seconds):
         if getattr(self,'closed',False) or self.job is not None:return

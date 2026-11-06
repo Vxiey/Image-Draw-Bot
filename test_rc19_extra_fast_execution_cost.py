@@ -26,7 +26,7 @@ class Rc19ExtraFastExecutionCostTests(unittest.TestCase):
     def test_extra_fast_reports_shared_model_and_scale(self):
         group=[(x,2,x,60) for x in range(2,60)]
         paths,meta=build_fast_paths([group],{'_hybrid_scale_x':3.0,'_hybrid_scale_y':2.0})
-        self.assertTrue(paths[0]);self.assertEqual(meta['execution_cost_model'],'ExecutionCostModel stateful v3')
+        self.assertTrue(paths[0]);self.assertEqual(meta['execution_cost_model'],f'ExecutionCostModel stateful v{EXECUTION_MODEL_VERSION}')
         self.assertEqual(meta['execution_scale'],[3.0,2.0])
         self.assertLessEqual(meta['ordered_cost_after_seconds'],meta['ordered_cost_before_seconds']+1e-9)
 

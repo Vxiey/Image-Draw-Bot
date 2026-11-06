@@ -44,7 +44,6 @@ def _rotate_if_large(path: Path, limit: int = _MAX_LOG_BYTES, *, incoming_bytes:
         if not path.exists() or path.stat().st_size + incoming_bytes <= limit:
             return incoming_bytes <= limit
         backup = path.with_suffix(path.suffix + '.1')
-        backup.unlink(missing_ok=True)
         os.replace(path, backup)
         return incoming_bytes <= limit
     except OSError:
@@ -131,6 +130,14 @@ def install():
     if _INSTALLED:
         return
     _INSTALLED = True
+    if sys.platform == 'win32':
+        # WER's expandable path belongs to the crashing account, which can be
+        # different from the administrator who opted in to LocalDumps.
+        try:
+            from CrashDumpConfig import user_dump_folder
+            user_dump_folder().mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         _rotate_if_large(CRASH_LOG)

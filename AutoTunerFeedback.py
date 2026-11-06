@@ -223,7 +223,9 @@ def _runtime_result(plan: dict[str, Any], completed_paths: int) -> dict[str, Any
     if structural is None:
         structural = completion * 100.0
     structural = _clamp(_finite(structural, completion * 100.0), 0.0, 100.0) / 100.0
-    drawn = max(0, int(counts.get("drawn") or 0))
+    # RuntimeSafetyReport classifies these as exclusive delivered path kinds.
+    # A boundary-clipped or edge-following path still delivered drawing input.
+    drawn = sum(max(0, int(counts.get(name) or 0)) for name in ('drawn', 'clipped', 'edge_follow'))
     blocked = max(0, int(counts.get("blocked") or 0))
     safe_skipped = max(0, int(counts.get("skipped") or 0))
     safety_total = drawn + blocked + safe_skipped
@@ -282,6 +284,10 @@ def record_completed_feedback(plan: dict[str, Any], actual_seconds: float, *, co
         return {"recorded": False, "reason": "Auto tuner inactive"}
     if bool(options.get("test_run")) or bool(options.get("dry_run_sampled")) or options.get("render_resume_state"):
         return {"recorded": False, "reason": "test/dry-run/resume sample"}
+    from CompletedDrawLearning import paused_learning_reason
+    pause_reason = paused_learning_reason(options)
+    if pause_reason:
+        return {"recorded": False, "reason": pause_reason}
     if not has_completed_drawing_work(options, completed_paths):
         return {"recorded": False, "reason": "no completed drawing work"}
     actual = _finite(actual_seconds, 0.0)

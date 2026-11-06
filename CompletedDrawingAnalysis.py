@@ -17,6 +17,7 @@ from typing import Any
 from ProfileStorage import safe_profile_key
 from RuntimePaths import data_dir, file_transaction, read_json, replace_text_files, is_finite_number
 from SafeCanvasSnapshotScoring import trusted_snapshot_evidence
+from CompletedDrawLearning import paused_learning_reason
 
 REPORT_VERSION = 1
 MAX_HISTORY = 40
@@ -113,11 +114,13 @@ def _operation_breakdown(options: dict[str, Any], actual_seconds: float) -> dict
             "average_seconds": round(average, 6),
             "share_of_actual_percent": round(100.0 * total / max(.001, actual_seconds), 2),
         }
-    unclassified = max(0.0, float(actual_seconds) - measured_total)
+    paused = min(float(actual_seconds), max(0.0, _float(options.get('execution_pause_seconds'), 0.0) or 0.0))
+    unclassified = max(0.0, float(actual_seconds) - measured_total - paused)
     return {
         "operations": rows,
         "measured_operation_seconds": round(measured_total, 5),
         "measured_share_percent": round(100.0 * measured_total / max(.001, actual_seconds), 2),
+        "paused_seconds": round(paused, 5),
         "unclassified_seconds": round(unclassified, 5),
         "unclassified_share_percent": round(100.0 * unclassified / max(.001, actual_seconds), 2),
     }
@@ -190,7 +193,12 @@ def _recommendations(*, options: dict[str, Any], actual: float, predicted: float
             f"Actual canvas coverage is {coverage:.1f}%.",
             "Inspect skipped/clipped regions and correction passes; do not raise simplification until coverage recovers.")
 
-    estimate_error = (actual - predicted) / max(1.0, actual) if predicted is not None else None
+    pause_reason = paused_learning_reason(options)
+    if pause_reason:
+        add(86, 'paused_timing', 'Timing learning skipped for this paused run',
+            'The elapsed total includes a manual pause or an invalid pause measurement.',
+            'Use an uninterrupted drawing to compare execution speed. Canvas quality measurements remain available.')
+    estimate_error = (actual - predicted) / max(1.0, actual) if predicted is not None and not pause_reason else None
     if estimate_error is not None and abs(estimate_error) >= .12:
         direction = "underestimated" if actual > predicted else "overestimated"
         add(86, "eta_model", "Refine the draw-time model",
@@ -229,7 +237,7 @@ def _recommendations(*, options: dict[str, Any], actual: float, predicted: float
             f"{unclassified_share:.1f}% of the completed draw is still outside typed operation timings.",
             "Add timing around prelude/travel/fill verification/UI waits so planner costs are learned from the real bottleneck.")
 
-    if trusted and score is not None and score >= 92.0 and not quality_limited and actual > 10.0:
+    if trusted and score is not None and score >= 92.0 and not quality_limited and not pause_reason and actual > 10.0:
         add(45, "safe_speed_headroom", "Use quality headroom carefully",
             f"Measured accuracy is {score:.1f}/100 with trusted final-canvas evidence.",
             "Test broader brushes or cheaper ordering only where the simulator predicts no protected-detail loss; reject changes that lower the real score materially.")
@@ -264,6 +272,7 @@ def build_completed_drawing_report(plan: dict[str, Any], actual_seconds: float, 
     operations = _operation_breakdown(options, actual)
     brush = _brush(options)
     opacity = _opacity(options)
+    pause_reason = paused_learning_reason(options)
     recommendations = _recommendations(options=options, actual=actual, predicted=predicted,
                                        accuracy=accuracy, operations=operations, brush=brush)
     return {
@@ -279,14 +288,17 @@ def build_completed_drawing_report(plan: dict[str, Any], actual_seconds: float, 
         "completed_paths": max(0, int(completed_paths or 0)),
         "predicted_seconds": None if predicted is None else round(predicted, 4),
         "actual_seconds": round(actual, 4),
-        "eta_error_seconds": None if predicted is None else round(actual - predicted, 4),
-        "eta_error_percent_of_actual": None if predicted is None else round((actual - predicted) * 100.0 / max(1.0, actual), 2),
+        "execution_pause_count": max(0, _int(options.get('execution_pause_count'), 0)),
+        "execution_pause_seconds": operations['paused_seconds'],
+        "timing_sample_exclusion_reason": pause_reason,
+        "eta_error_seconds": None if predicted is None or pause_reason else round(actual - predicted, 4),
+        "eta_error_percent_of_actual": None if predicted is None or pause_reason else round((actual - predicted) * 100.0 / max(1.0, actual), 2),
         "accuracy": accuracy,
         "drawing_accuracy_score_0_100": accuracy.get("score_0_100"),
         "operations": operations,
         "brush": brush,
         "opacity": opacity,
-        "efficiency_score_0_100": _efficiency_score(actual, predicted, accuracy, operations),
+        "efficiency_score_0_100": None if pause_reason else _efficiency_score(actual, predicted, accuracy, operations),
         "recommendations": recommendations,
         "privacy": "Metrics only. No source image, final canvas screenshot, crop, thumbnail or pixel buffer is persisted.",
     }
@@ -311,6 +323,7 @@ def _text_report(report: dict[str, Any]) -> str:
         f"Profile: {report.get('profile_name') or report.get('profile_key')}",
         f"Mode: {report.get('drawing_mode')} · preset {report.get('render_preset')} · quality {report.get('draw_quality')}",
         f"Time: predicted {report.get('predicted_seconds')}s · actual {report.get('actual_seconds')}s · error {report.get('eta_error_percent_of_actual')}% of actual",
+        f"Manual pause: {report.get('execution_pause_seconds', 0)}s · timing learning: {report.get('timing_sample_exclusion_reason') or 'normal eligibility checks'}",
         f"Paths: {report.get('completed_paths')}",
         f"Drawing Accuracy Score: {acc.get('score_0_100') if acc.get('score_0_100') is not None else 'unavailable'}/100 · trust {acc.get('trust','none')}",
         f"Coverage: {acc.get('actual_coverage_percent')}% · edge {acc.get('edge_accuracy_percent')}% · color {acc.get('perceptual_color_accuracy_percent')}%",

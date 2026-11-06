@@ -30,30 +30,53 @@ class App:
         try:
             data=load(profile_key);self.positions={k:tuple(v) for k,v in data['controls'].items()};self.anchor=data['anchor']
         except (OSError,ValueError):pass
-        root.title('Image Draw Bot · Smart custom palette');root.geometry('760x760');root.minsize(650,620)
-        body=ttk.Frame(root,padding=16);body.pack(fill='both',expand=True)
+        root.title('Image Draw Bot · Smart custom palette')
+        from WorkspaceLayout import fit_window
+        from CalibrationDialogLayout import CalibrationDialogLayout
+        fit_window(root,preferred=(760,760),minimum=(500,400))
+        self.layout=CalibrationDialogLayout(root);self.layout.pack(fill='both',expand=True);body=self.layout.body
         ttk.Label(body,text='Smart custom palette / exact color',font=('Segoe UI',17,'bold')).pack(anchor='w')
-        ttk.Label(body,text=(
+        self.layout.label(text=(
             'Recommended for maximum accuracy: capture Open custom color, the Red/Green/Blue fields, Selected-color preview, Confirm, and the spectrum corners as fallback. '
             "During drawing, Adaptive exact measures RGB from the source image, types that RGB into Paint automatically, checks the selected-color preview when calibrated, and only then confirms it. "
-            'The visual spectrum remains a safe fallback when numeric RGB cannot be verified. Calibration itself never clicks.'),wraplength=700).pack(anchor='w',pady=(6,12))
+            'The visual spectrum remains a safe fallback when numeric RGB cannot be verified. Calibration itself never clicks.'),wraplength=700).pack(fill='x',pady=(6,12))
         self.status=tk.StringVar(value='Best accuracy: capture Open + R/G/B + Selected preview + Active Color 1 swatch + Confirm. Also capture Spectrum corners for automatic fallback.')
-        self.labels={}
+        self.labels={};self.remove_buttons={}
         for name in ORDER:
             row=ttk.Frame(body);row.pack(fill='x',pady=4)
-            ttk.Label(row,text=LABELS[name],width=45).pack(side='left')
-            lab=ttk.Label(row,text='Not captured');lab.pack(side='left',padx=8);self.labels[name]=lab
-            ttk.Button(row,text='Capture',command=lambda n=name:self.capture(n,3)).pack(side='right')
+            row.columnconfigure(0,weight=1)
+            self.layout.label(row,text=LABELS[name],wraplength=380).grid(row=0,column=0,sticky='ew',padx=(0,8))
+            lab=ttk.Label(row,text='Not captured');lab.grid(row=1,column=0,sticky='w');self.labels[name]=lab
+            ttk.Button(row,text='Capture',command=lambda n=name:self.capture(n,3)).grid(row=0,column=2,rowspan=2,padx=(4,0))
+            if name!='OpenCustomColor':
+                remove=ttk.Button(row,text='Remove',command=lambda n=name:self.remove_control(n),width=7)
+                remove.grid(row=0,column=1,rowspan=2,padx=4);self.remove_buttons[name]=remove
         ttk.Separator(body).pack(fill='x',pady=10)
-        ttk.Label(body,textvariable=self.status,wraplength=700).pack(anchor='w',pady=6)
-        actions=ttk.Frame(body);actions.pack(fill='x',pady=(10,0))
-        ttk.Button(actions,text='Save calibration',command=self.save).pack(side='left')
-        ttk.Button(actions,text='Close',command=self.close).pack(side='right')
+        self.layout.label(textvariable=self.status,wraplength=700).pack(fill='x',pady=6)
+        actions=self.layout.footer
+        self.save_button=ttk.Button(actions,text='Save calibration',command=self.save);self.save_button.pack(side='left')
+        ttk.Button(actions,text='Start new calibration',command=self.reset_controls).pack(side='left',padx=8)
+        self.close_button=ttk.Button(actions,text='Close',command=self.close);self.close_button.pack(side='right')
         root.protocol('WM_DELETE_WINDOW',self.close)
         self.refresh()
     def refresh(self):
         optional={'Eyedropper','SelectedColorPreview','ActiveColorPreview','BrightnessTop','BrightnessBottom','RedField','GreenField','BlueField'}
         for n,l in self.labels.items():l.configure(text=('✓ '+str(self.positions[n])) if n in self.positions else ('Optional' if n in optional else 'Not captured'))
+        for name,button in getattr(self,'remove_buttons',{}).items():
+            button.configure(state='normal' if name in self.positions and self.job is None else 'disabled')
+    def remove_control(self,name):
+        if getattr(self,'closed',False) or self.job is not None:return False
+        if name not in ALL_FIELDS:raise ValueError('Unknown exact color control.')
+        if name=='OpenCustomColor':return self.reset_controls()
+        if name not in self.positions:return False
+        del self.positions[name]
+        self.status.set(f'Removed {LABELS[name]}. Save calibration to keep this change.')
+        self.refresh();return True
+    def reset_controls(self):
+        if getattr(self,'closed',False) or self.job is not None:return False
+        self.positions={};self.anchor=None;self.anchor_handle=None;self.anchor_owner=None;self.anchor_pid=None
+        self.status.set('New calibration: capture Open custom color first, then the controls you want to use. Save when ready.')
+        self.refresh();return True
     def capture(self,name,seconds):
         if getattr(self,'closed',False) or self.job is not None:return
         if getattr(self,'capture_visibility',None) is None:
@@ -125,7 +148,7 @@ class App:
             if ('BrightnessTop' in self.positions) != ('BrightnessBottom' in self.positions):
                 raise ValueError('Capture both brightness-scale endpoints or neither.')
             save(self.profile_key,self.positions,anchor=self.anchor)
-            mode='visual spectrum' if spectrum else 'numeric RGB fields'
+            mode='numeric RGB fields and visual spectrum' if numeric and spectrum else ('visual spectrum' if spectrum else 'numeric RGB fields')
             self.status.set(f'Exact color controls saved using {mode}. You can close this window.')
         except (OSError,ValueError) as e:self.status.set(f'Could not save: {e}')
 

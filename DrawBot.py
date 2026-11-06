@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from io import BytesIO
 from contextlib import closing
+from itertools import pairwise, islice
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -684,6 +685,7 @@ def make_plan(original, area, options, cancelled=lambda: False):
     from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageOps
     from AutoDrawing import resolve_drawing
     if cancelled():raise InterruptedError('Planning cancelled.')
+    options=dict(options,_planning_canvas_size=tuple(area))
     # v1.0.131: Sketch + Auto Fill owns an explicit Paint-only phase order.
     # Route it before AutoDrawing so Auto cannot replace the user's selected
     # renderer. The recursive colour sub-plan is marked _sketch_fill_inner.
@@ -2168,6 +2170,7 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
 
 def make_test_plan(area,options):
     from PIL import Image
+    options=dict(options,_planning_canvas_size=tuple(area))
     if options.get('paint_current_color'):
         return finish_plan(Image.new('RGBA',(80,60)),(min(area[0],180),min(area[1],135)),[[(10,20,65,20)]],options)
     groups=[[] for c in allColors]
@@ -2192,12 +2195,15 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
     if not dry_run and not plan['options'].get('unlimited_time') and plan['options'].get('gartic_timer_deadline') is not None:
         deadline_box[0]=min(deadline_box[0],float(plan['options']['gartic_timer_deadline']))
     done=0
+    sent_paths=0
+    guard_skipped_paths=0
     speed_measure_started=None
     speed_measure_completed=False
     execution_measure_started=None
     execution_measure_completed_at=None
     runtime_operation_stats={}
     paused_seconds=0.0
+    execution_pause_count=0
     def note_runtime_operation(kind, elapsed, count=1):
         if dry_run:return
         key=str(kind or 'operation')
@@ -3003,10 +3009,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         restored_input_generation=0
 
         def pause_guard():
-            nonlocal paused_seconds,resume_input_generation
+            nonlocal paused_seconds,resume_input_generation,execution_pause_count
             if not paused.is_set():
                 return False
             resume_input_generation+=1
+            execution_pause_count+=1
             verified_colors.clear()
             exact_color_samples.clear()
             for cached_color in (color_session_cache.values() if isinstance(color_session_cache,dict) else ()):
@@ -3026,7 +3033,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 paused_seconds+=max(0.0,clock()-pause_started)
 
         def draw_path_item(index,item,smart_group=True,verify_color=True,verification_mode='strict',count_progress=True,slow_probe=False,screen_points=None):
-            nonlocal done,restored_input_generation,_verified_execution_brush
+            nonlocal done,sent_paths,guard_skipped_paths,restored_input_generation,_verified_execution_brush
             if stop.is_set():
                 raise InterruptedError()
             pause_guard()
@@ -3050,11 +3057,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 # guarded physical subpath. Reapply the same guard below.
                 raw_canvas_points=list(screen_points)
             elif smart_group:
-                source_points=list(item)
-                raw_canvas_points=[transform.point(x,y) for x,y in source_points]
+                raw_canvas_points=[transform.point(x,y) for x,y in item]
             else:
                 stroke=item
-                source_points=[stroke[:2],stroke[2:]]
                 raw_canvas_points=[transform.point(*stroke[:2]),transform.point(*stroke[2:])]
             try:
                 edge_result=apply_edge_behavior(canvas_guard, raw_canvas_points, behavior=edge_mode,
@@ -3074,6 +3079,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             if not clipped_subpaths:
                 if count_progress:
                     done += 1
+                    guard_skipped_paths += 1
                     if done % progress_every == 0 or done == plan['count']:
                         report('progress', (done, plan['count']))
                         report_draw_timer()
@@ -3082,16 +3088,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     and plan['options'].get('adaptive_color_verification',False)
                     and not plan['options'].get('paint_current_color')):
                 raise InterruptedError('Color verification needs a drawable probe before painting this path. Adjust the canvas boundary or brush width, then retry.')
-            canvas_points=[p for path in clipped_subpaths for p in path]
-            drawn_pairs=[(a,b) for path in clipped_subpaths for a,b in zip(path,path[1:]) if a!=b]
-            start=clipped_subpaths[0][0];end=clipped_subpaths[-1][-1]
-
             # Longest actually drawable segment is the most useful read-only
             # delivery probe. Short dots are deliberately excluded because a
             # one-pixel sample cannot distinguish a missed event reliably.
-            delivery_start,delivery_end=start,end
-            if drawn_pairs:
-                delivery_start,delivery_end=max(drawn_pairs,key=lambda pair:(pair[1][0]-pair[0][0])**2+(pair[1][1]-pair[0][1])**2)
+            from StrokeProbeGeometry import representative_segment
+            delivery_start,delivery_end=representative_segment(clipped_subpaths,cancelled=stop.is_set)
 
             def deliver_current_stroke(*, retry=False):
                 retry_cfg=(delivery_retry_parameters(delivery_verify_policy,stroke_step_px,effective_path_delay) if retry else None)
@@ -3109,11 +3110,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     press_settle_now=max(press_settle_now,.08);release_settle_now=max(release_settle_now,.05)
                 for subpath_index,subpath in enumerate(clipped_subpaths):
                     sub_start=draw_mouse.move_point(subpath[0], 'stroke clipped retry start' if retry else 'stroke clipped start'); wait(cadence.movement_delay(travel_delay,0,1))
-                    if len(subpath)==1 or all(p==sub_start for p in subpath[1:]):
+                    if len(subpath)==1 or all(p==sub_start for p in islice(subpath,1,None)):
                         if not dry_run:draw_mouse.click('stroke clipped retry dot' if retry else 'stroke clipped dot')
                         continue
                     if dry_run:
-                        for segment_index,(segment_start,segment_end) in enumerate(zip(subpath,subpath[1:])):
+                        for segment_index,(segment_start,segment_end) in enumerate(pairwise(subpath)):
                             if segment_start==segment_end:continue
                             path_points=precision_path(segment_start,segment_end,precision,step_px)
                             for path_index,path_point in enumerate(path_points):
@@ -3122,7 +3123,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                         try:
                             draw_mouse.press('stroke clipped retry press' if retry else 'stroke clipped press')
                             if press_settle_now:wait(press_settle_now)
-                            for segment_index,(segment_start,segment_end) in enumerate(zip(subpath,subpath[1:])):
+                            for segment_index,(segment_start,segment_end) in enumerate(pairwise(subpath)):
                                 if segment_start==segment_end:continue
                                 path_points=precision_path(segment_start,segment_end,precision,step_px)
                                 for path_index,path_point in enumerate(path_points):
@@ -3175,11 +3176,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             verification=None
             if (not dry_run) and verify_color and not plan['options'].get('paint_current_color'):
                 wait(.12)
-                verify_start,verify_end=start,end
-                if len(canvas_points)>2:
-                    pairs=drawn_pairs
-                    if pairs:
-                        verify_start,verify_end=max(pairs,key=lambda pair:(pair[1][0]-pair[0][0])**2+(pair[1][1]-pair[0][1])**2)
+                verify_start,verify_end=delivery_start,delivery_end
                 if verification_mode=='adaptive' and hasattr(mouse,'inspect_ink_segment'):
                     verification=mouse.inspect_ink_segment(verify_start,verify_end,plan['colors'][index],current_execution_brush,
                                                            plan['options'].get('color_verification_tolerance',48))
@@ -3215,14 +3212,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 if verification_mode!='adaptive' and index < len(selectors) and selectors[index].get('kind')=='custom' and (verification is None or verification.get('matched')):
                     rgb=tuple(map(int,selectors[index].get('rgb',(0,0,0))))
                     if rgb not in exact_color_samples:
-                        pairs=drawn_pairs
-                        if pairs:
-                            a,b=max(pairs,key=lambda pair:(pair[1][0]-pair[0][0])**2+(pair[1][1]-pair[0][1])**2)
-                            exact_color_samples[rgb]=(round((a[0]+b[0])/2),round((a[1]+b[1])/2))
-                        else:
-                            exact_color_samples[rgb]=start
+                        a,b=delivery_start,delivery_end
+                        exact_color_samples[rgb]=(round((a[0]+b[0])/2),round((a[1]+b[1])/2))
             if count_progress:
                 done += 1
+                if not dry_run:sent_paths += 1
                 natural_pause=cadence.boundary_pause(done)
                 if natural_pause:wait(natural_pause)
                 if done % progress_every == 0 or done == plan['count']:
@@ -3470,7 +3464,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     publish_correction_review()
                     return compact
                 report('status',f"Post-draw correction pass: {int(correction.get('correction_paths',0))} bounded path(s), {int(correction.get('selected_correction_pixels',0))} pixel(s), no image data saved.")
-                executed=0;executed_colors=0;selected_index=None;selected_method=None;stopped_early=False
+                executed=0;executed_color_indices=set();selected_index=None;selected_method=None;stopped_early=False
                 for index in color_order:
                     if stop.is_set():
                         stopped_early=True;break
@@ -3480,7 +3474,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                         stopped_early=True;break
                     pause_guard()
                     if selected_index!=index:
-                        selected_method=select(index,selected_method);selected_index=index;executed_colors+=1
+                        selected_method=select(index,selected_method);selected_index=index
                     for item in execution_groups[index]:
                         if stop.is_set():
                             stopped_early=True;break
@@ -3488,13 +3482,15 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                             stopped_early=True;break
                         adaptive=plan['options'].get('adaptive_color_verification',False)
                         if index not in verified_colors and adaptive:
-                            selected_method=verify_color_batch(index,item,True,selected_method,executed_colors,len(color_order))
-                        draw_path_item(index,item,smart_group=True,
+                            selected_method=verify_color_batch(index,item,True,selected_method,len(executed_color_indices)+1,len(color_order))
+                        correction_result=draw_path_item(index,item,smart_group=True,
                             verify_color=(index not in verified_colors and not adaptive and plan['options'].get('strict_color_verification',True)),
                             count_progress=False)
-                        executed+=1
+                        if not (isinstance(correction_result,dict) and correction_result.get('skipped') is True):
+                            executed+=1;executed_color_indices.add(index)
                     if stopped_early:
                         break
+                executed_colors=len(executed_color_indices)
                 compact.update({'executed_paths':executed,'executed_colors':executed_colors,'stopped_early':bool(stopped_early)})
                 plan['options']['post_draw_correction_meta']=compact
                 publish_correction_review()
@@ -3765,7 +3761,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 _path_started=clock()
                 _pause_before_path=paused_seconds
                 try:
-                    draw_path_item(index,item,smart_group=True,verify_color=(index not in verified_colors and not plan['options'].get('adaptive_color_verification',False) and plan['options'].get('strict_color_verification',True)))
+                    path_result=draw_path_item(index,item,smart_group=True,verify_color=(index not in verified_colors and not plan['options'].get('adaptive_color_verification',False) and plan['options'].get('strict_color_verification',True)))
                 except BaseException as error:
                     if checkpoint is not None and not dry_run:
                         try:
@@ -3778,7 +3774,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                                 report('status',f'Smart Recovery saved {int(_progress.get("sequence_completed_count",0)):,}/{int(_progress.get("sequence_total",0)):,} completed sequence operations. Press Start again; target recalibration + visual preflight will run before resume.')
                         except Exception as checkpoint_error:log_event(f'Sequence Smart Recovery checkpoint skipped: {checkpoint_error!r}')
                     raise
-                note_runtime_operation(entry.get('operation_type','stroke'),max(0.0,clock()-_path_started-(paused_seconds-_pause_before_path)))
+                if not (isinstance(path_result,dict) and path_result.get('skipped') is True):
+                    note_runtime_operation(entry.get('operation_type','stroke'),max(0.0,clock()-_path_started-(paused_seconds-_pause_before_path)))
                 if sequence_visual:
                     sequence_visual_pending.append((entry,item))
                 else:
@@ -3898,7 +3895,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             actual_draw_seconds=max(.001,(execution_measure_completed_at or clock())-execution_measure_started)
             plan['options']['actual_draw_seconds']=round(actual_draw_seconds,4)
             report_draw_timer(force=True,completed=True)
-            report('draw_time_actual',{'seconds':actual_draw_seconds,'paths':int(done),
+            report('draw_time_actual',{'seconds':actual_draw_seconds,'paths':int(sent_paths),
+                                       'processed_paths':int(done),'guard_skipped_paths':int(guard_skipped_paths),
                                        'correction_paths':int((plan['options'].get('post_draw_correction_meta') or {}).get('executed_paths',0) or 0)})
         runtime_safety.mark_completed()
         speed_measure_completed=True
@@ -3917,7 +3915,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 _actual_label=format_duration(actual_draw_seconds or 0.0)
             except Exception:
                 _actual_label=f'{float(actual_draw_seconds or 0.0):.1f}s'
-            report('status', f'Finished locally: {done:,} brush strokes sent · total draw time {_actual_label}. Also verify the final result in the target application.')
+            _skipped_label=f' · {guard_skipped_paths:,} path(s) skipped by the canvas boundary' if guard_skipped_paths else ''
+            report('status', f'Finished locally: {sent_paths:,} brush strokes sent{_skipped_label} · total draw time {_actual_label}. Also verify the final result in the target application.')
     except DryRunBudgetComplete:
         # Reaching the configured Fast Dry run budget is the expected end of a
         # bounded safety sample. It must not invalidate an otherwise clean run.
@@ -3941,6 +3940,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             runtime_payload=runtime_safety.as_dict()
             runtime_payload['save_error']=str(report_error)
         plan['options']['runtime_safety_report']=runtime_payload
+        plan['options']['runtime_path_counts']={'processed':done,'sent':sent_paths,'guard_skipped':guard_skipped_paths}
+        plan['options']['execution_pause_seconds']=round(paused_seconds,6)
+        plan['options']['execution_pause_count']=execution_pause_count
         runtime_counts=runtime_payload.get('counts') or {}
         runtime_report_path=runtime_payload.get('text_path') or runtime_payload.get('json_path')
         runtime_report_name=Path(runtime_report_path).name if runtime_report_path else 'report save failed'
@@ -3948,6 +3950,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             f"Runtime safety report: drawn={int(runtime_counts.get('drawn',0))} clipped={int(runtime_counts.get('clipped',0))} "
             f"skipped={int(runtime_counts.get('skipped',0))} edge_follow={int(runtime_counts.get('edge_follow',0))} "
             f"blocked={int(runtime_counts.get('blocked',0))} stopped={int(runtime_counts.get('stopped',0))} file={runtime_report_name!r}.")
+        plan['options']['runtime_operation_timing']={}
         if runtime_operation_stats:
             _ops={}
             for _kind,_item in runtime_operation_stats.items():
@@ -3957,21 +3960,23 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         if (not dry_run) and (not plan['options'].get('correction_only_retry')) and speed_measure_completed and speed_measure_started is not None:
             try:
                 from RealSpeedBudget import record_runtime_sample
+                from CompletedDrawLearning import paused_learning_reason
                 elapsed=max(.001,(execution_measure_completed_at or clock())-speed_measure_started)
-                speed_meta=record_runtime_sample(
-                    str(plan['options'].get('profile_key') or ''),done,elapsed,
+                pause_reason=paused_learning_reason(plan['options'])
+                speed_meta=({'recorded':False,'reason':pause_reason} if pause_reason else record_runtime_sample(
+                    str(plan['options'].get('profile_key') or ''),sent_paths,elapsed,
                     colors=sum(bool(g) for g in (plan.get('execution_groups') or plan.get('groups') or [])),
-                    test_run=bool(plan['options'].get('test_run',False)))
+                    test_run=bool(plan['options'].get('test_run',False))))
                 plan['options']['real_speed_runtime_meta']=speed_meta
                 if speed_meta.get('recorded'):
-                    log_event(f"Real-Speed sample saved: profile={speed_meta.get('profile_key')} paths={done} elapsed={elapsed:.3f}s pps={float(speed_meta.get('last_sample_pps',0)):.2f} learned={float(speed_meta.get('paths_per_second',0)):.2f}.")
+                    log_event(f"Real-Speed sample saved: profile={speed_meta.get('profile_key')} paths={sent_paths} elapsed={elapsed:.3f}s pps={float(speed_meta.get('last_sample_pps',0)):.2f} learned={float(speed_meta.get('paths_per_second',0)):.2f}.")
             except Exception as speed_error:
                 log_event(f'Real-Speed sample save skipped: {speed_error!r}')
         if (not dry_run) and (not plan['options'].get('correction_only_retry')) and speed_measure_completed and execution_measure_started is not None:
             try:
                 from DrawTimeEstimate import record_completed_draw
                 actual_elapsed=max(.001,(execution_measure_completed_at or clock())-execution_measure_started)
-                calibration_meta=record_completed_draw(plan,actual_elapsed,completed_paths=done)
+                calibration_meta=record_completed_draw(plan,actual_elapsed,completed_paths=sent_paths)
                 plan['options']['draw_time_runtime_calibration']=calibration_meta
                 if calibration_meta.get('recorded'):
                     log_event(
@@ -3984,7 +3989,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             try:
                 from CompletedDrawingAnalysis import record_completed_drawing
                 _actual_analysis=max(.001,(execution_measure_completed_at or clock())-execution_measure_started)
-                analysis_meta=record_completed_drawing(plan,_actual_analysis,completed_paths=done)
+                analysis_meta=record_completed_drawing(plan,_actual_analysis,completed_paths=sent_paths)
                 plan['options']['completed_drawing_analysis_meta']=analysis_meta
                 _score=analysis_meta.get('drawing_accuracy_score_0_100')
                 _score_label='unavailable' if _score is None else f'{float(_score):.1f}/100'
@@ -3995,7 +4000,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             try:
                 from AutoTunerFeedback import record_completed_feedback
                 _actual_feedback=max(.001,(execution_measure_completed_at or clock())-execution_measure_started)
-                feedback_meta=record_completed_feedback(plan,_actual_feedback,completed_paths=done)
+                feedback_meta=record_completed_feedback(plan,_actual_feedback,completed_paths=sent_paths)
                 plan['options']['auto_tuner_feedback_runtime_meta']=feedback_meta
                 if feedback_meta.get('recorded'):
                     log_event(
@@ -7405,10 +7410,12 @@ class DrawBotApp:
         if self.original is None:
             self.status.set('Load an image before exporting PNG.')
             return False
+        source=self.original
         path=filedialog.asksaveasfilename(title='Save PNG',defaultextension='.png',
             filetypes=[('PNG image','*.png')])
         if not path:return False
-        snapshot=self.original.copy();self.status.set('Saving PNG…')
+        if self.closing or self.activity or self.original is not source:return False
+        snapshot=source.copy();self.status.set('Saving PNG…')
         def work():
             from BackgroundRemoval import png_export_ready
             from RuntimePaths import atomic_binary_writer
@@ -7511,7 +7518,13 @@ class DrawBotApp:
             if isinstance(content,Image.Image):
                 if content.width*content.height>25_000_000:
                     raise ValueError('The image is too large. Choose an image up to 25 megapixels.')
-                self._suppress_recovery=False;self.original=ImageOps.exif_transpose(content).convert('RGBA');self.plan=None
+                with closing(ImageOps.exif_transpose(content)) as oriented:
+                    oriented.info.pop('draw_studio_color_managed',None)
+                    if oriented.info.get('icc_profile'):
+                        from ImageColorManagement import srgb_source
+                        prepared=srgb_source(oriented)
+                    else:prepared=oriented.convert('RGBA')
+                self._suppress_recovery=False;self.original=prepared;self.plan=None
                 self.original.info.pop('draw_studio_format',None)
                 self.upscale_original=None
                 self.background_removal_original=None;self.background_removal_meta=None
@@ -7604,7 +7617,7 @@ class DrawBotApp:
                 save_gif_atomic(destination,frames,durations)
             finally:
                 for frame in frames:frame.close()
-            self.events.put(('status',f'Recording saved: {destination.name}'))
+            self.events.put(('terminal_status',('record',f'Recording saved: {destination.name}')))
         self.begin_worker('record',work)
 
     def paste_url(self):
@@ -7648,7 +7661,7 @@ class DrawBotApp:
                         except Exception:pass
                 log_error(f'Worker {activity} failed after {time.monotonic()-started:.3f} s: {error!r}',
                           category=f'worker:{activity}', exc_info=True)
-                self.events.put(('status',f'Operation failed: {error}'))
+                self.events.put(('terminal_status',(activity,f'Operation failed: {error}')))
             else:
                 log_event(f'Worker {activity} finished in {time.monotonic()-started:.3f} s.')
             finally:
@@ -7656,6 +7669,7 @@ class DrawBotApp:
         try:
             if activity in SCREEN_ACTIVITIES:screen_window.hide()
             self.screen_task_window=screen_window
+            self._worker_terminal_status=None
             self.stop.clear();self.set_busy(activity)
             log_event(f'Worker {activity} started.')
             self.worker=threading.Thread(target=work,daemon=True,name=f'imagedrawbot-{activity}')
@@ -7729,17 +7743,27 @@ class DrawBotApp:
         return True
 
     def reset_draw_time_calibration(self):
+        if self.closing:return False
+        if self.activity:
+            self.status.set('Finish or stop the current operation before resetting learned draw timing.')
+            return False
         try:
             from DrawTimeCalibration import reset_profile
-            # Use the exact active delivery context (profile, effective tool,
-            # brush width and color workflow) so Reset cannot touch another
-            # profile/context's learned timing after Step 9 isolation.
             opts=self.options()
+            plan_options=(self.plan or {}).get('options') if isinstance(getattr(self,'plan',None),dict) else None
+            if (isinstance(plan_options,dict) and plan_options.get('profile_key')
+                    and plan_options.get('profile_key')==opts.get('profile_key')):
+                # Planning resolves Auto style/tool/brush policy. Learning uses
+                # that actual context, which can differ from raw UI options.
+                opts=plan_options
             result=reset_profile(opts)
+            self._mark_plan_stale('Learned timing reset. Build preview to recalculate this drawing with the default timing model.')
             self.draw_time_text.set('Learned draw timing reset for this profile. The next estimate will use the operation model until a real drawing completes.')
             log_event(f"Draw-time calibration reset: key={result.get('key')} existed={result.get('reset')}.")
+            return True
         except Exception as error:
             self.status.set(f'Could not reset learned timing: {error}')
+            return False
 
     def render_preset_changed(self,*args):
         if self.render_preset.get()=='Masterpiece':
@@ -7990,22 +8014,17 @@ class DrawBotApp:
         self.preview_rendering=True
         try:
             from PIL import Image,ImageTk
+            from PreviewNavigation import clear_viewport
+            from PreviewViews import VIEW_SPECS,view_images
             photos=[]
-            ui_previews=(self.plan or {}).get('ui_previews',{}) if self.plan else {}
-            show_background=bool(getattr(getattr(self,'preview_show_background',None),'get',lambda:True)())
-            show_fill=bool(getattr(getattr(self,'preview_show_fill',None),'get',lambda:True)())
-            show_strokes=bool(getattr(getattr(self,'preview_show_strokes',None),'get',lambda:True)())
-            drawing_image=(ui_previews.get('simulated_final') or (self.plan['preview'] if self.plan else None)) if show_background else ui_previews.get('stroke')
-            pairs=[
-                (self.original_canvas,self.original),
-                (self.result_canvas,drawing_image),
-            ]
-            for attr,key,enabled in (('quantized_target_canvas','quantized_target',True),('delta_e_canvas','delta_e',True),('detail_zoom_canvas','detail_zoom',True),('safety_canvas','safety',True),('safety_debug_canvas','safety_debug',True),('stroke_canvas','stroke',show_strokes),('fill_canvas','fill',show_fill),('color_canvas','color',True),('coverage_canvas','coverage',True),('accuracy_error_canvas','accuracy_error',True)):
+            images=view_images(self);pairs=[]
+            for name,attr,_,_ in VIEW_SPECS:
                 canvas=getattr(self,attr,None)
-                if canvas is not None:pairs.append((canvas,ui_previews.get(key) if enabled else None))
+                if canvas is not None:pairs.append((canvas,images[name]))
             for canvas,im in pairs:
                 try:
                     if not canvas.winfo_exists():continue
+                    if im is None:clear_viewport(canvas)
                     if not canvas.winfo_ismapped():
                         canvas.delete('all');canvas._preview_photo=None
                         continue
@@ -8052,12 +8071,18 @@ class DrawBotApp:
                         canvas.create_text(w/2,h/2+38,text=hint,fill='#a6b2c5',font=('Segoe UI',11),justify='center',width=max(100,w-30))
                         continue
                     from PreviewQuality import viewport_image
+                    from PreviewNavigation import record_viewport
                     zoom=float(getattr(getattr(self,'preview_zoom',None),'get',lambda:0)())
-                    copy,scale=viewport_image(im,(max(1,w-16),max(1,h-16)),zoom,getattr(canvas,'_preview_pan',(0,0)))
-                    canvas._preview_scale=scale
-                    photo=ImageTk.PhotoImage(copy);photos.append(photo);canvas.create_image(w/2,h/2,image=photo)
+                    viewport_size=(max(1,w-16),max(1,h-16))
+                    pan=getattr(canvas,'_preview_pan',(0,0))
+                    copy,scale=viewport_image(im,viewport_size,zoom,pan)
+                    try:photo=ImageTk.PhotoImage(copy)
+                    finally:copy.close()
+                    photos.append(photo);canvas.create_image(w/2,h/2,image=photo)
                     canvas._preview_photo=photo
+                    record_viewport(canvas,im.size,viewport_size,zoom,pan)
                 except (ValueError,TypeError,MemoryError,OverflowError,OSError,RuntimeError) as error:
+                    clear_viewport(canvas)
                     log_event(f'Preview render failed safely: {type(error).__name__}: {error}')
                     try:
                         canvas.create_text(max(1,canvas.winfo_width())/2,max(1,canvas.winfo_height())/2,text='This view could not be rendered. Try Fit or rebuild preview.',fill='#f0f4fb',width=280)
@@ -8174,16 +8199,25 @@ class DrawBotApp:
 
     def export_preview(self):
         if self.activity or self.closing:return False
-        if not self.plan:self.status.set('Build a preview first.');return False
-        path=filedialog.asksaveasfilename(defaultextension='.png',filetypes=[('PNG image','*.png')],initialfile='ImageDrawBot-preview.png')
+        from PreviewViews import selected_export_view
+        try:name,source,filename=selected_export_view(self)
+        except (ValueError,tk.TclError) as error:
+            self.status.set(str(error));return False
+        path=filedialog.asksaveasfilename(title=f'Export {name}',defaultextension='.png',
+            filetypes=[('PNG image','*.png')],initialfile=filename)
         if not path:return False
-        snapshot=self.plan['preview'].copy()
+        if self.closing or self.activity:return False
+        try:current_name,current_source,_=selected_export_view(self)
+        except (ValueError,tk.TclError):return False
+        if current_name!=name or current_source is not source:
+            self.status.set('The preview changed. Select Export again to save the current view.');return False
+        snapshot=source.copy()
         def work():
             from RuntimePaths import atomic_binary_writer
             with closing(snapshot):
                 with atomic_binary_writer(Path(path),cancelled=self.stop.is_set) as stream:
                     snapshot.save(stream,format='PNG')
-            self.events.put(('status','Preview saved.'))
+            self.events.put(('status',f'{name} saved as PNG.'))
         started=False
         try:
             started=bool(self.begin_worker('preview-export',work))
@@ -9845,6 +9879,10 @@ class DrawBotApp:
             else:DrawBotApp._discard_worker_result(self,kind,value)
             return
         stop=getattr(self,'stop',None)
+        if stop is not None and stop.is_set() and kind in ('status','progress'):
+            # Status already queued by a worker must not undo the user's Stop.
+            # The matching completion event below confirms when it has exited.
+            return
         if (stop is not None and stop.is_set() and kind in
                 ('loaded','planned','background_removed','screen','recovery_loaded','paint_auto_calibration_complete',
                  'browser_one_click_setup_complete','browser_auto_calibration_complete',
@@ -9854,6 +9892,11 @@ class DrawBotApp:
             return
         if kind=='status':
             self.status.set(str(value))
+        elif kind=='terminal_status':
+            activity,message=value
+            if activity==self.activity:
+                self._worker_terminal_status=(activity,str(message))
+                if not self.stop.is_set() and not self.closing:self.status.set(str(message))
         elif kind=='recovery_loaded':
             self.recovery_loaded_pending=value
         elif kind=='paint_auto_calibration_complete':
@@ -10589,6 +10632,10 @@ class DrawBotApp:
                 if screen_window is not None:screen_window.restore()
                 self.set_busy(None)
                 self.worker=None
+                if self.stop.is_set() and not self.closing:
+                    terminal=getattr(self,'_worker_terminal_status',None)
+                    self.status.set(terminal[1] if terminal and terminal[0]==finished else 'Stopped.')
+                self._worker_terminal_status=None
                 if finished=='recovery-load':
                     pending=getattr(self,'recovery_loaded_pending',None)
                     self.recovery_loaded_pending=None
@@ -10814,6 +10861,7 @@ def self_test(gui=False):
             app=DrawBotApp(root,NoInput(),NoInput())
             assert hasattr(root,'drop_target_register')
             app.original=Image.new('RGBA',(120,80),'orange');app.plan=plan
+            app.workspace_layout.select('Workspace')
             root.update_idletasks();root.update();app.show_previews();root.update_idletasks()
             assert app.start.winfo_ismapped()
             assert app.original_canvas.winfo_width()>100

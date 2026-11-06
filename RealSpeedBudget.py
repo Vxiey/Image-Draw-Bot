@@ -17,11 +17,12 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import atomic_write_text, data_dir, file_transaction, read_json
 from AdaptivePaletteFidelity import adaptive_palette_cap, select_adaptive_palette
 
 SPEED_FILE = data_dir() / 'real-speed-profiles.json'
 VERSION = 1
+MAX_SPEED_FILE_BYTES = 1024 * 1024
 SUPPORTED = frozenset({'gartic-phone','skribbl','skribbl-fast','sketchheads','sketchful'})
 
 # Conservative fallback rates used only until a real completed sample exists.
@@ -40,16 +41,18 @@ def _empty():
 
 def load_all(path: Path = SPEED_FILE) -> dict:
     try:
-        raw=json.loads(Path(path).read_text(encoding='utf-8'))
-        if not isinstance(raw,dict) or int(raw.get('version',0))!=VERSION or not isinstance(raw.get('profiles'),dict):
+        raw=read_json(Path(path),max_bytes=MAX_SPEED_FILE_BYTES)
+        if (not isinstance(raw,dict) or type(raw.get('version')) is not int
+                or raw['version']!=VERSION or not isinstance(raw.get('profiles'),dict)):
             return _empty()
         return {'version':VERSION,'profiles':dict(raw['profiles'])}
-    except (OSError,ValueError,TypeError):
+    except (OSError,ValueError,TypeError,RecursionError,OverflowError):
         return _empty()
 
 
 def save_all(data: dict, path: Path = SPEED_FILE) -> None:
-    atomic_write_text(Path(path),json.dumps({'version':VERSION,'profiles':data.get('profiles') or {}},ensure_ascii=False,indent=2))
+    with file_transaction(path):
+        atomic_write_text(Path(path),json.dumps({'version':VERSION,'profiles':data.get('profiles') or {}},ensure_ascii=False,indent=2,allow_nan=False))
 
 
 def load_profile(profile_key: str, path: Path = SPEED_FILE) -> dict | None:
@@ -91,6 +94,11 @@ def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, 
     if key not in SUPPORTED or paths < 3 or not math.isfinite(elapsed) or elapsed < .20:
         return {'recorded':False,'profile_key':key,'reason':'sample too small or unsupported'}
     pps=max(.20,min(80.0,paths/elapsed))
+    with file_transaction(path):
+        return _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, path)
+
+
+def _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, path):
     db=load_all(path);profiles=db['profiles'];old=_clean_profile(profiles.get(key)) or {}
     old_pps=float(old.get('paths_per_second') or 0.0)
     # More completed paths = more trust. Small test remains useful as a first

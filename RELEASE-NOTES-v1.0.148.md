@@ -1,6 +1,19 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 699 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04 and 31 changes in batch 05. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 729 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05 and 30 changes in batch 06. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 06: color-correct imports, useful previews and responsive workflows
+
+- Convert valid embedded color profiles to sRGB before planning, preserving opacity and transparency. Export the selected complete preview view, with source/view identity rechecked after the save dialog.
+- Keep manually paused wall time out of timing/strategy learning, count actually delivered paths, and reset the effective learned context used by Auto planning. Preserve truthful Stop/terminal results.
+- Choose ink verification pixels from delivered geometry; isolated clipped dots no longer create a probe across an unpainted gap. Remove repeated segment-list allocations.
+- Guard the complete selected canvas while projecting centered image previews correctly. Preserve thin sources, negative desktop origins and whole-canvas polygon/anchor coordinates.
+- Make custom usable time monotonic, retain valid current-color portrait workflows and round-trip named RGB aliases correctly. Reuse unchanged complete ExtraFast2 costs and discard unusable border-component geometry in Fill detection.
+- Preserve reviewed palette data on failed rescans; edit optional draft calibration points and remove all selected palette rows. Support tiny subject selections, predictable Fit zoom and immediate pan reversal.
+- Keep all twelve preview pages and Tools actions accessible, scroll tall calibration forms and adapt the main workspace to narrow/high-scale windows while retaining the existing Start/Stop/Pause and authorization controls.
+- Check bounded linked release pages, reuse fully rehashed owned installers and preserve completed diagnostics when Explorer cannot open their folder. Use per-user expandable WER paths and contain corrupt optional package metadata.
+
+Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
 
 ## Batch 05: drawing verification, recovery and publication identity
 
@@ -27,7 +40,7 @@ source hygiene and eight exact-raster fixtures. Its published checkpoint passed
 Windows/Linux, dependency, CodeQL and packaged Windows GUI/native drag-and-drop
 CI. Batch 05 passed 3,059 frozen-source local tests with 26 platform/hardware
 skips, the source gate, source-package hygiene and eight exact-raster fixtures.
-All independent reviews are closed; its new Windows/Linux CI remains pending.
+All independent reviews are closed; its published checkpoint passed Windows/Linux, dependencies, CodeQL and packaged Windows checks.
 
 ## Batch 03: visible image fidelity, bounded work and responsive operations
 

@@ -1,6 +1,7 @@
 """Capture any visible palette, without a game-specific layout or color order."""
 import tkinter as tk
 from tkinter import ttk
+from contextlib import closing
 from RuntimePaths import atomic_write_text
 BG="#0b0f14"
 PANEL="#151d29"
@@ -25,7 +26,10 @@ class CalibrationApp:
         self.path=path;self.is_paint=profile=='microsoft-paint';self.profile_key=str(profile);self.preset=PRESETS.get(profile);self.max_colors=96 if str(profile)=='gartic-phone' else 64
         self.map_names=None;self.map_indices=None;self.pending=[];self.rgbs=[];self.job=None;self.snapshot=None
         self.anchor=None;self.anchor_handle=None;self.closed=False
-        root.configure(bg=BG);root.title('Image Draw Bot · Read color palette');root.geometry('760x780');root.minsize(650,620)
+        root.configure(bg=BG);root.title('Image Draw Bot · Read color palette')
+        from WorkspaceLayout import fit_window
+        from CalibrationDialogLayout import CalibrationDialogLayout
+        fit_window(root,preferred=(760,780),minimum=(500,400))
         style=ttk.Style(root)
         try: style.theme_use('clam')
         except tk.TclError: pass
@@ -36,9 +40,10 @@ class CalibrationApp:
         style.configure('Palette.TButton',font=('Segoe UI',10,'bold'),padding=(10,8))
         style.configure('Palette.Treeview',background=FIELD,fieldbackground=FIELD,foreground=TEXT,rowheight=28)
         style.configure('Palette.Treeview.Heading',background='#1b2635',foreground=TEXT,font=('Segoe UI',9,'bold'))
-        body=ttk.Frame(root,style='Palette.TFrame');body.pack(fill='both',expand=True,padx=16,pady=16)
+        self.layout=CalibrationDialogLayout(root,style='Palette.TFrame',background=PANEL)
+        self.layout.pack(fill='both',expand=True);body=self.layout.body
         ttk.Label(body,text='🎨  Read colors from your application',font=('Segoe UI',18,'bold'),style='Palette.TLabel').pack(anchor='w')
-        ttk.Label(body,text='1. Select palette area   →   2. Review colors   →   3. Save',wraplength=650,style='Palette.TLabel').pack(anchor='w',pady=8)
+        self.layout.label(text='1. Select palette area   →   2. Review colors   →   3. Save',wraplength=650,style='Palette.TLabel').pack(fill='x',pady=8)
         self.status=tk.StringVar(value='Select only the area where Image Draw Bot should look for color swatches. No mouse input is generated during detection.')
         self.count=tk.StringVar(value='No palette loaded')
         self.auto=ttk.Button(body,text='▣  Select color sampling area',command=self.start_scan,style='Palette.TButton');self.auto.pack(fill='x',pady=8)
@@ -71,28 +76,29 @@ class CalibrationApp:
             if self.profile_key=='gartic-phone': preset_note='Gartic Phone: 6 columns × 12 rows = 72 colors'
             ttk.Label(grid,text=preset_note).pack(side='left')
         self.rescan=ttk.Button(grid,text='↻  Refresh scan',command=self.read_snapshot,style='Palette.TButton');self.rescan.pack(side='right')
-        ttk.Label(body,text='Auto detect finds solid color swatches only inside your selected area. Use Grid mode if the palette is arranged in equal cells and auto detection misses colors.',wraplength=560).pack(anchor='w')
+        self.layout.label(text='Auto detect finds solid color swatches only inside your selected area. Use Grid mode if the palette is arranged in equal cells and auto detection misses colors.',wraplength=560).pack(fill='x')
         self.swatches=tk.Canvas(body,width=540,height=94,highlightthickness=0,bg=PANEL);self.swatches.pack(fill='x',pady=8)
         ttk.Label(body,textvariable=self.count).pack(anchor='w')
-        self.table=ttk.Treeview(body,columns=('rgb','position'),show='headings',height=5,style='Palette.Treeview')
+        self.table=ttk.Treeview(body,columns=('rgb','position'),show='headings',height=5,style='Palette.Treeview',selectmode='extended')
         self.table.heading('rgb',text='Color (RGB; ARGB converted)');self.table.heading('position',text='Click position on screen')
         self.table.pack(fill='both',expand=True,pady=8)
+        self.table.bind('<Delete>',self.undo)
         actions=ttk.Frame(body);actions.pack(fill='x')
-        self.undo_button=ttk.Button(actions,text='−  Remove selected color',command=self.undo,style='Palette.TButton');self.undo_button.pack(side='left')
+        self.undo_button=ttk.Button(actions,text='−  Remove selected colors',command=self.undo,style='Palette.TButton');self.undo_button.pack(side='left')
         self.add=ttk.Button(actions,text='＋  Capture a color manually…',command=lambda:self.capture(4),style='Palette.TButton');self.add.pack(side='right')
         code_row=ttk.Frame(body);code_row.pack(fill='x',pady=(9,0))
         self.color_code=tk.StringVar()
         code_entry=ttk.Entry(code_row,textvariable=self.color_code,width=28);code_entry.pack(side='left')
         self.add_code=ttk.Button(code_row,text='＋  Add RGB/ARGB at cursor',command=self.capture_code,style='Palette.TButton')
         self.add_code.pack(side='left',padx=8)
-        ttk.Label(body,text='ARGB uses AARRGGBB. Alpha is converted to visible RGB on a white background.',
-                  wraplength=560).pack(anchor='w',pady=(4,0))
-        ttk.Label(body,textvariable=self.status,wraplength=560).pack(anchor='w',pady=12)
-        self.save_button=ttk.Button(body,text='✓  Save colors for profile',command=self.save,style='Palette.TButton');self.save_button.pack(fill='x',pady=4)
-        ttk.Button(body,text='Cancel',command=self.close,style='Palette.TButton').pack(anchor='e')
+        self.layout.label(text='ARGB uses AARRGGBB. Alpha is converted to visible RGB on a white background.',
+                  wraplength=560).pack(fill='x',pady=(4,0))
+        self.layout.label(textvariable=self.status,wraplength=560).pack(fill='x',pady=12)
+        self.save_button=ttk.Button(self.layout.footer,text='✓  Save colors for profile',command=self.save,style='Palette.TButton');self.save_button.pack(side='left',fill='x',expand=True,padx=(0,8))
+        self.close_button=ttk.Button(self.layout.footer,text='Cancel',command=self.close,style='Palette.TButton');self.close_button.pack(side='right')
         root.protocol('WM_DELETE_WINDOW',self.close);self.refresh()
 
-    def _capture_anchor_for_area(self, area, *, replace=False):
+    def _capture_anchor_for_area(self, area, *, replace=False, commit=True):
         """Capture target client geometry without generating mouse input."""
         from TargetCapture import capture_target_metadata_isolated
         meta=capture_target_metadata_isolated(area)
@@ -100,7 +106,7 @@ class CalibrationApp:
             raise ValueError('All calibrated colors must belong to the same target window.')
         if self.anchor is None or replace:
             anchor=make_anchor(meta['client_rect'])
-            self.anchor_handle=meta['handle'];self.anchor=anchor
+            if commit:self.anchor_handle=meta['handle'];self.anchor=anchor
         else:
             ensure_same_layout(self.anchor,meta['client_rect'])
         return meta
@@ -203,35 +209,32 @@ class CalibrationApp:
             try:
                 left,top,right,bottom=screen_rect(box)
                 if image.size!=(right-left,bottom-top):raise ValueError('The selected screenshot size changed. Select the palette again.')
-                self._capture_anchor_for_area((left,top,right-left,bottom-top),replace=True)
+                meta=self._capture_anchor_for_area((left,top,right-left,bottom-top),replace=True,commit=False)
+                anchor=make_anchor(meta['client_rect'])
             except (OSError,ValueError) as error:
                 image.close();self.status.set(str(error));return
-            previous=self.snapshot
-            self.snapshot=(box,image)
-            if previous is not None and previous[1] is not image:previous[1].close()
-            self.read_snapshot()
+            try:
+                self.read_snapshot((box,image),anchor=anchor,anchor_handle=meta['handle'])
+            finally:
+                # The selected crop transfers to the dialog only after a full
+                # successful scan. Keep the previous frame/colours on failure.
+                if self.snapshot is None or self.snapshot[1] is not image:image.close()
         select_region(self.root,selected,lambda message:self.status.set(message))
 
-    def read_snapshot(self):
-        if getattr(self,'closed',False) or self.job is not None:return
-        if self.snapshot is None:self.status.set('Select the palette on screen first.');return
+    def read_snapshot(self,snapshot=None,*,anchor=None,anchor_handle=None):
+        if getattr(self,'closed',False) or self.job is not None:return False
+        candidate=self.snapshot if snapshot is None else snapshot
+        if candidate is None:self.status.set('Select the palette on screen first.');return False
         try:
-            (left,top,right,bottom),screenshot=self.snapshot
+            if snapshot is not None and anchor is None:
+                raise ValueError('The new palette area needs a target-window anchor.')
+            (left,top,right,bottom),screenshot=candidate
             mode=self.detect_mode.get() if not self.preset else 'Preset map'
             rows=columns=None
             if not self.preset and mode=='Grid':
                 rows,columns=self.rows.get(),self.columns.get()
                 if min(rows,columns)<1 or not 1<=rows*columns<=self.max_colors:
                     raise ValueError('Enter a valid number of color swatches for this profile.')
-            shown=screenshot.copy();shown.thumbnail((560,150))
-            if not self.preset and mode=='Grid':
-                pen=ImageDraw.Draw(shown)
-                for col in range(1,columns):
-                    x=round(col*shown.width/columns);pen.line((x,0,x,shown.height),fill='#ff00bf',width=1)
-                for row in range(1,rows):
-                    y=round(row*shown.height/rows);pen.line((0,y,shown.width,y),fill='#ff00bf',width=1)
-            try:self.photo=ImageTk.PhotoImage(shown);self.preview.configure(image=self.photo,text='')
-            finally:shown.close()
             note=''
             if self.preset:
                 try:
@@ -257,18 +260,42 @@ class CalibrationApp:
             else:
                 positions,rgbs=sample_grid(screenshot,rows,columns,(left,top));names=None;indices=None
                 note='Grid mode completed. '
-            self.pending=positions;self.rgbs=rgbs;self.map_names=names;self.map_indices=indices
-            self.status.set(note+'Review the detected colors. Remove incorrect matches, then save.')
-        except (OSError,ValueError,AttributeError,tk.TclError) as error:
-            self.pending=[];self.rgbs=[];self.status.set(str(error))
+            with closing(screenshot.copy()) as shown:
+                shown.thumbnail((560,150))
+                if not self.preset and mode=='Grid':
+                    pen=ImageDraw.Draw(shown)
+                    for col in range(1,columns):
+                        x=round(col*shown.width/columns);pen.line((x,0,x,shown.height),fill='#ff00bf',width=1)
+                    for row in range(1,rows):
+                        y=round(row*shown.height/rows);pen.line((0,y,shown.width,y),fill='#ff00bf',width=1)
+                photo=ImageTk.PhotoImage(shown,master=self.root)
+            self.preview.configure(image=photo,text='')
+        except (OSError,ValueError,AttributeError,tk.TclError,MemoryError) as error:
+            retained=' Previous colors and target were kept.' if self.pending else ''
+            self.status.set(f'Could not scan: {error}.{retained}')
+            self.refresh()
+            return False
+        previous=self.snapshot
+        self.pending=positions;self.rgbs=rgbs;self.map_names=names;self.map_indices=indices;self.photo=photo
+        if snapshot is not None:
+            self.snapshot=candidate;self.anchor=anchor;self.anchor_handle=anchor_handle
+            if previous is not None and previous[1] is not screenshot:previous[1].close()
+        self.status.set(note+'Review the detected colors. Remove incorrect matches, then save.')
         self.refresh()
+        return True
 
-    def undo(self):
-        if self.job is not None or not self.pending:return
-        self.map_names=None;self.map_indices=None
+    def undo(self,event=None):
+        if getattr(self,'closed',False) or self.job is not None or not self.pending:return 'break'
         selected=self.table.selection()
-        index=int(selected[0]) if selected else len(self.pending)-1
-        self.pending.pop(index);self.rgbs.pop(index);self.refresh()
+        indices=sorted({int(value) for value in selected} if selected else {len(self.pending)-1},reverse=True)
+        if any(index<0 or index>=len(self.pending) for index in indices):return 'break'
+        self.map_names=None;self.map_indices=None
+        for index in indices:self.pending.pop(index);self.rgbs.pop(index)
+        self.refresh()
+        if self.pending:
+            next_index=str(min(indices[-1],len(self.pending)-1))
+            self.table.selection_set(next_index);self.table.focus(next_index)
+        return 'break'
 
     def save(self):
         if self.job is not None:return

@@ -199,8 +199,8 @@ def _canvas_to_preview(point: Sequence[int | float], fitted: Sequence[int | floa
     return (float(point[0]) * pw / fw, float(point[1]) * ph / fh)
 
 
-def _draw_polyline(draw: ImageDraw.ImageDraw, points: Sequence[Sequence[int | float]], fitted, preview_size, *, fill, width=2, dashed=False) -> None:
-    mapped = [_canvas_to_preview(p, fitted, preview_size) for p in points]
+def _draw_polyline(draw: ImageDraw.ImageDraw, points: Sequence[Sequence[int | float]], fitted, preview_size, *, fill, width=2, dashed=False, image_offset=(0, 0)) -> None:
+    mapped = [_canvas_to_preview((p[0]-image_offset[0], p[1]-image_offset[1]), fitted, preview_size) for p in points]
     if len(mapped) == 1:
         x, y = mapped[0]
         r = max(2, width + 1)
@@ -237,7 +237,8 @@ def render_safety_debug_overlay(preview_size, safety_plan, palette_rgb, brush: i
     meta = getattr(safety_plan, 'meta', {}) or {}
     guard_meta = meta.get('canvas_guard') or {}
     fitted = guard_meta.get('area') or (0, 0, w, h)
-    fitted_size = (max(1, int(fitted[2])), max(1, int(fitted[3]))) if len(fitted) == 4 else preview_size
+    fitted_size = meta.get('fitted_size') or ((max(1, int(fitted[2])), max(1, int(fitted[3]))) if len(fitted) == 4 else preview_size)
+    image_offset = meta.get('image_offset') or (0, 0)
 
     # Safe polygon context.
     for key, color, width in (('polygon', (82, 100, 125), 1), ('safe_polygon', (98, 226, 146), 2)):
@@ -245,7 +246,7 @@ def render_safety_debug_overlay(preview_size, safety_plan, palette_rgb, brush: i
         mapped = []
         for p in poly:
             try:
-                mapped.append(_canvas_to_preview(p, fitted_size, preview_size))
+                mapped.append(_canvas_to_preview((p[0]-image_offset[0], p[1]-image_offset[1]), fitted_size, preview_size))
             except Exception:
                 continue
         if len(mapped) >= 2:
@@ -260,13 +261,13 @@ def render_safety_debug_overlay(preview_size, safety_plan, palette_rgb, brush: i
         raw = event.get('original_points') or ()
         outputs = event.get('output_subpaths') or ()
         if action in ('skipped', 'blocked'):
-            _draw_polyline(draw, raw, fitted_size, preview_size, fill=color, width=max(1, min(3, int(brush))), dashed=True)
+            _draw_polyline(draw, raw, fitted_size, preview_size, fill=color, width=max(1, min(3, int(brush))), dashed=True, image_offset=image_offset)
         else:
             # Draw a faint raw reference below the actual executable result for clipped paths.
             if action in ('clipped', 'edge-follow'):
-                _draw_polyline(draw, raw, fitted_size, preview_size, fill=(64, 76, 94), width=1, dashed=True)
+                _draw_polyline(draw, raw, fitted_size, preview_size, fill=(64, 76, 94), width=1, dashed=True, image_offset=image_offset)
             for path in outputs:
-                _draw_polyline(draw, path, fitted_size, preview_size, fill=color, width=max(1, min(5, int(brush))))
+                _draw_polyline(draw, path, fitted_size, preview_size, fill=color, width=max(1, min(5, int(brush))), image_offset=image_offset)
 
     counts = summarize_debug(meta)
     y = 8

@@ -56,6 +56,18 @@ def has_completed_drawing_work(options: dict[str, Any] | None, completed_paths: 
     return False
 
 
+def paused_learning_reason(options: dict[str, Any] | None) -> str | None:
+    """Manual idle and resume countdowns are not device performance samples."""
+    opts = options if isinstance(options, dict) else {}
+    count = opts.get('execution_pause_count', 0)
+    seconds = opts.get('execution_pause_seconds', 0.0)
+    if (type(count) is not int or count < 0 or _number(seconds) is None or seconds < 0):
+        return 'invalid execution pause measurement'
+    if count or seconds:
+        return 'manually paused execution'
+    return None
+
+
 def timing_sample_gate(options: dict[str, Any] | None, *, completed_paths: int = 0,
                        planned_paths: int = 0) -> dict[str, Any]:
     """Return whether one real draw may update local ETA calibration.
@@ -73,6 +85,9 @@ def timing_sample_gate(options: dict[str, Any] | None, *, completed_paths: int =
         return {"allowed": False, "reason": "correction-only retry", "confidence": "none"}
     if opts.get("render_resume_state"):
         return {"allowed": False, "reason": "resumed execution", "confidence": "none"}
+    pause_reason = paused_learning_reason(opts)
+    if pause_reason:
+        return {"allowed": False, "reason": pause_reason, "confidence": "none"}
 
     if any(type(value) is not int or not 0 <= value <= 1_000_000_000
            for value in (completed_paths, planned_paths)):

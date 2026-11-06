@@ -106,6 +106,21 @@ def button(parent, text, command, primary=False, danger=False, **kwargs):
     return ctk.CTkButton(parent, text=text, command=command, **defaults)
 
 
+def _configure_presentation(widget, **values):
+    """Write changed StudioUI-owned display properties, after successful Tk calls.
+
+    Controller-owned enable/disable state stays outside this cache: the Start
+    buttons must still reflect the current controller decision on every refresh.
+    """
+    previous=getattr(widget,'_studio_presentation_values',None)
+    if not isinstance(previous,dict):previous={}
+    changed={key:value for key,value in values.items() if key not in previous or previous[key]!=value}
+    if not changed:return False
+    widget.configure(**changed)
+    widget._studio_presentation_values={**previous,**changed}
+    return True
+
+
 def build_ui(a, quality, speed):
     root = a.root
     ctk.set_appearance_mode('dark')
@@ -219,28 +234,31 @@ def build_ui(a, quality, speed):
     # ---- Top bar ---------------------------------------------------------
     header = frame(root)
     header.pack(fill='x', padx=22, pady=(18, 10))
+    header_brand=frame(header);header_brand.pack(side='left')
+    header_info=frame(header);header_info.pack(side='left')
+    header_actions=frame(header);header_actions.pack(side='right')
     from AppBranding import header_image
     a.brand_icon = header_image(42)
-    logo = label(header, '', image=a.brand_icon, width=42, height=42, anchor='center')
+    logo = label(header_brand, '', image=a.brand_icon, width=42, height=42, anchor='center')
     logo.pack(side='left', padx=(0, 11))
-    title = frame(header)
+    title = frame(header_brand)
     title.pack(side='left')
-    label(title, 'Image Draw Bot', size=23, bold=True).pack(side='left')
+    label(title, 'Image Draw Bot', size=23, bold=True).pack(anchor='w')
     label(title, APP_VERSION, size=9, bold=True, fg_color=FIELD, corner_radius=8,
-          width=96, height=24, anchor='center').pack(side='left', padx=(9, 0))
+          width=96, height=24, anchor='center').pack(anchor='w',pady=(2,0))
 
-    top_state = label(header, 'Not ready', size=11, bold=True, fg_color=FIELD,
+    top_state = label(header_info, 'Not ready', size=11, bold=True, fg_color=FIELD,
                       corner_radius=10, width=112, height=32, anchor='center')
     top_state.pack(side='left', padx=(16, 0))
-    profile_pill = label(header, 'Other drawing app', size=10, muted=True,
+    profile_pill = label(header_info, 'Other drawing app', size=10, muted=True,
                          fg_color=SIDEBAR, corner_radius=9, width=150, height=30,
                          anchor='center')
     profile_pill.pack(side='left', padx=(8, 0))
 
-    btn(header, 'ℹ  About', a.show_about, width=76, height=34).pack(side='right')
-    guide_btn=btn(header, '❔  Get started', a.show_welcome, width=112, height=34); guide_btn.pack(side='right', padx=(0, 8)); tooltip(guide_btn,'Learn target setup, drawing modes, previews and troubleshooting. Shift+F1 opens this guide; F1 is Quick Start.')
-    wizard_btn=btn(header, '🧭  Setup wizard', a.show_beginner_setup_wizard, width=126, height=34); wizard_btn.pack(side='right', padx=(0, 8)); tooltip(wizard_btn,'Step 20: show exactly what is missing before Start. No mouse input is used.')
-    tools_button = button(header, '🧰  Tools', lambda: None, width=78, height=34)
+    about_btn=btn(header_actions, 'ℹ  About', a.show_about, width=76, height=34);about_btn.pack(side='right')
+    guide_btn=btn(header_actions, '❔  Get started', a.show_welcome, width=112, height=34); guide_btn.pack(side='right', padx=(0, 8)); tooltip(guide_btn,'Learn target setup, drawing modes, previews and troubleshooting. Shift+F1 opens this guide; F1 is Quick Start.')
+    wizard_btn=btn(header_actions, '🧭  Setup wizard', a.show_beginner_setup_wizard, width=126, height=34); wizard_btn.pack(side='right', padx=(0, 8)); tooltip(wizard_btn,'Step 20: show exactly what is missing before Start. No mouse input is used.')
+    tools_button = button(header_actions, '🧰  Tools', lambda: None, width=78, height=34)
     tools_button.pack(side='right', padx=(0, 8))
 
     # ---- Fixed action/status bar ----------------------------------------
@@ -248,19 +266,20 @@ def build_ui(a, quality, speed):
     footer.pack(side='bottom', fill='x', padx=22, pady=(10, 16))
     footer_row = frame(footer)
     footer_row.pack(fill='x', padx=15, pady=(11, 7))
-    a.start = btn(footer_row, '🔒  Start locked', a.start_full_drawing, True,
+    footer_buttons=frame(footer_row);footer_buttons.pack(fill='x')
+    a.start = btn(footer_buttons, '🔒  Start locked', a.start_full_drawing, True,
                   width=152, height=45, state='disabled')
     a.start.pack(side='right', padx=(9, 0))
-    a.start_unlock = btn(footer_row, '🔓  Unlock full drawing', a.unlock_full_drawing, False,
+    a.start_unlock = btn(footer_buttons, '🔓  Unlock full drawing', a.unlock_full_drawing, False,
                          width=164, height=39, state='disabled')
     a.start_unlock.pack(side='right', padx=(8, 0))
-    a.dry_run_button = btn(footer_row, '🖱️  Fast Dry run · ≤12s', a.run_dry_run, False,
+    a.dry_run_button = btn(footer_buttons, '🖱️  Fast Dry run · ≤12s', a.run_dry_run, False,
                            width=148, height=39, state='disabled')
     a.dry_run_button.pack(side='right', padx=(8, 0))
-    a.safety_preflight_button = btn(footer_row, '🛡️  Safety preflight', a.run_safety_preflight, False,
+    a.safety_preflight_button = btn(footer_buttons, '🛡️  Safety preflight', a.run_safety_preflight, False,
                                     width=142, height=39, state='disabled')
     a.safety_preflight_button.pack(side='right', padx=(8, 0))
-    a.target_lock_button = btn(footer_row, '🔒  Lock setup', a.lock_setup, False,
+    a.target_lock_button = btn(footer_buttons, '🔒  Lock setup', a.lock_setup, False,
                                width=118, height=39, state='disabled')
     a.target_lock_button.pack(side='right', padx=(8, 0))
     tooltip(a.target_lock_button,'Lock target window/canvas geometry after the small drawing test. Any important setup change invalidates this lock.')
@@ -268,12 +287,21 @@ def build_ui(a, quality, speed):
     tooltip(a.dry_run_button,'Simulates representative cursor paths without clicking. Required before full drawing.')
     tooltip(a.start_unlock,'Temporary second confirmation. It does not disable CanvasGuard.')
     tooltip(a.start,'Starts real mouse drawing only after all safety gates are valid. Esc stops immediately.')
-    button(footer_row, '⛔  Stop · Esc', a.cancel, danger=True, width=108, height=39).pack(side='right')
-    a.pause_button = button(footer_row, '⏸  Pause · F6', a.toggle_pause,
+    a.stop_button=button(footer_buttons, '⛔  Stop · Esc', a.cancel, danger=True, width=108, height=39);a.stop_button.pack(side='right')
+    a.pause_button = button(footer_buttons, '⏸  Pause · F6', a.toggle_pause,
                             width=108, height=39, state='disabled')
     a.pause_button.pack(side='right', padx=8)
     footer_status = label(footer_row, var=a.status, muted=True, wraplength=720, size=11)
-    footer_status.pack(side='left', fill='x', expand=True)
+    footer_status.pack(fill='x',pady=(4,0))
+    from ResponsiveWorkspace import fit_label
+    fit_label(footer_status,720)
+    from ResponsiveRows import wrap_action_rows
+    from ResponsiveActionBar import ResponsiveActionBar
+    a.draw_action_bar=ResponsiveActionBar(footer_buttons,
+        (a.start,a.start_unlock,a.dry_run_button,a.safety_preflight_button,a.target_lock_button,a.stop_button,a.pause_button),
+        essential=(a.start,a.stop_button),promote_when_enabled=(a.pause_button,),menu_text='More drawing actions')
+    a.help_action_bar=ResponsiveActionBar(header_actions,(about_btn,guide_btn,wizard_btn,tools_button),
+        essential=(tools_button,),menu_text='Help and information')
     a.progress = ttk.Progressbar(footer, maximum=100)
     a.progress.pack(fill='x', padx=15, pady=(0, 10))
 
@@ -670,41 +698,47 @@ def build_ui(a, quality, speed):
     # CENTER: preview workspace and Tools alternate view.
     center_host = frame(main)
     center_host.grid(row=0, column=1, sticky='nsew', padx=(0, 12))
-    workspace_center = frame(center_host, PANEL, border_width=1, border_color=LINE, radius=15)
+    workspace_center = ctk.CTkScrollableFrame(center_host,fg_color=PANEL,border_width=1,border_color=LINE,corner_radius=15)
     tools_center = frame(center_host, PANEL, border_width=1, border_color=LINE, radius=15)
 
     preview_head = frame(workspace_center)
     preview_head.pack(fill='x', padx=16, pady=(15, 8))
-    text = frame(preview_head); text.pack(side='left', fill='x', expand=True)
+    text = frame(preview_head); text.pack(fill='x', expand=True)
     label(text, '👁️  Preview workspace', size=18, bold=True).pack(anchor='w')
-    label(text, 'Manual preview prevents lag while configuring/profile switching. Build only when you want to refresh it.', muted=True, size=10).pack(anchor='w', pady=(2, 0))
-    label(text, var=a.draw_time_text, size=11, bold=True, fg_color=FIELD, corner_radius=8, wraplength=560).pack(anchor='w', pady=(7, 0))
-    label(text, var=a.draw_live_time_text, size=10, fg_color=FIELD, corner_radius=8, wraplength=560).pack(anchor='w', pady=(5, 0))
-    label(text, var=a.total_draw_time_text, size=11, bold=True, fg_color=FIELD, corner_radius=8, wraplength=560).pack(anchor='w', pady=(5, 0))
+    fit_label(label(text, 'Manual preview prevents lag while configuring/profile switching. Build only when you want to refresh it.', muted=True, size=10,wraplength=560),560).pack(fill='x', pady=(2, 0))
+    fit_label(label(text, var=a.draw_time_text, size=11, bold=True, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x', pady=(7, 0))
+    fit_label(label(text, var=a.draw_live_time_text, size=10, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x', pady=(5, 0))
+    fit_label(label(text, var=a.total_draw_time_text, size=11, bold=True, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x', pady=(5, 0))
     a.preview_zoom = tk.DoubleVar(value=0.0)
     a.preview_show_background = tk.BooleanVar(value=True)
     a.preview_show_fill = tk.BooleanVar(value=True)
     a.preview_show_strokes = tk.BooleanVar(value=True)
-    zoom_text = label(preview_head, 'Fit', muted=True, size=10, width=50, anchor='center')
+    from PreviewNavigation import begin_pan, move_pan, relative_zoom, reset_pan
+    preview_canvases=[]
+    preview_zoom_row=frame(workspace_center);preview_zoom_row.pack(fill='x',padx=16,pady=(0,4))
+    zoom_text = label(preview_zoom_row, 'Fit', muted=True, size=10, width=50, anchor='center')
     zoom_text.pack(side='right', padx=3)
     def set_zoom(value):
         value = max(0.0, min(8.0, float(value)))
+        if value==0:
+            for canvas in preview_canvases:reset_pan(canvas)
         a.preview_zoom.set(value); zoom_text.configure(text='Fit' if value==0 else f'{round(value*100):.0f}%'); a.schedule_previews(delay=15)
-    button(preview_head, '+', lambda: set_zoom(a.preview_zoom.get()+.25), width=34, height=32).pack(side='right', padx=2)
-    button(preview_head, '−', lambda: set_zoom(a.preview_zoom.get()-.25), width=34, height=32).pack(side='right', padx=2)
-    button(preview_head, '1:1', lambda: set_zoom(1.0), width=42, height=32).pack(side='right', padx=2)
-    button(preview_head, 'Fit', lambda: set_zoom(0.0), width=46, height=32).pack(side='right', padx=2)
+    def step_zoom(delta):
+        visible=next((canvas for canvas in preview_canvases if canvas.winfo_ismapped()),None)
+        current=a.preview_zoom.get()
+        value=relative_zoom(current,delta,getattr(visible,'_preview_scale',1.0))
+        if value!=current:set_zoom(value)
+    button(preview_zoom_row, '+', lambda: step_zoom(.25), width=34, height=32).pack(side='right', padx=2)
+    button(preview_zoom_row, '−', lambda: step_zoom(-.25), width=34, height=32).pack(side='right', padx=2)
+    button(preview_zoom_row, '1:1', lambda: set_zoom(1.0), width=42, height=32).pack(side='right', padx=2)
+    button(preview_zoom_row, 'Fit', lambda: set_zoom(0.0), width=46, height=32).pack(side='right', padx=2)
 
     full_preview_row=frame(workspace_center);full_preview_row.pack(fill='x',padx=16,pady=(0,5))
     btn(full_preview_row,'Full detail preview',a.request_full_preview,height=32).pack(side='left')
-    label(full_preview_row,'Native target pixels · 1:1 to inspect · drag to pan',muted=True,size=10).pack(side='left',padx=8)
-    a.preview_tabs = ctk.CTkTabview(workspace_center, fg_color=PREVIEW, corner_radius=13,
-                                    segmented_button_fg_color=FIELD,
-                                    segmented_button_selected_color=ACCENT_DARK,
-                                    segmented_button_selected_hover_color='#2d6756',
-                                    segmented_button_unselected_color=FIELD,
-                                    segmented_button_unselected_hover_color=FIELD_HOVER,
-                                    text_color=TEXT,command=lambda:a.schedule_previews(delay=20))
+    fit_label(label(full_preview_row,'Native target pixels · 1:1 to inspect · drag to pan',muted=True,size=10,wraplength=300),300).pack(side='left',fill='x',expand=True,padx=8)
+    from PreviewDeck import PreviewDeck
+    a.preview_tabs = PreviewDeck(workspace_center, fg_color=PREVIEW, corner_radius=13,
+                                 command=lambda:a.schedule_previews(delay=20))
     a.preview_tabs.pack(fill='both', expand=True, padx=14, pady=(0, 9))
     # Legacy tab source marker retained for older UI compatibility tests: ('Drawing preview', 'result_canvas')
     preview_specs = (
@@ -720,13 +754,11 @@ def build_ui(a, quality, speed):
         canvas = tk.Canvas(tab, bg=PREVIEW, height=260, highlightthickness=0)
         canvas.pack(fill='both', expand=True, padx=4, pady=4)
         setattr(a, attr, canvas)
+        preview_canvases.append(canvas)
         canvas.bind('<Configure>', a.schedule_previews)
-        def pan_start(event,c=canvas):c._drag=(event.x,event.y,getattr(c,'_preview_pan',(0,0)))
+        def pan_start(event,c=canvas):begin_pan(c,event.x,event.y)
         def pan_move(event,c=canvas):
-            if not hasattr(c,'_drag') or a.preview_zoom.get()==0:return
-            x,y,old=c._drag;scale=max(.125,getattr(c,'_preview_scale',1))
-            c._preview_pan=(old[0]-(event.x-x)/scale,old[1]-(event.y-y)/scale)
-            a.schedule_previews(delay=30)
+            if move_pan(c,event.x,event.y,a.preview_zoom.get()):a.schedule_previews(delay=30)
         canvas.bind('<ButtonPress-1>',pan_start)
         canvas.bind('<B1-Motion>',pan_move)
     a.original_canvas.bind('<Button-1>', lambda _e: a.open_file() if a.original is None and not a.activity else None,add='+')
@@ -741,6 +773,7 @@ def build_ui(a, quality, speed):
                       text_color=MUTED, font=('Segoe UI', 9)).pack(side='left', padx=(0, 15))
     mobile_btn=btn(preview_options, '📱 Mobile Preview', a.show_mobile_preview, width=132, height=31)
     mobile_btn.pack(side='right')
+    wrap_action_rows(preview_options,recursive=False,control_types=(ctk.CTkButton,ctk.CTkSwitch))
     tooltip(mobile_btn, 'Starts an opt-in local-network preview page for your phone. No cloud or telemetry. Same Wi-Fi/LAN required.')
     label(workspace_center, var=a.preview_diagnostics_text, fg_color=FIELD, corner_radius=8, wraplength=760, size=9).pack(fill='x', padx=16, pady=(0, 5), ipady=5)
     label(workspace_center, var=a.mobile_preview_status, muted=True, wraplength=760, size=9).pack(fill='x', padx=16, pady=(0, 4))
@@ -764,6 +797,8 @@ def build_ui(a, quality, speed):
     btn(row, 'Golden tests', a.run_golden_image_regression, width=112, height=33).pack(side='left', padx=6)
     btn(row, 'Clear GPU cache', a.clear_gpu_cache, width=118, height=33).pack(side='left')
     btn(row, 'Run self-test', a.run_self_test, width=105, height=33).pack(side='left', padx=6)
+    from ResponsiveRows import wrap_action_rows
+    wrap_action_rows(row,recursive=False)
 
     update_card = frame(tools_scroll, PANEL_ALT)
     update_card.pack(fill='x', padx=16, pady=6)
@@ -807,7 +842,7 @@ def build_ui(a, quality, speed):
         ('Small drawing', 'Draws a tiny test so Paint/tool/color problems are caught early.', 'Draw test', lambda: a.draw(test=True, user_initiated=True)),
         ('Inspect drawing area', 'Captures the selected canvas so you can verify its bounds.', 'Show screenshot', a.capture_screen),
         ('Record drawing area', 'Records up to 30 seconds as a GIF for debugging.', 'Record GIF', a.record_screen),
-        ('Export preview', 'Exports the current drawing preview as PNG.', 'Export PNG', a.export_preview),
+        ('Export preview', 'Exports the selected preview view as PNG.', 'Export view PNG', a.export_preview),
         ('Mobile Preview', 'Serves Original, Drawing Preview and Safety Map to a phone on the same Wi-Fi/LAN. Opt-in and local-only.', 'Open Mobile', a.show_mobile_preview),
         ('Diagnostics', 'Creates a sanitized ZIP with logs, system/GPU/resource information, settings summaries and calibration hashes. Source/recovery images are excluded.', 'Create diagnostics', a.collect_diagnostics),
         ('Safe recovery', 'Clears the local crash-recovery checkpoint. Recovery never restores Start authorization, target lock, preflight or dry-run passes.', 'Clear recovery', a.clear_recovery_snapshot),
@@ -841,6 +876,8 @@ def build_ui(a, quality, speed):
 
     center_mode = {'name': 'workspace'}
     def show_center(name='workspace'):
+        layout=getattr(a,'workspace_layout',None)
+        if layout is not None:layout.select('Workspace')
         workspace_center.pack_forget(); tools_center.pack_forget()
         center_mode['name'] = name
         if name == 'tools':
@@ -855,9 +892,8 @@ def build_ui(a, quality, speed):
     show_center('workspace')
 
     # RIGHT: readiness + contextual help + error card.
-    right = frame(main, SIDEBAR, border_width=1, border_color=LINE, radius=15, width=286)
+    right = ctk.CTkScrollableFrame(main,fg_color=SIDEBAR,border_width=1,border_color=LINE,corner_radius=15,width=286)
     right.grid(row=0, column=2, sticky='nsew')
-    right.pack_propagate(False)
     label(right, '🛡️  Readiness', size=16, bold=True).pack(anchor='w', padx=15, pady=(15, 2))
     label(right, 'Complete the blocking items before a full drawing.', muted=True, size=9, wraplength=250).pack(anchor='w', padx=15, pady=(0, 9))
     checklist_host = frame(right)
@@ -893,6 +929,10 @@ def build_ui(a, quality, speed):
     button(erow, '📂 Logs', a.open_app_data_folder, width=76, height=30).pack(side='left')
     button(erow, '📦 Diagnostics', a.collect_diagnostics, width=104, height=30).pack(side='left', padx=5)
     button(erow, '🧪 Retry', lambda: a.draw(test=True, user_initiated=True), width=78, height=30).pack(side='left')
+    from ResponsiveWorkspace import ResponsiveWorkspace
+    a.workspace_layout=ResponsiveWorkspace(main,{'Setup':sidebar_shell,'Workspace':center_host,'Readiness':right},
+        header=header,header_groups=(header_brand,header_info,header_actions),
+        header_actions=(about_btn,guide_btn,wizard_btn,tools_button),on_change=lambda:a.schedule_previews(delay=20))
 
     # ---- Safe state renderer --------------------------------------------
     ui_state_job = {'id': None}
@@ -951,12 +991,12 @@ def build_ui(a, quality, speed):
                 'blocked': (FIELD, MUTED), 'working': ('#183958', INFO), 'error': ('#48232e', ERROR)}
             bg, fg = tone_colors.get(state.tone, (FIELD, TEXT))
             state_icons={'ready':'✓','attention':'!','blocked':'×','working':'↻','error':'⚠'}
-            top_state.configure(text=f"{state_icons.get(state.tone,'•')}  {state.label}", fg_color=bg, text_color=fg)
+            _configure_presentation(top_state,text=f"{state_icons.get(state.tone,'•')}  {state.label}", fg_color=bg, text_color=fg)
             meta=profile_ui(a.game.get())
-            profile_pill.configure(text=f"{meta.get('icon','🧩')}  {a.game.get()}")
-            profile_guide_icon.configure(text=meta.get('icon','🧩'))
-            profile_guide_badge.configure(text=meta.get('badge','Profile guide'))
-            profile_guide_tip.configure(text=meta.get('tip',''))
+            _configure_presentation(profile_pill,text=f"{meta.get('icon','🧩')}  {a.game.get()}")
+            _configure_presentation(profile_guide_icon,text=meta.get('icon','🧩'))
+            _configure_presentation(profile_guide_badge,text=meta.get('badge','Profile guide'))
+            _configure_presentation(profile_guide_tip,text=meta.get('tip',''))
             recommended=profile_defaults(a.game.get())
             policy_mode=getattr(getattr(a,'profile_engine',None),'get',lambda:'Auto')()
             try:
@@ -965,35 +1005,35 @@ def build_ui(a, quality, speed):
                 polish=f" · {preset.recommended_time_budget} · {preset.color_policy}"
             except Exception:
                 polish=''
-            profile_guide_recommend.configure(text=(
+            _configure_presentation(profile_guide_recommend,text=(
                 f"Profile Engine v2: {policy_summary(a.game.get())} · {policy_mode}{polish}"))
             title_widget,subtitle_widget=step_headers[3]
-            title_widget.configure(text=f"3. {meta.get('prepare_title','Prepare target app')}")
-            subtitle_widget.configure(text=meta.get('prepare_subtitle','Calibrate the target app and select its canvas.'))
-            a.palette_button.configure(text=meta.get('palette_button','🎨  Read colors / palette'))
-            a.area_button.configure(text=meta.get('area_button','▣  Select drawing area'))
-            a.app_tool_button.configure(text=meta.get('tool_button','🧰  Calibrate Brush / Fill'))
+            _configure_presentation(title_widget,text=f"3. {meta.get('prepare_title','Prepare target app')}")
+            _configure_presentation(subtitle_widget,text=meta.get('prepare_subtitle','Calibrate the target app and select its canvas.'))
+            _configure_presentation(a.palette_button,text=meta.get('palette_button','🎨  Read colors / palette'))
+            _configure_presentation(a.area_button,text=meta.get('area_button','▣  Select drawing area'))
+            _configure_presentation(a.app_tool_button,text=meta.get('tool_button','🧰  Calibrate Brush / Fill'))
 
             item_map = {item.key: item for item in state.items}
             item_colors = {'ready': SUCCESS, 'attention': WARNING, 'blocked': ERROR, 'optional': MUTED}
             item_glyphs = {'ready': '✓', 'attention': '!', 'blocked': '×', 'optional': '•'}
             for key, (_row, dot, text_widget) in checklist_rows.items():
                 item = item_map[key]
-                dot.configure(text=item_glyphs.get(item.state,'•'), text_color=item_colors.get(item.state, MUTED))
-                text_widget.configure(text=item.label)
+                _configure_presentation(dot,text=item_glyphs.get(item.state,'•'), text_color=item_colors.get(item.state, MUTED))
+                _configure_presentation(text_widget,text=item.label)
 
             for number, good in ((1, a.game.get() in PROFILES), (2, a.original is not None),
                                  (3, len(a.corners) == 2 and tool_ready),
                                  (4, a.plan is not None), (5, state.ready)):
-                step_dots[number].configure(fg_color=ACCENT_DARK if good else FIELD,
+                _configure_presentation(step_dots[number],fg_color=ACCENT_DARK if good else FIELD,
                                             text_color=SUCCESS if good else MUTED)
 
             if a.original is None:
-                image_info.configure(text='No image information yet.')
+                _configure_presentation(image_info,text='No image information yet.')
             else:
                 w, h = a.original.size
                 aspect = w / max(1, h)
-                image_info.configure(text=f'{w:,} × {h:,} px · {a.original.mode} · aspect {aspect:.2f}:1')
+                _configure_presentation(image_info,text=f'{w:,} × {h:,} px · {a.original.mode} · aspect {aspect:.2f}:1')
 
             plan = a.plan or {}
             if plan:
@@ -1042,13 +1082,13 @@ def build_ui(a, quality, speed):
                     accuracy_line='\n'+' · '.join(_parts)
                     if acc.get('plan_source_divergence_note'):
                         accuracy_line+='\n'+str(acc.get('plan_source_divergence_note'))
-                plan_metrics.configure(text=f"{int(plan.get('count', 0)):,} strokes · {time_line}\n{tool} · {fills} Fill action(s) · {colors} color phase(s){progressive}{deadline_line}{accuracy_line}")
+                _configure_presentation(plan_metrics,text=f"{int(plan.get('count', 0)):,} strokes · {time_line}\n{tool} · {fills} Fill action(s) · {colors} color phase(s){progressive}{deadline_line}{accuracy_line}")
             else:
-                plan_metrics.configure(text='No plan yet. Load an image and finish setup.')
+                _configure_presentation(plan_metrics,text='No plan yet. Load an image and finish setup.')
 
             err = classify_error(a.status.get())
             if err:
-                error_title.configure(text=err['title']); error_message.configure(text=err['message']); error_action.configure(text=err['action'])
+                _configure_presentation(error_title,text=err['title']); _configure_presentation(error_message,text=err['message']); _configure_presentation(error_action,text=err['action'])
                 if not error_card.winfo_manager(): error_card.pack(fill='x', padx=12, pady=(7, 5))
             elif error_card.winfo_manager():
                 error_card.pack_forget()
@@ -1060,6 +1100,10 @@ def build_ui(a, quality, speed):
                 primary_state = 'disabled'
             ready = primary_state == 'normal' and not a.activity and not a.closing
             a._safe_widget_configure(a.start_secondary, state='normal' if ready else 'disabled')
+            action_bar=getattr(a,'draw_action_bar',None)
+            if action_bar is not None:action_bar.schedule()
+            workspace_layout=getattr(a,'workspace_layout',None)
+            if workspace_layout is not None:workspace_layout.schedule()
         finally:
             ui_state_running['value'] = False
 
