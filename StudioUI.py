@@ -932,6 +932,7 @@ def build_ui(a, quality, speed):
     from ResponsiveWorkspace import ResponsiveWorkspace
     a.workspace_layout=ResponsiveWorkspace(main,{'Setup':sidebar_shell,'Workspace':center_host,'Readiness':right},
         header=header,header_groups=(header_brand,header_info,header_actions),
+        window=root,footer=footer,footer_row=footer_row,
         header_actions=(about_btn,guide_btn,wizard_btn,tools_button),on_change=lambda:a.schedule_previews(delay=20))
 
     # ---- Safe state renderer --------------------------------------------

@@ -271,6 +271,8 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
                                 app.workspace_layout.select(name);root.update()
                                 outer=getattr(panel,'_parent_frame',panel)
                                 inside(outer)
+                                self.assertGreaterEqual(outer.winfo_height(),round(48*scale),
+                                    str(self.layout_diagnostics(root,app,outer)))
                             app.show_tools();root.update()
                             self.assertEqual(app.workspace_layout.selected,'Workspace')
                 self.assertFalse(errors,errors)

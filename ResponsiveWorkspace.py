@@ -21,9 +21,12 @@ def fit_label(widget,maximum):
 
 
 class ResponsiveWorkspace:
-    def __init__(self,main,panels,*,header=None,header_groups=(),header_actions=(),on_change=None):
+    def __init__(self,main,panels,*,header=None,header_groups=(),header_actions=(),
+                 window=None,footer=None,footer_row=None,on_change=None):
         self.main=main;self.panels=dict(panels);self.header=header
         self.header_groups=tuple(header_groups);self.header_actions=tuple(header_actions)
+        self.window=window;self.footer=footer;self.footer_row=footer_row
+        self.compact_height=False;self._chrome_signature=None;self._window_binding=None
         self.on_change=on_change;self.closed=False;self.job=None
         self.compact=None;self._signature=None;self._header_signature=None
         self.selected=next(iter(self.panels));self.variable=tk.StringVar(master=main,value=self.selected)
@@ -36,6 +39,7 @@ class ResponsiveWorkspace:
         bind_widget_event(main,'<Configure>',self.schedule)
         bind_widget_event(main,'<Destroy>',self.dispose)
         if header is not None:bind_widget_event(header,'<Configure>',self.schedule)
+        if window is not None:self._window_binding=bind_widget_event(window,'<Configure>',self.schedule)
         self.schedule()
 
     def _scale(self):
@@ -66,8 +70,30 @@ class ResponsiveWorkspace:
             if callable(self.on_change):self.on_change()
 
     def schedule(self,event=None):
-        if self.closed or (event is not None and event.widget not in (self.main,self.header)):return
+        if self.closed or (event is not None and event.widget not in (self.main,self.header,self.window)):return
         if self.job is None:self.job=self.main.after_idle(self.apply)
+
+    def _layout_window_chrome(self,scale):
+        if self.window is None:return
+        height=self.window.winfo_height()
+        if height<=1:return
+        # Widget scaling changes the space the controls need independently of
+        # the native client size. Reserve room for the selected panel on short
+        # windows instead of letting two header rows and generous padding use
+        # the entire vertical budget. Action controls retain their full size.
+        compact=height<math.ceil(520*scale)
+        signature=(compact,scale)
+        if signature==self._chrome_signature:return
+        self.compact_height=compact
+        margin=12 if compact else 22
+        if self.header is not None:
+            self.header.pack(fill='x',padx=margin,pady=(6,4) if compact else (18,10))
+        if self.footer is not None:
+            self.footer.pack(side='bottom',fill='x',padx=margin,pady=(4,6) if compact else (10,16))
+        if self.footer_row is not None:
+            self.footer_row.pack(fill='x',padx=8 if compact else 15,pady=(6,4) if compact else (11,7))
+        self.main.pack(fill='both',expand=True,padx=margin)
+        self._chrome_signature=signature
 
     def _layout_header(self,scale):
         if self.header is None or len(self.header_groups)!=3:return
@@ -76,8 +102,8 @@ class ResponsiveWorkspace:
         brand,info,actions=self.header_groups
         brand_width=brand.winfo_reqwidth();info_width=info.winfo_reqwidth()
         actions_width=sum(widget.winfo_reqwidth()+math.ceil(6*scale) for widget in self.header_actions)
-        mode=0 if width>=brand_width+info_width+actions_width+math.ceil(24*scale) else (
-            1 if width>=brand_width+info_width+math.ceil(12*scale) else 2)
+        mode=3 if self.compact_height else (0 if width>=brand_width+info_width+actions_width+math.ceil(24*scale) else (
+            1 if width>=brand_width+info_width+math.ceil(12*scale) else 2))
         signature=(mode,scale)
         if signature==self._header_signature:return
         for group in self.header_groups:group.pack_forget();group.grid_forget()
@@ -92,21 +118,29 @@ class ResponsiveWorkspace:
             brand.grid(row=0,column=0,sticky='w')
             info.grid(row=0,column=1,sticky='e')
             actions.grid(row=1,column=0,columnspan=2,sticky='ew',pady=(4,0))
-        else:
+        elif mode==2:
             self.header.grid_columnconfigure(0,weight=1)
             # These badges repeat the profile selector, readiness panel and
             # footer status. Keep the actionable header reachable on low/narrow
             # screens instead of spending another row on duplicate summaries.
             for row,group in enumerate((brand,actions)):
                 group.grid(row=row,column=0,sticky='ew',pady=(0,4) if row<2 else 0)
+        else:
+            # The window title and About retain application/version identity;
+            # Tools and every help action remain reachable on the single row.
+            self.header.grid_columnconfigure(0,weight=1)
+            actions.grid(row=0,column=0,sticky='ew')
         self._header_signature=signature
 
     def apply(self):
         self.job=None
         if self.closed:return
+        # Header/footer may initially consume the whole short window, leaving
+        # main at its unmapped 1 px size. Compact known window chrome first so
+        # pack can allocate the main panel on the next geometry pass.
+        scale=self._scale();self._layout_window_chrome(scale);self._layout_header(scale)
         width=self.main.winfo_width()
         if width<=1:return
-        scale=self._scale();self._layout_header(scale)
         compact=width<math.ceil(1120*scale)
         signature=(compact,scale)
         if signature==self._signature:return
@@ -136,3 +170,9 @@ class ResponsiveWorkspace:
         if job is not None:
             try:self.main.after_cancel(job)
             except (tk.TclError,RuntimeError,ValueError):pass
+        if self._window_binding is not None:
+            try:
+                if isinstance(self.window,tk.Misc):tk.Misc.unbind(self.window,'<Configure>',self._window_binding)
+                else:self.window.unbind('<Configure>',self._window_binding)
+            except (tk.TclError,RuntimeError,ValueError):pass
+            self._window_binding=None
