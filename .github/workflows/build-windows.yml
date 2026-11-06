@@ -15,8 +15,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: image-draw-bot-release-${{ github.ref }}
+  # Main, tag and manual runs can publish the same versioned draft. Serialize
+  # every publisher so --clobber cannot mix assets from independent builds.
+  group: image-draw-bot-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   build-windows:
@@ -148,15 +151,19 @@ jobs:
             if ($release.targetCommitish -ne $env:GITHUB_SHA) { throw 'Draft belongs to a different commit; use a new version.' }
             $resumeDraft = $true
           }
+          python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA --create-missing-tag
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag does not match the build commit' }
           $notes = "RELEASE-NOTES-v$version.md"
           $flags = @()
           if ($version -match '-') { $flags += '--prerelease' }
           if (-not $resumeDraft) {
-            gh release create $tag --target $env:GITHUB_SHA --draft --title "Image Draw Bot $tag" --notes-file $notes @flags
+            gh release create $tag --verify-tag --target $env:GITHUB_SHA --draft --title "Image Draw Bot $tag" --notes-file $notes @flags
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release draft' }
           }
           gh release upload $tag --clobber release/ImageDrawBot-*-Windows-x64.zip release/ImageDrawBot-*-Windows-x64-Setup.exe release/ImageDrawBot-*-SHA256.txt release/ImageDrawBot-*-manifest.json
           if ($LASTEXITCODE -ne 0) { throw 'Could not upload verified release assets' }
+          python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag changed before publication' }
           gh release edit $tag --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }
 

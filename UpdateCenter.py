@@ -196,6 +196,26 @@ def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, d
                 _close_response(response)
 
 
+def _response_chunks(response, chunk_size):
+    # Like image imports, inspect available body data without waiting to fill
+    # an entire chunk. A server that trickles bytes within the socket timeout
+    # must not prevent Stop/deadline checks for the whole response body.
+    from urllib3.response import HTTPResponse
+    raw = getattr(response, 'raw', None)
+    # File-like custom adapters may expose io.read1 without urllib3's decoding
+    # parameter. Leave those on Requests' existing iter_content contract.
+    reader = getattr(raw, 'read1', None) if isinstance(raw, HTTPResponse) else None
+    if callable(reader):
+        while True:
+            chunk = reader(chunk_size, decode_content=True)
+            if not chunk:
+                break
+            yield chunk
+    else:
+        # Retain compatibility with injected transports and older adapters.
+        yield from response.iter_content(chunk_size=chunk_size)
+
+
 def check_for_updates(*, request_get=None, timeout=(4, 8), cancelled=lambda: False) -> dict:
     """Check GitHub Releases after an explicit user action.
 
@@ -218,7 +238,7 @@ def check_for_updates(*, request_get=None, timeout=(4, 8), cancelled=lambda: Fal
             cancelled=cancelled, deadline=deadline,
         )
         body = bytearray()
-        for chunk in response.iter_content(chunk_size=64 * 1024):
+        for chunk in _response_chunks(response, 64 * 1024):
             _check_transfer_budget(cancelled, deadline)
             if len(body) + len(chunk) > _MAX_RELEASE_RESPONSE_BYTES:
                 raise UpdateCheckError("GitHub release metadata exceeds the allowed size.")
@@ -347,7 +367,7 @@ def download_installer(asset, *, directory=None, request_get=None, cancelled=lam
             declared=response_headers.get('Content-Length')
             if declared is not None and (not re.fullmatch(r'[0-9]{1,20}',str(declared)) or int(declared)!=asset['size']):
                 raise UpdateCheckError('Installer response size differs from its published size.')
-            for chunk in response.iter_content(chunk_size=256*1024):
+            for chunk in _response_chunks(response, 256*1024):
                 _check_transfer_budget(cancelled,deadline)
                 if not chunk:continue
                 total+=len(chunk)

@@ -36,14 +36,17 @@ def _palette_boundaries(index_map: np.ndarray, drawable: np.ndarray) -> np.ndarr
     out = np.zeros(draw.shape, dtype=np.float32)
 
     valid = draw[:, 1:] & draw[:, :-1]
-    diff = valid & (idx[:, 1:] != idx[:, :-1])
+    diff = (draw[:, 1:] != draw[:, :-1]) | (valid & (idx[:, 1:] != idx[:, :-1]))
     out[:, 1:] = np.maximum(out[:, 1:], diff.astype(np.float32))
     out[:, :-1] = np.maximum(out[:, :-1], diff.astype(np.float32))
 
     valid = draw[1:, :] & draw[:-1, :]
-    diff = valid & (idx[1:, :] != idx[:-1, :])
+    diff = (draw[1:, :] != draw[:-1, :]) | (valid & (idx[1:, :] != idx[:-1, :]))
     out[1:, :] = np.maximum(out[1:, :], diff.astype(np.float32))
     out[:-1, :] = np.maximum(out[:-1, :], diff.astype(np.float32))
+    # Keep the outside of a contour as background; only target pixels are
+    # eligible for contour/protected-detail scheduling.
+    out *= draw
     return out
 
 

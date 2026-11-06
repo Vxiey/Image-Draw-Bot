@@ -10,6 +10,7 @@ selection, stroke planning or renderer behaviour.
 """
 from __future__ import annotations
 
+from contextlib import ExitStack, closing
 from typing import Any, Callable
 import math
 import numpy as np
@@ -36,14 +37,15 @@ def normalize_source(source: Image.Image, size: tuple[int, int], *, background=(
     """
     if source.mode == 'RGB' and 'transparency' not in source.info:
         return source.resize(tuple(size), Image.Resampling.LANCZOS) if source.size != tuple(size) else source.copy()
-    rgba = source.convert('RGBA')
-    if rgba.size != tuple(size):
-        rgba = rgba.resize(tuple(size), Image.Resampling.LANCZOS)
-    if rgba.getextrema()[3] == (255, 255):
-        return rgba.convert('RGB')
-    base = Image.new('RGBA', rgba.size, tuple(background[:3]) + (255,))
-    base.alpha_composite(rgba)
-    return base.convert('RGB')
+    with ExitStack() as owned:
+        rgba = owned.enter_context(closing(source.convert('RGBA')))
+        if rgba.size != tuple(size):
+            rgba = owned.enter_context(closing(rgba.resize(tuple(size), Image.Resampling.LANCZOS)))
+        if rgba.getextrema()[3] == (255, 255):
+            return rgba.convert('RGB')
+        base = owned.enter_context(closing(Image.new('RGBA', rgba.size, tuple(background[:3]) + (255,))))
+        base.alpha_composite(rgba)
+        return base.convert('RGB')
 
 
 def _srgb_to_oklab(rgb: np.ndarray) -> np.ndarray:
@@ -82,9 +84,8 @@ def _importance_weights(importance, size: tuple[int, int]) -> tuple[np.ndarray, 
             raise ValueError('importance map must be a nonempty finite 2D array')
         imp = np.clip(raw, 0.0, 1.0)
         if imp.shape != (size[1], size[0]):
-            imp_img = Image.fromarray(imp)
-            imp_img = imp_img.resize(tuple(size), Image.Resampling.BILINEAR)
-            imp = np.asarray(imp_img, dtype=np.float32)
+            with closing(Image.fromarray(imp)) as imp_img, closing(imp_img.resize(tuple(size), Image.Resampling.BILINEAR)) as resized:
+                imp = np.asarray(resized, dtype=np.float32)
     return imp, (0.25 + 0.75 * imp).astype(np.float32, copy=False)
 
 
@@ -173,11 +174,9 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
     if min(size) < 1:
         raise ValueError('preview must have positive dimensions')
     source_buffer = normalized_source if isinstance(normalized_source, Image.Image) and normalized_source.size == size else source
-    src_img = normalize_source(source_buffer, size)
-    dst_img = normalize_source(preview, size)
-
-    src = np.asarray(src_img, dtype=np.float32) / 255.0
-    dst = np.asarray(dst_img, dtype=np.float32) / 255.0
+    with closing(normalize_source(source_buffer, size)) as src_img, closing(normalize_source(preview, size)) as dst_img:
+        src = np.asarray(src_img, dtype=np.float32) / 255.0
+        dst = np.asarray(dst_img, dtype=np.float32) / 255.0
     if src.shape != dst.shape:
         raise ValueError('normalized source and preview must have identical dimensions')
 
@@ -194,6 +193,7 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
         pixel_route = {"backend_id":"cpu:numpy","backend":"CPU/NumPy","fallback_reason":f"{type(exc).__name__}: {exc}"}
     source_pixel_similarity = np.clip(1.0 - channel_error, 0.0, 1.0)
     source_pixel_accuracy = float(np.mean(source_pixel_similarity, dtype=np.float64))
+    del channel_error, source_pixel_similarity
 
     if cancelled():
         raise InterruptedError()
@@ -205,12 +205,16 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
         src_lab = _srgb_to_oklab(src); dst_lab = _srgb_to_oklab(dst)
         lab_delta = np.linalg.norm(src_lab - dst_lab, axis=2).astype(np.float32, copy=False)
         perceptual_route = {"backend_id":"cpu:numpy","backend":"CPU/NumPy","fallback_reason":f"{type(exc).__name__}: {exc}"}
+    del src, dst
     perceptual_similarity = np.clip(1.0 - lab_delta / _OKLAB_PERCEPTUAL_FULL_ERROR, 0.0, 1.0)
     perceptual_accuracy = float(np.mean(perceptual_similarity, dtype=np.float64))
 
     luminance_error = np.abs(src_lab[..., 0] - dst_lab[..., 0]).astype(np.float32, copy=False)
     luminance_similarity = np.clip(1.0 - luminance_error, 0.0, 1.0)
     luminance_accuracy = float(np.mean(luminance_similarity, dtype=np.float64))
+    del luminance_similarity
+    if not return_error_map:
+        del luminance_error
 
     src_chroma = np.hypot(src_lab[..., 1], src_lab[..., 2])
     dst_chroma = np.hypot(dst_lab[..., 1], dst_lab[..., 2])
@@ -225,9 +229,11 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
         hue_similarity = np.where(chromatic & (dst_chroma < _NEUTRAL_CHROMA_THRESHOLD), 0.0, hue_similarity)
         hue_accuracy = float(np.mean(hue_similarity[chromatic], dtype=np.float64))
         hue_pixels = int(np.count_nonzero(chromatic))
+        del src_hue, dst_hue, hue_delta, hue_similarity
     else:
         hue_accuracy = 1.0
         hue_pixels = 0
+    del src_chroma, dst_chroma, chromatic
 
     try:
         from UniversalGpuAcceleration import edge_magnitude
@@ -239,6 +245,7 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
         src_edge = _edge_from_luminance(src_lab[..., 0]); dst_edge = _edge_from_luminance(dst_lab[..., 0])
         edge_route = {"backend_id":"cpu:numpy","backend":"CPU/NumPy","fallback_reason":f"{type(exc).__name__}: {exc}"}
         edge_route_dst = dict(edge_route)
+    del src_lab, dst_lab
     edge_denom = np.maximum(0.04, src_edge + dst_edge)
     edge_error = np.clip(np.abs(src_edge - dst_edge) / edge_denom, 0.0, 1.0).astype(np.float32, copy=False)
     edge_similarity = 1.0 - edge_error
@@ -248,11 +255,15 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
     # drawing that preserved those edges but added unrelated shapes elsewhere.
     edge_mask = np.maximum(src_edge, dst_edge) >= edge_threshold
     edge_accuracy = float(np.mean(edge_similarity[edge_mask], dtype=np.float64)) if np.any(edge_mask) else float(np.mean(edge_similarity, dtype=np.float64))
+    del src_edge, dst_edge, edge_denom, edge_similarity, edge_mask
+    if not return_error_map:
+        del edge_error
 
     imp, weights = _importance_weights(importance, size)
     important_mask = imp >= 0.62
     important_accuracy = (_weighted_mean(perceptual_similarity[important_mask], weights[important_mask])
                           if np.any(important_mask) else _weighted_mean(perceptual_similarity, weights))
+    del perceptual_similarity, weights, important_mask
 
     metric_values = {
         'perceptual_color_accuracy_percent': perceptual_accuracy * 100.0,
@@ -300,10 +311,19 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
         result['plan_execution_accuracy_percent'] = round(max(0.0, min(100.0, float(plan_execution_accuracy_percent))), 2)
     if plan_execution_accuracy_percent is not None and float(plan_execution_accuracy_percent) >= 99.95 and perceptual_accuracy < 0.80:
         result['plan_source_divergence_note'] = 'The drawing matches its plan, but the plan differs from the source.'
-    if return_error_map:
-        result['_error_map_image'] = _error_preview(lab_delta, luminance_error, edge_error, imp)
-    if return_delta_e_heatmap:
-        result['_delta_e_heatmap_image'] = _delta_e_preview(lab_delta)
     if cancelled():
         raise InterruptedError()
-    return result
+    try:
+        if return_error_map:
+            result['_error_map_image'] = _error_preview(lab_delta, luminance_error, edge_error, imp)
+        if return_delta_e_heatmap:
+            result['_delta_e_heatmap_image'] = _delta_e_preview(lab_delta)
+        if cancelled():
+            raise InterruptedError()
+        return result
+    except BaseException:
+        for name in ('_error_map_image', '_delta_e_heatmap_image'):
+            image = result.get(name)
+            if image is not None:
+                image.close()
+        raise

@@ -14,7 +14,7 @@ class Rc29ReleaseBuilderTests(unittest.TestCase):
              patch.object(build_exe.Path, 'exists', return_value=True), \
              patch.object(build_exe.subprocess, 'run', return_value=SimpleNamespace(returncode=1)) as run:
             with self.assertRaisesRegex(SystemExit, 'Rename .build-venv'):
-                build_exe.main()
+                build_exe.main([])
         # Reject the existing interpreter before any dependency installation.
         run.assert_called_once()
         command = run.call_args.args[0]

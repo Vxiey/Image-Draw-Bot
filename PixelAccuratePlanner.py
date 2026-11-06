@@ -141,8 +141,10 @@ def _cpu_palette_map(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
                 neutral_cut = np.maximum(2.5, src_chroma[:, :, None] * 0.28)
                 neutral_loss = np.where(vivid & (pal_chroma[None, None, :] < neutral_cut),
                                         src_chroma[:, :, None] - pal_chroma[None, None, :], 0.0)
-                hue_excess = np.maximum(hue_error - 45.0, 0.0)
-                hue_extreme = np.maximum(hue_error - 85.0, 0.0)
+                # The scalar matcher applies hue-family protection only to a
+                # chromatic source. Near-neutral hue angles are unstable.
+                hue_excess = np.where(vivid, np.maximum(hue_error - 45.0, 0.0), 0.0)
+                hue_extreme = np.where(vivid, np.maximum(hue_error - 85.0, 0.0), 0.0)
                 if color_fidelity == "Balanced":
                     family = neutral_loss * 0.18 + hue_excess * 0.035 + hue_extreme * 0.060
                     dist += light_error * 0.10 + dark_loss * 0.24 * bright_boost + chroma_error * 0.055 + hue_error * 0.010 + family
@@ -271,9 +273,12 @@ def micro_detail_map(palette_index: np.ndarray, drawable: np.ndarray, edges: np.
         dst_y = slice(max(0, dy), idx.shape[0] - max(0, -dy))
         dst_x = slice(max(0, dx), idx.shape[1] - max(0, -dx))
         valid = mask[src_y, src_x] & mask[dst_y, dst_x]
-        neighbours[src_y, src_x] += valid.astype(np.float32)
+        # Skipped white/transparent neighbors still bound a visible feature.
+        # They contribute no same-color support, but must not disappear from
+        # the boundary denominator merely because they need no drawing.
+        neighbours[src_y, src_x] += mask[src_y, src_x]
         same[src_y, src_x] += (valid & (idx[src_y, src_x] == idx[dst_y, dst_x])).astype(np.float32)
-    boundary = np.where(neighbours > 0, 1.0 - same / np.maximum(neighbours, 1.0), 0.0).astype(np.float32)
+    boundary = np.where(neighbours > 0, 1.0 - same / np.maximum(neighbours, 1.0), 1.0).astype(np.float32)
     thin = np.clip((2.5 - same) / 2.5, 0.0, 1.0).astype(np.float32)
     score = np.clip(boundary * .48 + edge * .34 + thin * .18, 0.0, 1.0)
     score *= mask.astype(np.float32)

@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image
 
 
 def scalar_cells(groups, active, grid, *, legacy_sqrt_mass=False):
@@ -34,10 +34,17 @@ def scalar_cells(groups, active, grid, *, legacy_sqrt_mass=False):
 def scalar_edge_colors(image, count):
     import PictureCustomPaletteLegacy as legacy
     with closing(legacy._analysis_image(image)) as source:
-        with closing(source.convert('L')) as gray:
-            with closing(gray.filter(ImageFilter.FIND_EDGES)) as edge:
-                candidates = [rgb for rgb, strength in zip(source.getdata(), edge.getdata())
-                              if strength >= 52]
+        # Batch05 corrects the edge definition. Keep this allocation regression
+        # independent: inspect each real 4-neighbor directly in source order.
+        pixels = source.load()
+        candidates = []
+        for y in range(source.height):
+            for x in range(source.width):
+                rgb = pixels[x, y]
+                if any(max(abs(rgb[c]-pixels[nx, ny][c]) for c in range(3)) >= 32
+                       for nx, ny in ((x-1,y), (x+1,y), (x,y-1), (x,y+1))
+                       if 0 <= nx < source.width and 0 <= ny < source.height):
+                    candidates.append(rgb)
     if not candidates:
         return []
     step = max(1, math.ceil(len(candidates)/legacy.MAX_EDGE_SAMPLES))

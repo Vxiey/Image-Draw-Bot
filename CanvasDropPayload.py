@@ -8,22 +8,19 @@ module normalizes those forms without performing network access.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
 import re
 from urllib.parse import parse_qs, unquote, urlparse
 
-_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.jpe', '.jfif', '.webp', '.bmp', '.gif'}
+IMAGE_FILE_PATTERNS = '*.png *.apng *.jpg *.jpeg *.jpe *.jfif *.webp *.bmp *.gif *.tif *.tiff *.ico'
+_IMAGE_EXTENSIONS = frozenset(pattern[1:] for pattern in IMAGE_FILE_PATTERNS.split())
 MAX_DROP_CHARACTERS = 32_000_000
 MAX_DROP_ITEMS = 256
 _URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
-_IMG_SRC_RE = re.compile(
-    r'''(?:src|data-src|data-original)\s*=\s*["'](https?://[^"']+)["']''',
-    re.IGNORECASE,
-)
 _DATA_IMAGE_RE = re.compile(
-    r'''data:image/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=_-]+''',
-    re.IGNORECASE,
+    r'''(?i:data:image/(?:png|jpe?g|webp|gif);base64,)[A-Za-z0-9+/=_-]+''',
+    re.ASCII,
 )
 
 
@@ -85,7 +82,15 @@ def _looks_like_image_url(url: str) -> bool:
 def _clean_url(value: str) -> str:
     # Strip only drag/drop wrappers. Punctuation and percent escapes can be part
     # of a signed URL and must survive normalization unchanged.
-    return str(value or '').strip().strip('{}').strip('\"\'')
+    return _unwrap_item(str(value or ''))
+
+
+def _unwrap_item(value: str) -> str:
+    value = value.strip()
+    for opening, closing in (('{', '}'), ('"', '"'), ("'", "'")):
+        if len(value) >= 2 and value.startswith(opening) and value.endswith(closing):
+            return value[1:-1].strip()
+    return value
 
 
 def _is_http_url(value: str) -> bool:
@@ -108,7 +113,6 @@ def _unwrap_image_search_url(url: str) -> str:
     try:
         parsed = urlparse(url)
         host = (parsed.hostname or '').lower()
-        query = parse_qs(parsed.query)
     except Exception:
         return url
 
@@ -117,6 +121,9 @@ def _unwrap_image_search_url(url: str) -> str:
         keys = ('imgurl', 'mediaurl')
     elif _host_is_or_subdomain(host, 'bing.com'):
         keys = ('mediaurl', 'imgurl')
+    if not keys:
+        return url
+    query = parse_qs(parsed.query)
 
     for key in keys:
         for value in query.get(key) or ():
@@ -126,6 +133,129 @@ def _unwrap_image_search_url(url: str) -> str:
             if _is_http_url(candidate):
                 return candidate
     return url
+
+
+def _data_source(value: str) -> CanvasDropSource | None:
+    if len(value) <= 28_000_000:
+        match = _DATA_IMAGE_RE.fullmatch(value)
+        if match is not None:
+            return _matched_data_source(match)
+    return None
+
+
+def _matched_data_source(match) -> CanvasDropSource | None:
+    end = match.end()
+    # Do not turn an invalid encoded token into a valid image by returning
+    # only the regex prefix. Quotes/whitespace delimit an embedded URI.
+    boundary = end == len(match.string) or match.string[end].isspace() or match.string[end] in "\"'<>"
+    if boundary and end-match.start() <= 28_000_000:
+        return CanvasDropSource(match.group(), 'Dropped web image', 'data')
+    return None
+
+
+def _is_html(value: str) -> bool:
+    return ('<' in value and '>' in value and
+            not value[:16].lower().startswith(('http://', 'https://', 'data:image/')))
+
+
+class _FoundImage(Exception):
+    """Stop parsing once the first usable image element is found."""
+
+
+class _ImageHTMLParser(HTMLParser):
+    """Read image attributes and visible links without building a DOM."""
+
+    _INERT = frozenset(('script', 'style', 'template', 'noscript', 'head'))
+    _IMAGE_ATTRIBUTES = frozenset(('src', 'data-src', 'data-original'))
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.inert = []
+        self.image = None
+        self.inline = None
+        self.link = None
+        self.link_rank = None
+
+    def _consider_link(self, value):
+        value = _clean_url(value)
+        if _is_http_url(value):
+            rank = (not _looks_like_image_url(value), len(value))
+            if self.link_rank is None or rank < self.link_rank:
+                self.link, self.link_rank = value, rank
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._INERT:
+            if len(self.inert) >= 256:
+                raise ValueError('The dropped HTML is nested too deeply.')
+            self.inert.append(tag)
+        if self.inert:
+            return
+        seen = set()
+        for name, value in attrs:
+            # HTML uses the first occurrence of a duplicated attribute.
+            if name in seen:
+                continue
+            seen.add(name)
+            if not isinstance(value, str):
+                continue
+            if tag == 'img' and name in self._IMAGE_ATTRIBUTES:
+                value = _clean_url(value)
+                source = _data_source(value)
+                if source is None and _is_http_url(value):
+                    source = CanvasDropSource(_unwrap_image_search_url(value), 'Dropped web image', 'url')
+                if source is not None:
+                    self.image = source
+                    raise _FoundImage()
+            elif tag == 'a' and name == 'href':
+                self._consider_link(value)
+
+    def handle_endtag(self, tag):
+        if self.inert and self.inert[-1] == tag:
+            self.inert.pop()
+
+    def handle_data(self, data):
+        if self.inert:
+            return
+        if self.inline is None:
+            for match in _DATA_IMAGE_RE.finditer(data):
+                self.inline = _matched_data_source(match)
+                if self.inline is not None:
+                    break
+        for match in _URL_RE.finditer(data):
+            self._consider_link(match.group())
+
+
+def _html_source(value: str) -> CanvasDropSource | None:
+    parser = _ImageHTMLParser()
+    try:
+        parser.feed(value)
+        parser.close()
+    except _FoundImage:
+        pass
+    if parser.image is not None:
+        return parser.image
+    if parser.inline is not None:
+        return parser.inline
+    if parser.link is not None:
+        return CanvasDropSource(_unwrap_image_search_url(parser.link), 'Dropped web image', 'url')
+    return None
+
+
+def _uri_list(value: str) -> tuple[str, ...] | None:
+    """Recognize URI-list lines without interpreting comment URLs as images."""
+    if '\n' not in value and '\r' not in value:
+        return None
+    values = []
+    for match in re.finditer(r'[^\r\n]+', value):
+        line = match.group().strip()
+        if not line or line.startswith('#'):
+            continue
+        if not (_is_http_url(line) or line[:7].lower() == 'file://'):
+            return None
+        if len(values) >= MAX_DROP_ITEMS:
+            raise ValueError('Drop at most 256 items at a time.')
+        values.append(line)
+    return tuple(values)
 
 
 def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
@@ -147,14 +277,29 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
         characters += len(value)
         if characters > 2 * MAX_DROP_CHARACTERS:
             raise ValueError('The dropped image payload is too large.')
-        value = value.strip().strip('{}')
+        value = value.strip()
         if value:
             items.append(value)
 
+    # Tcl's splitlist is not an HTML parser. Its fragments can contain URLs
+    # from comments or scripts, so the complete HTML payload is authoritative.
+    if _is_html(raw):
+        source = _html_source(raw)
+        if source is not None:
+            return source
+        raise ValueError('No image was found in the dropped HTML.')
+    lines = _uri_list(raw)
+    values = list(lines) if lines is not None else items + ([raw] if raw else [])
+
     # 1) Local files and file:// URIs take priority because they need no network.
     unsupported_file = False
-    for item in items + ([raw] if raw else []):
-        candidate = item.strip().strip('{}').strip('"')
+    for item in values:
+        candidate = _unwrap_item(item)
+        # A multi-megabyte inline image is not a filesystem path. Besides
+        # avoiding an irrelevant stat, this avoids Path splitting its base64
+        # slashes into thousands of temporary path components.
+        if candidate[:16].lower().startswith(('http://', 'https://', 'data:image/')) or _is_html(candidate):
+            continue
         file_path = _file_uri_to_path(candidate)
         if file_path:
             candidate = file_path
@@ -172,21 +317,23 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
     # 2) Chromium/Google Images may drag an in-memory thumbnail as a data URI.
     # Accept only common image MIME types and keep the encoded payload bounded;
     # load_image performs the strict decoded-size validation before Pillow sees it.
-    for value in items + ([raw] if raw else []):
-        for match in _DATA_IMAGE_RE.finditer(unescape(str(value))):
-            if match.end() - match.start() <= 28_000_000:
-                return CanvasDropSource(match.group(), 'Dropped web image', 'data')
-
-    # 3) Prefer explicit <img src=...> or lazy-load image attributes from HTML.
-    for match in _IMG_SRC_RE.finditer(raw):
-        url = _clean_url(unescape(match.group(1)))
-        if _is_http_url(url):
-            return CanvasDropSource(_unwrap_image_search_url(url), 'Dropped web image', 'url')
+    for value in values:
+        if _is_html(value):
+            source = _html_source(value)
+            if source is not None:
+                return source
+            continue
+        for match in _DATA_IMAGE_RE.finditer(value):
+            source = _matched_data_source(match)
+            if source is not None:
+                return source
 
     # 4) Plain text/URI-list drops. Rank likely image URLs before generic URLs.
     best_url = None
     best_rank = None
-    for text in items + ([raw] if raw else []):
+    for text in values:
+        if _is_html(text):
+            continue
         direct = _clean_url(text)
         if _is_http_url(direct):
             candidates = [direct]
@@ -201,7 +348,7 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
         return CanvasDropSource(_unwrap_image_search_url(best_url), 'Dropped web image', 'url')
 
     if unsupported_file:
-        raise ValueError('Drop an image file (PNG, JPG, WEBP or BMP).')
+        raise ValueError('Drop an image file (PNG, JPG, WEBP, BMP, GIF, TIFF, ICO or APNG).')
     raise ValueError(
         'No image was found in the drop. Drag the image itself from Chrome/Edge or drop a local image file.'
     )

@@ -302,6 +302,8 @@ def build_preview_diagnostics(options: dict, *, accuracy: dict | None = None,
     quick_sketch = quick_sketch if isinstance(quick_sketch, dict) else {}
     hybrid = options.get('hybrid_renderer_meta') if isinstance(options, dict) else {}
     hybrid = hybrid if isinstance(hybrid, dict) else {}
+    simulation = options.get('pixel_accuracy_meta')
+    simulation = simulation if isinstance(simulation,dict) else {}
     return {
         'calibration':{
             'profile_key':str(options.get('profile_key') or calibration.get('profile_key') or ''),
@@ -313,6 +315,8 @@ def build_preview_diagnostics(options: dict, *, accuracy: dict | None = None,
             'visual_accuracy_percent','source_pixel_accuracy_percent','perceptual_color_accuracy_percent',
             'luminance_accuracy_percent','hue_accuracy_percent','edge_accuracy_percent','coverage_percent',
             'plan_execution_accuracy_percent') if accuracy.get(k) is not None},
+        'plan_simulation':{k:simulation.get(k) for k in (
+            'background_repaint_available','unrepairable_background_pixels') if simulation.get(k) is not None},
         'real_result':{k:post_draw.get(k) for k in (
             'available','trusted','feedback_trust','scoring_state','confidence_percent','visual_accuracy_percent',
             'source_pixel_accuracy_percent','perceptual_color_accuracy_percent','actual_coverage_percent',
@@ -395,6 +399,9 @@ def format_preview_diagnostics(meta: dict[str, Any]) -> str:
         except Exception:
             perf_text=f"Estimated draw: {float(perf['projected_draw_seconds']):.1f}s"
     lines=[cal_text]
+    simulation=meta.get('plan_simulation') or {}
+    if isinstance(simulation,dict) and simulation.get('unrepairable_background_pixels',0):
+        lines.append(f"Canvas correction: {int(simulation['unrepairable_background_pixels']):,} spill pixels need a white palette color.")
     if tuner.get('active'):
         tune_bits=[str(tuner.get('status') or 'PENDING'), str(tuner.get('strategy') or 'Auto'),
                    str(tuner.get('draw_quality') or ''), str(tuner.get('speed_strategy') or '')]

@@ -21,7 +21,7 @@ from typing import Iterable, Sequence
 
 from RuntimePaths import atomic_write_text, data_dir
 
-SCHEMA = 3
+SCHEMA = 4
 PROFILE_KEY = "microsoft-paint"
 DEFAULT_MAX_COLORS = 16
 MAX_ANALYSIS_DIMENSION = 640
@@ -213,18 +213,27 @@ def _edge_detail_colors(image, count: int, *, cancelled=lambda: False) -> list[t
         return []
     from contextlib import closing
     import numpy as np
-    from PIL import Image, ImageFilter
+    from PIL import Image
     with closing(_analysis_image(image)) as source:
-        with closing(source.convert("L")) as gray:
-            with closing(gray.filter(ImageFilter.FIND_EDGES)) as edge:
-                indices = np.flatnonzero(np.asarray(edge, dtype=np.uint8).ravel() >= 52)
+        rgb = np.asarray(source, dtype=np.uint8)
+        edge = np.zeros(rgb.shape[:2], dtype=np.uint8)
+        # Both sides of a real color transition are evidence. A signed
+        # Laplacian clipped dark accents away and treated the unchanged Pillow
+        # filter border as an edge even for a completely uniform source.
+        for axis in (0, 1):
+            left = (slice(None, -1), slice(None)) if axis == 0 else (slice(None), slice(None, -1))
+            right = (slice(1, None), slice(None)) if axis == 0 else (slice(None), slice(1, None))
+            contrast = np.max(np.abs(rgb[right].astype(np.int16) - rgb[left].astype(np.int16)), axis=2).astype(np.uint8)
+            np.maximum(edge[left], contrast, out=edge[left])
+            np.maximum(edge[right], contrast, out=edge[right])
+        indices = np.flatnonzero(edge.ravel() >= 32)
         if not len(indices):
             return []
         step = max(1, math.ceil(len(indices) / MAX_EDGE_SAMPLES))
         indices = indices[::step][:MAX_EDGE_SAMPLES]
         # Materialize RGB triples only for the bounded sample, in exactly the
         # same row-major order as the scalar pixel/edge zip used previously.
-        pixels = np.asarray(source, dtype=np.uint8).reshape(-1, 3)[indices]
+        pixels = rgb.reshape(-1, 3)[indices]
     if cancelled():
         raise InterruptedError('Picture custom palette cancelled.')
     with closing(Image.fromarray(pixels.reshape(1, -1, 3))) as sample:

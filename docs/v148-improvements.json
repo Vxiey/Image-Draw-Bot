@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 668,
+  "implemented": 699,
   "release_published": false,
-  "validation": "Batch 04: final frozen-source discovery passed 2,934 tests in 75.509 seconds (23 platform/hardware skips), with unchanged source hashes. Independent area and cross-area reviews closed. Source gate passed 5,000 cycles; source-package hygiene passed; eight exact-raster engine fixtures passed with zero mismatched pixels. New checkpoint Windows/Linux CI pending. Prior checkpoint 2aca72a passed Windows/Linux, dependency, CodeQL and packaged Windows GUI/native drag-and-drop CI in run 42273234504.",
+  "validation": "Batch 05: final frozen-source discovery passed 3,059 tests in 73.421 seconds (26 platform/hardware skips), with unchanged source hashes. All four independent area reviews and the final adaptive-probe/correction integration review are closed. Source gate passed 5,000 cycles; source-package hygiene passed for 918 files; eight exact-raster engine fixtures passed with zero mismatched pixels. New checkpoint Windows/Linux CI pending. Prior checkpoint 5f3fcfb passed Windows/Linux, dependencies, CodeQL and packaged Windows GUI/native drag-and-drop CI in run 42280910774.",
   "improvements": [
     {
       "id": 1,
@@ -5194,6 +5194,223 @@
       "local_id": "NR05",
       "description": "`LocalSanitization` recognizes escaped separators, Unicode escapes and serialized custom home paths. It redacts within quoted-literal boundaries before handling ordinary paths, preserving legitimate apostrophes in names and the surrounding JSON/repr syntax. Escaped quotes cannot start new literals, avoiding repeated rescans of a malformed line.",
       "ledger": "v148-batch04-platform-release.md"
+    },
+    {
+      "id": 669,
+      "area": "batch05-application",
+      "local_id": "AP01",
+      "description": "A manually marked subject rectangle and its mode disappeared on session recovery. Simply saving the rectangle could also bind a new image's selection to an older cached image after a failed image checkpoint. Save validated normalized subject geometry and mode against the cached image's SHA-256. Attach it only to its matching, successfully recovered raster. A weak source reference advances only after successful image publication, while selection-only checkpoints reuse the encoded image. Real application/disk round trips verify exact subject masks, changed-image failure/retry, malformed or mismatched selection rejection and legacy defaults. Recovery remains Manual and disarmed.",
+      "ledger": "v148-batch05-application.md"
+    },
+    {
+      "id": 670,
+      "area": "batch05-application",
+      "local_id": "AP02",
+      "description": "Every deadline-sequence path copied the complete remaining suffix and all its dictionaries even when normal, unlimited or throttled policy could not reorder anything. Check the existing eligibility policy before accessing the suffix. Eligible replanning retains its original algorithm and complete metadata. No-tail-access fixtures, 40 seeded active fixtures and an actual unlimited `execute_plan` route verify the adapter. Paired measurements below preserve complete entries and scheduler output.",
+      "ledger": "v148-batch05-application.md"
+    },
+    {
+      "id": 671,
+      "area": "batch05-application",
+      "local_id": "AP03",
+      "description": "After a released-mouse pause, the same-color next path trusted cached color/brush state even though the user could change both while paused. Invalidate verification samples on pause, restore the known tool and calibrated brush, reselect the current color and perform the configured ink checks before resumed drawing. Real execution fixtures change color and width during the pause, exercise both legacy and ordered paths, and verify Stop prevents resumed input. Unknown manual tool configuration is not claimed to be detectable.",
+      "ledger": "v148-batch05-application.md"
+    },
+    {
+      "id": 672,
+      "area": "batch05-application",
+      "local_id": "AP04",
+      "description": "“Retry correction only” emptied drawing groups but retained executable background/region fill options. It could fill over the existing drawing before scoring a fresh correction. Skip every canvas-clear/fill prelude for the explicit correction-only operation while retaining those descriptions as comparison evidence. An actual retry with both fill types issues only mandatory input cleanup and fresh snapshots when the correction planner declines patch input; ordinary full drawing still fills normally.",
+      "ledger": "v148-batch05-application.md"
+    },
+    {
+      "id": 673,
+      "area": "batch05-application",
+      "local_id": "AP05",
+      "description": "The emptied retry retained the original total estimate but set path count to zero. Correction costing consequently used a full drawing's time as the cost of one correction path. Derive a valid per-path reference from the original positive path count before emptying execution. A 60-second/6,000-path drawing supplies 0.01 seconds to the actual correction planner. Fill-only plans provide no fabricated per-path estimate.",
+      "ledger": "v148-batch05-application.md"
+    },
+    {
+      "id": 674,
+      "area": "batch05-application",
+      "local_id": "AP06",
+      "description": "Each retry inherited the first drawing's “before correction” metrics, so even a skipped retry could claim the original cumulative improvement again. Shallow-copied mutable runtime counters could also modify the completed plan and carry old results into the retry. Start a new before/after pair and runtime counters for each attempt; preserve the original comparison target and completed plan. Fresh scoring becomes the retry history baseline and is reflected in the current UI result. Actual execution/history tests verify a skipped retry reports zero gain, the original metrics/counters remain unchanged, and stale successful evidence cannot replace a failed fresh capture. The existing failed-evidence trust contract is completed without another ID.",
+      "ledger": "v148-batch05-application.md"
+    },
+    {
+      "id": 675,
+      "area": "batch05-application",
+      "local_id": "AP07",
+      "description": "Strict/adaptive ink checks and the retry of a delivery check used the plan's default width, while an ordered entry could have selected a different actual brush. Use the selected execution width for each check. Two-color execution fixtures verify widths 4→1; delivery retry checks use the same current width as the original check. This is the actual mouse verification boundary, distinct from PL31 simulation/cost inheritance and PB03 detail-batch snapshot ordering.",
+      "ledger": "v148-batch05-application.md"
+    },
+    {
+      "id": 676,
+      "area": "batch05-colour-planning",
+      "local_id": "CP01",
+      "description": "Near-neutral source colors received hue-family penalties in vector/GPU mapping that the canonical scalar matcher explicitly disables below OKLab chroma5. For source `(222,200,194)` and the recorded four-swatch fixture, Faithful scalar matching chose index3 while CPU/vector mapping chose2. Gate the family penalties consistently in universal NumPy/OpenCL, fused CUDA, legacy CUDA array expressions and the Pixel Accurate emergency CPU fallback.",
+      "ledger": "v148-batch05-colour-planning.md"
+    },
+    {
+      "id": 677,
+      "area": "batch05-colour-planning",
+      "local_id": "CP02",
+      "description": "A palette without white used its nearest color as the supposedly untouched white canvas. An empty black-only plan reported100% target/plan accuracy, zero coverage and one missing pixel; black spill also disappeared from the error classification. Use signed `-1` only as internal unpainted-white simulation state when no exact white swatch exists. CPU/CUDA scoring retain missing/spill errors. Corrections repair drawable colors but never emit the sentinel or pretend an unavailable white swatch can erase spill. Preserve explicit valid background indices.",
+      "ledger": "v148-batch05-colour-planning.md"
+    },
+    {
+      "id": 678,
+      "area": "batch05-colour-planning",
+      "local_id": "CP03",
+      "description": "Excluding unpainted white removed isolated colored pixels' boundary evidence. A black dot changed from protected cleanup with micro score.66 to unprotected mid-detail with score.18 solely because Skip white was enabled. Count skipped white/transparent neighbors as boundaries of drawable features, while keeping nondrawable pixels outside contour/protected maps. A singleton target also retains micro-detail evidence.",
+      "ledger": "v148-batch05-colour-planning.md"
+    },
+    {
+      "id": 679,
+      "area": "batch05-colour-planning",
+      "local_id": "CP04",
+      "description": "The picture-palette edge sampler used a clipped Laplacian, which selected only the bright background around a dark accent. Its unchanged filter border also supplied “edge colors” for uniform images. Use symmetric four-neighbor RGB contrast, retaining both sides of real transitions and no artificial outer-border response. Preserve row-major bounded sampling and palette deduplication. Increment the picture-cache schema so previously cached edge choices are rebuilt.",
+      "ledger": "v148-batch05-colour-planning.md"
+    },
+    {
+      "id": 680,
+      "area": "batch05-colour-planning",
+      "local_id": "CP05",
+      "description": "Component extraction issued five NumPy sums plus max/count work separately for every run, including every one-pixel checkerboard component, and kept a second statistics dictionary per component. Reduce busy rows together with bounded start/end reduction arrays. Preserve small slice reductions for rows with fewer than eight runs. Accumulate final component fields directly, retaining exact IDs, runs, order and statistics.",
+      "ledger": "v148-batch05-colour-planning.md"
+    },
+    {
+      "id": 681,
+      "area": "batch05-colour-planning",
+      "local_id": "CP06",
+      "description": "Preview accuracy retained multiple normalized RGB copies and materialized full-frame linear/LMS scratch arrays, alongside already finished metric intermediates. Borrow already valid normalized inputs in read-only numeric consumers, bound CPU OKLab transform scratch to65,536pixels, and release evaluator intermediates when their scalar results are complete. Whole-workload GPU routing and formulas remain unchanged.",
+      "ledger": "v148-batch05-colour-planning.md"
+    },
+    {
+      "id": 682,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW01",
+      "description": "HTML drops could select a script URL, a non-image data-src attribute or an image inside a comment/template before the actual dragged image. The parser now reads image elements and visible image links, ignoring inert/comment content and unrelated attributes. Quoted/unquoted attributes are decoded once, and duplicate attributes follow their first value.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 683,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW02",
+      "description": "A text/uri-list comment containing a short image URL could win instead of the actual dropped URI; multiple file URI lines also required Tcl preprocessing. Standard URI-list lines are now recognized with comments/blank lines excluded, and supported files are found without Tcl splitting.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 684,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW03",
+      "description": "TIFF, ICO and APNG files already decoded successfully through ImageImport but were rejected by the drop extension filter. File drops and the shared file-picker pattern now admit those same formats.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 685,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW04",
+      "description": "An inline image was parsed/stat-tested as a filesystem name, creating thousands of Path components from base64 slashes. Repeated case-insensitive matching also processed the case-sensitive base64 body unnecessarily. URI sources now skip filesystem parsing, the body uses its explicit ASCII alphabet, and already matched spans are not rescanned. Ordinary image URLs also skip irrelevant search-query parsing.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 686,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW05",
+      "description": "An open guide continued showing Paint instructions after a profile change. The current topic now follows the live profile without requiring the user to close the guide or navigate to another page.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 687,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW06",
+      "description": "Every guide Configure event reconfigured every label and queried the same width per label, including height-only changes. Events now coalesce into one idle callback; an unchanged wrap width produces no label updates.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 688,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW07",
+      "description": "The guide treated a physical widget width as CTk logical pixels and forced a 240-pixel minimum wrap, allowing text to exceed scaled or compact viewports. Wrapping now divides by the widget scale and fits the available logical width.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 689,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW08",
+      "description": "Guide navigation required pointer operation of its buttons/menu. Alt+Left/Alt+Right now navigate bounded topics and Escape closes the guide; the shortcuts are visible in the guide.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 690,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW09",
+      "description": "Reopening an existing iconified guide only raised it and did not request restoration. Reopen now deiconifies and raises the existing window.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 691,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW10",
+      "description": "Each CTk guide scroll frame installed wheel/Shift callbacks on the root, but destruction left those callbacks and their frame references registered. The scoped frame now removes only its own callback IDs, including partial construction, without unbinding other widgets.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 692,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW11",
+      "description": "Smart Canvas Drop passed signed desktop positions as Tk geometry offsets; negative offsets actually address the right/bottom screen edges. The overlay is now positioned with typed System32 SetWindowPos calls and checked against GetWindowRect. It stays visually hidden during realization/mapping and is revealed only after verification.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 693,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW12",
+      "description": "Stop during the screen-area picker's 250ms launch delay did not cancel its independently scheduled overlay; a late selection could still be delivered. The picker now observes the supplied cancellation callback before capture, while open and before delayed delivery, cancels its own jobs, restores prior window states and disposes undelivered crops.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 694,
+      "area": "batch05-ui-workflow",
+      "local_id": "UW13",
+      "description": "Loading a large custom-profile registry rebuilt the full case-folded name set for each record, producing quadratic startup work. One incrementally maintained set now preserves the same normalized-name and storage-owner rules.",
+      "ledger": "v148-batch05-ui-workflow.md"
+    },
+    {
+      "id": 695,
+      "area": "batch05-platform-release",
+      "local_id": "PR01",
+      "description": "`os.walk` silently ignored an unreadable included resource directory. Source validation could return success and publish a ZIP lacking its theme/assets even though all individually required files existed. `ReleasePackage` propagates included-directory traversal errors in both validation walks and the final inventory. The previous complete archive remains intact and staging is removed. Excluded private trees remain excluded.",
+      "ledger": "v148-batch05-platform-release.md"
+    },
+    {
+      "id": 696,
+      "area": "batch05-platform-release",
+      "local_id": "PR02",
+      "description": "`build_exe.py --help`, misspelled flags and unsupported positional arguments fell through to creating a virtual environment and installing/building packages. Parse the supported `--onefile` and `--gpu` options before platform or build side effects. Help succeeds without building; unknown options fail immediately.",
+      "ledger": "v148-batch05-platform-release.md"
+    },
+    {
+      "id": 697,
+      "area": "batch05-platform-release",
+      "local_id": "PR03",
+      "description": "The release workflow checked the versioned tag name and draft metadata but not the actual Git ref. GitHub ignores `target_commitish` when a tag already exists, so binaries from the current build could be published under a preexisting tag pointing elsewhere. `ReleaseIdentity` resolves the exact ref, peels bounded nested annotated tags and requires the build SHA. Verification is read-only by default. The workflow may explicitly create only a missing tag at that SHA, re-read creation races, and use `gh release create --verify-tag`. A second read verifies identity immediately before publication. Existing refs are never updated or deleted. The helper is required by source packaging and the source gate.",
+      "ledger": "v148-batch05-platform-release.md"
+    },
+    {
+      "id": 698,
+      "area": "batch05-platform-release",
+      "local_id": "PR04",
+      "description": "Main, tag and manual workflow runs used different ref-specific concurrency groups while they could resume the same versioned draft. Their clobbering uploads could interleave, mixing two independent builds' ZIP/installer/checksum/manifest assets. Use one repository release-workflow concurrency group, `cancel-in-progress: false` and `queue: max`. Cooperating publishers run serially without replacing the sole pending request.",
+      "ledger": "v148-batch05-platform-release.md"
+    },
+    {
+      "id": 699,
+      "area": "batch05-platform-release",
+      "local_id": "PR05",
+      "description": "The one-shot source hygiene check traversed every private builder/output tree and treated an upstream `check_once.py` inside `.build-venv` or the frozen output as repository source. It also scanned `.git` fully before discarding findings. Prune the same excluded directory names and links as source packaging. Keep genuine source and workflow one-shot detection, reject included-directory traversal errors and avoid per-file metadata queries for irrelevant filenames.",
+      "ledger": "v148-batch05-platform-release.md"
     }
   ]
 }

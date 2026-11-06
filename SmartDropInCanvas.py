@@ -105,6 +105,68 @@ def canvas_overlay_geometry(canvas_box: Sequence[int]) -> str:
     return f'{r-l}x{b-t}{l:+d}{t:+d}'
 
 
+def place_canvas_overlay(window, canvas_box: Sequence[int]) -> tuple[int, int, int, int]:
+    """Show a verified overlay at absolute physical Windows coordinates.
+
+    Negative Tk geometry offsets measure from the right/bottom screen edge.
+    SetWindowPos instead accepts the detector's signed desktop coordinates.
+    Keep the window visually hidden during realization and mapping because Tk
+    may apply a pending geometry request when it first becomes visible.
+    """
+    import ctypes
+    from ctypes import wintypes
+    from CalibrationValidation import screen_rect
+    from WindowsSystem import load_system_library
+
+    rect = screen_rect(canvas_box, 'Canvas')
+    left, top, right, bottom = rect
+    width, height = right-left, bottom-top
+    if max(width, height) >= 2**31:
+        raise ValueError('The canvas overlay exceeds the native window size range.')
+    window.withdraw()
+    alpha = window.attributes('-alpha')
+    window.attributes('-alpha', 0.0)
+    try:
+        window.geometry(f'{width}x{height}+0+0')
+        window.update_idletasks()
+        api = load_system_library('user32.dll', use_last_error=True)
+        api.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        api.GetAncestor.restype = wintypes.HWND
+        api.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND,
+                                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        api.SetWindowPos.restype = wintypes.BOOL
+        api.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+        api.GetWindowRect.restype = wintypes.BOOL
+        handle = api.GetAncestor(window.winfo_id(), 2)  # GA_ROOT
+        if not handle:
+            raise OSError('Could not read the canvas drop overlay window handle.')
+
+        def position_and_verify():
+            # SWP_NOZORDER | SWP_NOACTIVATE; the caller owns topmost/focus policy.
+            if not api.SetWindowPos(handle, None, left, top, width, height, 0x0014):
+                raise OSError('Could not position the canvas drop overlay.')
+            actual = wintypes.RECT()
+            if not api.GetWindowRect(handle, ctypes.byref(actual)):
+                raise OSError('Could not verify the canvas drop overlay position.')
+            if (actual.left, actual.top, actual.right, actual.bottom) != rect:
+                raise OSError('The canvas drop overlay did not match the detected canvas.')
+
+        position_and_verify()
+        window.deiconify()
+        window.update_idletasks()
+        position_and_verify()
+        window.attributes('-alpha', alpha)
+        return rect
+    except BaseException:
+        # A failed/partially mapped overlay must never remain a visible drop
+        # target. The caller can now destroy it and report the original error.
+        try:
+            window.withdraw()
+        except Exception:
+            pass
+        raise
+
+
 def canvas_relative_box(canvas_box: Sequence[int], client_rect: Sequence[int]) -> tuple[int, int, int, int]:
     if not canvas_inside_client(canvas_box, client_rect):
         raise ValueError('Detected canvas is outside the target browser client area.')

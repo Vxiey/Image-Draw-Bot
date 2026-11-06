@@ -7,6 +7,57 @@ import tkinter as tk
 
 _PATCHED = False
 
+
+def _scoped_scrollable_class(base):
+    class ScopedScrollableFrame(base):
+        """Own the global callbacks CTk installs for this particular frame."""
+
+        def __init__(self, *args, **kwargs):
+            self._owned_scroll_bindings = []
+            self._scroll_destroyed = False
+            try:
+                super().__init__(*args, **kwargs)
+            except BaseException:
+                self._release_scroll_bindings()
+                try:
+                    super().destroy()
+                except Exception:
+                    pass
+                raise
+
+        def bind_all(self, sequence=None, func=None, add=None):
+            token = super().bind_all(sequence, func, add)
+            if token is not None and func is not None:
+                self._owned_scroll_bindings.append((self._root(), sequence, token))
+            return token
+
+        def _release_scroll_bindings(self):
+            bindings = self._owned_scroll_bindings
+            self._owned_scroll_bindings = []
+            for root, sequence, token in bindings:
+                try:
+                    # Tkinter's targeted remover keeps every other bind_all
+                    # callback and deletes only this frame's Tcl command.
+                    root._unbind(('bind', 'all', sequence), token)
+                except (tk.TclError, RuntimeError):
+                    pass
+
+        def destroy(self):
+            if self._scroll_destroyed:
+                return
+            self._scroll_destroyed = True
+            self._release_scroll_bindings()
+            super().destroy()
+
+    return ScopedScrollableFrame
+
+
+def scoped_scrollable_frame(parent, **kwargs):
+    """Create a CTk scroll frame whose root bindings end with its lifetime."""
+    import customtkinter as ctk
+    return _scoped_scrollable_class(ctk.CTkScrollableFrame)(parent, **kwargs)
+
+
 def patch_customtkinter_scroll_guard() -> bool:
     """Prevent CTkScrollableFrame from dereferencing non-widget event targets.
 

@@ -156,11 +156,16 @@ def build_preview_safety_plan(
     }
     def source_paths():
         if execution_sequence is not None:
+            from AdaptiveBrushEngine import brush_for_entry
+            current_brush=max(1,int(options.get('brush_px',3)))
             for entry in execution_sequence:
+                path=entry.get('path') or ()
+                if not path:continue
                 index = entry['color_index']
                 if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(safe_groups):
                     raise ValueError('Invalid sequence palette index.')
-                yield index, entry.get('path') or (), max(1, int(entry.get('brush_px') or options.get('brush_px', 3)))
+                current_brush=brush_for_entry(entry,current_brush)
+                yield index, path, current_brush
         else:
             for index, items in enumerate(source_groups or []):
                 for item in items:

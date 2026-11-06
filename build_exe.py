@@ -5,6 +5,7 @@ Usage:
     py -3 build_exe.py --onefile  # optional single-file build
 """
 from pathlib import Path
+import argparse
 import os
 import shutil
 import stat
@@ -40,7 +41,11 @@ def documentation_data(base: Path) -> list[tuple[Path, str]]:
     return data
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Build the Windows Image Draw Bot application in its private environment.')
+    parser.add_argument('--onefile', action='store_true', help='Build a single-file EXE instead of the default application directory.')
+    parser.add_argument('--gpu', action='store_true', help='Bundle the optional NVIDIA CUDA/CuPy dependencies.')
+    args = parser.parse_args(argv)
     if sys.platform != 'win32':
         raise SystemExit('The Windows EXE build must run on Windows. Use Build-Release.bat or the GitHub Actions workflow.')
     if sys.version_info < (3, 11):
@@ -52,8 +57,8 @@ def main():
     version_text=(base/'version_info.txt').read_text(encoding='utf-8')
     if f"FileVersion', '{FILE_VERSION}'" not in version_text or f"ProductVersion', '{FILE_VERSION}'" not in version_text:
         raise SystemExit('Version mismatch: update version_info.txt to match Version.py before building.')
-    onefile = '--onefile' in sys.argv[1:]
-    gpu_build = '--gpu' in sys.argv[1:]
+    onefile = args.onefile
+    gpu_build = args.gpu
     builder = base / '.build-venv' / 'Scripts' / 'python.exe'
     if not builder.exists():
         subprocess.run([sys.executable, '-m', 'venv', str(base / '.build-venv')], check=True)

@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 668 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **332 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 699 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **301 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -19,18 +19,25 @@ The count excludes tests, assertions, documentation, version changes, formatting
 | 515–552 | RP01–RP38 | Batch 03 rendering, planning and exact previews | 38 | [Rendering/planning ledger](v148-batch03-rendering-planning.md); independent integration-owner review. |
 | 553–574 | GP01–GP22 | Batch 03 GPU, benchmarks and platform behavior | 22 | [GPU/platform ledger](v148-batch03-gpu-platform.md); independent planner-agent review. |
 | 575–614 | IW01–IW40 | Batch 03 image workflow, imports and UI | 40 | [Image-workflow ledger](v148-batch03-image-workflow.md); independent colour-agent review. |
-
 | 615–641 | AW01–AW27 | Batch 04 application settings, recovery and planning policy | 27 | [Application ledger](v148-batch04-application.md); independent UI and planner reviews. |
 | 642–650 | PB01–PB09 | Batch 04 colour planning, detail order and bounded working sets | 9 | [Planning ledger](v148-batch04-planning.md); independent integration-owner review. |
 | 651–663 | UP01–UP13 | Batch 04 profiles, setup guidance and UI layout | 13 | [UI/profile ledger](v148-batch04-ui-profiles.md); independent integration-owner review. |
 | 664–668 | NR01–NR05 | Batch 04 native input, helper lifecycle and diagnostic privacy | 5 | [Platform ledger](v148-batch04-platform-release.md); independent integration-owner review. |
+| 669–675 | AP01–AP07 | Batch 05 subject recovery, runtime and correction retry | 7 | [Application ledger](v148-batch05-application.md); independent UI and platform reviews. |
+| 676–681 | CP01–CP06 | Batch 05 colour consistency, canvas scoring and planning memory | 6 | [Colour/planning ledger](v148-batch05-colour-planning.md); independent UI-agent review. |
+| 682–694 | UW01–UW13 | Batch 05 image drops, guide lifecycle and region selection | 13 | [UI/workflow ledger](v148-batch05-ui-workflow.md); independent planner review. |
+| 695–699 | PR01–PR05 | Batch 05 source inventories and release publication | 5 | [Platform ledger](v148-batch05-platform-release.md); independent integration-owner review. |
 
 The [machine-readable registry](v148-improvements.json) maps every global ID to its area-local ID and evidence ledger. The [working plan](v148-improvement-progress.md) records release conditions and the next review cycle.
 
 ## Integration evidence
 
+- Batch 05 reference: `5f3fcfb5c4519e5ed1b9b770ba951918819d725d`. Independent area reviews and count checks are closed. Final frozen-source integration passed **3,059 tests in 73.421 seconds**, with **26 platform/hardware skips** and unchanged source hashes. The final adaptive-probe/correction review is also closed. This new checkpoint still requires its own Windows/Linux CI.
+- The 5,000-cycle source gate, source-package hygiene for 918 files and eight exact-raster fixtures passed; [raw engine results](v148-batch05-engine-benchmarks.json).
+- Historical fixture updates preserve the changed contracts: runtime replanning now uses its allocation-avoiding adapter; palette goldens are checked pixel for pixel against the canonical scalar matcher after the neutral-chroma correction. Review completions cover actual Pillow pixel-buffer disposal, numeric protected-mask parity and unavailable clipped color probes. None adds another improvement ID.
+
 - Batch 04 product reference: `1d48eabaf349a5fd8049a2c96ef5426745c3078c`; subsequent `2aca72a` only repairs test fixtures.
-- Final batch 04 frozen-source discovery: **2,934 tests in 75.509 seconds, passed with 23 platform/hardware skips**. Source hashes stayed unchanged; independent area reviews and the coordinated detail-order/verification review are closed. The new checkpoint still requires its own Windows/Linux CI.
+- Final batch 04 frozen-source discovery: **2,934 tests in 75.509 seconds, passed with 23 platform/hardware skips**. Source hashes stayed unchanged; independent area reviews and the coordinated detail-order/verification review are closed. Published checkpoint `5f3fcfb5c4519e5ed1b9b770ba951918819d725d` passed Windows/Linux, dependencies, CodeQL and packaged Windows GUI/native drag-and-drop checks in [run 42280910774](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42280910774).
 - Batch 04 source gate passed 5,000 lifecycle/profile cycles and source-package hygiene passed. Eight engine fixtures have zero mismatched pixels; [raw results](v148-batch04-engine-benchmarks.json).
 - One old mouse-cleanup assertion was updated: failed native LEFTUP retains ownership for a later cleanup attempt while input remains disarmed. The production semantics and retry tests are documented under NR01.
 

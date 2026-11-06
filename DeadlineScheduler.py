@@ -408,6 +408,36 @@ class DeadlineScheduler:
         # Original index is the final tie-breaker, keeping the sort deterministic.
         return (tier,-round(value,6),round(adjusted,6),original_index)
 
+    def replan_ready(self, remaining_count: int, *, force: bool = False) -> bool:
+        """Check the existing policy without traversing or copying future paths."""
+        if remaining_count < 2 or self.budget_seconds is None or self.mode == NORMAL:
+            return False
+        if not force:
+            if self._global_samples < 2:
+                return False
+            sample_gap = self._global_samples - self._last_replan_sample
+            scale_delta = abs(self._runtime_scale() - self._last_replan_scale)
+            if self.mode == self._last_replan_mode and sample_gap < 2 and scale_delta < .12:
+                return False
+        return True
+
+    def replan_in_place(self, sequence: list, start: int, *, force: bool = False) -> bool:
+        """Apply an eligible runtime replan, leaving the executed prefix intact.
+
+        Normal, unlimited and throttled paths take constant time and allocate no
+        tail. The public copy-returning replan API retains its existing contract.
+        """
+        if type(start) is not int or not 0 <= start <= len(sequence):
+            raise ValueError('Replan start must identify the unexecuted suffix.')
+        if not self.replan_ready(len(sequence) - start, force=force):
+            return False
+        remaining = sequence[start:]
+        reordered = self.replan_remaining(remaining, force=force)
+        if reordered == remaining:
+            return False
+        sequence[start:] = reordered
+        return True
+
     def replan_remaining(self, remaining, *, force: bool = False):
         """Reorder only already-safe remaining paths inside contiguous phase barriers.
 
@@ -416,13 +446,8 @@ class DeadlineScheduler:
         colour/brush transitions, so catch-up cannot become slower by UI thrashing.
         """
         rows=[dict(entry) for entry in (remaining or ())]
-        if len(rows)<2 or self.budget_seconds is None or self.mode == NORMAL:return rows
+        if not self.replan_ready(len(rows), force=force):return rows
         scale=self._runtime_scale()
-        if not force:
-            if self._global_samples < 2:return rows
-            sample_gap=self._global_samples-self._last_replan_sample
-            scale_delta=abs(scale-self._last_replan_scale)
-            if self.mode==self._last_replan_mode and sample_gap<2 and scale_delta<.12:return rows
         output=[];moved=0;rejected=0;start=0
         while start<len(rows):
             first=rows[start];op=self._op_type(first);phase=self._phase(first)

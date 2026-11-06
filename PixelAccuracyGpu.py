@@ -68,6 +68,7 @@ def compile_swept_rectangles(sequence: Sequence[dict], brush_px: int, width: int
     """
     rects=[]
     w=max(1,int(width));h=max(1,int(height))
+    current_brush=max(1,int(brush_px))
     def add(x0,y0,x1,y1,color):
         from PixelAccuracyEngine import _clip_rect
         clipped=_clip_rect(x0,y0,x1,y1,w,h)
@@ -86,7 +87,7 @@ def compile_swept_rectangles(sequence: Sequence[dict], brush_px: int, width: int
         try:path=tuple(checked_path(points))
         except (KeyError,TypeError,ValueError):continue
         if not path:continue
-        entry_brush=brush_for_entry(entry,brush_px);before,after=_brush_extents(entry_brush)
+        current_brush=brush_for_entry(entry,current_brush);before,after=_brush_extents(current_brush)
         if len(path)==1:
             x,y=path[0];add(x-before,y-before,x+after,y+after,color);continue
         for segment_index,(a,b) in enumerate(zip(path,path[1:])):
@@ -338,19 +339,22 @@ def score_cuda_host(pixel_map, simulated: np.ndarray, coverage_count: np.ndarray
         cp.cuda.Stream.null.synchronize()
         if cancelled():raise InterruptedError()
         eval_count=totals['evaluation'];drawable_count=totals['drawable'];correct_count=totals['correct']
+        target_accuracy=100.0*totals['target_correct']/max(1,drawable_count)
         metrics={
             'plan_execution_accuracy_percent':round(100.0*correct_count/max(1,eval_count),4),
             'pixel_accuracy_percent':round(100.0*correct_count/max(1,eval_count),4),
-            'target_color_accuracy_percent':round(100.0*totals['target_correct']/max(1,drawable_count),4),
+            'target_color_accuracy_percent':round(target_accuracy,4),
             'coverage_percent':round(100.0*totals['covered']/max(1,drawable_count),4),
-            'edge_accuracy_percent':round(100.0*totals['edge_correct']/max(1,totals['edge']),4),
-            'protected_accuracy_percent':round(100.0*totals['protected_correct']/max(1,totals['protected']),4),
+            'edge_accuracy_percent':round(100.0*totals['edge_correct']/totals['edge'] if totals['edge'] else target_accuracy,4),
+            'protected_accuracy_percent':round(100.0*totals['protected_correct']/totals['protected'] if totals['protected'] else target_accuracy,4),
             'evaluation_pixels':eval_count,'drawable_pixels':drawable_count,'correct_pixels':correct_count,
             'missing_pixels':totals['missing'],'wrong_color_pixels':totals['wrong'],'spill_pixels':totals['spill'],
             'error_pixels':totals['errors'],'covered_target_pixels':totals['covered'],'edge_pixels':totals['edge'],
             'protected_pixels':totals['protected'],'touched_pixels':totals['touched'],'overdraw_pixels':totals['overdraw'],
             'total_brush_hits':totals['hits'],'mean_hits_per_touched_pixel':round(float(totals['hits']/max(1,totals['touched'])),5),
             'edge_threshold':round(edge_threshold,5),'background_index':int(background_index),
+            'background_repaint_available':background_index != -1,
+            'unrepairable_background_pixels':totals['spill'] if background_index == -1 else 0,
             'score_backend':'cuda-cupy-tiled-reduction' if initial_rows<height or retries else 'cuda-cupy-reduction',
             'score_cuda_device':info.device,'score_tile_rows':int(tile_rows),'score_initial_tile_rows':int(initial_rows),
             'score_tile_count':int(tiles),'score_vram_retries':int(retries),'score_vram_recovered':bool(retries>0),

@@ -21,12 +21,23 @@ area reviews are closed. The 5,000-cycle source gate, source-package hygiene for
 860 files and eight exact-raster fixtures also passed. Checkpoint `2aca72acb36b547d75e12a0a59d78325552c21a8` passed Windows/Linux, dependency, CodeQL and packaged Windows GUI/native drag-and-drop CI in [run 42273234504](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42273234504). The initial Ubuntu Node-startup timeout passed on rerun with unchanged source and test timeout.
 
 Batch 04 adds 54 distinct changes: application workflow 27, planning 9,
-UI/profiles 13 and native input/helper lifecycle/privacy 5. The implemented total
-is **668**, with **332 remaining**. Frozen-source integration passed **2,934 tests
+UI/profiles 13 and native input/helper lifecycle/privacy 5. That checkpoint brought the implemented total
+to **668**, with **332 remaining**. Frozen-source integration passed **2,934 tests
 in 75.509 seconds**, with 23 platform/hardware skips and unchanged source hashes.
 Independent source and cross-area reviews are closed. The 5,000-cycle source gate,
 source-package hygiene and eight exact-raster engine fixtures passed. This new
-checkpoint still requires its own Windows/Linux CI; no 1.0.148 release is published.
+checkpoint `5f3fcfb5c4519e5ed1b9b770ba951918819d725d` passed Windows/Linux,
+dependencies, CodeQL and packaged Windows GUI/native drag-and-drop checks in
+[run 42280910774](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42280910774).
+
+Batch 05 adds 31 independently reviewed groups: application execution/recovery 7,
+colour/planning 6, UI/workflow 13 and source/release publication 5. The implemented
+total is **699**, with **301 remaining**. Frozen-source integration passed **3,059 tests in 73.421 seconds**, with 26
+platform/hardware skips and unchanged source hashes. All area and final
+adaptive-probe/correction reviews are closed. The 5,000-cycle source gate,
+source-package hygiene for 918 files and eight exact-raster fixtures passed.
+This new checkpoint still requires its own Windows/Linux CI. No 1.0.148 release
+is published.
 
 ## Review method
 
@@ -47,6 +58,7 @@ checkpoint still requires its own Windows/Linux CI; no 1.0.148 release is publis
 - [Batch 02 calibration](v148-batch02-calibration.md), [delivery/planning](v148-batch02-delivery-planning.md), [storage/resources](v148-batch02-storage-runtime.md), and [UI/input](v148-batch02-ui-input.md).
 - Batch 03: [colour quality](v148-batch03-colour-quality.md), [rendering/planning](v148-batch03-rendering-planning.md), [GPU/platform](v148-batch03-gpu-platform.md), and [image workflow/UI](v148-batch03-image-workflow.md).
 - Batch 04: [application workflow](v148-batch04-application.md), [planning](v148-batch04-planning.md), [UI/profiles](v148-batch04-ui-profiles.md), and [native input/helpers/privacy](v148-batch04-platform-release.md).
+- Batch 05: [recovery/execution](v148-batch05-application.md), [colour/planning](v148-batch05-colour-planning.md), [UI/workflow](v148-batch05-ui-workflow.md), and [source/release publication](v148-batch05-platform-release.md).
 - [Combined numbered index](IMPROVEMENTS-v1.0.148.md) and [machine-readable registry](v148-improvements.json).
 - `benchmark_engine.py` validates eight deterministic planning fixtures against quantized target geometry. The saved reference has zero mismatched pixels in all eight fixtures.
 - `benchmark_v148_ui.py` reproduces UI helper workload comparisons. It does not exercise real Windows input or physical GPU hardware.

@@ -193,23 +193,37 @@ def _rgb01(array: np.ndarray) -> np.ndarray:
     a = np.asarray(raw, dtype=np.float32)
     if not np.all(np.isfinite(a)):
         raise ValueError('RGB channels must be finite')
-    if np.issubdtype(raw.dtype, np.integer) or (a.size and float(np.max(a)) > 1.5):
+    maximum = float(np.max(a)) if a.size else 0.0
+    if np.issubdtype(raw.dtype, np.integer) or maximum > 1.5:
         a = a / 255.0
+        maximum /= 255.0
+    # These internal consumers only read normalized input. Borrow valid float
+    # buffers instead of copying both full preview frames at every nested call.
+    if not a.size or (maximum <= 1.0 and float(np.min(a)) >= 0.0):
+        return a
     return np.clip(a, 0.0, 1.0).astype(np.float32, copy=False)
 
 
 def _oklab_cpu(rgb: np.ndarray) -> np.ndarray:
     c = _rgb01(rgb)
-    linear = np.where(c <= 0.04045, c / 12.92, np.power((c + 0.055) / 1.055, 2.4))
-    r, g, b = linear[..., 0], linear[..., 1], linear[..., 2]
-    l = np.cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
-    m = np.cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
-    s = np.cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)
-    return np.stack((
-        0.2104542553*l + 0.7936177850*m - 0.0040720468*s,
-        1.9779984951*l - 2.4285922050*m + 0.4505937099*s,
-        0.0259040371*l + 0.7827717662*m - 0.8086757660*s,
-    ), axis=-1).astype(np.float32, copy=False)
+    flat = c.reshape(-1, 3)
+    result = np.empty(c.shape, dtype=np.float32)
+    output = result.reshape(-1, 3)
+    # Keep transfer/routing decisions for the complete workload, but bound the
+    # CPU transform's linear-light and LMS scratch buffers. Arithmetic order is
+    # identical to the dense formula, including each float32 intermediate.
+    for start in range(0, len(flat), 65536):
+        tile = flat[start:start+65536]
+        linear = np.where(tile <= 0.04045, tile / 12.92, np.power((tile + 0.055) / 1.055, 2.4))
+        r, g, b = linear[:, 0], linear[:, 1], linear[:, 2]
+        l = np.cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
+        m = np.cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
+        s = np.cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)
+        out = output[start:start+65536]
+        out[:, 0] = 0.2104542553*l + 0.7936177850*m - 0.0040720468*s
+        out[:, 1] = 1.9779984951*l - 2.4285922050*m + 0.4505937099*s
+        out[:, 2] = 0.0259040371*l + 0.7827717662*m - 0.8086757660*s
+    return result
 
 
 _OPENCL_SOURCE = r"""
@@ -288,7 +302,8 @@ __kernel void ds_palette_kernel(
             float bright=1.0f+fmax(srcL-52.0f,0.0f)/80.0f;
             float neutral_cut=fmax(2.5f,srcC*0.28f);
             float neutral=(srcC>=5.0f && palC<neutral_cut)?srcC-palC:0.0f;
-            float hex=fmax(hue-45.0f,0.0f), hext=fmax(hue-85.0f,0.0f);
+            float hex=(srcC>=5.0f)?fmax(hue-45.0f,0.0f):0.0f;
+            float hext=(srcC>=5.0f)?fmax(hue-85.0f,0.0f):0.0f;
             if(fidelity==1){
                 float family=neutral*0.18f+hex*0.035f+hext*0.060f;
                 dist+=light*0.10f+dark*0.24f*bright+chroma*0.055f+hue*0.010f+family;
@@ -527,7 +542,12 @@ def _palette_cost_cpu(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
         palL,palC,palH=_palette_features(pal_lab) if pal_features is None else pal_features
         light=np.abs(srcL[...,None]-palL);dark=np.maximum(srcL[...,None]-palL,0.0)
         chroma=np.abs(srcC[...,None]-palC);hd=np.abs(srcH[...,None]-palH);hue=np.minimum(hd,360.0-hd);hue=np.where(np.minimum(srcC[...,None],palC)<2.5,0.0,hue)
-        bright=1.0+np.maximum(srcL-52.0,0.0)[...,None]/80.0;neutral_cut=np.maximum(2.5,srcC[...,None]*.28);neutral=np.where((srcC[...,None]>=5.0)&(palC<neutral_cut),srcC[...,None]-palC,0.0);hex=np.maximum(hue-45.0,0.0);hext=np.maximum(hue-85.0,0.0)
+        bright=1.0+np.maximum(srcL-52.0,0.0)[...,None]/80.0
+        vivid=srcC[...,None]>=5.0
+        neutral_cut=np.maximum(2.5,srcC[...,None]*.28)
+        neutral=np.where(vivid&(palC<neutral_cut),srcC[...,None]-palC,0.0)
+        hex=np.where(vivid,np.maximum(hue-45.0,0.0),0.0)
+        hext=np.where(vivid,np.maximum(hue-85.0,0.0),0.0)
         if fidelity=="Balanced":dist+=light*.10+dark*.24*bright+chroma*.055+hue*.010+neutral*.18+hex*.035+hext*.060
         else:dist+=light*.22+dark*.55*bright+chroma*.115+hue*.026+neutral*.32+hex*.080+hext*.120
     return dist.astype(np.float32,copy=False)

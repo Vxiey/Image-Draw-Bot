@@ -44,7 +44,10 @@ class Rc8DynamicReplannerTests(unittest.TestCase):
     def test_drawbot_has_runtime_replan_hook(self):
         src=Path('DrawBot.py').read_text(encoding='utf-8')
         self.assertIn('enumerate(execution_sequence)',src)
-        self.assertIn('deadline_scheduler.replan_remaining(_tail)',src)
+        # The adapter preserves replanning while bypassing suffix copies when
+        # the current runtime policy cannot reorder it. Actual execution and
+        # active ordering parity are exercised by the batch05 runtime tests.
+        self.assertIn('deadline_scheduler.replan_in_place(execution_sequence,_execution_index+1)',src)
 
     def test_version(self):
         self.assertEqual(APP_VERSION,'1.0.148')

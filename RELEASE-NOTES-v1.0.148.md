@@ -1,6 +1,33 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 614 distinct runtime improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02 and 116 changes in batch 03. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 699 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04 and 31 changes in batch 05. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 05: drawing verification, recovery and publication identity
+
+- Preserve a marked subject and its mode with the exact recovered image. A failed image checkpoint cannot attach another image's selection to the old raster.
+- Avoid copying the remaining drawing sequence when runtime policy cannot replan. Restore known color/tool/brush state after a released-mouse pause.
+- Keep correction-only retries from replaying canvas fills, use the original per-path timing reference and record a fresh before/after result for every attempt.
+- Verify the brush actually selected for each entry. Clipped color probes remain unavailable evidence; boundary-spanning lines obtain a short probe from their guarded interior, and correction-only input follows the same verification contract.
+- Match near-neutral colors consistently across scalar/vector/GPU paths. Represent untouched white canvas correctly when no white palette color exists, preserve isolated colored details and sample both sides of real picture edges.
+- Reduce fragmented-component statistics work and preview-metric scratch memory while preserving exact results. The paired ledgers disclose slower workloads as well as improvements.
+- Parse actual image elements and URI lists in drops, support the already decodable TIFF/ICO/APNG formats and avoid interpreting inline image data as a filesystem path.
+- Keep an open guide synchronized with the profile, improve scaling/keyboard navigation, release owned root callbacks and coalesce redundant resize work. Position drop overlays at verified signed desktop coordinates and cancel delayed region selection when Stop is pressed.
+- Fail source packaging on unreadable included trees, validate build CLI arguments before side effects, bind each release tag to its actual build commit and serialize all release publishers so their assets cannot interleave.
+
+## Batch 04: application policies, detailed plans and native lifecycle
+
+- Preserve explicit Pixel Accurate and Unlimited settings through automatic profile/planning policies; keep watchdog Off meaningful while retaining Stop and bounded dry-run behavior.
+- Make settings application transactional, preserve unknown-schema documents, isolate invalid preference fields and stop dependent actions when saving fails.
+- Recover images through a tracked cancellable worker, disarm before recovery and treat an already completed sequence checkpoint as a no-op.
+- Preserve final detail execution order and actual brush footprints in previews and verification; reduce repeated palette/source analysis allocations.
+- Improve setup readiness, target-specific guidance, profile resets and scaled layout. Retain pending native mouse cleanup, propagate helper cancellation and redact diagnostic metadata.
+
+Batch 04 passed 2,934 local tests with 23 platform/hardware skips, the source gate,
+source hygiene and eight exact-raster fixtures. Its published checkpoint passed
+Windows/Linux, dependency, CodeQL and packaged Windows GUI/native drag-and-drop
+CI. Batch 05 passed 3,059 frozen-source local tests with 26 platform/hardware
+skips, the source gate, source-package hygiene and eight exact-raster fixtures.
+All independent reviews are closed; its new Windows/Linux CI remains pending.
 
 ## Batch 03: visible image fidelity, bounded work and responsive operations
 
@@ -19,7 +46,7 @@ temporary allocation; the area ledgers report both outcomes. Final frozen-source
 discovery passed 2,800 tests in 70.634 seconds with 22 platform/hardware skips and
 unchanged source hashes. All four independent area reviews are closed. The
 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures
-also passed. Windows checkpoint verification remains pending.
+also passed. Its published checkpoint passed Windows/Linux and packaged Windows verification.
 
 ## Batch 02: calibration, execution and application reliability
 
@@ -50,7 +77,7 @@ The batch includes reproducible CPU microbenchmarks for calibration scans, check
 - Keep native paste in text controls, restore UI state after startup failures, yield long event queues and avoid redundant preview layouts.
 - Save recordings through unique atomic staging files, preserve existing recordings on failure and release owned capture buffers.
 
-Batch 01 passed 2,202 local unittest tests with 19 platform/hardware skips. Batch 02 passed 2,557 local tests with 22 platform/hardware skips, its 5,000-cycle source gate and eight exact-raster engine fixtures; its published checkpoint passed Windows/Linux and packaged GUI/native drag-and-drop CI. The batch 03 Windows checks remain pending. Area ledgers contain reproducible CPU measurements and exact-output comparisons; physical GPU behavior and real drawing remain separate verification scopes.
+Batch 01 passed 2,202 local unittest tests with 19 platform/hardware skips. Batch 02 passed 2,557 local tests with 22 platform/hardware skips, its 5,000-cycle source gate and eight exact-raster engine fixtures; its published checkpoint passed Windows/Linux and packaged GUI/native drag-and-drop CI. Batch 03's published checkpoint also passed those checks. Area ledgers contain reproducible CPU measurements and exact-output comparisons; physical GPU behavior and real drawing remain separate verification scopes.
 
 ## Original 100-change baseline
 

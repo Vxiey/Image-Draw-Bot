@@ -190,15 +190,20 @@ def load_custom_profiles(path):
         if not isinstance(data, dict) or len(data) > MAX_CUSTOM_PROFILES:
             return
         owners = {v[0] for v in PROFILES.values()}
+        names = {name.casefold() for name in PROFILES}
         for name,key in data.items():
             if not isinstance(key, str) or not re.fullmatch(r'custom-[a-f0-9]{32}', key) or key in owners:
                 continue
             try:
-                name = validate_custom_profile_name(name)
+                name = clean_profile_name(name)
             except ValueError:
+                continue
+            folded = name.casefold()
+            if folded in names:
                 continue
             _register_custom_profile(name, key)
             owners.add(key)
+            names.add(folded)
     except (OSError, ValueError, RecursionError):
         return
 

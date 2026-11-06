@@ -63,6 +63,43 @@ def _actual_coverage(options: dict[str, Any]) -> float | None:
     return _float(post.get("actual_coverage_percent"), None)
 
 
+def build_correction_retry_plan(base_plan: dict[str, Any]) -> dict[str, Any]:
+    """Prepare one correction pass while retaining the original visual target.
+
+    Empty execution groups prevent a full redraw. The original source, previews
+    and fill descriptions remain comparison evidence; execution separately skips
+    every clear/fill prelude for this explicit correction-only operation.
+    """
+    options = dict(base_plan.get('options') or {})
+    estimate = _as_dict(base_plan.get('draw_time_estimate'))
+    projected = _float(estimate.get('projected_seconds'))
+    if projected is None or projected <= 0:
+        projected = _float(base_plan.get('estimate'))
+    count = base_plan.get('count')
+    per_path = (projected / count if projected is not None and projected > 0
+                and type(count) is int and count > 0 else None)
+    # A retry's before/after pair must describe this attempt, not the first
+    # full drawing. Missing fresh evidence cannot fall back to a previous pass.
+    for key in ('post_draw_before_correction_accuracy_meta', 'post_draw_accuracy_meta',
+                'post_draw_correction_meta', 'correction_review_meta',
+                'stroke_delivery_verification_meta', 'edge_behavior_meta',
+                'visual_verification_runtime_meta', 'adaptive_brush_runtime_meta',
+                'deadline_runtime_meta', 'real_speed_runtime_meta',
+                'auto_tuner_feedback_runtime_meta'):
+        options.pop(key, None)
+    options.update({
+        'post_draw_correction_retry': True, 'correction_only_retry': True,
+        '_post_draw_correction_ran': False, 'render_resume_state': None,
+        'auto_clear_canvas': False, 'canvas_clear_actions': [],
+        'canvas_clear_restore_actions': [], 'test_run': False, 'dry_run_sampled': False,
+        'post_draw_correction_reference_seconds_per_path': per_path,
+    })
+    groups = [[] for _ in (base_plan.get('colors') or ())]
+    retry_estimate = _float(options.get('post_draw_correction_estimated_seconds'), 6.0)
+    return dict(base_plan, options=options, groups=groups, execution_groups=groups,
+                execution_sequence=[], count=0, estimate=max(1.0, min(20.0, retry_estimate)))
+
+
 @dataclass(frozen=True)
 class ReviewAction:
     label: str

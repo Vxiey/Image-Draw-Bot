@@ -266,7 +266,7 @@ class CalibrationAndModalTests(unittest.TestCase):
                 captured=Image.new('RGB',(40,30),'red'); original_convert=captured.convert; copies=[]
                 def convert(*args,**kwargs):
                     result=original_convert(*args,**kwargs);copies.append(result);return result
-                with patch.object(ctypes,'windll',SimpleNamespace(user32=api),create=True), \
+                with patch('WindowsSystem.load_system_library',return_value=api), \
                      patch('RegionPicker.ImageGrab.grab',return_value=captured), \
                      patch.object(captured,'convert',side_effect=convert), \
                      patch('RegionPicker.tk.Toplevel',Overlay), patch('RegionPicker.tk.Canvas') as canvas, \

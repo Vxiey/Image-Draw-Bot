@@ -1,0 +1,46 @@
+{
+  "baseline_commit": "5f3fcfb5c4519e5ed1b9b770ba951918819d725d",
+  "fixture": {
+    "excluded_private_files": 6000,
+    "expected_findings": [
+      ".github/workflows/validate-once.yml",
+      "patch_once.py"
+    ],
+    "included_files": 402,
+    "private_roots": [
+      ".git",
+      ".build-venv",
+      "dist"
+    ]
+  },
+  "limitations": "Synthetic local filesystem with warmed metadata; Python allocation peak is not process RSS. This measures only source-hygiene traversal, not build or application runtime.",
+  "measured_at_utc": "2026-11-06T19:54:07.357586+00:00",
+  "median_time_ratio_before_over_after": 239.5810155003842,
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "python_allocation_peak_bytes": {
+    "after": 10036,
+    "before": 448046
+  },
+  "schema": 1,
+  "seconds_median": {
+    "after": 0.0008045700014918111,
+    "before": 0.19275969799855375
+  },
+  "seconds_samples": {
+    "after": [
+      0.0006958190024306532,
+      0.0008045700014918111,
+      0.0008091159979812801,
+      0.00047953899775166065,
+      0.0026705180025601294
+    ],
+    "before": [
+      0.19275969799855375,
+      0.18312051799875917,
+      0.19574185400051647,
+      0.18603980300031253,
+      0.2207853520012577
+    ]
+  }
+}

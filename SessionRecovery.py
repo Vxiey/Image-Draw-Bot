@@ -122,6 +122,31 @@ def _valid_digest(value):
     return isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value) is not None
 
 
+def clean_subject_selection(value, image_sha256):
+    """Keep a bounded image-specific selection only for its saved raster."""
+    if not _valid_digest(image_sha256) or not isinstance(value, dict):
+        return None
+    if value.get('image_sha256') != image_sha256:
+        return None
+    from SubjectFocus import MODES
+    mode = value.get('mode')
+    if mode not in MODES:
+        return None
+    region = value.get('region')
+    if region is not None:
+        if (not isinstance(region, (list, tuple)) or len(region) != 4
+                or any(type(v) not in (int, float) for v in region)):
+            return None
+        try:
+            region = [float(v) for v in region]
+        except (ValueError, OverflowError):
+            return None
+        x0, y0, x1, y1 = region
+        if not all(math.isfinite(v) for v in region) or not (0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1):
+            return None
+    return {'image_sha256': image_sha256, 'mode': mode, 'region': region}
+
+
 def _image_path(digest):
     return IMAGE_FILE.with_name(f'{IMAGE_FILE.stem}-{digest}.png')
 
@@ -228,14 +253,15 @@ def _clean_old_images(keep, *, strict=False):
         raise OSError(f'Could not remove cached recovery files: {names}') from failures[0][1]
 
 
-def save_snapshot(*, profile: str, options: dict, saved_area=None, image=None, clear_render_resume=False, target_lock=None) -> Path:
+def save_snapshot(*, profile: str, options: dict, saved_area=None, image=None, clear_render_resume=False, target_lock=None, subject_selection=None) -> Path:
     """Write a bounded local checkpoint. ``image=None`` preserves any old cache."""
     with _snapshot_guard():
         return _save_snapshot(profile=profile, options=options, saved_area=saved_area, image=image,
-                              clear_render_resume=clear_render_resume, target_lock=target_lock)
+                              clear_render_resume=clear_render_resume, target_lock=target_lock,
+                              subject_selection=subject_selection)
 
 
-def _save_snapshot(*, profile, options, saved_area, image, clear_render_resume, target_lock):
+def _save_snapshot(*, profile, options, saved_area, image, clear_render_resume, target_lock, subject_selection=None):
     RECOVERY_DIR.mkdir(parents=True, exist_ok=True)
     cleaned = {}
     for key in _OPTION_KEYS:
@@ -262,6 +288,10 @@ def _save_snapshot(*, profile, options, saved_area, image, clear_render_resume, 
         "has_image": digest is not None,
         "image_sha256": digest,
         "target_lock_hint": _clean_target_lock(target_lock),
+        "subject_selection": clean_subject_selection(
+            dict(subject_selection, image_sha256=digest) if isinstance(subject_selection, dict) else None,
+            digest,
+        ),
         "safety": {
             "drawing_armed": False,
             "target_lock_restored": False,
@@ -337,6 +367,7 @@ def load_snapshot() -> dict | None:
         "has_image": image_path is not None and image_path.is_file(),
         "image_sha256": digest,
         "target_lock_hint": _clean_target_lock(raw.get('target_lock_hint')),
+        "subject_selection": clean_subject_selection(raw.get('subject_selection'), digest),
         "render_resume": load_render_progress(),
     }
 

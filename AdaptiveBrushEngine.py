@@ -278,3 +278,15 @@ def assign_adaptive_brushes(execution_sequence: Sequence[dict], *, profile_key: 
 def brush_for_entry(entry: dict, default_brush_px: int) -> int:
     try:return max(1,int(entry.get('brush_px',default_brush_px) or default_brush_px))
     except (TypeError,ValueError,AttributeError):return max(1,int(default_brush_px or 1))
+
+
+def brush_sizes_for_sequence(sequence, default_brush_px: int) -> list[int]:
+    """Report brushes actually used, retaining state across implicit entries."""
+    current = max(1, int(default_brush_px or 1))
+    sizes = set()
+    for entry in sequence:
+        if not isinstance(entry, dict) or not entry.get('path'):
+            continue
+        current = brush_for_entry(entry, current)
+        sizes.add(current)
+    return sorted(sizes) or [max(1, int(default_brush_px or 1))]

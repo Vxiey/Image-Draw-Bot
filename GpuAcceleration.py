@@ -606,7 +606,7 @@ def palette_indices_rgba(image: Image.Image, palette: list[tuple[int, int, int]]
                     ok_diff = src_ok[:, :, None, :] - pal_ok[None, None, :, :]
                     dist = cp.sqrt(cp.sum(ok_diff * ok_diff, axis=3)) * 100.0
                 threshold = 0.0006
-                if color_fidelity in ("Balanced", "Faithful"):
+                if color_rendering != "RGB nearest" and color_fidelity in ("Balanced", "Faithful"):
                     src_L = src_ok[..., 0] * 100.0
                     pal_L = pal_ok[..., 0] * 100.0
                     light_error = cp.abs(src_L[:, :, None] - pal_L[None, None, :])
@@ -622,8 +622,8 @@ def palette_indices_rgba(image: Image.Image, palette: list[tuple[int, int, int]]
                     neutral_cut = cp.maximum(2.5, src_chroma[:, :, None] * 0.28)
                     neutral_loss = cp.where(vivid & (pal_chroma[None, None, :] < neutral_cut),
                                             src_chroma[:, :, None] - pal_chroma[None, None, :], 0.0)
-                    hue_excess = cp.maximum(hue_error - 45.0, 0.0)
-                    hue_extreme = cp.maximum(hue_error - 85.0, 0.0)
+                    hue_excess = cp.where(vivid, cp.maximum(hue_error - 45.0, 0.0), 0.0)
+                    hue_extreme = cp.where(vivid, cp.maximum(hue_error - 85.0, 0.0), 0.0)
                     if color_fidelity == "Balanced":
                         family_penalty = neutral_loss * 0.18 + hue_excess * 0.035 + hue_extreme * 0.060
                         dist = dist + light_error * 0.10 + dark_loss * 0.24 * bright_boost + chroma_error * 0.055 + hue_error * 0.010 + family_penalty

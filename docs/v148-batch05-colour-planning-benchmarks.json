@@ -1,0 +1,218 @@
+{
+  "baseline": "5f3fcfb5c4519e5ed1b9b770ba951918819d725d",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One exact-parity/warm pair, alternating before/after elapsed samples, separate Python/NumPy-traced peaks after garbage collection.",
+  "scope": "CPU synthetic component extraction and complete preview evaluation; no drawing, UI, native input or GPU performance claim. Component inputs are built once outside both timings. The baseline evaluator uses its baseline UniversalGpuAcceleration module too; other shared dependencies use the current checkout. Most native Pillow buffers are not traced.",
+  "after_source_sha256": {
+    "PixelStrokeEngine": "8f3b5764c0a0537fe1dc4168b2a1fdaabfbfbb57742f489a9dfab92d99565b7c",
+    "AccuracyEvaluator": "d60866c7ca8f9c5b078a93e4c83f1e8486c0851996a8a9e7b259c35b2d324d07",
+    "UniversalGpuAcceleration": "1e9fd7799608522729fd63440eb01840b27fcd77c832de68efbbedc0e1ba96fb"
+  },
+  "measurements": {
+    "components_checker160x160": {
+      "before_samples_ms": [
+        929.9193430015293,
+        1025.153914000839,
+        776.3859810002032,
+        911.3524749991484,
+        937.9276459985704
+      ],
+      "after_samples_ms": [
+        396.6432189990883,
+        556.246652999107,
+        399.8890000002575,
+        370.0084730007802,
+        618.0430780004826
+      ],
+      "before_median_ms": 929.9193430015293,
+      "after_median_ms": 399.8890000002575,
+      "exact_output_parity": true,
+      "output_sha256": "958b891cc160cb5fe03862babe749ee9f73f9b8fa87329c856b329ec03f3d35b",
+      "before_peak_python_bytes": 40702476,
+      "after_peak_python_bytes": 31630048,
+      "parameters": {
+        "size": [
+          160,
+          160
+        ],
+        "pattern": "checker",
+        "vertical_runs": true,
+        "seed": null
+      },
+      "comparison": "Every component field, ordered horizontal/vertical run, label pixel and metadata value."
+    },
+    "components_solid1024x768": {
+      "before_samples_ms": [
+        40.62538200014387,
+        40.49554100129171,
+        41.47865399863804,
+        43.607080002402654,
+        41.05680899738218
+      ],
+      "after_samples_ms": [
+        42.75528099969961,
+        39.79811899989727,
+        39.76937700281269,
+        42.470509997656336,
+        43.34070700133452
+      ],
+      "before_median_ms": 41.05680899738218,
+      "after_median_ms": 42.470509997656336,
+      "exact_output_parity": true,
+      "output_sha256": "b1d3e9879c581a6ba5b70351dbe38577bc8d31bde2304402d1bb4dbe38c731b9",
+      "before_peak_python_bytes": 3647840,
+      "after_peak_python_bytes": 3648136,
+      "parameters": {
+        "size": [
+          1024,
+          768
+        ],
+        "pattern": "solid",
+        "vertical_runs": true,
+        "seed": null
+      },
+      "comparison": "Every component field, ordered horizontal/vertical run, label pixel and metadata value."
+    },
+    "components_sparse1024x768": {
+      "before_samples_ms": [
+        20.673389997682534,
+        19.982468002126552,
+        21.2735259992769,
+        20.334127999376506,
+        20.588133000273956
+      ],
+      "after_samples_ms": [
+        19.93489699816564,
+        20.111529000132577,
+        19.963989998359466,
+        19.262104000517866,
+        19.02720599900931
+      ],
+      "before_median_ms": 20.588133000273956,
+      "after_median_ms": 19.93489699816564,
+      "exact_output_parity": true,
+      "output_sha256": "fe999ad78ed62697f9ec86349e44ebbfd0aeb792491c3d6cf4f07cb73841a74b",
+      "before_peak_python_bytes": 3272656,
+      "after_peak_python_bytes": 3262508,
+      "parameters": {
+        "size": [
+          1024,
+          768
+        ],
+        "pattern": "sparse",
+        "vertical_runs": true,
+        "seed": 148055
+      },
+      "comparison": "Every component field, ordered horizontal/vertical run, label pixel and metadata value."
+    },
+    "preview_768x512_rgb_metrics": {
+      "before_samples_ms": [
+        61.62285499885911,
+        67.2334699993371,
+        66.73478599986993,
+        68.20556999809924,
+        64.18922800003202
+      ],
+      "after_samples_ms": [
+        59.697544002119685,
+        67.3150929978874,
+        62.82998399910866,
+        59.41615800111322,
+        66.13668199861422
+      ],
+      "before_median_ms": 66.73478599986993,
+      "after_median_ms": 62.82998399910866,
+      "exact_output_parity": true,
+      "output_sha256": "0e76470e0582a2c8d972b5e41c32fb97d69903176275782dcc39a2f859b5efa6",
+      "before_peak_python_bytes": 51600920,
+      "after_peak_python_bytes": 31475584,
+      "parameters": {
+        "size": [
+          768,
+          512
+        ],
+        "seed": 148055,
+        "source": "generated RGB/RGBA bytes",
+        "preview": "one-column cyclic source shift",
+        "heatmaps": false,
+        "importance_size": null
+      },
+      "comparison": "Complete returned metrics, routes, percentiles, and optional diagnostic image bytes."
+    },
+    "preview_1536x1024_rgb_metrics": {
+      "before_samples_ms": [
+        329.19409799796995,
+        321.25569300114876,
+        332.35391300331685,
+        300.4470849991776,
+        309.16445099865086
+      ],
+      "after_samples_ms": [
+        281.57522800029255,
+        290.83553300006315,
+        270.4590159992222,
+        273.13766600127565,
+        276.6517499985639
+      ],
+      "before_median_ms": 321.25569300114876,
+      "after_median_ms": 276.6517499985639,
+      "exact_output_parity": true,
+      "output_sha256": "fe054664b7b775cd1483d25d666f11573fa885527b9451e48f3330a45dba964a",
+      "before_peak_python_bytes": 206134564,
+      "after_peak_python_bytes": 125847216,
+      "parameters": {
+        "size": [
+          1536,
+          1024
+        ],
+        "seed": 148055,
+        "source": "generated RGB/RGBA bytes",
+        "preview": "one-column cyclic source shift",
+        "heatmaps": false,
+        "importance_size": null
+      },
+      "comparison": "Complete returned metrics, routes, percentiles, and optional diagnostic image bytes."
+    },
+    "preview_640x384_rgba_heatmaps": {
+      "before_samples_ms": [
+        65.62037900221185,
+        65.13934699978563,
+        62.854799998603994,
+        63.35663299978478,
+        62.876863001292804
+      ],
+      "after_samples_ms": [
+        61.95833500169101,
+        63.34713799878955,
+        62.57153200203902,
+        61.93339799938258,
+        62.39807699967059
+      ],
+      "before_median_ms": 63.35663299978478,
+      "after_median_ms": 62.39807699967059,
+      "exact_output_parity": true,
+      "output_sha256": "b10c7805de3104b0f737986edb15281ed2eab03a5f3e60db446bcf881810ba55",
+      "before_peak_python_bytes": 41071805,
+      "after_peak_python_bytes": 19679152,
+      "parameters": {
+        "size": [
+          640,
+          384
+        ],
+        "seed": 148055,
+        "source": "generated RGB/RGBA bytes",
+        "preview": "one-column cyclic source shift",
+        "heatmaps": true,
+        "importance_size": [
+          128,
+          96
+        ]
+      },
+      "comparison": "Complete returned metrics, routes, percentiles, and optional diagnostic image bytes."
+    }
+  }
+}

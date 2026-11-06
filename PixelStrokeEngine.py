@@ -186,6 +186,60 @@ def _vertical_run_chunk(component_map: np.ndarray, x0: int, x1: int, cancelled=l
     return out
 
 
+def _row_component_statistics(pixel_map: PixelMap, y: int, row_runs, *, cancelled):
+    """Reduce all runs in one row together, including gaps between runs.
+
+    Alternating start/end boundaries let reduceat cover exactly each drawable
+    interval. The unused inter-run reductions are discarded. One padded value
+    handles a run ending at the right edge without a special final interval.
+    """
+    planes = (pixel_map.importance_map, pixel_map.edge_map,
+              pixel_map.contour_map if pixel_map.contour_map is not None else pixel_map.edge_map,
+              pixel_map.shadow_map, pixel_map.shadow_detail_map)
+    if len(row_runs) < 8:
+        # Solid rows and sparse dots have too few runs to amortize full-row
+        # padding. Keep their original small slice reductions instead.
+        if cancelled():raise InterruptedError()
+        slices = [slice(run.x0, run.x1 + 1) for run in row_runs]
+        sums = [[0.0] * len(slices) if plane is None else
+                [float(np.sum(plane[y, sl], dtype=np.float64)) for sl in slices]
+                for plane in planes]
+        maxima = [float(np.max(pixel_map.importance_map[y, sl])) for sl in slices]
+        counts = [int(np.count_nonzero(pixel_map.protected_mask[y, sl])) for sl in slices]
+        return sums, maxima, counts
+    def boundaries():
+        for index, run in enumerate(row_runs):
+            if index % 128 == 0 and cancelled():raise InterruptedError()
+            yield run.x0
+            yield run.x1 + 1
+    bounds = np.fromiter(boundaries(), dtype=np.intp, count=len(row_runs) * 2)
+    cache = {}
+    sums = []
+    for plane in planes:
+        if cancelled():raise InterruptedError()
+        key = id(plane)
+        if key not in cache:
+            if plane is None:
+                cache[key] = np.zeros(len(row_runs), dtype=np.float64)
+            else:
+                values = np.empty(pixel_map.width + 1, dtype=np.float64)
+                values[:-1] = plane[y]
+                values[-1] = 0
+                cache[key] = np.add.reduceat(values, bounds)[::2]
+        sums.append(cache[key])
+    values = np.empty(pixel_map.width + 1, dtype=np.float64)
+    values[:-1] = pixel_map.importance_map[y]
+    values[-1] = 0
+    maxima = np.maximum.reduceat(values, bounds)[::2]
+    protected = np.empty(pixel_map.width + 1, dtype=np.int64)
+    # Preserve count_nonzero semantics for supported numeric masks as well
+    # as the Boolean masks produced by the application.
+    protected[:-1] = np.asarray(pixel_map.protected_mask[y], dtype=np.bool_)
+    protected[-1] = 0
+    counts = np.add.reduceat(protected, bounds)[::2]
+    return sums, maxima, counts
+
+
 def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, include_vertical_runs: bool = True,
                          cancelled=lambda: False) -> tuple[list[Component], np.ndarray, dict]:
     """Label lossless same-palette 4-connected regions using run union-find."""
@@ -194,48 +248,42 @@ def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, include_v
     component_map = np.full((h, w), -1, dtype=np.int32)
     root_to_component: dict[int, int] = {}
     components: list[Component] = []
-    stats: dict[int, dict] = {}
-
-    for run_index,run in enumerate(runs):
-        if run_index%128==0 and cancelled():raise InterruptedError()
-        root = uf.find(run.rid)
-        cid = root_to_component.get(root)
-        if cid is None:
-            cid = len(components)
-            root_to_component[root] = cid
-            components.append(Component(cid, run.color, bbox=(run.x0, run.y, run.x1, run.y)))
-            stats[cid] = {"importance_sum": 0.0, "edge_sum": 0.0, "contour_sum": 0.0,
-                          "shadow_sum": 0.0, "shadow_detail_sum": 0.0}
-        comp = components[cid]
-        length = run.x1 - run.x0 + 1
-        comp.area += length
-        x0, y0, x1, y1 = comp.bbox
-        comp.bbox = (min(x0, run.x0), min(y0, run.y), max(x1, run.x1), max(y1, run.y))
-        segment = (run.x0, run.y, run.x1, run.y)
-        comp.horizontal_runs.append(segment)
-        sl = slice(run.x0, run.x1 + 1)
-        importance_values = pixel_map.importance_map[run.y, sl]
-        edge_values = pixel_map.edge_map[run.y, sl]
-        contour_values = (pixel_map.contour_map[run.y, sl] if pixel_map.contour_map is not None else edge_values)
-        stats[cid]["importance_sum"] += float(np.sum(importance_values, dtype=np.float64))
-        stats[cid]["edge_sum"] += float(np.sum(edge_values, dtype=np.float64))
-        stats[cid]["contour_sum"] += float(np.sum(contour_values, dtype=np.float64))
-        if pixel_map.shadow_map is not None:
-            stats[cid]["shadow_sum"] += float(np.sum(pixel_map.shadow_map[run.y, sl], dtype=np.float64))
-        if pixel_map.shadow_detail_map is not None:
-            stats[cid]["shadow_detail_sum"] += float(np.sum(pixel_map.shadow_detail_map[run.y, sl], dtype=np.float64))
-        if importance_values.size:
-            comp.importance_max = max(comp.importance_max, float(np.max(importance_values)))
-        comp.protected_pixels += int(np.count_nonzero(pixel_map.protected_mask[run.y, sl]))
-        component_map[run.y, sl] = cid
+    for y, row_ids in enumerate(rows):
+        if cancelled():raise InterruptedError()
+        if not row_ids:continue
+        row_runs = [runs[index] for index in row_ids]
+        sums, maxima, protected = _row_component_statistics(pixel_map, y, row_runs, cancelled=cancelled)
+        for run_index,run in enumerate(row_runs):
+            if run_index%128==0 and cancelled():raise InterruptedError()
+            root = uf.find(run.rid)
+            cid = root_to_component.get(root)
+            if cid is None:
+                cid = len(components)
+                root_to_component[root] = cid
+                components.append(Component(cid, run.color, bbox=(run.x0, run.y, run.x1, run.y)))
+            comp = components[cid]
+            comp.area += run.x1 - run.x0 + 1
+            x0, y0, x1, y1 = comp.bbox
+            comp.bbox = (min(x0, run.x0), min(y0, run.y), max(x1, run.x1), max(y1, run.y))
+            comp.horizontal_runs.append((run.x0, run.y, run.x1, run.y))
+            # These fields hold sums until the component is complete; avoid a
+            # second Python dictionary and five boxed sums per component.
+            comp.importance_mean += float(sums[0][run_index])
+            comp.edge_mean += float(sums[1][run_index])
+            comp.contour_mean += float(sums[2][run_index])
+            comp.shadow_mean += float(sums[3][run_index])
+            comp.shadow_detail_mean += float(sums[4][run_index])
+            comp.importance_max = max(comp.importance_max, float(maxima[run_index]))
+            comp.protected_pixels += int(protected[run_index])
+            component_map[run.y, run.x0:run.x1+1] = cid
 
     for comp in components:
         if comp.area:
-            comp.importance_mean = stats[comp.component_id]["importance_sum"] / comp.area
-            comp.edge_mean = stats[comp.component_id]["edge_sum"] / comp.area
-            comp.contour_mean = stats[comp.component_id]["contour_sum"] / comp.area
-            comp.shadow_mean = stats[comp.component_id]["shadow_sum"] / comp.area
-            comp.shadow_detail_mean = stats[comp.component_id]["shadow_detail_sum"] / comp.area
+            comp.importance_mean /= comp.area
+            comp.edge_mean /= comp.area
+            comp.contour_mean /= comp.area
+            comp.shadow_mean /= comp.area
+            comp.shadow_detail_mean /= comp.area
 
     # Build exact vertical runs. Block D parallelizes independent column chunks
     # while preserving deterministic x-order when merging the results.

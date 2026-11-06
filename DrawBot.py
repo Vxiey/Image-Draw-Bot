@@ -4,6 +4,7 @@ import math
 import queue
 import threading
 import time
+import weakref
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from io import BytesIO
@@ -2249,6 +2250,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
     resume_path_level=bool(resume_info.get('compatible') and resume_info.get('path_level'))
     resume_sequence_level=bool(resume_info.get('compatible') and resume_info.get('sequence_level'))
     resume_skip_prelude=bool(resume_info.get('compatible') and resume_info.get('prelude_complete'))
+    correction_only_retry=plan['options'].get('correction_only_retry') is True
+    skip_canvas_prelude=resume_skip_prelude or correction_only_retry
     if resume_info.get('compatible') and (resume_completed or resume_path_level or resume_sequence_level):
         if resume_sequence_level:
             report('status',f'Render resume verified: {int(resume_info.get("sequence_completed_count",0)):,}/{int(resume_info.get("sequence_total",0)):,} final sequence operations already completed ({float(resume_info.get("sequence_coverage_percent",0.0)):.1f}% execution coverage). Normal target recalibration/preflight still runs before resuming.')
@@ -2810,7 +2813,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         # so already-finished color batches are not erased.
         clear_enabled=bool(plan['options'].get('auto_clear_canvas'))
         clear_strategy=str(plan['options'].get('canvas_clear_strategy') or 'off')
-        if clear_enabled and resume_skip_prelude:
+        if clear_enabled and correction_only_retry:
+            report('status','Automatic canvas clear skipped for correction-only retry.')
+        elif clear_enabled and resume_skip_prelude:
             report('status','Automatic canvas clear skipped because this is a compatible render resume.')
         elif clear_enabled and plan['options'].get('test_run'):
             report('status','Automatic canvas clear skipped for Small Test.')
@@ -2882,7 +2887,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         labels={'tool':'Paint tool','brush-menu':'Brushes menu','brush-preset':'Brush preset','opacity':'100% brush opacity',
                 'fill':'Fill tool','brush':'Brush tool','eraser':'Eraser tool'}
         fill_meta=plan['options'].get('background_fill_plan') or {}
-        if fill_meta.get('enabled') and plan['options'].get('fill_tool_actions') and not resume_skip_prelude:
+        if fill_meta.get('enabled') and plan['options'].get('fill_tool_actions') and not skip_canvas_prelude:
             runtime_safety.note_fill('background_fill_planned')
             bg_index=int(fill_meta['color_index'])
             # Choose color first, then the Fill tool. Some browser drawing apps
@@ -2920,7 +2925,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         # interior seed, then verify both fill color and outside guards. Any
         # component rejected by planning remains as normal scanline strokes.
         fill_regions=plan['options'].get('fill_regions',[]) or []
-        if fill_regions and plan['options'].get('fill_tool_actions') and not resume_skip_prelude:
+        if fill_regions and plan['options'].get('fill_tool_actions') and not skip_canvas_prelude:
             runtime_fill_mask=filter_fill_regions_by_runtime_mask(fill_regions,(width,height),transform,canvas_guard)
             plan['options']['runtime_safe_fill_mask_meta']=runtime_fill_mask.as_dict()
             if runtime_fill_mask.rejected_regions:
@@ -2994,11 +2999,18 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         edge_mode=runtime_edge_mode
         plan['options']['edge_behavior_resolved']=edge_mode
         plan['options'].setdefault('edge_behavior_meta',{'active':True,'mode':edge_mode,'hard_clip':0,'hard_skip':0,'adaptive_boundary':0,'preserve_outline_boundary':0,'safe_skip':0})
+        resume_input_generation=0
+        restored_input_generation=0
 
         def pause_guard():
-            nonlocal paused_seconds
+            nonlocal paused_seconds,resume_input_generation
             if not paused.is_set():
                 return False
+            resume_input_generation+=1
+            verified_colors.clear()
+            exact_color_samples.clear()
+            for cached_color in (color_session_cache.values() if isinstance(color_session_cache,dict) else ()):
+                if isinstance(cached_color,dict):cached_color.pop('sample',None)
             pause_started=clock()
             try:
                 if not dry_run:mouse.release()
@@ -3013,12 +3025,31 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             finally:
                 paused_seconds+=max(0.0,clock()-pause_started)
 
-        def draw_path_item(index,item,smart_group=True,verify_color=True,verification_mode='strict',count_progress=True,slow_probe=False):
-            nonlocal done
+        def draw_path_item(index,item,smart_group=True,verify_color=True,verification_mode='strict',count_progress=True,slow_probe=False,screen_points=None):
+            nonlocal done,restored_input_generation,_verified_execution_brush
             if stop.is_set():
                 raise InterruptedError()
             pause_guard()
-            if smart_group:
+            if restored_input_generation!=resume_input_generation:
+                # A pause explicitly frees the mouse. The user may have changed
+                # the selected colour/tool; cached brush and ink evidence no
+                # longer authorizes assuming the previous target state.
+                for kind,position in plan['options'].get('tool_actions',()):
+                    click_ui_control(position,labels.get(kind,'drawing tool'),.22)
+                _verified_execution_brush=None
+                install_brush_guard(_initial_guard_brush)
+                switch_execution_brush(current_execution_brush)
+                selected_method=select(index)
+                restored_input_generation=resume_input_generation
+                if plan['options'].get('adaptive_color_verification',False) and verification_mode!='adaptive':
+                    verify_color_batch(index,item,smart_group,selected_method,0,0)
+                else:
+                    verify_color=bool(verify_color or plan['options'].get('strict_color_verification',True))
+            if screen_points is not None:
+                # Internal verification probes may already be derived from a
+                # guarded physical subpath. Reapply the same guard below.
+                raw_canvas_points=list(screen_points)
+            elif smart_group:
                 source_points=list(item)
                 raw_canvas_points=[transform.point(x,y) for x,y in source_points]
             else:
@@ -3046,7 +3077,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     if done % progress_every == 0 or done == plan['count']:
                         report('progress', (done, plan['count']))
                         report_draw_timer()
-                return {'matched': True, 'skipped': True, 'reason': 'outside safe canvas'}
+                return {'matched': False, 'skipped': True, 'available':False, 'reason': 'outside safe canvas'}
+            if (not dry_run and verification_mode!='adaptive' and index not in verified_colors
+                    and plan['options'].get('adaptive_color_verification',False)
+                    and not plan['options'].get('paint_current_color')):
+                raise InterruptedError('Color verification needs a drawable probe before painting this path. Adjust the canvas boundary or brush width, then retry.')
             canvas_points=[p for path in clipped_subpaths for p in path]
             drawn_pairs=[(a,b) for path in clipped_subpaths for a,b in zip(path,path[1:]) if a!=b]
             start=clipped_subpaths[0][0];end=clipped_subpaths[-1][-1]
@@ -3120,7 +3155,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                             deliver_current_stroke(retry=True)
                             wait(delivery_verify_policy.verify_settle)
                             retry_result=inspect_stroke_delivery(mouse,delivery_start,delivery_end,plan['colors'][index],
-                                                                plan['options'].get('brush_px',1),delivery_verify_policy)
+                                                                current_execution_brush,delivery_verify_policy)
                             if retry_result.get('matched'):
                                 recovered=True
                                 delivery_verify_meta['recovered']=int(delivery_verify_meta.get('recovered',0))+1
@@ -3146,16 +3181,18 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     if pairs:
                         verify_start,verify_end=max(pairs,key=lambda pair:(pair[1][0]-pair[0][0])**2+(pair[1][1]-pair[0][1])**2)
                 if verification_mode=='adaptive' and hasattr(mouse,'inspect_ink_segment'):
-                    verification=mouse.inspect_ink_segment(verify_start,verify_end,plan['colors'][index],plan['options'].get('brush_px',1),
+                    verification=mouse.inspect_ink_segment(verify_start,verify_end,plan['colors'][index],current_execution_brush,
                                                            plan['options'].get('color_verification_tolerance',48))
-                    if not verification.get('matched'):
+                    if not isinstance(verification,dict) or verification.get('matched') is not True:
                         return verification
                 else:
                     try:
                         if hasattr(mouse,'verify_ink_segment'):
-                            mouse.verify_ink_segment(verify_start,verify_end,plan['colors'][index],plan['options'].get('brush_px',1))
+                            mouse.verify_ink_segment(verify_start,verify_end,plan['colors'][index],current_execution_brush)
                         elif hasattr(mouse,'verify_ink'):
                             mouse.verify_ink(tuple(round((verify_start[i]+verify_end[i])/2) for i in (0,1)),plan['colors'][index])
+                        elif verification_mode=='adaptive':
+                            raise InterruptedError('The input backend cannot verify the rendered ink.')
                     except InterruptedError as error:
                         selected_tool=plan['options'].get('paint_tool','Use current tool')
                         speed_hint=(' Fast mode can outrun some drawing applications; retry Balanced or Safe if the tool calibration is correct.'
@@ -3169,11 +3206,13 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                             f'{error} Automatic Paint tool selection was enabled. Recalibrate Paint tools because the saved tool position may no longer match this Paint version or window layout.'+speed_hint
                         ) from error
                     verification={'matched':True,'expected':tuple(plan['colors'][index]),'actual':tuple(plan['colors'][index]),'error':0,'confidence':100.0,'sample_count':0}
-                verified_colors.add(index)
+                # Adaptive probes still have a caller-side perceptual gate.
+                # Only that gate may approve the color or publish its cache.
+                if verification_mode!='adaptive':verified_colors.add(index)
 
             if not dry_run:
                 selectors=plan.get('color_selectors') or ()
-                if index < len(selectors) and selectors[index].get('kind')=='custom' and (verification is None or verification.get('matched')):
+                if verification_mode!='adaptive' and index < len(selectors) and selectors[index].get('kind')=='custom' and (verification is None or verification.get('matched')):
                     rgb=tuple(map(int,selectors[index].get('rgb',(0,0,0))))
                     if rgb not in exact_color_samples:
                         pairs=drawn_pairs
@@ -3210,7 +3249,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                          plan['options'].get('effective_paint_tool',plan['options'].get('paint_tool'))=='Pencil' and
                          bool(plan['options'].get('tool_actions')) and ordered==['palette'])
             if paint_retry:ordered.append('palette')
-            last=None
+            last=None;screen_probe=None
             for attempt,method in enumerate(ordered,1):
                 if paint_retry and attempt==2:
                     for kind,position in plan['options']['tool_actions']:
@@ -3219,8 +3258,35 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 actual_method=selected_method if attempt==1 else select(index,method)
                 if attempt>1:
                     report('status',f'Color {color_number}/{total_colors} · RGB {rgb}: retry {attempt}/{len(ordered)} with {method_label(actual_method)}.')
-                result=draw_path_item(index,probe,smart_group=smart_group,verify_color=True,verification_mode='adaptive',count_progress=False,slow_probe=bool(paint_retry and attempt==2))
-                last=result or {'matched':True,'actual':rgb,'error':0,'confidence':100.0}
+                result=draw_path_item(index,probe,smart_group=smart_group,verify_color=True,verification_mode='adaptive',count_progress=False,slow_probe=bool(paint_retry and attempt==2),screen_points=screen_probe)
+                if isinstance(result,dict) and result.get('skipped') is True and screen_probe is None:
+                    # A short source probe may lie entirely outside the inset
+                    # even though its full scanline crosses the safe canvas.
+                    # Derive a short segment from the same guarded full path;
+                    # never widen the boundary to obtain verification pixels.
+                    raw=([transform.point(x,y) for x,y in item] if smart_group else
+                         [transform.point(*item[:2]),transform.point(*item[2:])])
+                    drawable=apply_edge_behavior(canvas_guard,raw,behavior=edge_mode,
+                        profile_name=plan['options'].get('profile_name'),
+                        drawing_mode=plan['options'].get('drawing_mode'),
+                        outline=bool(plan['options'].get('outline')),
+                        context='normal stroke',cancelled=stop.is_set).subpaths
+                    if drawable:
+                        span=float(plan['options'].get('color_probe_source_span',4))*max(fw/width,fh/height)
+                        screen_probe=probe_item(drawable[0],True,span)
+                        result=draw_path_item(index,probe,smart_group=smart_group,verify_color=True,
+                            verification_mode='adaptive',count_progress=False,
+                            slow_probe=bool(paint_retry and attempt==2),screen_points=screen_probe)
+                if isinstance(result,dict) and result.get('skipped') is True:
+                    # Nothing was painted or sampled. Keep this color pending;
+                    # the next drawable path must run its own real probe.
+                    report('color_plan',{'current':color_number,'total':total_colors,'rgb':rgb,
+                        'method':method_label(actual_method),'matched':False,'available':False,
+                        'confidence':0.0,'actual':(),'reason':'No drawable color probe in this path.'})
+                    return actual_method
+                last=result if isinstance(result,dict) and result else {
+                    'matched':False,'available':False,'confidence':0.0,'actual':(),
+                    'reason':'Rendered color evidence was unavailable.'}
                 if plan['options'].get('profile_name')=='Microsoft Paint' and last.get('actual'):
                     try:
                         from PaintColorVerifier import verify_paint_color
@@ -3337,6 +3403,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 return None
             if bool(plan['options'].get('_post_draw_correction_ran')):
                 return None
+            snapshot=None
             try:
                 from PIL import Image
                 source=plan['options'].get('_accuracy_original_source')
@@ -3370,8 +3437,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 estimate=plan.get('draw_time_estimate') if isinstance(plan.get('draw_time_estimate'),dict) else {}
                 per_path=None
                 try:
-                    projected=float(estimate.get('projected_seconds') or plan.get('estimate') or 0)
-                    per_path=projected/max(1,int(plan.get('count') or 1))
+                    if correction_only_retry:
+                        per_path=plan['options'].get('post_draw_correction_reference_seconds_per_path')
+                    else:
+                        projected=float(estimate.get('projected_seconds') or plan.get('estimate') or 0)
+                        per_path=projected/max(1,int(plan.get('count') or 1))
                 except Exception:
                     per_path=None
                 correction=build_post_draw_correction_plan(
@@ -3416,7 +3486,12 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                             stopped_early=True;break
                         if usable is not None and clock()-execution_measure_started >= max(0.0,float(usable)-0.45):
                             stopped_early=True;break
-                        draw_path_item(index,item,smart_group=True,verify_color=False,count_progress=False)
+                        adaptive=plan['options'].get('adaptive_color_verification',False)
+                        if index not in verified_colors and adaptive:
+                            selected_method=verify_color_batch(index,item,True,selected_method,executed_colors,len(color_order))
+                        draw_path_item(index,item,smart_group=True,
+                            verify_color=(index not in verified_colors and not adaptive and plan['options'].get('strict_color_verification',True)),
+                            count_progress=False)
                         executed+=1
                     if stopped_early:
                         break
@@ -3450,6 +3525,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 publish_correction_review()
                 log_event(f'Step 14 post-draw correction skipped safely: {error!r}')
                 return meta
+            finally:
+                if snapshot is not None and isinstance(snapshot,Image.Image):snapshot.close()
 
         def checkpoint_recoverable_path(error, *, color_number, path_index, ordered_items):
             """Persist only the first not-completed path for a transient browser stop."""
@@ -3678,10 +3755,10 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     _select_started=clock()
                     selected_method=select(index); current_color=index
                     note_runtime_operation('palette_change' if selected_method=='palette' else 'color_change',clock()-_select_started)
-                    if index not in verified_colors and plan['options'].get('adaptive_color_verification',False):
-                        _verify_started=clock()
-                        selected_method=verify_color_batch(index,item,True,selected_method,1,1)
-                        note_runtime_operation('verification',clock()-_verify_started)
+                if index not in verified_colors and plan['options'].get('adaptive_color_verification',False):
+                    _verify_started=clock()
+                    selected_method=verify_color_batch(index,item,True,selected_method,1,1)
+                    note_runtime_operation('verification',clock()-_verify_started)
                 if sequence_visual and not sequence_visual_pending:
                     sequence_visual_batch_key=entry_visual_key
                     sequence_visual_brush=current_execution_brush
@@ -3713,10 +3790,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     except Exception as checkpoint_error:log_event(f'Sequence recovery checkpoint skipped: {checkpoint_error!r}')
                 if deadline_scheduler is not None:
                     deadline_scheduler.after(entry,excluded_seconds=paused_seconds-_pause_before_entry)
-                    _tail=list(execution_sequence[_execution_index+1:])
-                    _replanned=deadline_scheduler.replan_remaining(_tail)
-                    if _replanned != _tail:
-                        execution_sequence[_execution_index+1:]=_replanned
+                    if deadline_scheduler.replan_in_place(execution_sequence,_execution_index+1):
                         report('status',f'Dynamic Replanner: {deadline_scheduler.mode} reordered remaining safe paths without changing geometry.')
                     _now=clock()
                     if _now-deadline_last_telemetry>=.75:
@@ -3771,8 +3845,6 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 if ordered_items:
                     pause_guard()
                     selected_method=select(index);selected=True
-                    if index not in verified_colors and plan['options'].get('adaptive_color_verification',False):
-                        selected_method=verify_color_batch(index,ordered_items[0],smart_group,selected_method,color_number,len(active_order))
                 resume_path_start=0
                 if resume_path_level and color_number==int(resume_info.get('active_color_number',0)):
                     expected_fp=str(resume_info.get('active_items_fingerprint') or '')
@@ -3792,6 +3864,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     if not selected:
                         selected_method=select(index,selected_method); selected = True
                     try:
+                        if index not in verified_colors and plan['options'].get('adaptive_color_verification',False):
+                            selected_method=verify_color_batch(index,item,smart_group,selected_method,color_number,len(active_order))
                         draw_path_item(index,item,smart_group=smart_group,verify_color=(index not in verified_colors and not plan['options'].get('adaptive_color_verification',False) and plan['options'].get('strict_color_verification',True)))
                     except BaseException as error:
                         checkpoint_recoverable_path(error,color_number=color_number,path_index=path_index,ordered_items=ordered_items)
@@ -3805,7 +3879,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                         except Exception as checkpoint_error:
                             log_event(f'Path-level recovery checkpoint skipped: {checkpoint_error!r}')
                 visual_result=visual_verify_color_batch(index,ordered_items,smart_group,color_number,len(active_order))
-                report('color_plan',{'current':color_number,'total':len(active_order),'rgb':rgb_label,'method':method_label(selected_method),'confidence':100.0,'actual':rgb_label,'matched':True,'completed':True})
+                color_confirmed=(index in verified_colors or not plan['options'].get('adaptive_color_verification',False))
+                report('color_plan',{'current':color_number,'total':len(active_order),'rgb':rgb_label,'method':method_label(selected_method),'confidence':100.0 if color_confirmed else 0.0,'actual':rgb_label if color_confirmed else (),'matched':color_confirmed,'completed':True})
                 if visual_result:
                     report('visual_verification',visual_result)
                 if not dry_run and checkpoint is not None:
@@ -4300,9 +4375,16 @@ class DrawBotApp:
             from SessionRecovery import save_snapshot
             profile=self.game.get() if hasattr(self,'game') else ''
             area=self.saved_area or (self.corners if len(self.corners)==2 else None)
+            # An image-specific subject rectangle cannot be attached to an
+            # older cached raster after a failed or delayed image checkpoint.
+            cached_source=getattr(self,'_recovery_source_ref',lambda:None)()
+            include_image=bool(include_image or self.original is not cached_source)
             image=self.original if include_image else None
+            subject_selection={'mode':getattr(getattr(self,'subject_focus',None),'get',lambda:'Off')(),
+                               'region':getattr(self,'subject_region',None)} if self.original is not None else None
             target_lock=getattr(self,'target_lock_fingerprint',None) if getattr(self,'target_lock_passed',False) else None
-            save_snapshot(profile=profile,options=DrawBotApp._recovery_option_snapshot(self),saved_area=area,image=image,clear_render_resume=bool(include_image),target_lock=target_lock)
+            save_snapshot(profile=profile,options=DrawBotApp._recovery_option_snapshot(self),saved_area=area,image=image,clear_render_resume=bool(include_image),target_lock=target_lock,subject_selection=subject_selection)
+            if image is not None:self._recovery_source_ref=weakref.ref(image)
             log_event(f'Recovery checkpoint saved. image_cached={bool(include_image and self.original is not None)} target_lock_hint={bool(target_lock)}.')
         except Exception as error:
             log_event(f'Recovery checkpoint skipped: {error!r}')
@@ -4353,6 +4435,18 @@ class DrawBotApp:
         image=(load_cached_image(expected_sha256=state.get('image_sha256')) if state.get('has_image') is True else None) if recovered_image is _RECOVERY_IMAGE_UNSET else recovered_image
         if image is not None:
             self.original=image;self.plan=None;self.file_label.set('Recovered local image')
+            self._recovery_source_ref=weakref.ref(image)
+        self.subject_region=None
+        subject_mode='Off'
+        if image is not None:
+            from SessionRecovery import clean_subject_selection
+            selection=clean_subject_selection(state.get('subject_selection'),state.get('image_sha256'))
+            if selection is not None:
+                self.subject_region=tuple(selection['region']) if selection['region'] is not None else None
+                subject_mode=selection['mode']
+        if hasattr(self,'subject_focus'):self.subject_focus.set(subject_mode)
+        if hasattr(self,'subject_hint'):
+            self.subject_hint.set('Recovered marked rectangle. Build preview to check.' if self.subject_region is not None else 'Auto: simple background or transparent PNG. Mark busy photos.')
         resume=state.get('render_resume') if isinstance(state,dict) else None
         self.pending_render_resume=resume if isinstance(resume,dict) else None
         if self.pending_render_resume:
@@ -5505,29 +5599,8 @@ class DrawBotApp:
             self.status.set(f'Correction-only retry preflight stopped: {error}')
             return
         base_plan = self.plan
-        colors = list(base_plan.get('colors') or [])
-        groups = [[] for _ in colors]
-        retry_plan = dict(base_plan)
-        retry_options = dict(base_plan.get('options') or {})
-        retry_options.update({
-            'post_draw_correction_retry': True,
-            'correction_only_retry': True,
-            '_post_draw_correction_ran': False,
-            'render_resume_state': None,
-            'auto_clear_canvas': False,
-            'canvas_clear_actions': [],
-            'canvas_clear_restore_actions': [],
-            'test_run': False,
-            'dry_run_sampled': False,
-        })
-        retry_plan.update({
-            'options': retry_options,
-            'groups': groups,
-            'execution_groups': groups,
-            'execution_sequence': [],
-            'count': 0,
-            'estimate': max(1.0, min(20.0, float((base_plan.get('options') or {}).get('post_draw_correction_estimated_seconds', 6.0) or 6.0))),
-        })
+        from CorrectionReviewRecovery import build_correction_retry_plan
+        retry_plan=build_correction_retry_plan(base_plan)
         self._disarm_full_draw('correction-only retry accepted', update_text=True)
         self.paused.clear(); self.progress['value'] = 0; self.save_settings()
         def work():
@@ -5536,6 +5609,7 @@ class DrawBotApp:
                          lambda k, v: self.events.put((k, v)), dry_run=False, keyboard=self.keyboard,
                          checkpoint=None)
             try:
+                base_plan['options']['post_draw_before_correction_accuracy_meta'] = retry_plan['options'].get('post_draw_before_correction_accuracy_meta')
                 base_plan['options']['post_draw_accuracy_meta'] = retry_plan['options'].get('post_draw_accuracy_meta', base_plan.get('options', {}).get('post_draw_accuracy_meta'))
                 base_plan['options']['post_draw_correction_meta'] = retry_plan['options'].get('post_draw_correction_meta', base_plan.get('options', {}).get('post_draw_correction_meta'))
                 base_plan['options']['correction_review_meta'] = retry_plan['options'].get('correction_review_meta', base_plan.get('options', {}).get('correction_review_meta'))
@@ -7095,7 +7169,7 @@ class DrawBotApp:
         One-Click switch is off. Paint is never eligible for this path.
         """
         if self.closing:return False
-        from SmartDropInCanvas import canvas_overlay_geometry, event_screen_point
+        from SmartDropInCanvas import place_canvas_overlay, event_screen_point, point_in_canvas
         meta=dict((payload or {}).get('target_meta') or {})
         canvas_box=tuple(map(int,(payload or {}).get('canvas_box') or ()))
         client_rect=tuple(map(int,meta.get('client_rect') or ()))
@@ -7112,18 +7186,20 @@ class DrawBotApp:
                 pass
             overlay=SmartDropOverlay(self.root)
             self.smart_drop_overlay=overlay
+            overlay.withdraw()
             overlay.title('Image Draw Bot — Game Canvas Drop')
             overlay.overrideredirect(True)
             # Important: the OS drop target exists only over the actual drawable
             # canvas, not over chat/toolbars/browser chrome.
-            overlay.geometry(canvas_overlay_geometry(canvas_box))
             try:overlay.attributes('-topmost',True)
             except tk.TclError:pass
             try:overlay.attributes('-alpha',0.34)
             except tk.TclError:pass
             try:overlay.attributes('-toolwindow',True)
             except tk.TclError:pass
+            place_canvas_overlay(overlay,canvas_box)
             l,t,r,b=canvas_box;w=r-l;h=b-t
+            expires_at=time.monotonic()+60.0
             board=tk.Canvas(overlay,bg='#123b2f',highlightthickness=0,cursor='plus')
             board.pack(fill='both',expand=True)
             frame=board.create_rectangle(2,2,max(3,w-3),max(3,h-3),outline='#48f0a2',width=5)
@@ -7133,6 +7209,9 @@ class DrawBotApp:
             board.create_text(10,10,anchor='nw',text='Esc = cancel · expires after 60 s',fill='white',font=('Segoe UI',9,'bold'))
 
             def position(_event):
+                if (self.closing or self.activity or self.smart_drop_overlay is not overlay
+                        or time.monotonic()>=expires_at or not point_in_canvas(event_screen_point(_event),canvas_box)):
+                    return 'none'
                 try:board.itemconfigure(frame,outline='#7bffc1',width=7)
                 except tk.TclError:pass
                 try:self.smart_drop_in_text.set('Image detected over the game canvas — release to import and start drawing.')
@@ -7140,12 +7219,17 @@ class DrawBotApp:
                 return 'copy'
 
             def dropped(event):
+                if (self.closing or self.activity or self.smart_drop_overlay is not overlay
+                        or time.monotonic()>=expires_at or self.stop.is_set()):
+                    return 'none'
                 try:
+                    point=event_screen_point(event)
+                    if not point_in_canvas(point,canvas_box):
+                        raise ValueError('Release the image inside the highlighted canvas, away from its edge.')
                     try:split_items=self.root.tk.splitlist(event.data)
                     except Exception:split_items=()
                     from CanvasDropPayload import parse_canvas_drop
                     dropped_source=parse_canvas_drop(event.data,split_items=split_items)
-                    point=event_screen_point(event)
                     DrawBotApp._close_smart_drop_overlay(self,'image accepted')
                     # Lock the exact detector result for the import. One-Click
                     # re-verifies canvas/palette again before native input.
@@ -7265,7 +7349,9 @@ class DrawBotApp:
             self.root.clipboard_clear();self.root.clipboard_append(self.guess_list.get(selection[0]));self.status.set('Word copied.')
 
     def open_file(self):
-        path=filedialog.askopenfilename(filetypes=[('Images','*.png *.jpg *.jpeg *.webp *.bmp'),('All files','*.*')])
+        if self.activity or self.closing or getattr(self,'pending_clear_drawing',None) is not None:return
+        from CanvasDropPayload import IMAGE_FILE_PATTERNS
+        path=filedialog.askopenfilename(filetypes=[('Images',IMAGE_FILE_PATTERNS),('All files','*.*')])
         if path:
             self.load_source(path,Path(path).name,action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
 
@@ -8117,11 +8203,12 @@ class DrawBotApp:
             self.set_busy(None);self._mark_plan_stale('Drawing area restored. Press Build preview or Safety preflight / Dry run when ready.');self._maybe_auto_preview(delay=900, reason='reuse-area')
 
     def set_boundary(self):
-        if self.activity:return
+        if self.activity or self.closing:return
         from RegionPicker import select_region
+        DrawBotApp._cancel_after_attr(self,'capture_job')
         self.stop.clear();self.set_busy('capture')
         log_event('Drawing-area selection started.')
-        def selected(box,image):
+        def apply_selected(box,image):
             left,top,right,bottom=map(int,box)
             width,height=right-left,bottom-top
             log_event(f'Drawing-area selected: box={(left,top,right,bottom)} size={(width,height)}')
@@ -8181,13 +8268,31 @@ class DrawBotApp:
                 profile_key=PROFILES.get(self.game.get(),('',))[0]
                 if profile_key in SUPPORTED_BROWSER_PROFILES:
                     self.browser_auto_text.set('Canvas selected · automatic browser palette setup will start now.')
-                    self.root.after(450,lambda:self.auto_calibrate_browser_profile(automatic=True))
+                    selected_corners=tuple(self.corners)
+                    job=[None]
+                    def auto_setup():
+                        if getattr(self,'capture_job',None)!=job[0]:return
+                        self.capture_job=None
+                        if (self.closing or self.activity or self.stop.is_set()
+                                or tuple(self.corners)!=selected_corners
+                                or PROFILES.get(self.game.get(),('',))[0]!=profile_key):return
+                        self.auto_calibrate_browser_profile(automatic=True)
+                    job[0]=self.root.after(450,auto_setup)
+                    self.capture_job=job[0]
             except Exception as auto_error:
                 log_event(f'Browser Auto Setup scheduling skipped: {auto_error!r}')
+        def selected(box,image):
+            try:
+                if self.closing or self.stop.is_set():raise InterruptedError('Selection cancelled.')
+                apply_selected(box,image)
+            finally:
+                # RegionPicker transfers the delivered crop to its consumer.
+                # This path analyses it synchronously and retains no raster.
+                image.close()
         def failed(message):
             log_event(f'Drawing-area selection failed/aborted: {message}')
-            self.set_busy(None);self.status.set(message)
-        select_region(self.root,selected,failed)
+            if not self.closing:self.set_busy(None);self.status.set(message)
+        select_region(self.root,selected,failed,cancelled=lambda:self.closing or self.stop.is_set())
 
     def refresh_exact_color_status(self):
         try:
@@ -10365,6 +10470,8 @@ class DrawBotApp:
             if plan_accuracy:
                 accuracy_note+=(f" · plan errors {int(plan_accuracy.get('final_error_pixels',0) or 0):,}"
                                 f" · corrections {int(plan_accuracy.get('correction_paths_added',0) or 0):,}")
+                if plan_accuracy.get('unrepairable_background_pixels',0):
+                    accuracy_note+=f" · {int(plan_accuracy['unrepairable_background_pixels']):,} spill pixels need a white palette color"
             planner_note=''
             if opts.get('planning_resolution_effective'):
                 sample=f"{opts.get('planner_sample_limit')} px" if opts.get('planner_sample_limit') else ''

@@ -108,6 +108,7 @@ REQUIRED_RELEASE_FILES = (
     "Build-Release.bat",
     "build_release.py",
     "build_exe.py",
+    "ReleaseIdentity.py",
     "Version.py",
     "version_info.txt",
     "requirements.txt",
@@ -206,9 +207,16 @@ def _is_link(path: Path) -> bool:
     return stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)
 
 
+def _walk_error(error):
+    # os.walk otherwise skips unreadable subdirectories silently. A successful
+    # source release must account for every included subtree, including assets
+    # that are not individually listed in REQUIRED_RELEASE_FILES.
+    raise error
+
+
 def iter_release_files(root: Path) -> Iterable[Path]:
     root = root.resolve()
-    for current, dirs, files in os.walk(root):
+    for current, dirs, files in os.walk(root, onerror=_walk_error):
         current_path = Path(current)
         rel_dir = current_path.relative_to(root).as_posix() if current_path != root else ""
         dirs[:] = sorted(d for d in dirs if d.casefold() not in EXCLUDED_DIR_NAMES
@@ -232,7 +240,7 @@ def validate_release_tree(root: Path, *, allow_output_dirs: bool = False) -> Rel
     missing = tuple(item for item in REQUIRED_RELEASE_FILES if item not in release_set)
 
     forbidden: list[str] = []
-    for current, dirs, files in os.walk(root):
+    for current, dirs, files in os.walk(root, onerror=_walk_error):
         current_path = Path(current)
         rel_current = current_path.relative_to(root).as_posix() if current_path != root else ""
         original_dirs = list(dirs)

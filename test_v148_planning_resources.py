@@ -26,21 +26,36 @@ def pixel_map(indices, drawable=None, edge=None, **extra):
 
 
 class PaletteTileTests(unittest.TestCase):
-    def test_saved_prechange_outputs_for_each_distance_policy(self):
+    def test_scalar_policy_oracles_and_verified_outputs_are_tile_independent(self):
+        from ColorFidelity import palette_match_cost
+
         rng = np.random.default_rng(148)
         rgb = rng.integers(0, 256, (15, 19, 3), dtype=np.uint8)
         palette = rng.integers(0, 256, (17, 3), dtype=np.uint8)
         digests = {
             (False, 'Faithful'): '85977be025c86e402ab5843cb750de27e04d7593c3066542cbe8c66dd04c9eb0',
-            (True, 'Faithful'): '6f3b54331fec51910d39487666c1eedb6d091a0e5873bc0a7137390060dd3b20',
-            (True, 'Balanced'): '09e69f01237c72c2dd37091cbc2d9c59aca98e80b0c83c8493ff29489b68e6e7',
+            (True, 'Faithful'): '3dd8841e2502b61f33b4e0bd6516429bc83d45317f3376cc57908ec6fbd3f9b2',
+            (True, 'Balanced'): '30e69407e034b0306ad25d32aa5993e86eaf87a7f5efdaafb58044ba7c6ecf13',
             (True, 'Off'): 'f46eb5d40684e2c0cebf38f703f7ca53746cb1135e933f15fbefa466446c2ef6',
         }
         for (perceptual, fidelity), digest in digests.items():
+            # Scalar double-precision ColorFidelity is independent of the
+            # vectorized fallback and its tile layout. CP01 intentionally
+            # corrects the old near-neutral hue-family penalty in Balanced
+            # and Faithful; RGB-nearest and unweighted OKLab stay unchanged.
+            colors = [tuple(map(int, color)) for color in palette]
+            expected = np.asarray([
+                min(range(len(colors)), key=lambda index: palette_match_cost(
+                    tuple(map(int, pixel)), colors[index],
+                    color_rendering='Perceptual match' if perceptual else 'RGB nearest',
+                    fidelity='Exact' if fidelity == 'Off' else fidelity))
+                for pixel in rgb.reshape(-1, 3)
+            ], dtype=np.int16).reshape(rgb.shape[:2])
+            self.assertEqual(hashlib.sha256(expected.astype('<i2').tobytes()).hexdigest(), digest)
             for chunk in (1, 4, 96):
                 actual = PAP._cpu_palette_map(rgb, palette, perceptual=perceptual,
                                               color_fidelity=fidelity, row_chunk=chunk)
-                self.assertEqual(hashlib.sha256(actual.astype('<i2').tobytes()).hexdigest(), digest)
+                np.testing.assert_array_equal(actual, expected)
         direct = np.argmin(np.sum((rgb.astype(np.int32)[:, :, None] - palette.astype(np.int32)) ** 2, axis=3), axis=2)
         np.testing.assert_array_equal(PAP._cpu_palette_map(rgb, palette, perceptual=False), direct)
 

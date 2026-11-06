@@ -5,7 +5,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from RuntimePaths import atomic_write_text
+from RuntimePaths import atomic_write_text, file_transaction
 from WindowsSystem import load_system_library
 
 REG_BASE = r'SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
@@ -68,6 +68,14 @@ def configure(action, include_python=False):
         raise PermissionError('Right-click this BAT file and choose Run as administrator once. Start Image Draw Bot normally afterwards.')
     folder=Path(os.environ['LOCALAPPDATA'])/'ImageDrawBot'/'dumps'
     folder.mkdir(parents=True,exist_ok=True)
+    # The undo document and corresponding registry changes form one logical
+    # operation. Otherwise Disable can consume the just-written undo record
+    # before Enable applies its values, leaving active settings with no backup.
+    with file_transaction(folder/'localdumps-backup.json'):
+        return _configure_locked(action, include_python, folder, reg)
+
+
+def _configure_locked(action, include_python, folder, reg):
     backup=folder/'localdumps-backup.json'
     access=reg.KEY_READ|reg.KEY_WRITE|reg.KEY_WOW64_64KEY
     state = {}
