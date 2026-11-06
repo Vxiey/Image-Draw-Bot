@@ -415,9 +415,22 @@ class WindowsWorkflowTests(unittest.TestCase):
         sequences = ('<MouseWheel>', '<Button-4>', '<Button-5>',
                      '<KeyPress-Shift_L>', '<KeyPress-Shift_R>',
                      '<KeyRelease-Shift_L>', '<KeyRelease-Shift_R>')
-        root.bind_all('<MouseWheel>', lambda event: None, add='+')
-        before = {sequence: root.bind_all(sequence) for sequence in sequences}
+        delivered = []
+        unrelated = root.bind_all('<MouseWheel>', lambda event: delivered.append(event.delta), add='+')
+
+        def binding_lines():
+            # Tk's targeted _unbind preserves callbacks but may leave extra
+            # empty Tcl lines. Compare the complete nonempty scripts, rather
+            # than treating those harmless separators as callback leaks.
+            return {sequence: tuple(line for line in root.bind_all(sequence).splitlines() if line.strip())
+                    for sequence in sequences}
+
+        before = binding_lines()
         try:
+            root.deiconify()
+            root.update()
+            root.event_generate('<MouseWheel>', delta=120, when='now')
+            self.assertEqual(delivered, [120])
             for _ in range(3):
                 window = guide.show_guide(app)
                 root.update_idletasks()
@@ -434,9 +447,13 @@ class WindowsWorkflowTests(unittest.TestCase):
                 self.assertTrue(tokens)
                 window.destroy()
                 root.update_idletasks()
-                self.assertEqual({sequence: root.bind_all(sequence) for sequence in sequences}, before)
+                self.assertEqual(binding_lines(), before)
                 for token in tokens:
                     self.assertFalse(root.tk.call('info', 'commands', token))
+                self.assertTrue(root.tk.call('info', 'commands', unrelated))
+                previous_count = len(delivered)
+                root.event_generate('<MouseWheel>', delta=-120, when='now')
+                self.assertEqual(delivered[previous_count:], [-120])
                 self.assertFalse(app.game.trace_info())
         finally:
             root.destroy()

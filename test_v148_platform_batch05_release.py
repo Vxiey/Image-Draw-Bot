@@ -15,7 +15,9 @@ import test_step30_release_candidate_hardening_v10129rc1 as gate_fixtures
 class SourceInventoryTests(unittest.TestCase):
     def test_any_included_traversal_failure_preserves_the_previous_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / 'source'
+            # Windows TEMP can use an 8.3 alias; the archive builder resolves
+            # its root before walking, so inject against that same identity.
+            root = Path(temporary).resolve() / 'source'
             root.mkdir()
             for relative in release.REQUIRED_RELEASE_FILES:
                 path = root / relative
@@ -45,7 +47,7 @@ class SourceInventoryTests(unittest.TestCase):
 
     def test_private_excluded_subtrees_are_not_opened_to_validate_the_source(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             private = root / 'logs'
             private.mkdir()
             (private / 'private.log').write_text('not release contents')
@@ -61,7 +63,7 @@ class SourceInventoryTests(unittest.TestCase):
     def test_source_gate_and_archive_require_the_release_identity_helper(self):
         self.assertIn('ReleaseIdentity.py', release.REQUIRED_RELEASE_FILES)
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             gate_fixtures.Step30ReleaseCandidateHardeningTests()._fake_root(root)
             (root / 'ReleaseIdentity.py').unlink()
             errors = gate.collect_source_gate_errors(root, app_version='1.0.131-beta', file_version='1.0.131', channel='beta')
@@ -69,7 +71,7 @@ class SourceInventoryTests(unittest.TestCase):
 
     def test_hygiene_ignores_private_dependency_trees_but_keeps_actual_source_checks(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             names = ['real_patch_once.py', '.github/workflows/release-once.yml',
                      '.build-venv/Lib/site-packages/upstream/check_once.py',
                      'dist/ImageDrawBot/_internal/upstream/check_once.py', '.git/private_once.py',
@@ -89,7 +91,7 @@ class SourceInventoryTests(unittest.TestCase):
 
     def test_hygiene_reports_included_traversal_failure_instead_of_a_clean_tree(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             included = root / 'module'
             included.mkdir()
             (included / 'patch_once.py').write_text('fixture')
