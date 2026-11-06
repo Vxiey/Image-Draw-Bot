@@ -25,6 +25,8 @@ class ClipboardRuntimeTests(unittest.TestCase):
     def test_text_and_spinbox_paste_stays_native_even_with_a_tcl_widget_path(self):
         for kind in (tk.Text, tk.Spinbox, ttk.Spinbox, tk.Entry, ttk.Combobox):
             widget = object.__new__(kind)
+            if kind is ttk.Combobox:
+                widget.instate = Mock(return_value=False)  # This fixture is an editable text field.
             for target in (widget, '.editor'):
                 with self.subTest(kind=kind, target=type(target)):
                     app = SimpleNamespace(paste_image=Mock(), root=Mock())

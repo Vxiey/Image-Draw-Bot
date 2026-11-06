@@ -87,7 +87,10 @@ def optimize_skribbl_groups(groups: Sequence[Sequence[Segment]], palette_rgb: Se
         palette.extend([(0, 0, 0)] * (color_count - len(palette)))
 
     weights = [sum(_run_weight(s) for s in group) for group in work]
-    active = [i for i, w in enumerate(weights) if w and i < len(palette) and not _is_white(palette[i])]
+    # skip_white belongs to source mapping. Supplied white groups are explicit
+    # paint and must survive palette reduction just like the dark structure.
+    active = [i for i, w in enumerate(weights) if w and i < len(palette)]
+    white = [i for i in active if _is_white(palette[i])]
     before_colors = len(active)
     before_runs = sum(len(g) for g in work)
     if not active:
@@ -100,29 +103,42 @@ def optimize_skribbl_groups(groups: Sequence[Sequence[Segment]], palette_rgb: Se
     max_colors = max(2, int(max_colors))
     darkest = min(active, key=lambda i: (color_metrics(tuple(palette[i]))[0], -weights[i], i))
     brightest = max(active, key=lambda i: (color_metrics(tuple(palette[i]))[0], weights[i], -i))
+    white_anchor = max(white, key=lambda i: (color_metrics(tuple(palette[i]))[0], weights[i], -i)) if white else None
+    anchors = [darkest] + ([white_anchor] if white_anchor is not None else [])
     selector_groups=[list(g) if i in active else [] for i,g in enumerate(work)]
     keep,mapping,palette_quality=select_adaptive_palette(selector_groups,palette,max_colors,fidelity=color_fidelity)
     if not keep:
         keep=[darkest];mapping={i:darkest for i in active};palette_quality={}
-    elif darkest not in keep:
+    if any(anchor not in keep for anchor in anchors):
         # Structural dark ink is a semantic geometry anchor for this fast path.
         # Preserve it even when its pixel weight is tiny, while keeping the same
         # max-colour budget. Drop the weakest non-dark retained swatch if needed.
         keep=list(map(int,keep))
-        if len(keep) >= max_colors:
-            removable=[i for i in keep if i != darkest]
-            if removable:
-                drop=min(removable,key=lambda i:(weights[i],i))
-                keep.remove(drop)
-        keep.append(int(darkest))
+        forced_dark = darkest not in keep
+        for anchor in anchors:
+            if anchor in keep:
+                continue
+            if len(keep) >= max_colors:
+                removable=[i for i in keep if i not in anchors]
+                if removable:
+                    drop=min(removable,key=lambda i:(weights[i],i))
+                    keep.remove(drop)
+            keep.append(int(anchor))
         keep=list(dict.fromkeys(keep))
-        mapping, errors = _map_indices(active, keep, palette, weights, color_fidelity)
+        palette_quality['forced_dark_structure']=forced_dark
+    if white or palette_quality.get('forced_dark_structure'):
+        mapping, errors = _map_indices([i for i in active if i not in white], keep,
+                                       palette, weights, color_fidelity)
+        if white:
+            white_mapping, white_errors = _map_indices(white, [i for i in keep if i in white],
+                                                      palette, weights, color_fidelity)
+            mapping.update(white_mapping)
+            errors.extend(white_errors)
         palette_quality = {**palette_quality, **palette_quality_metrics(
             active, keep, palette, weights, mapping, errors,
             fidelity=color_fidelity, max_colors=max_colors)}
         palette_quality['region_detail_anchors_kept'] = tuple(
             i for i in palette_quality.get('region_detail_anchor_indexes', ()) if i in keep)
-        palette_quality['forced_dark_structure']=True
 
     result: list[list[Segment]] = [[] for _ in work]
     remapped = 0
@@ -133,8 +149,9 @@ def optimize_skribbl_groups(groups: Sequence[Sequence[Segment]], palette_rgb: Se
 
     for index in keep:
         # Dark outlines/details may contain short but important fragments.
-        keep_short = index == darkest
-        result[index] = _coalesce_rows(result[index], gap_join=gap_join, min_run=min_run, keep_short=keep_short)
+        keep_short = index == darkest or index in white
+        result[index] = _coalesce_rows(result[index], gap_join=0 if index in white else gap_join,
+                                      min_run=min_run, keep_short=keep_short)
 
     after_runs = sum(len(g) for g in result)
     after_colors = sum(bool(g) for g in result)
@@ -152,6 +169,7 @@ def optimize_skribbl_groups(groups: Sequence[Sequence[Segment]], palette_rgb: Se
         'min_run': int(min_run),
         'darkest_color_index': int(darkest),
         'brightest_color_index': int(brightest),
+        'white_color_index': white_anchor,
         'color_fidelity': color_fidelity,
         'kept_color_indexes': tuple(map(int, keep)),
         'color_mapping': {str(k): int(v) for k, v in mapping.items()},

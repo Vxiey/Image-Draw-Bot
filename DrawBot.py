@@ -1089,44 +1089,53 @@ def make_plan(original, area, options, cancelled=lambda: False):
 
     plan_options=dict(options)
     _prof_color = profiler_start(plan_options, 'color_planning')
-    # Work on a white-flattened palette image. This is the same visible result
-    # build_strokes used to derive from alpha, but it lets v1.0.7 simplify only
-    # a border-connected background before palette quantization.
-    backdrop=Image.new('RGBA',image.size,'white');backdrop.alpha_composite(image)
-    palette_image=backdrop.convert('RGB')
+    # RGB is already composited on white for matching and smoothing. Retain
+    # only the zero-alpha drawable mask afterwards; restoring partial alpha
+    # would composite those visible colours a second time and wash them out.
+    with closing(alpha):
+        source_has_transparency = alpha.getextrema()[0] == 0
+        with closing(image) as rgba_source, closing(Image.new('RGBA',image.size,'white')) as backdrop:
+            backdrop.alpha_composite(rgba_source)
+            palette_image=backdrop.convert('RGB')
 
-    # v1.0.38: local adaptive-detail pass.  Important high-contrast structure is
-    # protected while low-detail texture is simplified before palette planning.
-    # Outline-only plans already reduce the source to edges and therefore bypass
-    # this pass to avoid processing the same structure twice.
-    adaptive_mask=None
-    adaptive_stats=None
-    adaptive_mode=options.get('adaptive_detail','Auto')
-    if adaptive_mode!='Off' and not options.get('outline'):
-        adaptive_rgba,adaptive_mask,adaptive_stats=apply_adaptive_detail(
-            palette_image.convert('RGBA'),adaptive_mode,
-            subject_focus=bool(options.get('portrait_focus',False)),
-            drawing_mode=options.get('drawing_mode'),preview=is_preview_plan(options),cancelled=cancelled)
-        palette_image=adaptive_rgba.convert('RGB')
-        plan_options['adaptive_detail_meta']=adaptive_stats.as_dict()
-        plan_options['adaptive_detail_effective']=adaptive_stats.effective_mode
-    elif adaptive_mode=='Off':
-        plan_options['adaptive_detail_meta']={'adaptive_detail_requested':'Off','adaptive_detail_effective':'Off',
-                                             'adaptive_detail_pruned_micro_strokes':0,'adaptive_detail_pruned_micro_pixels':0}
-        plan_options['adaptive_detail_effective']='Off'
+        adaptive_mask=None
+        adaptive_stats=None
+        adaptive_mode=options.get('adaptive_detail','Auto')
+        if adaptive_mode!='Off' and not options.get('outline'):
+            with closing(palette_image), closing(palette_image.convert('RGBA')) as adaptive_source:
+                adaptive_rgba,adaptive_mask,adaptive_stats=apply_adaptive_detail(
+                    adaptive_source,adaptive_mode,
+                    subject_focus=bool(options.get('portrait_focus',False)),
+                    drawing_mode=options.get('drawing_mode'),preview=is_preview_plan(options),cancelled=cancelled)
+            with closing(adaptive_rgba):palette_image=adaptive_rgba.convert('RGB')
+            plan_options['adaptive_detail_meta']=adaptive_stats.as_dict()
+            plan_options['adaptive_detail_effective']=adaptive_stats.effective_mode
+        elif adaptive_mode=='Off':
+            plan_options['adaptive_detail_meta']={'adaptive_detail_requested':'Off','adaptive_detail_effective':'Off',
+                                                 'adaptive_detail_pruned_micro_strokes':0,'adaptive_detail_pruned_micro_pixels':0}
+            plan_options['adaptive_detail_effective']='Off'
 
-    simplification_mode=options.get('background_simplification','Balanced')
-    palette_image,simplification=simplify_background(palette_image,simplification_mode)
-    plan_options['background_simplification_meta']=simplification.as_dict()
-    image=palette_image.convert('RGBA')
+        simplification_mode=options.get('background_simplification','Balanced')
+        with closing(palette_image) as unsimplified:
+            palette_image,simplification=simplify_background(unsimplified,simplification_mode,cancelled=cancelled)
+        plan_options['background_simplification_meta']=simplification.as_dict()
+        with closing(palette_image):
+            image=palette_image.convert('RGBA')
+        if source_has_transparency:
+            with closing(alpha.point([0]+[255]*255)) as drawable_alpha:
+                image.putalpha(drawable_alpha)
+    plan_options['source_transparency_meta']={'zero_alpha_excluded':source_has_transparency}
+    if source_has_transparency:
+        plan_options.pop('background_fill_plan',None)
+        plan_options.pop('fill_regions',None)
 
     fill_plan=None;fill_regions=[]
     fill_mode=options.get('background_fill','Balanced')
-    safe_fill_margin=source_fill_margin_px(options.get('brush_px',3),2,palette_image.size)
+    safe_fill_margin=source_fill_margin_px(options.get('brush_px',3),2,image.size)
     plan_options['safe_fill_mask_margin_px']=safe_fill_margin
     region_fill_enabled=bool(options.get('use_region_fill_engine',fill_mode!='Off'))
     if (fill_mode!='Off' or region_fill_enabled) and options.get('fill_tool_available') and not options.get('outline'):
-        fill_plan=detect_background(palette_image,fill_mode,safe_margin_px=safe_fill_margin) if fill_mode!='Off' else None
+        fill_plan=detect_background(image,fill_mode,safe_margin_px=safe_fill_margin) if fill_mode!='Off' and not source_has_transparency else None
         if options.get('extra_fast'):
             # Extra fast only fills bounded interior regions, never the whole canvas.
             fill_plan=None
@@ -1141,18 +1150,22 @@ def make_plan(original, area, options, cancelled=lambda: False):
         if region_fill_enabled:
             from RegionFillEngine import build_region_fill_plan
             fill_region_dicts,fill_region_meta=build_region_fill_plan(
-                palette_image,fitted,options,safe_margin_px=safe_fill_margin,cancelled=cancelled)
+                image,fitted,options,safe_margin_px=safe_fill_margin,cancelled=cancelled)
             plan_options['region_fill_meta']=dict(fill_region_meta)
         else:
             fill_regions,fill_region_meta=detect_fill_regions(
-                palette_image,fill_mode,engine=options.get('fill_engine','Auto'),
+                image,fill_mode,engine=options.get('fill_engine','Auto'),
                 cancelled=cancelled,return_meta=True,safe_margin_px=safe_fill_margin)
             fill_region_dicts=[region.as_dict() for region in fill_regions]
         fill_region_dicts,safe_fill_meta=filter_fill_regions_by_source_mask(
-            fill_region_dicts,palette_image.size,margin_px=safe_fill_margin)
+            fill_region_dicts,image.size,margin_px=safe_fill_margin)
+        if source_has_transparency:
+            from SafeFillMask import filter_fill_regions_by_source_alpha
+            fill_region_dicts,safe_fill_meta=filter_fill_regions_by_source_alpha(
+                fill_region_dicts,image,metadata=safe_fill_meta,cancelled=cancelled)
         if options.get('extra_fast'):
             from ExtraFast import select_fast_regions
-            fill_region_dicts,fast_meta=select_fast_regions(fill_region_dicts,palette_image.size,fitted,options,cancelled)
+            fill_region_dicts,fast_meta=select_fast_regions(fill_region_dicts,image.size,fitted,options,cancelled)
             plan_options['extra_fast_meta']=fast_meta
         fill_region_meta=dict(fill_region_meta);fill_region_meta['safe_fill_mask']=safe_fill_meta
         fill_region_meta['accepted_regions']=len(fill_region_dicts)
@@ -1297,6 +1310,10 @@ def make_plan(original, area, options, cancelled=lambda: False):
                     _dyn_candidates,image.size,fitted,options,base_meta=_dyn_base,cancelled=cancelled)
                 _dyn_regions,_dyn_mask=filter_fill_regions_by_source_mask(
                     _dyn_regions,image.size,margin_px=safe_fill_margin)
+                if source_has_transparency:
+                    from SafeFillMask import filter_fill_regions_by_source_alpha
+                    _dyn_regions,_dyn_mask=filter_fill_regions_by_source_alpha(
+                        _dyn_regions,image,metadata=_dyn_mask,cancelled=cancelled)
                 _dyn_regions,_dyn_fast=select_fast_regions(
                     _dyn_regions,image.size,fitted,options,cancelled)
                 _dyn_meta=dict(_dyn_meta);_dyn_meta.update({
@@ -1420,7 +1437,7 @@ def make_plan(original, area, options, cancelled=lambda: False):
         groups, skribbl_fast_meta = optimize_skribbl_groups(
             groups, tuple(c.RGB for c in allColors),
             max_colors=int(options.get('skribbl_fast_max_colors', 6) or 6),
-            gap_join=int(options.get('skribbl_fast_gap_join', 1) or 1),
+            gap_join=0 if source_has_transparency else int(options.get('skribbl_fast_gap_join', 1) or 1),
             min_run=int(options.get('skribbl_fast_min_run', 2) or 2),
             color_fidelity=str(options.get('color_fidelity','Balanced')))
         plan_options['skribbl_fast_meta'] = skribbl_fast_meta
@@ -1441,7 +1458,7 @@ def make_plan(original, area, options, cancelled=lambda: False):
         groups, gartic_fast_meta = optimize_gartic_phone_groups(
             groups, tuple(c.RGB for c in allColors),
             max_colors=int(options.get('gartic_phone_max_colors', runtime_profile.max_colors) or runtime_profile.max_colors),
-            gap_join=int(options.get('gartic_phone_gap_join', 1) or 1),
+            gap_join=0 if source_has_transparency else int(options.get('gartic_phone_gap_join', 1) or 1),
             min_run=int(options.get('gartic_phone_min_run', 2) or 2),
             color_fidelity=str(options.get('color_fidelity','Faithful')))
         gartic_fast_meta = dict(gartic_fast_meta)
@@ -1987,7 +2004,9 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
             log_event(f'Adaptive Region simulated-final preview fallback: {_ah_preview_error!r}')
     profiler_stop(options, 'preview_rendering', _prof_preview)
     _prof_estimate = profiler_start(options, 'execution_estimate')
-    count=path_meta['execution_paths'];colors=sum(bool(g) for g in groups)
+    count=path_meta['execution_paths']
+    retained_groups=execution_groups if execution_groups is not None else groups
+    colors=sum(bool(g) for g in retained_groups)
     motion=estimated_motion_seconds(path_moves_total,count,dot_count,options['delay'],speed_name)
     base_path_delay=phase_delay(options['delay'],speed_name,'path')
     if estimate_delivery.min_path_delay > base_path_delay:
@@ -1999,11 +2018,27 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     # a major source of optimistic estimates on complex fills.
     fill_regions=options.get('fill_regions',[]) or []
     fill_color_indexes={int(r.get('color_index',-1)) for r in fill_regions if isinstance(r,dict) and int(r.get('color_index',-1))>=0}
-    active_stroke_indexes={i for i,g in enumerate(groups) if g}
-    palette_batches=len(active_stroke_indexes|fill_color_indexes)
-    if fill_meta.get('enabled') and fill_meta.get('color_index') is not None:
-        try:palette_batches=len((active_stroke_indexes|fill_color_indexes)|{int(fill_meta['color_index'])})
-        except (TypeError,ValueError):pass
+    active_stroke_indexes={i for i,g in enumerate(retained_groups) if g}
+    # Charge controls that the retained plan actually uses. Unused custom
+    # colours must not consume the drawing budget; progressive phase changes
+    # explicitly reselect their colour even when its index is unchanged.
+    selection_counts={i:1 for i in active_stroke_indexes}
+    if execution_sequence:
+        selection_counts={};previous_selection=None
+        for entry in execution_sequence:
+            if cancelled():raise InterruptedError()
+            selection=(int(entry['color_index']),str(entry.get('phase','details')))
+            if selection!=previous_selection:
+                index=selection[0]
+                selection_counts[index]=selection_counts.get(index,0)+1
+            previous_selection=selection
+    if options.get('fill_tool_actions'):
+        for index in fill_color_indexes:
+            selection_counts[index]=selection_counts.get(index,0)+1
+        if fill_meta.get('enabled') and fill_meta.get('color_index') is not None:
+            index=int(fill_meta['color_index'])
+            selection_counts[index]=selection_counts.get(index,0)+1
+    palette_batches=sum(selection_counts.values())
     palette_seconds=0.0 if options.get('paint_current_color') else palette_batches*estimate_delivery.palette_click_delay
 
     fill_seconds=0.0;fill_timing_meta={}
@@ -2024,13 +2059,28 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
 
     tool_seconds=len(options.get('tool_actions') or ())*estimate_delivery.ui_control_delay
     clear_seconds=max(0.0,float(options.get('canvas_clear_estimate_seconds',0.0) or 0.0))
-    custom_selectors=sum(1 for x in (options.get('color_selectors') or ()) if isinstance(x,dict) and x.get('kind')=='custom')
-    custom_color_seconds=custom_selectors*(.78 if options.get('exact_color_available') else .0)
+    selectors=options.get('color_selectors') or ()
+    custom_selectors=sum(times for index,times in selection_counts.items()
+                         if 0<=index<len(selectors) and isinstance(selectors[index],dict)
+                         and selectors[index].get('kind')=='custom')
+    custom_color_seconds=custom_selectors*(.78 if options.get('exact_color_available') and not options.get('paint_current_color') else .0)
     verification_seconds=0.0
-    if options.get('adaptive_color_verification'):
+    if options.get('adaptive_color_verification') and not options.get('paint_current_color'):
         verification_seconds += colors*(estimate_delivery.palette_click_delay+.14)
-    if options.get('visual_verification_enabled'):
-        verification_seconds += colors*.08
+    if (options.get('visual_verification_enabled') and not options.get('paint_current_color')
+            and str(options.get('visual_verification_resolved') or options.get('visual_verification','Auto'))!='Off'):
+        if not execution_sequence:
+            verification_seconds += colors*.08
+        elif (options.get('detail_zoom_meta') or {}).get('sequence_created_for_detail_pass'):
+            # Runtime batches these materialized Detail Zoom paths by their
+            # colour, detail-pass identity and brush. Ordinary progressive
+            # passes explicitly skip this visual batch check.
+            previous_batch=None
+            for entry in execution_sequence:
+                if cancelled():raise InterruptedError()
+                key=(int(entry['color_index']),bool(entry.get('detail_zoom')),entry.get('brush_px'))
+                if key!=previous_batch:verification_seconds+=.08
+                previous_batch=key
     operation_overhead=palette_seconds+fill_seconds+tool_seconds+clear_seconds+custom_color_seconds+verification_seconds
     estimate=3+motion+operation_overhead+count*.0015
     estimate += human_overhead_seconds(count, options.get('human_mode','Off'))
@@ -4137,6 +4187,8 @@ class DrawBotApp:
         # v1.0.69: Mobile Preview is opt-in and local-network only. The HTTP
         # server is not created/bound until the user explicitly starts it.
         self.mobile_preview_server = None
+        self.mobile_preview_after = None
+        self.mobile_preview_ticket = None
         root.title('Image Draw Bot')
         try:
             import customtkinter as ctk
@@ -5664,7 +5716,7 @@ class DrawBotApp:
         return DrawBotApp.draw(self,dry_run=True,user_initiated=True)
 
     def unlock_full_drawing(self):
-        """Separate mouse-click safety unlock. This never starts drawing."""
+        """Separate explicit safety unlock. This never starts drawing."""
         if self.activity or self.closing:
             return
         ready, message = self._start_guard_ready(require_image=True)
@@ -5719,7 +5771,7 @@ class DrawBotApp:
         self.status.set('Full drawing unlocked for 12 seconds. Now press the separate Start Drawing button. Stop/Esc cancels.' + test_note)
         try:self.summary.set('Safety lock passed: image, area, palette/tools and target setup are ready. The next click on Start Drawing begins final planning before any mouse input.' + test_note)
         except (tk.TclError,AttributeError):pass
-        log_event('Full drawing safety-unlocked by separate explicit mouse click. Waiting for Start Drawing click.')
+        log_event('Full drawing safety-unlocked by explicit button or shortcut activation. Waiting for Start Drawing.')
 
     def start_full_drawing(self):
         """Start is separate from unlock and refuses to run while locked."""
@@ -5865,10 +5917,13 @@ class DrawBotApp:
             except (tk.TclError,RuntimeError,AttributeError):pass
 
     def add_profile(self):
+        if not DrawBotApp._profile_action_ready(self):return False
         from tkinter import simpledialog
         from GameProfiles import add_custom_profile
         name=simpledialog.askstring('New application profile','What is the drawing application called?',parent=self.root)
-        if not name:return
+        # The modal dialog pumps Tk events; a hotkey may have started work or
+        # queued a profile change while it was open.
+        if not name or not DrawBotApp._profile_action_ready(self):return False
         try:
             add_custom_profile(name,DATA_DIR/'profiles.json')
             self.profile_selector.configure(values=list(PROFILES))
@@ -6433,7 +6488,7 @@ class DrawBotApp:
 
 
     def calibrate_paint_tools(self):
-        if self.activity:return
+        if not DrawBotApp._profile_action_ready(self):return
         if self.game.get()!='Microsoft Paint':
             self.status.set('Paint tool calibration is available only for the Microsoft Paint profile.');return
         from PaintToolCalibration import PaintToolCalibrationApp
@@ -6456,7 +6511,7 @@ class DrawBotApp:
         self.paint_tool_window=window
 
     def calibrate_app_tools(self):
-        if self.activity:return
+        if not DrawBotApp._profile_action_ready(self):return
         if self.game.get()=='Microsoft Paint':
             self.status.set('Use Calibrate Paint tools for Microsoft Paint.');return
         from AppToolCalibration import AppToolCalibrationApp
@@ -6539,9 +6594,16 @@ class DrawBotApp:
         self.options_changed()
 
     def change_profile(self,event=None):
-        if self.activity or self.closing:
+        if self.closing:return
+        if self.activity or getattr(self,'profile_change_in_progress',False):
+            if not getattr(self,'profile_change_in_progress',False):
+                self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
             return
         selected=self.game.get()
+        if selected==getattr(self,'_active_profile_name',None):
+            DrawBotApp._cancel_after_attr(self,'profile_change_after')
+            self.profile_change_ticket=None
+            return
         if selected not in PROFILES:
             self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
             self.status.set('Unknown drawing application profile.')
@@ -6562,12 +6624,20 @@ class DrawBotApp:
         if self.profile_change_after is not None:
             try:self.root.after_cancel(self.profile_change_after)
             except (tk.TclError,ValueError):pass
-        try:self.profile_change_after=self.root.after_idle(lambda value=selected:self._apply_profile_change(value))
-        except tk.TclError:self.profile_change_after=None
+        ticket=object();self.profile_change_ticket=ticket
+        try:self.profile_change_after=self.root.after_idle(lambda value=selected:self._apply_profile_change(value,ticket=ticket))
+        except tk.TclError:
+            self.profile_change_after=None;self.profile_change_ticket=None
+            self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
 
-    def _apply_profile_change(self,selected):
+    def _apply_profile_change(self,selected,*,ticket=None):
+        if ticket is not None and getattr(self,'profile_change_ticket',None) is not ticket:return
         self.profile_change_after=None
-        if self.activity or self.closing or self.profile_change_in_progress:
+        self.profile_change_ticket=None
+        if self.closing:return
+        if self.activity or self.profile_change_in_progress:
+            if not self.profile_change_in_progress and selected==self.game.get():
+                self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
             return
         # Ignore a stale queued selection if the user changed the menu again.
         if selected != self.game.get() or selected not in PROFILES:
@@ -6689,7 +6759,7 @@ class DrawBotApp:
             try:_set('target_stroke_custom',str(parse_custom_stroke_count(data.get('target_stroke_custom'))))
             except ValueError:pass
         render_style=data.get('render_style','Auto')
-        if hasattr(self,'render_style') and render_style in ('Auto','Portrait / shaded','Standard / pixel',QUICK_SKETCH_RENDER_STYLE,HYBRID_RENDER_STYLE):_set('render_style',render_style)
+        if hasattr(self,'render_style') and render_style in ('Auto','Portrait / shaded','Standard / pixel',QUICK_SKETCH_RENDER_STYLE,SKETCH_FILL_RENDER_STYLE,HYBRID_RENDER_STYLE):_set('render_style',render_style)
         draw_quality=data.get('draw_quality','High likeness')
         if hasattr(self,'draw_quality') and draw_quality in ('Balanced','High likeness','Maximum likeness','GPU enhanced','Pixel Accurate'):_set('draw_quality',draw_quality)
         human_mode='Off'  # Ignore humanization saved by earlier versions.
@@ -6900,7 +6970,7 @@ class DrawBotApp:
         validate_planning_watchdog(planning_watchdog)
         validate_time_budget_mode(time_budget_mode)
         validate_target_stroke_count(target_stroke_count)
-        if render_style not in ('Auto','Portrait / shaded','Standard / pixel',QUICK_SKETCH_RENDER_STYLE,HYBRID_RENDER_STYLE):
+        if render_style not in ('Auto','Portrait / shaded','Standard / pixel',QUICK_SKETCH_RENDER_STYLE,SKETCH_FILL_RENDER_STYLE,HYBRID_RENDER_STYLE):
             raise ValueError('Choose a valid rendering style.')
         validate_quick_sketch_style(quick_sketch_style)
         validate_fill_preference(quick_sketch_fill_preference)
@@ -7504,7 +7574,13 @@ class DrawBotApp:
             widget=getattr(event,'widget',None)
             if isinstance(widget,str):
                 try:widget=self.root.nametowidget(widget)
-                except (KeyError,tk.TclError):widget=None
+                except (KeyError,tk.TclError):return
+            if isinstance(widget,ttk.Combobox):
+                try:
+                    if not widget.instate(['readonly']) or widget.instate(['disabled']):return
+                except (tk.TclError,RuntimeError):return
+                self.paste_image()
+                return 'break'
             if isinstance(widget,(tk.Entry,ttk.Entry,ttk.Combobox,tk.Text,tk.Spinbox,ttk.Spinbox)):
                 return
         self.paste_image()
@@ -7520,7 +7596,9 @@ class DrawBotApp:
                     raise ValueError('The image is too large. Choose an image up to 25 megapixels.')
                 with closing(ImageOps.exif_transpose(content)) as oriented:
                     oriented.info.pop('draw_studio_color_managed',None)
-                    if oriented.info.get('icc_profile'):
+                    oriented.info.pop('draw_studio_bit_depth',None)
+                    from SourcePixelDepth import UNSIGNED_16BIT_MODES
+                    if oriented.info.get('icc_profile') or oriented.mode in UNSIGNED_16BIT_MODES:
                         from ImageColorManagement import srgb_source
                         prepared=srgb_source(oriented)
                     else:prepared=oriented.convert('RGBA')
@@ -7604,12 +7682,17 @@ class DrawBotApp:
                     frame=grab_area(area)
                     try:
                         frame.thumbnail((800,500))
-                        frames.append(frame.quantize(colors=128))
+                        captured=frame.quantize(colors=128)
                     finally:
                         frame.close()
-                    self.events.put(('status',f'● RECORDING {time.monotonic()-started:.0f}/30 s • STOP/Esc ends and saves the GIF'))
-                    self.stop.wait(max(0,.25-(time.monotonic()-tick)))
-                    durations.append(max(20,round((time.monotonic()-tick)*1000)))
+                    try:
+                        self.events.put(('status',f'● RECORDING {time.monotonic()-started:.0f}/30 s • STOP/Esc ends and saves the GIF'))
+                        self.stop.wait(max(0,.25-(time.monotonic()-tick)))
+                        duration=max(20,(time.monotonic()-tick)*1000)
+                        from ScreenRecording import append_recorded_frame
+                        if append_recorded_frame(frames,durations,captured,duration):captured=None
+                    finally:
+                        if captured is not None:captured.close()
                 if not frames:raise InterruptedError()
                 self.events.put(('status','Saving recording…'))
                 from ScreenRecording import save_gif_atomic
@@ -7631,8 +7714,15 @@ class DrawBotApp:
             self.status.set('Paste an image URL beginning with https:// and click Load.');return
         self.load_source(source,'Image from URL',action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
 
+    def _profile_action_ready(self):
+        """Do not snapshot or act on a partially selected profile context."""
+        return not (self.activity or self.closing or
+                    getattr(self,'pending_clear_drawing',None) is not None or
+                    getattr(self,'profile_change_after',None) is not None or
+                    getattr(self,'profile_change_in_progress',False))
+
     def begin_worker(self,activity,task):
-        if self.activity or self.closing or getattr(self,'pending_clear_drawing',None) is not None:
+        if not DrawBotApp._profile_action_ready(self):
             log_event(f'Worker {activity} not started: busy={self.activity!r} closing={self.closing!r}.')
             return False
         DrawBotApp._cancel_after_attr(self,'preview_after')
@@ -7724,6 +7814,7 @@ class DrawBotApp:
             if hasattr(self,'schedule_previews'):
                 try:self.schedule_previews(delay=30)
                 except (tk.TclError,RuntimeError,AttributeError):pass
+            DrawBotApp._sync_mobile_preview(self)
 
     def _maybe_auto_preview(self, delay=900, reason='settings'):
         if self.activity or self.closing or self.original is None:
@@ -8095,20 +8186,35 @@ class DrawBotApp:
             self.photos=photos
         finally:
             self.preview_rendering=False
+        DrawBotApp._sync_mobile_preview(self)
 
     def _sync_mobile_preview(self):
+        """Coalesce accepted source/plan changes on the image-owning Tk thread."""
         server=getattr(self,'mobile_preview_server',None)
-        if server is None or not server.running:
-            return
+        if self.closing or server is None or not server.running:return False
+        if getattr(self,'mobile_preview_after',None) is not None:return False
+        ticket=object();self.mobile_preview_ticket=ticket
         try:
-            ui_previews=(self.plan or {}).get('ui_previews',{}) if self.plan else {}
-            server.update_images(
-                original=self.original,
-                preview=(self.plan or {}).get('preview') if self.plan else None,
-                safety=ui_previews.get('safety'),
-            )
+            self.mobile_preview_after=self.root.after_idle(
+                lambda:DrawBotApp._publish_mobile_preview(self,server,ticket))
+            return True
+        except (tk.TclError,RuntimeError):
+            self.mobile_preview_ticket=None;self.mobile_preview_after=None
+            return False
+
+    def _publish_mobile_preview(self,server,ticket):
+        if getattr(self,'mobile_preview_ticket',None) is not ticket:return False
+        self.mobile_preview_ticket=None;self.mobile_preview_after=None
+        if self.closing or server is not getattr(self,'mobile_preview_server',None) or not server.running:
+            return False
+        try:
+            from PreviewViews import view_images
+            views=view_images(self)
+            return server.queue_images(original=views['Original'],preview=views['Simulated final'],
+                                       safety=views['Safety map'])
         except Exception as error:
-            log_event(f'Mobile Preview refresh failed safely: {error!r}')
+            log_event(f'Mobile Preview refresh failed safely: {type(error).__name__}')
+            return False
 
     def _copy_mobile_preview_url(self):
         value=getattr(self,'mobile_preview_url',None)
@@ -8123,11 +8229,14 @@ class DrawBotApp:
             self.status.set(f'Could not copy Mobile Preview address: {error}')
 
     def stop_mobile_preview(self, *, quiet=False):
+        DrawBotApp._cancel_after_attr(self,'mobile_preview_after')
+        self.mobile_preview_ticket=None
         server=getattr(self,'mobile_preview_server',None)
         if server is not None:
             try:server.stop()
             except Exception as error:log_event(f'Mobile Preview stop failed safely: {error!r}')
-        self.mobile_preview_server=None
+        # Reuse one encoder owner on a later explicit restart. A Pillow native
+        # encode may still be finishing; new server instances would multiply it.
         try:self.mobile_preview_url.set('')
         except (tk.TclError,AttributeError):pass
         try:self.mobile_preview_status.set('Mobile Preview is off · local network only.')
@@ -8144,12 +8253,11 @@ class DrawBotApp:
             if server is None:
                 server=MobilePreviewServer();self.mobile_preview_server=server
             if not server.running:
-                self._sync_mobile_preview()  # no-op before start; keeps intent explicit
                 state=server.start()
-                self._sync_mobile_preview()
                 log_event(f'Mobile Preview started locally on port {state.port}. No cloud service or telemetry is used.')
             else:
                 server.refresh_addresses()
+            DrawBotApp._sync_mobile_preview(self)
             urls=server.urls()
             url=urls[0] if urls else f'http://127.0.0.1:{server.port}/{server.token}/'
             self.mobile_preview_url.set(url)
@@ -8237,7 +8345,7 @@ class DrawBotApp:
             self.set_busy(None);self._mark_plan_stale('Drawing area restored. Press Build preview or Safety preflight / Dry run when ready.');self._maybe_auto_preview(delay=900, reason='reuse-area')
 
     def set_boundary(self):
-        if self.activity or self.closing:return
+        if not DrawBotApp._profile_action_ready(self):return
         from RegionPicker import select_region
         DrawBotApp._cancel_after_attr(self,'capture_job')
         self.stop.clear();self.set_busy('capture')
@@ -8345,7 +8453,7 @@ class DrawBotApp:
             self.exact_color_text.set('Smart custom palette setup unavailable; nearest calibrated palette fallback remains active.')
 
     def calibrate_exact_colors(self):
-        if self.activity or self.closing:return
+        if not DrawBotApp._profile_action_ready(self):return
         from RuntimePaths import helper_command
         import subprocess
         key=PROFILES[self.game.get()][0];log=BASE/'logs'/'ImageDrawBot-exact-color-calibration.log';log.parent.mkdir(parents=True,exist_ok=True)
@@ -8372,7 +8480,7 @@ class DrawBotApp:
         The palette picker touches Tk image objects, screen capture and Win32 mouse/window
         APIs.  A native/GUI failure there must never terminate the main Image Draw Bot UI.
         """
-        if self.activity:return
+        if not DrawBotApp._profile_action_ready(self):return
         import subprocess
         profile_key=PROFILES[self.game.get()][0]
         palette_log=BASE/'logs'/'ImageDrawBot-palette-calibration.log'

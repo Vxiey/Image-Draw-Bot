@@ -45,7 +45,9 @@ path aliases and blank Tcl binding-script lines. Only the two test files changed
 in the correction; callback identities and native event delivery are verified.
 No 1.0.148 release is published.
 
-Batch 06 adds 30 independently reviewed groups: application 7, rendering/planning 7, UI/calibration 11 and platform/diagnostics 5. The total is **729**, with **271 remaining**. Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
+Batch 06 adds 30 independently reviewed groups: application 7, rendering/planning 7, UI/calibration 11 and platform/diagnostics 5. The total is **729**, with **271 remaining**. Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. The existing Windows scaling and compact-height repairs through `ace8fd741b363ab9f7a01ccd1fad94231a70a1f4` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42300520218](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42300520218). These repairs add no duplicate improvement IDs. No 1.0.148 release is published.
+
+Batch 07 adds 16 independently reviewed groups: application 3, rendering/planning 6, UI/workflow 4 and platform/import 3. The total is **745**, with **255 remaining**. Batch 07: final frozen-source discovery passed 3,355 tests in 71.096 seconds (35 platform/hardware skips), with unchanged source hashes. All four area reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
 
 ## Review method
 
@@ -68,6 +70,7 @@ Batch 06 adds 30 independently reviewed groups: application 7, rendering/plannin
 - Batch 04: [application workflow](v148-batch04-application.md), [planning](v148-batch04-planning.md), [UI/profiles](v148-batch04-ui-profiles.md), and [native input/helpers/privacy](v148-batch04-platform-release.md).
 - Batch 05: [recovery/execution](v148-batch05-application.md), [colour/planning](v148-batch05-colour-planning.md), [UI/workflow](v148-batch05-ui-workflow.md), and [source/release publication](v148-batch05-platform-release.md).
 - Batch 06: [application](v148-batch06-application.md), [rendering/planning](v148-batch06-rendering.md), [UI/calibration](v148-batch06-ui-calibration.md), and [platform/diagnostics](v148-batch06-platform.md).
+- Batch 07: [application](v148-batch07-application.md), [rendering/planning](v148-batch07-rendering.md), [UI/workflow](v148-batch07-ui-workflow.md), and [platform/import](v148-batch07-platform.md).
 - [Combined numbered index](IMPROVEMENTS-v1.0.148.md) and [machine-readable registry](v148-improvements.json).
 - `benchmark_engine.py` validates eight deterministic planning fixtures against quantized target geometry. The saved reference has zero mismatched pixels in all eight fixtures.
 - `benchmark_v148_ui.py` reproduces UI helper workload comparisons. It does not exercise real Windows input or physical GPU hardware.

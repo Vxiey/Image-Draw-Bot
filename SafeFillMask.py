@@ -210,6 +210,75 @@ def choose_safe_background_seed(candidates: Iterable[Sequence[int | float]], siz
     return tuple(dict.fromkeys(fallback))
 
 
+def filter_fill_regions_by_source_alpha(regions, image, *, metadata=None, cancelled=lambda: False):
+    """Keep fills whose painted interior contains no deliberately absent pixel.
+
+    Rectangle Fill paints its whole bounding box, including the small holes
+    allowed by its density threshold. A closed-contour fill follows its exact
+    row spans. Transparent holes cannot be repaired by painting white later.
+    """
+    from contextlib import ExitStack, closing
+    import numpy as np
+    if cancelled():raise InterruptedError()
+    work = [dict(region) for region in regions or ()]
+    meta = dict(metadata or {})
+    reasons = dict(meta.get('rejected') or {})
+    rejected = 0
+    accepted = []
+    active = False
+    with ExitStack() as owned:
+        source = image
+        alpha = None
+        if 'A' not in image.getbands() and 'transparency' in image.info:
+            source = owned.enter_context(closing(image.convert('RGBA')))
+        if 'A' in source.getbands():
+            channel = owned.enter_context(closing(source.getchannel('A')))
+            if channel.getextrema()[0] == 0:
+                active = True
+                alpha = np.asarray(channel, dtype=np.uint8)
+        width, height = image.size
+        for region in work:
+            if cancelled():raise InterruptedError()
+            why = None
+            if alpha is not None:
+                # Bound the bbox before _row_spans expands a rectangle into
+                # rows. Trusted detector output is bounded already; malformed
+                # callers must not allocate an arbitrary-height tuple here.
+                try:
+                    x0,y0,x1,y1 = [int(value) for value in region.get('bbox', ())]
+                    if not (0 <= x0 <= x1 < width and 0 <= y0 <= y1 < height):
+                        why = 'fill outside source transparency mask'
+                except (TypeError,ValueError,OverflowError):
+                    why = 'invalid source transparency bbox'
+                spans = ()
+                if why is None:
+                    try:
+                        spans = _row_spans(dict(region, row_spans=()) if region.get('strategy') == 'rectangle' else region)
+                    except (TypeError,ValueError,OverflowError):
+                        why = 'invalid source transparency spans'
+                    if not spans:
+                        why = 'invalid source transparency spans'
+                for y, x0, x1 in spans:
+                    if cancelled():raise InterruptedError()
+                    if not (0 <= y < height and 0 <= x0 <= x1 < width):
+                        why = 'fill outside source transparency mask'
+                        break
+                    if np.any(alpha[y, x0:x1 + 1] == 0):
+                        why = 'fill covers transparent source pixels'
+                        break
+            if why:
+                rejected += 1
+                reasons[why] = reasons.get(why, 0) + 1
+            else:
+                accepted.append(region)
+    meta.update(active=bool(meta.get('active') or active),
+                input_regions=int(meta.get('input_regions', len(work))),
+                accepted_regions=len(accepted),
+                rejected_regions=int(meta.get('rejected_regions', 0)) + rejected,
+                transparent_source_rejections=rejected, rejected=reasons)
+    return accepted, meta
+
+
 @dataclass(frozen=True)
 class RuntimeFillMaskResult:
     accepted_regions: tuple[dict, ...]

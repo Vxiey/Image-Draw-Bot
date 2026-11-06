@@ -1,0 +1,223 @@
+{
+  "baseline_commit": "8a9c848b9dd0f2c4738aee729dace75be2a5778d",
+  "python": "3.12.14",
+  "pillow": "13.0.0",
+  "numpy": "2.5.4",
+  "frames": 100,
+  "capture_size": [
+    800,
+    500
+  ],
+  "clock_step_ms": 259.49,
+  "scope": "Actual record_screen worker with simulated capture/clock; no desktop or native input. Retained P pixel payload is width*height bytes, excluding palette/core allocator overhead, capture/comparison/GIF scratch and Python objects; process RSS is not measured.",
+  "source_hashes": {
+    "baseline_record_screen_ast": "550c52d5e8a5a479f898905daa71b3ad82695f661c459144a592d4486da51252",
+    "current_record_screen_ast": "1de21c7113cbada737deca580c6f24bc9b296b053d283c0285cd7124a7dfc9b6"
+  },
+  "helper_hashes": {
+    "baseline": "d0aee8bbeafb8b3ecc47b6cb88e34d19ce8522320c345a03e6a25d80051d0fe8",
+    "current": "2858e81fb0c22987aa6a9473b547580ebd110ffd34fe5572df3dd0a68fe96413"
+  },
+  "results": {
+    "unchanged": {
+      "warmup": {
+        "baseline": {
+          "retained_frames": 100,
+          "raw_duration_ms": 25900,
+          "worker_seconds": 1.7612020120068337,
+          "decoded_frame_count": 1,
+          "decoded_pixels_sha256": "03aceb49817edb2d7939adc6d4e48eaf753712c2987d36f1ccde1fa2fa9aef7e",
+          "decoded_duration_ms": 25900,
+          "retained_pixel_payload_bytes": 40000000
+        },
+        "current": {
+          "retained_frames": 1,
+          "raw_duration_ms": 25948.999999999913,
+          "worker_seconds": 1.7060468359995866,
+          "decoded_frame_count": 1,
+          "decoded_pixels_sha256": "03aceb49817edb2d7939adc6d4e48eaf753712c2987d36f1ccde1fa2fa9aef7e",
+          "decoded_duration_ms": 25950,
+          "retained_pixel_payload_bytes": 400000
+        }
+      },
+      "pairs": [
+        {
+          "baseline": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25900,
+            "worker_seconds": 1.7063889640048728,
+            "decoded_frame_count": 1,
+            "decoded_pixels_sha256": "03aceb49817edb2d7939adc6d4e48eaf753712c2987d36f1ccde1fa2fa9aef7e",
+            "decoded_duration_ms": 25900,
+            "retained_pixel_payload_bytes": 40000000
+          },
+          "current": {
+            "retained_frames": 1,
+            "raw_duration_ms": 25948.999999999913,
+            "worker_seconds": 1.7266339189955033,
+            "decoded_frame_count": 1,
+            "decoded_pixels_sha256": "03aceb49817edb2d7939adc6d4e48eaf753712c2987d36f1ccde1fa2fa9aef7e",
+            "decoded_duration_ms": 25950,
+            "retained_pixel_payload_bytes": 400000
+          }
+        },
+        {
+          "current": {
+            "retained_frames": 1,
+            "raw_duration_ms": 25948.999999999913,
+            "worker_seconds": 1.7342648789999657,
+            "decoded_frame_count": 1,
+            "decoded_pixels_sha256": "03aceb49817edb2d7939adc6d4e48eaf753712c2987d36f1ccde1fa2fa9aef7e",
+            "decoded_duration_ms": 25950,
+            "retained_pixel_payload_bytes": 400000
+          },
+          "baseline": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25900,
+            "worker_seconds": 1.6962930929948925,
+            "decoded_frame_count": 1,
+            "decoded_pixels_sha256": "03aceb49817edb2d7939adc6d4e48eaf753712c2987d36f1ccde1fa2fa9aef7e",
+            "decoded_duration_ms": 25900,
+            "retained_pixel_payload_bytes": 40000000
+          }
+        },
+        {
+          "baseline": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25900,
+            "worker_seconds": 1.73992051800451,
+            "decoded_frame_count": 1,
+            "decoded_pixels_sha256": "03aceb49817edb2d7939adc6d4e48eaf753712c2987d36f1ccde1fa2fa9aef7e",
+            "decoded_duration_ms": 25900,
+            "retained_pixel_payload_bytes": 40000000
+          },
+          "current": {
+            "retained_frames": 1,
+            "raw_duration_ms": 25948.999999999913,
+            "worker_seconds": 1.749039123998955,
+            "decoded_frame_count": 1,
+            "decoded_pixels_sha256": "03aceb49817edb2d7939adc6d4e48eaf753712c2987d36f1ccde1fa2fa9aef7e",
+            "decoded_duration_ms": 25950,
+            "retained_pixel_payload_bytes": 400000
+          }
+        }
+      ],
+      "medians": {
+        "baseline": {
+          "worker_seconds": 1.7063889640048728,
+          "retained_frames": 100,
+          "decoded_duration_ms": 25900,
+          "decoded_frame_count": 1,
+          "retained_pixel_payload_bytes": 40000000
+        },
+        "current": {
+          "worker_seconds": 1.7342648789999657,
+          "retained_frames": 1,
+          "decoded_duration_ms": 25950,
+          "decoded_frame_count": 1,
+          "retained_pixel_payload_bytes": 400000
+        }
+      }
+    },
+    "changing": {
+      "warmup": {
+        "baseline": {
+          "retained_frames": 100,
+          "raw_duration_ms": 25900,
+          "worker_seconds": 1.930260453998926,
+          "decoded_frame_count": 100,
+          "decoded_pixels_sha256": "d8fc5e118df201fc40f672d1d00d7099d5e603a47aff4be9577a21091693caec",
+          "decoded_duration_ms": 25000,
+          "retained_pixel_payload_bytes": 40000000
+        },
+        "current": {
+          "retained_frames": 100,
+          "raw_duration_ms": 25948.99999999996,
+          "worker_seconds": 1.9733490450016689,
+          "decoded_frame_count": 100,
+          "decoded_pixels_sha256": "d8fc5e118df201fc40f672d1d00d7099d5e603a47aff4be9577a21091693caec",
+          "decoded_duration_ms": 25950,
+          "retained_pixel_payload_bytes": 40000000
+        }
+      },
+      "pairs": [
+        {
+          "baseline": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25900,
+            "worker_seconds": 1.9521626799978549,
+            "decoded_frame_count": 100,
+            "decoded_pixels_sha256": "d8fc5e118df201fc40f672d1d00d7099d5e603a47aff4be9577a21091693caec",
+            "decoded_duration_ms": 25000,
+            "retained_pixel_payload_bytes": 40000000
+          },
+          "current": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25948.99999999996,
+            "worker_seconds": 1.9363719809989561,
+            "decoded_frame_count": 100,
+            "decoded_pixels_sha256": "d8fc5e118df201fc40f672d1d00d7099d5e603a47aff4be9577a21091693caec",
+            "decoded_duration_ms": 25950,
+            "retained_pixel_payload_bytes": 40000000
+          }
+        },
+        {
+          "current": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25948.99999999996,
+            "worker_seconds": 1.9309520940005314,
+            "decoded_frame_count": 100,
+            "decoded_pixels_sha256": "d8fc5e118df201fc40f672d1d00d7099d5e603a47aff4be9577a21091693caec",
+            "decoded_duration_ms": 25950,
+            "retained_pixel_payload_bytes": 40000000
+          },
+          "baseline": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25900,
+            "worker_seconds": 1.994072382003651,
+            "decoded_frame_count": 100,
+            "decoded_pixels_sha256": "d8fc5e118df201fc40f672d1d00d7099d5e603a47aff4be9577a21091693caec",
+            "decoded_duration_ms": 25000,
+            "retained_pixel_payload_bytes": 40000000
+          }
+        },
+        {
+          "baseline": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25900,
+            "worker_seconds": 1.8829117860004772,
+            "decoded_frame_count": 100,
+            "decoded_pixels_sha256": "d8fc5e118df201fc40f672d1d00d7099d5e603a47aff4be9577a21091693caec",
+            "decoded_duration_ms": 25000,
+            "retained_pixel_payload_bytes": 40000000
+          },
+          "current": {
+            "retained_frames": 100,
+            "raw_duration_ms": 25948.99999999996,
+            "worker_seconds": 1.9181508859983296,
+            "decoded_frame_count": 100,
+            "decoded_pixels_sha256": "d8fc5e118df201fc40f672d1d00d7099d5e603a47aff4be9577a21091693caec",
+            "decoded_duration_ms": 25950,
+            "retained_pixel_payload_bytes": 40000000
+          }
+        }
+      ],
+      "medians": {
+        "baseline": {
+          "worker_seconds": 1.9521626799978549,
+          "retained_frames": 100,
+          "decoded_duration_ms": 25000,
+          "decoded_frame_count": 100,
+          "retained_pixel_payload_bytes": 40000000
+        },
+        "current": {
+          "worker_seconds": 1.9309520940005314,
+          "retained_frames": 100,
+          "decoded_duration_ms": 25950,
+          "decoded_frame_count": 100,
+          "retained_pixel_payload_bytes": 40000000
+        }
+      }
+    }
+  }
+}

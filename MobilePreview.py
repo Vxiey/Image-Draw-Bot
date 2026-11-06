@@ -159,6 +159,13 @@ class MobilePreviewServer:
         self._thread: Optional[threading.Thread] = None
         self._port = 0
         self._addresses: tuple[str, ...] = ()
+        from MobilePreviewQueue import LatestImageQueue
+        self._queued_identities = None
+        self._queued_ticket = None
+        self._encoded_identities = None
+        self._image_queue = LatestImageQueue(
+            encode=lambda image: _image_png_bytes(image), current=self._queue_current,
+            publish=self._publish_queued, failed=self._queue_failed)
 
     @property
     def running(self) -> bool:
@@ -173,25 +180,121 @@ class MobilePreviewServer:
         return int(self._port)
 
     def update_images(self, *, original=None, preview=None, safety=None) -> int:
+        """Synchronous compatibility API; each call rereads mutable inputs."""
         with self._lock:
-            generation = self._generation
             self._update_sequence += 1
-            sequence = self._update_sequence
+            ticket = (self._generation, self._update_sequence)
+            self._queued_ticket = self._queued_identities = None
+            self._encoded_identities = None
+        self._image_queue.discard_before(ticket)
         encoded = {
             'original': _image_png_bytes(original),
             'preview': _image_png_bytes(preview),
             'safety': _image_png_bytes(safety),
         }
+        return self._publish_images(ticket, encoded)
+
+    def _publish_images(self, ticket, encoded, identities=None):
         with self._lock:
-            # Encoding happens outside the lock. A stop must not be undone by
-            # an older, slower encode completing after its session was cleared.
-            if generation != self._generation or sequence != self._update_sequence:
+            # Both APIs reserve identity before capture/encoding. A late older
+            # completion cannot replace a newer request or a cleared session.
+            if ticket != (self._generation, self._update_sequence):
                 return self._revision
-            if encoded == self._images:
-                return self._revision
-            self._images.update(encoded)
-            self._revision += 1
+            self._encoded_identities = identities
+            if encoded != self._images:
+                self._images.update(encoded)
+                self._revision += 1
             return self._revision
+
+    def _queue_current(self, ticket):
+        with self._lock:
+            return self.running and ticket == (self._generation, self._update_sequence)
+
+    def _publish_queued(self, request, encoded):
+        return self._publish_images(request.ticket, encoded, request.identities)
+
+    def _queue_failed(self, ticket, error=None):
+        with self._lock:
+            if self._queued_ticket == ticket:
+                self._queued_ticket = self._queued_identities = None
+        if error is not None:
+            # No worker touches Tk. Do not copy filenames, image metadata or
+            # potentially private exception arguments into this new log entry.
+            try:
+                from CrashDiagnostics import log_event
+                log_event(f'Mobile Preview background encoding failed: {type(error).__name__}.')
+            except Exception:
+                pass
+
+    def queue_images(self, *, original=None, preview=None, safety=None) -> bool:
+        """Queue immutable app image generations using owned PIL snapshots.
+
+        Call this on the thread owning the input images. Source objects must
+        remain immutable between submissions; mutable callers use update_images.
+        Copy/occasional reduction happens here, while PNG encoding runs on one
+        worker. At most 32 MiB of retained snapshots per request and one active
+        plus one pending/capturing request are allowed. Native resize/PNG scratch
+        buffers are additional. False means stopped, superseded or unchanged.
+        """
+        from MobilePreviewQueue import ImageRequest, capture_snapshots, image_identities, same_images
+        images = {'original': original, 'preview': preview, 'safety': safety}
+        # Capture is serialized, but session cancellation never takes this lock.
+        with self._image_queue.submission_lock:
+            with self._lock:
+                if not self.running:
+                    return False
+                if (self._queued_ticket == (self._generation, self._update_sequence)
+                        and same_images(self._queued_identities, images)):
+                    return False
+                identities = image_identities(images)
+                self._update_sequence += 1
+                ticket = (self._generation, self._update_sequence)
+                self._queued_ticket, self._queued_identities = ticket, identities
+                cached = {}
+                captures = {}
+                for name, image in images.items():
+                    identity = self._encoded_identities
+                    if identity is not None and same_images({name: identity[name]}, {name: image}):
+                        cached[name] = self._images[name]
+                    elif image is None:
+                        cached[name] = None
+                    else:
+                        captures[name] = image
+            # Release the obsolete pending slot before building its replacement,
+            # so retained snapshots never grow to three requests during capture.
+            self._image_queue.discard_before(ticket)
+            request = None
+            try:
+                snapshots = capture_snapshots(captures, maximum=MOBILE_PREVIEW_MAX_DIMENSION,
+                                              current=lambda: self._queue_current(ticket))
+                if snapshots is None:
+                    self._queue_failed(ticket)
+                    return False
+                request = ImageRequest(ticket, identities, snapshots, cached)
+                if not self._queue_current(ticket):
+                    request.close()
+                    self._queue_failed(ticket)
+                    return False
+                if not snapshots:
+                    # Clearing views or returning to already encoded identities
+                    # requires no worker, but still invalidates an older request.
+                    self._publish_queued(request, cached)
+                else:
+                    self._image_queue.submit(request)
+                return True
+            except BaseException:
+                if request is not None:
+                    request.close()
+                self._queue_failed(ticket)
+                raise
+
+    def cancel_updates(self) -> None:
+        """Invalidate queued work without changing the currently served frame."""
+        with self._lock:
+            self._update_sequence += 1
+            ticket = (self._generation, self._update_sequence)
+            self._queued_ticket = self._queued_identities = None
+        self._image_queue.discard_before(ticket)
 
     def urls(self) -> list[str]:
         with self._lock:
@@ -366,8 +469,13 @@ class MobilePreviewServer:
             self._addresses = ()
             self._token = ''
             self._generation += 1
+            self._update_sequence += 1
+            ticket = (self._generation, self._update_sequence)
+            self._queued_ticket = self._queued_identities = None
+            self._encoded_identities = None
             self._images = {name: None for name in self._images}
             self._revision = 0
+        self._image_queue.discard_before(ticket)
         if server is not None:
             try:
                 server.shutdown()

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tkinter as tk
 import customtkinter as ctk
+from UiKeyboardNavigation import KeyboardButton
 
 from GameProfiles import PROFILES
 
@@ -159,7 +160,7 @@ class CompactGroup:
         try:
             self.shell = ctk.CTkFrame(parent, fg_color=PANEL_ALT, corner_radius=10,
                                       border_width=1, border_color=LINE)
-            self.toggle = ctk.CTkButton(
+            self.toggle = KeyboardButton(
                 self.shell, text='›  ' + self.title, command=self.toggle_open,
                 height=34, anchor='w', corner_radius=8, border_width=0,
                 fg_color='transparent', hover_color=FIELD,

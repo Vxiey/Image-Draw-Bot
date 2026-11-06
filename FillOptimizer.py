@@ -130,7 +130,7 @@ def _distance2(a, b):
     return sum((int(a[i]) - int(b[i])) ** 2 for i in range(3))
 
 
-def simplify_background(image, mode="Balanced"):
+def simplify_background(image, mode="Balanced", *, cancelled=lambda: False):
     """Simplify only a border-connected background to one calibrated color.
 
     The flood starts at matching border pixels and therefore does not rewrite a
@@ -139,13 +139,25 @@ def simplify_background(image, mode="Balanced"):
     and makes a later base Fill both safer and much cheaper.
     """
     validate_background_simplification(mode)
+    if cancelled():raise InterruptedError()
     rgb = image.convert("RGB")
+    try:
+        return _simplify_rgb_background(rgb, mode, cancelled=cancelled)
+    except BaseException:
+        rgb.close()
+        raise
+
+
+def _simplify_rgb_background(rgb, mode, *, cancelled):
+    """Work in the owned conversion; the caller's source is never modified."""
+    if cancelled():raise InterruptedError()
     if mode == "Off":
         return rgb, BackgroundSimplification(False, reason="Background simplification is disabled.")
     w, h = rgb.size
     if w < 8 or h < 8:
         return rgb, BackgroundSimplification(False, reason="Image is too small for background simplification.")
     winner, confidence = _dominant_border(rgb)
+    if cancelled():raise InterruptedError()
     cfg = {
         "Conservative": (.78, 26, .16),
         "Balanced": (.62, 38, .12),
@@ -168,25 +180,43 @@ def simplify_background(image, mode="Balanced"):
         if not visited[pos] and _distance2(px[x, y], winner) <= tol2:
             visited[pos] = 1; queue.append((x, y))
     for x in range(w):
+        if x % 1024 == 0 and cancelled():raise InterruptedError()
         push(x, 0); push(x, h - 1)
     for y in range(1, h - 1):
+        if y % 1024 == 0 and cancelled():raise InterruptedError()
         push(0, y); push(w - 1, y)
-    points = []
+    pixel_count = 0
     while queue:
-        x, y = queue.popleft(); points.append((x, y))
+        if pixel_count % 1024 == 0 and cancelled():raise InterruptedError()
+        x, y = queue.popleft(); pixel_count += 1
         if x: push(x - 1, y)
         if x + 1 < w: push(x + 1, y)
         if y: push(x, y - 1)
         if y + 1 < h: push(x, y + 1)
-    coverage = len(points) / max(1, w * h)
+    if cancelled():raise InterruptedError()
+    coverage = pixel_count / max(1, w * h)
     if coverage < min_coverage:
         return rgb, BackgroundSimplification(False, mapped, index, 0, coverage, confidence,
                                              "Connected background coverage is too small to simplify.")
-    out = rgb.copy(); out_px = out.load(); changed = 0
-    for x, y in points:
-        if tuple(out_px[x, y]) != mapped:
-            out_px[x, y] = mapped; changed += 1
-    return out, BackgroundSimplification(True, mapped, index, changed, coverage, confidence,
+    # The visited mask already records complete membership. Retaining a second
+    # Python (x,y) tuple for every background pixel, then copying this private
+    # RGB image again, is unnecessary. Scan its contiguous row spans after the
+    # coverage decision; no pixel changes can influence flood membership.
+    changed = 0
+    for y in range(h):
+        if cancelled():raise InterruptedError()
+        row_start, row_end = y * w, (y + 1) * w
+        start = visited.find(b'\x01', row_start, row_end)
+        while start >= 0:
+            end = visited.find(b'\x00', start, row_end)
+            if end < 0:end = row_end
+            for x in range(start - row_start, end - row_start):
+                if x % 1024 == 0 and cancelled():raise InterruptedError()
+                if tuple(px[x, y]) != mapped:
+                    px[x, y] = mapped; changed += 1
+            start = visited.find(b'\x01', end, row_end)
+    if cancelled():raise InterruptedError()
+    return rgb, BackgroundSimplification(True, mapped, index, changed, coverage, confidence,
                                          "Border-connected background simplified to one calibrated palette color.")
 
 

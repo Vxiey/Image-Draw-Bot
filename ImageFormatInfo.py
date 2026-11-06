@@ -43,4 +43,5 @@ def image_label(image, name):
     encoded = image.info.get('draw_studio_format') or image.format or 'Clipboard / decoded pixels'
     transparency = 'transparent pixels' if _has_transparency(image) else 'no transparency'
     managed = ' · sRGB from embedded color profile' if image.info.get('draw_studio_color_managed') else ''
-    return f'{name} · {encoded} · {image.width} × {image.height} · {transparency}{managed}'
+    depth = ' · 16-bit grayscale mapped to 8-bit' if image.info.get('draw_studio_bit_depth') else ''
+    return f'{name} · {encoded} · {image.width} × {image.height} · {transparency}{managed}{depth}'

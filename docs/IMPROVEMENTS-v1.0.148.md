@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 729 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **271 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 745 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **255 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -31,12 +31,19 @@ The count excludes tests, assertions, documentation, version changes, formatting
 | 707–713 | RB01–RB07 | Batch 06 canvas coordinates, budgets, color names and planning allocations | 7 | [Rendering ledger](v148-batch06-rendering.md); independent integration-owner review. |
 | 714–724 | UC01–UC11 | Batch 06 calibration editing, preview navigation and responsive workspace | 11 | [UI/calibration ledger](v148-batch06-ui-calibration.md); independent platform and controller reviews. |
 | 725–729 | PF01–PF05 | Batch 06 update history/cache and diagnostic lifecycle | 5 | [Platform ledger](v148-batch06-platform.md); independent integration-owner review. |
+| 730–732 | AY01–AY03 | Batch 07 source depth and recording clock/storage | 3 | [Application ledger](v148-batch07-application.md); independent rendering and platform reviews. |
+| 733–738 | RC01–RC06 | Batch 07 rendering priorities, admission, white ink and planning memory | 6 | [Rendering ledger](v148-batch07-rendering.md); independent integration-owner review. |
+| 739–742 | UK01–UK04 | Batch 07 keyboard controls and workflow/renderer integration | 4 | [UI ledger](v148-batch07-ui-workflow.md); independent platform and controller reviews. |
+| 743–745 | MP01–MP03 | Batch 07 mobile publication and raster import boundary | 3 | [Platform ledger](v148-batch07-platform.md); independent integration-owner review. |
 
 The [machine-readable registry](v148-improvements.json) maps every global ID to its area-local ID and evidence ledger. The [working plan](v148-improvement-progress.md) records release conditions and the next review cycle.
 
 ## Integration evidence
 
-- Batch 06 reference: `4c8aa247f852df7225b5e7d10ce4ac151e612226`. Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
+- Batch 07 reference: `8a9c848b9dd0f2c4738aee729dace75be2a5778d`. Batch 07: final frozen-source discovery passed 3,355 tests in 71.096 seconds (35 platform/hardware skips), with unchanged source hashes. All four area reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
+- Batch 07 retains complete output parity in the paired recording, mobile and rendering measurements. Memory scopes and unchanged/slower cases are stated in each ledger. [Eight exact-raster fixtures](v148-batch07-engine-benchmarks.json) have zero mismatched pixels.
+
+- Batch 06 reference: `4c8aa247f852df7225b5e7d10ce4ac151e612226`. Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. The existing Windows scaling and compact-height repairs through `ace8fd741b363ab9f7a01ccd1fad94231a70a1f4` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42300520218](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42300520218). These repairs add no duplicate improvement IDs. No 1.0.148 release is published.
 - Batch 06 source hygiene and all eight exact-raster fixtures passed; [raw engine results](v148-batch06-engine-benchmarks.json). The only full-suite correction updated an older diagnostics fixture to the already implemented opaque settings label, preserving all privacy assertions. It adds no improvement ID.
 
 - Batch 05 reference: `5f3fcfb5c4519e5ed1b9b770ba951918819d725d`. Independent area reviews and count checks are closed. Final frozen-source integration passed **3,059 tests in 73.421 seconds**, with **26 platform/hardware skips** and unchanged source hashes. The final adaptive-probe/correction review is also closed. Published checkpoint `4c8aa247` passed Windows/Linux, dependencies, CodeQL and packaged Windows checks in [run 42289019482](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42289019482).

@@ -79,7 +79,7 @@ class NativePrecisionCostTests(unittest.TestCase):
 
 
 class OrderedDeadlineDeliveryTests(unittest.TestCase):
-    def test_each_custom_colour_revisit_includes_its_verification_and_dialog(self):
+    def test_each_custom_colour_revisit_includes_dialog_but_verifies_colour_once(self):
         entries=[adaptive.DeadlineEntry(color,((index,0),),index,.1,.8,.8,.8,
                                        'structure',False,(index,0),'dot')
                  for index,color in enumerate((0,1,0))]
@@ -88,8 +88,8 @@ class OrderedDeadlineDeliveryTests(unittest.TestCase):
             color_extras={0:(.78,.3),1:(0,.3)})
         self.assertEqual(len(kept),3)
         self.assertAlmostEqual(metadata['ordered_custom_color_seconds'],1.56)
-        self.assertAlmostEqual(metadata['ordered_verification_seconds'],.9)
-        self.assertAlmostEqual(sum(row.estimated_cost_seconds for row in kept),.3+.6+1.56+.9+.00009)
+        self.assertAlmostEqual(metadata['ordered_verification_seconds'],.6)
+        self.assertAlmostEqual(sum(row.estimated_cost_seconds for row in kept),.3+.6+1.56+.6+.00009)
 
     def test_repeated_colour_switches_are_budgeted_before_returning_the_plan(self):
         entries = [adaptive.DeadlineEntry(index % 2, ((index * 100, 0),), index, .2,

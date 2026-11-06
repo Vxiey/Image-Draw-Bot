@@ -52,7 +52,7 @@ class ResponsiveWorkspace:
         except (tk.TclError,KeyError):return None
         while widget is not None:
             for name,panel in self.panels.items():
-                if widget is panel:return name
+                if widget is panel or widget is getattr(panel,'_parent_frame',None):return name
             widget=getattr(widget,'master',None)
         return None
 

@@ -7,19 +7,21 @@ palette assignments or invent geometry.
 """
 from __future__ import annotations
 
+from contextlib import closing
 import numpy as np
 from PIL import Image, ImageFilter
 
 
 def _luma(rgb: np.ndarray) -> np.ndarray:
     arr = np.asarray(rgb, dtype=np.float32) / 255.0
-    return (arr[..., 0] * 0.2126 + arr[..., 1] * 0.7152 + arr[..., 2] * 0.0722).astype(np.float32)
+    return (arr[..., 0] * 0.2126 + arr[..., 1] * 0.7152 + arr[..., 2] * 0.0722).astype(np.float32, copy=False)
 
 
 def _box_blur(values: np.ndarray, radius: int) -> np.ndarray:
     radius = max(1, int(radius))
-    image = Image.fromarray(np.rint(np.clip(values, 0.0, 1.0) * 255.0).astype(np.uint8), mode="L")
-    return (np.asarray(image.filter(ImageFilter.BoxBlur(radius)), dtype=np.float32) / 255.0).astype(np.float32)
+    with closing(Image.fromarray(np.rint(np.clip(values, 0.0, 1.0) * 255.0).astype(np.uint8), mode="L")) as image:
+        with closing(image.filter(ImageFilter.BoxBlur(radius))) as blurred:
+            return (np.asarray(blurred, dtype=np.float32) / 255.0).astype(np.float32, copy=False)
 
 
 def _gradient(values: np.ndarray) -> np.ndarray:
@@ -27,7 +29,7 @@ def _gradient(values: np.ndarray) -> np.ndarray:
     from ImageGradients import luminance_edges
     mag = luminance_edges(f)
     scale = max(1e-4, float(np.percentile(mag, 99.0)))
-    return np.clip(mag / scale, 0.0, 1.0).astype(np.float32)
+    return np.clip(mag / scale, 0.0, 1.0).astype(np.float32, copy=False)
 
 
 def _palette_boundaries(index_map: np.ndarray, drawable: np.ndarray) -> np.ndarray:
@@ -108,11 +110,13 @@ def analyze_shadow_contours(rgb: np.ndarray, palette_index: np.ndarray,
     }
     if cancelled():raise InterruptedError()
     return {
-        "luma_map": luma.astype(np.float32),
-        "local_tone_map": local_tone.astype(np.float32),
-        "shadow_map": shadow.astype(np.float32),
-        "contour_map": contour.astype(np.float32),
-        "shadow_detail_map": fine_shadow.astype(np.float32),
+        # Each calculation already owns a float32 plane. Transfer those planes
+        # to the caller instead of retaining a second full set at publication.
+        "luma_map": luma.astype(np.float32, copy=False),
+        "local_tone_map": local_tone.astype(np.float32, copy=False),
+        "shadow_map": shadow.astype(np.float32, copy=False),
+        "contour_map": contour.astype(np.float32, copy=False),
+        "shadow_detail_map": fine_shadow.astype(np.float32, copy=False),
         "contour_mask": contour_mask,
         "shadow_detail_mask": shadow_detail_mask,
         "deep_shadow_mask": deep_shadow_mask,

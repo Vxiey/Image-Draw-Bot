@@ -15,6 +15,15 @@ _SPOOL_MEMORY_BYTES = 2 * 1024 * 1024
 _BLOCK_BYTES = 64 * 1024
 _MAX_URL_CHARACTERS = 65536
 _DOWNLOAD_SECONDS = 45
+# Limit public image input to the advertised raster decoders. In particular,
+# opening an EPS must not implicitly launch Ghostscript, and a metafile must
+# not dispatch a platform/custom renderer. JPEG's own factory also reads MPO;
+# APNG uses the PNG decoder. DIB retains the BMP-family raster representation.
+_RASTER_FORMATS = ('PNG','JPEG','WEBP','BMP','DIB','GIF','TIFF','ICO','AVIF')
+_UNSUPPORTED_IMAGE = (
+    'Could not read the image. Choose PNG, APNG, JPG, WEBP, BMP, GIF, TIFF, ICO '
+    'or AVIF. Export documents or vector artwork to one of these raster formats first.'
+)
 
 
 def _check(cancelled, deadline=None):
@@ -110,9 +119,49 @@ def _download(stream,url,limit,cancelled):
         raise ValueError('Choose a valid direct image URL.')
     deadline=time.monotonic()+_DOWNLOAD_SECONDS
     response=None
+
+    class ImportSession(requests.Session):
+        def send(self,prepared,**options):
+            # The Requests resolver calls this before every actual hop, after
+            # its normal quoting/auth/cookie/proxy handling. Validate the exact
+            # prepared destination and observe Stop before another connection.
+            _check(cancelled,deadline)
+            destination=prepared.url
+            if not isinstance(destination,str) or len(destination)>_MAX_URL_CHARACTERS or not _is_http_url(destination):
+                raise ValueError('The image server redirected to an invalid image URL.')
+            return super().send(prepared,**options)
+
+    session=ImportSession()
+
+    def close_safely(resource):
+        if resource is not None:
+            try:resource.close()
+            except Exception:
+                # Cleanup cannot replace Stop, a primary transfer error or a
+                # successfully verified final body.
+                pass
+
+    def inspect_response(item,*_args,**_kwargs):
+        """Keep Requests' auth/cookie/proxy redirect logic, without body drain."""
+        keep_body=False
+        try:
+            _check(cancelled,deadline)
+            if not item.is_redirect or not item.headers.get('Location'):
+                keep_body=True
+                return item
+            return item
+        finally:
+            if not keep_body:
+                # Session.resolve_redirects reads response.content even with
+                # stream=True (and when preparing Response.next). Close the
+                # unread socket first, then expose an empty intermediate body.
+                # Headers/raw metadata remain available to cookie handling.
+                close_safely(item)
+                item._content=b''
+                item._content_consumed=True
     try:
         _check(cancelled,deadline)
-        response=requests.get(url,timeout=(10,15),stream=True,headers={
+        response=session.get(url,timeout=(10,15),stream=True,hooks={'response':inspect_response},headers={
             'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36',
             'Accept':'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
         })
@@ -136,12 +185,67 @@ def _download(stream,url,limit,cancelled):
     except (requests.RequestException,HTTPError) as error:
         raise ValueError(f'Could not download the image: {error}') from error
     finally:
-        if response is not None:
-            try:response.close()
-            except Exception:
-                # A secondary close failure must not hide the original transfer
-                # failure, Stop request, or a successfully verified body.
-                pass
+        close_safely(response)
+        close_safely(session)
+
+
+def _check_source_size(width,height,limit):
+    if width<1 or height<1:raise ValueError('The image has invalid dimensions.')
+    if width*height>limit:
+        raise ValueError('The image is larger than 25 megapixels. Resize it first.')
+
+
+def _preflight_icon_size(stream,limit,cancelled):
+    """Check the selected ICO payload before Pillow's eager icon decoder.
+
+    ICO directory dimensions can disagree with the embedded PNG/DIB. Inspect
+    only the chosen payload header, preserving Pillow's stable area/depth order
+    without retaining a possibly 65,535-entry directory or decoding pixels.
+    Other formats still use their normal content-based Pillow identification.
+    """
+    position=stream.tell()
+    try:
+        header=stream.read(6)
+        if header[:4]!=b'\x00\x00\x01\x00':return
+        if len(header)!=6:raise ValueError('The icon directory is incomplete.')
+        count=int.from_bytes(header[4:6],'little')
+        chosen=None
+        for index in range(count):
+            if index%64==0:_check(cancelled)
+            entry=stream.read(16)
+            if len(entry)!=16:raise ValueError('The icon directory is incomplete.')
+            width,height=entry[0] or 256,entry[1] or 256
+            depth=int.from_bytes(entry[6:8],'little')
+            colors=entry[2]
+            depth=depth or ((colors-1).bit_length() if colors else 0) or 256
+            rank=(-width*height,depth)
+            if chosen is None or rank<chosen[0]:
+                chosen=(rank,int.from_bytes(entry[12:16],'little'))
+        if chosen is None:return  # Pillow reports the invalid empty directory.
+        _check(cancelled)
+        stream.seek(chosen[1])
+        payload=stream.read(24)
+        if payload.startswith(b'\x89PNG\r\n\x1a\n'):
+            if len(payload)<24 or payload[12:16]!=b'IHDR':
+                raise ValueError('The icon image header is incomplete or invalid.')
+            width=int.from_bytes(payload[16:20],'big')
+            height=int.from_bytes(payload[20:24],'big')
+        else:
+            header_size=int.from_bytes(payload[:4],'little')
+            if header_size==12 and len(payload)>=8:
+                width=int.from_bytes(payload[4:6],'little')
+                height=int.from_bytes(payload[6:8],'little')//2
+            elif header_size in (40,52,56,64,108,124) and len(payload)>=12:
+                width=int.from_bytes(payload[4:8],'little')
+                height=int.from_bytes(payload[8:12],'little')
+                if payload[11]==255:height=2**32-height
+                height//=2  # The DIB includes the XOR image and its AND mask.
+            else:
+                return  # Leave unsupported/malformed DIB validation to Pillow.
+        _check_source_size(width,height,limit)
+        _check(cancelled)
+    finally:
+        stream.seek(position)
 
 
 def read_image(source,cancelled=lambda:False,*,max_download_bytes=20*1024*1024,
@@ -168,15 +272,16 @@ def read_image(source,cancelled=lambda:False,*,max_download_bytes=20*1024*1024,
         snapshot.seek(0)
         result=None
         try:
-            with closing(Image.open(snapshot)) as image:
-                if image.width<1 or image.height<1:raise ValueError('The image has invalid dimensions.')
-                if image.width*image.height>max_source_pixels:
-                    raise ValueError('The image is larger than 25 megapixels. Resize it first.')
+            _preflight_icon_size(snapshot,max_source_pixels,cancelled)
+            with closing(Image.open(snapshot,formats=_RASTER_FORMATS)) as image:
+                _check_source_size(image.width,image.height,max_source_pixels)
                 _check(cancelled)
                 detected=image.format or 'Unknown'
                 oriented=ImageOps.exif_transpose(image)
                 oriented.info.pop('draw_studio_color_managed',None)
-                if oriented.info.get('icc_profile'):
+                oriented.info.pop('draw_studio_bit_depth',None)
+                from SourcePixelDepth import UNSIGNED_16BIT_MODES
+                if oriented.info.get('icc_profile') or oriented.mode in UNSIGNED_16BIT_MODES:
                     from ImageColorManagement import srgb_source
                     with closing(oriented):result=srgb_source(oriented,cancelled=cancelled)
                 elif oriented.mode=='RGBA':result=oriented
@@ -189,7 +294,7 @@ def read_image(source,cancelled=lambda:False,*,max_download_bytes=20*1024*1024,
             if result is not None:result.close()
             if isinstance(error,InterruptedError):raise
             if isinstance(error,UnidentifiedImageError):
-                raise ValueError('Could not read the image. Choose PNG, JPG, WEBP or BMP, or use a direct image URL.') from error
+                raise ValueError(_UNSUPPORTED_IMAGE) from error
             if isinstance(error,OSError):
                 raise ValueError(f'Could not decode the image: {error}') from error
             raise

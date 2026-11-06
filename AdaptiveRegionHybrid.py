@@ -948,7 +948,7 @@ def _order_fill_regions_for_execution(regions):
     return out,{"policy":"color-batched-large-first-nearest","color_batches":len(batches),"batches":batches}
 
 
-def _build_fill_regions(groups,palette_rgb,image_size,fitted,options,cancelled):
+def _build_fill_regions(groups,palette_rgb,image_size,fitted,options,cancelled,*,source_image=None):
     if not options.get("fill_tool_available"):
         return [],{"enabled":False,"reason":"target has no verified Fill capability"}
     try:
@@ -963,6 +963,10 @@ def _build_fill_regions(groups,palette_rgb,image_size,fitted,options,cancelled):
             max_regions=384,cancelled=cancelled,return_meta=True,safe_margin_px=margin)
         accepted,meta=evaluate_region_candidates(candidates,image_size,fitted,options,base_meta=base,cancelled=cancelled)
         accepted,mask_meta=filter_fill_regions_by_source_mask(accepted,image_size,margin_px=margin)
+        if source_image is not None:
+            from SafeFillMask import filter_fill_regions_by_source_alpha
+            accepted,mask_meta=filter_fill_regions_by_source_alpha(
+                accepted,source_image,metadata=mask_meta,cancelled=cancelled)
         accepted,fill_order_meta=_order_fill_regions_for_execution(accepted)
         accepted,state_meta=filter_stateful_fill_regions(accepted,image_size,brush_px=max(1,int(options.get("brush_px") or 1)),cancelled=cancelled)
         meta=dict(meta);meta["safe_fill_mask"]=mask_meta;meta["stateful_fill_simulation"]=state_meta
@@ -1015,7 +1019,10 @@ def build_adaptive_hybrid_plan(original:Image.Image,area,options:dict[str,Any],m
                     "paint_profile","profile_key","profile_name","brush_px","time_budget_active",
                     "time_budget_mode","max_seconds","manual_max_seconds","deadline_safety_reserve"):
             if key in options:outer[key]=options[key]
-        fill_regions,fill_meta=_build_fill_regions(groups,palette,base["image"].size,base["fitted"],outer,cancelled)
+        alpha_source=(base['image'] if ((outer.get('source_transparency_meta') or {}).get('zero_alpha_excluded')
+                                      or outer.get('pixel_accurate')) else None)
+        fill_regions,fill_meta=_build_fill_regions(groups,palette,base["image"].size,base["fitted"],outer,cancelled,
+                                                 source_image=alpha_source)
         reference_pixel_map=pixel_map_from_groups(base["image"],groups,palette,cancelled=cancelled)
         work_groups=groups
         if fill_regions:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 import math
+from itertools import pairwise
 import numpy as np
 from PIL import Image
 
@@ -176,28 +177,85 @@ def build_importance_map(image: Image.Image, options: dict[str, Any] | None = No
     return out, meta
 
 
-def sample_path_importance(path, importance: np.ndarray) -> float:
+def _path_vertices(path, *, reverse=False, cancelled=lambda: False):
+    """Stream the corners, retaining turns/backtracking and omitting subdivisions."""
+    if cancelled():
+        raise InterruptedError()
+    points = iter(reversed(path) if reverse else path)
+    first = tuple(next(points))
+    yield first
+    anchor = previous = first
+    for index, raw in enumerate(points):
+        if index % 128 == 0 and cancelled():
+            raise InterruptedError()
+        point = tuple(raw)
+        if point == previous:
+            continue
+        ax, ay = previous[0] - anchor[0], previous[1] - anchor[1]
+        bx, by = point[0] - previous[0], point[1] - previous[1]
+        if ax * by != ay * bx or ax * bx + ay * by < 0:
+            yield previous
+            anchor = previous
+        previous = point
+    if previous != anchor:
+        yield previous
+
+
+def _canonical_path_vertices(path, *, cancelled=lambda: False):
+    # The same geometric traversal gives identical floating-point sample
+    # positions after a path reversal. Compare corners for a closed path too,
+    # so inserting a collinear vertex cannot change the chosen direction.
+    reverse = False
+    for left, right in zip(_path_vertices(path, cancelled=cancelled),
+                           _path_vertices(path, reverse=True, cancelled=cancelled)):
+        if left != right:
+            reverse = left > right
+            break
+    return _path_vertices(path, reverse=reverse, cancelled=cancelled)
+
+
+def sample_path_importance(path, importance: np.ndarray, *, cancelled=lambda: False) -> float:
+    if cancelled():
+        raise InterruptedError()
     if not path or importance.size == 0:
         return 0.0
     h, w = importance.shape
-    n = len(path)
-    # Bound work for very long polylines while always sampling endpoints and
-    # central structure.
-    step = max(1, n // 24)
+    # Sample at most 24 distinct pixels along the geometry, not the stored
+    # vertices. A two-point segment has an interior; neither its direction nor
+    # redundant collinear vertices should change its deadline priority.
+    length = math.fsum(math.dist(a, b) for a, b in
+                       pairwise(_canonical_path_vertices(path, cancelled=cancelled)))
+    count = min(24, max(2, math.ceil(length) + 1))
     values = []
-    for i in range(0, n, step):
-        try:
-            x, y = path[i]
-            values.append(float(importance[min(h-1,max(0,int(y))), min(w-1,max(0,int(x))) ]))
-        except Exception:
-            continue
-    try:
-        x, y = path[-1]
-        values.append(float(importance[min(h-1,max(0,int(y))), min(w-1,max(0,int(x))) ]))
-    except Exception:
-        pass
-    if not values:
-        return 0.0
+    seen = set()
+
+    def sample(point):
+        x = min(w - 1, max(0, int(round(point[0]))))
+        y = min(h - 1, max(0, int(round(point[1]))))
+        if (x, y) not in seen:
+            seen.add((x, y))
+            values.append(float(importance[y, x]))
+
+    vertices = _canonical_path_vertices(path, cancelled=cancelled)
+    previous = next(vertices)
+    sample(previous)
+    distance = 0.0
+    index = 1
+    for point in vertices:
+        segment = math.dist(previous, point)
+        end = distance + segment
+        while index < count - 1 and length * index / (count - 1) <= end:
+            if cancelled():
+                raise InterruptedError()
+            fraction = max(0.0, min(1.0, (length * index / (count - 1) - distance) / segment))
+            sample((previous[0] + (point[0] - previous[0]) * fraction,
+                    previous[1] + (point[1] - previous[1]) * fraction))
+            index += 1
+        distance = end
+        previous = point
+    sample(previous)
+    if cancelled():
+        raise InterruptedError()
     values.sort()
     mean = sum(values) / len(values)
     high = values[max(0, int(len(values) * .80) - 1)]

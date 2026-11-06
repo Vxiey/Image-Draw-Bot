@@ -1,0 +1,285 @@
+{
+  "baseline": "8a9c848b9dd0f2c4738aee729dace75be2a5778d",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One exact-parity/warm pair, five alternating before/after elapsed pairs by default, separate traced-memory peaks after garbage collection.",
+  "scope": "CPU shadow analysis, actual PixelAccuratePlanner.build_pixel_map, background simplification and actual DrawBot.make_plan. No input, UI, network or GPU throughput claim. Only the measured changed helper is substituted; both sides share the current caller and other dependencies.",
+  "parity": "No fields are excluded from helper results or PixelMap. Application comparison includes source/preview pixels, complete source/execution paths, sequence, counts, estimate, path statistics, simplification and transparency metadata. Volatile application profiling/timer metadata is outside that explicitly listed comparison.",
+  "lifetime": "Owned returned images are fingerprinted and closed within each measured helper/application call. Fingerprinting cost is included equally on both sides. Array results are fingerprinted only by the warm/parity comparison; timed array calls return and release their original arrays.",
+  "memory_scope": "tracemalloc peak includes Python/NumPy allocations tracked by Python; most Pillow pixel-core allocation and process RSS are not measured. Separate ownership regression proves removal of the second full RGB copy.",
+  "baseline_source_sha256": {
+    "ShadowDetailEngine": "e0e1100a540d901d067a9ee31d286547a1f4ca712c8d0f799a100a733885a527",
+    "FillOptimizer": "95263bf7e3a861631e12f065421efa1f92b552f56a73336007881100aa1c305b"
+  },
+  "after_source_sha256": {
+    "ShadowDetailEngine": "9565c2f04ea08b815533323a56b030b27b355524eaaa0ac710be4efc7f1c3ded",
+    "FillOptimizer": "5932cbf5bb17fa463dd0e0dc3e844251e1290ff73d99cb0815e101e8c5609f35"
+  },
+  "shared_dependency_sha256": {
+    "DrawBot": "eb1655a8de2bcb6642cbb7d04f9a5aad5caaccf6bbc6b4d760e5b33bbd59672d",
+    "PixelAccuratePlanner": "aa46e595d16b6d913e6f5781ac4cb9d0405961fb02f954c7a699c74da3eb52e7",
+    "ImageGradients": "aeb90934a24fec91d8344424ed9355ec2ebc2b2fa41fad10607902fc9069740e",
+    "PixelData": "3dba56479a5ce5b7385e5356fd0f3a99c537de64a89e74a42bdf0d57456bbc6c",
+    "PixelMapValidation": "ea26af03b257e52d00151eb81520a0d4cb4a5b09a3dad83397ad0138b77d64cf",
+    "UniversalGpuAcceleration": "1e9fd7799608522729fd63440eb01840b27fcd77c832de68efbbedc0e1ba96fb",
+    "SafeFillMask": "2596307e8d2dd6795be62dc9ef68474cffaec0e02d9b44b082ae4b5eb08179dc",
+    "Colors": "a89301a8397484092714431771a3d9cb5fe1ab7e22aa6ebe9755a3d3dbd0f942",
+    "ColorCache": "646ae6933ac0d7de88182ecf74f8666dfb7673cfefd3a40e6fbc1f761aec6f95",
+    "ColorMatchingEngine": "a947fbe2faf71148178a9f0de8125cae73129731622dcb7429d87a08b872f7ae",
+    "ColorFidelity": "8a85606577672a7758dc58e208c4d60d084e5fab0bbec09d29d0bb44b8599513",
+    "AdvancedColor": "bcb333361ea65d39438b87040047a98e2febf0b4af6f32b3d64fa49fb0651c9a",
+    "ColorGrouping": "a691d23f407107bb5c8599c03d605497267cdecb66279c3e06fa5e1972238388",
+    "PreviewSafety": "7b53509e71cb3fc3d36c557d84823459122cbd502f325871f4887beb948b357a",
+    "ContinuousPaths": "1a93251e00e80152d2a971425edc521bdb303f866219dbcb6b47aaddc689f9ea",
+    "ExecutionCostModel": "4ebc67f1cdb29e7c9af61be1f240f5e6aa9b1b9f79724d3a4a5495615e5c0192",
+    "StrokeOptimizer": "ed71f43d95ff30396254f88bbf5e25499b0284f051319237d90ea2300ec53eee",
+    "TimeBudget": "c68ba2186c387fcd67d5c04820dba05fa10af12d3d9e35a34a1e72a1bae4d96c",
+    "AdaptiveDetail": "28f5d6ff2b40452815990f3c12a62474c765d408ba035693af0b7e7370c5eb23",
+    "ImageSampling": "e331f52a99196cf8ae8b5a15c917de20ed72db43cbe416329fb9e884ad411d58",
+    "DrawingStyleProfiles": "bed1954f8f1c5bbfc3264e5eb44af27fb4dd30982991d3c1ebb4849d35c5afbc",
+    "benchmark_v148_image_workflow": "ccba17da2b50a22c3c967e51994121bc23a95a7c4b2a496dc3eb1b2918346da5",
+    "benchmark_v148_rendering_batch07": "9feabe175bbc2c9a25463f3dca3f51883926418be2dcc6eb11961ad42de3d800"
+  },
+  "measurements": {
+    "shadow_guidance_512x512": {
+      "before_samples_ms": [
+        25.566686999809463,
+        35.29303899995284,
+        23.81673999479972,
+        22.986876996583305,
+        20.276487004593946
+      ],
+      "after_samples_ms": [
+        30.46205900318455,
+        23.442760000762064,
+        19.747398000617977,
+        21.185121004236862,
+        21.77922699775081
+      ],
+      "before_median_ms": 23.81673999479972,
+      "after_median_ms": 21.77922699775081,
+      "exact_output_parity": true,
+      "output_sha256": "d5b4a78fb0ebd1a17a12e2cb662d4bc1232ac2e5f4f3ddb34bcb7766d5469d4d",
+      "before_peak_python_bytes": 16521566,
+      "after_peak_python_bytes": 12586944,
+      "parameters": {
+        "size": [
+          512,
+          512
+        ],
+        "seed": 1480702,
+        "palette_size": 4,
+        "drawable_probability": 0.85
+      },
+      "comparison": "All five float32 maps, three boolean masks and complete metadata."
+    },
+    "actual_pixel_map_512x512": {
+      "before_samples_ms": [
+        85.24008800304728,
+        85.32923299935646,
+        84.49538100103382,
+        83.01449799910188,
+        77.15609000297263
+      ],
+      "after_samples_ms": [
+        83.36361300462158,
+        80.89197899971623,
+        82.36189000308514,
+        82.06182999856537,
+        76.27925999986473
+      ],
+      "before_median_ms": 84.49538100103382,
+      "after_median_ms": 82.06182999856537,
+      "exact_output_parity": true,
+      "output_sha256": "2d9c1330278c0559fe375bf911e5cc1edbd664c4fddf29cd7556845353e521ed",
+      "before_peak_python_bytes": 20252214,
+      "after_peak_python_bytes": 20251964,
+      "parameters": {
+        "size": [
+          512,
+          512
+        ],
+        "seed": 1480702,
+        "palette": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            0,
+            80,
+            205
+          ],
+          [
+            255,
+            120,
+            41
+          ]
+        ],
+        "gpu_mode": "CPU",
+        "skip_white": false,
+        "color_rendering": "RGB nearest",
+        "color_fidelity": "Fast"
+      },
+      "comparison": "Every PixelMap field: complete source RGB, palette indices, drawable/edge/importance/protected/contour/shadow/shadow-detail/micro-detail arrays and metadata."
+    },
+    "background_connected_with_enclosed_island": {
+      "before_samples_ms": [
+        193.30633600475267,
+        199.46688399795676,
+        185.9294649984804,
+        180.38394400355173,
+        179.4201989978319
+      ],
+      "after_samples_ms": [
+        195.06786000420107,
+        183.97721200017259,
+        185.77459700463805,
+        178.61606200312963,
+        176.13022900331998
+      ],
+      "before_median_ms": 185.9294649984804,
+      "after_median_ms": 183.97721200017259,
+      "exact_output_parity": true,
+      "output_sha256": "2db52b653f023e6f8ef6e1a6cbe0b689b9d3841e155d826d9896e673285d853e",
+      "before_peak_python_bytes": 10838813,
+      "after_peak_python_bytes": 1070976,
+      "parameters": {
+        "size": [
+          384,
+          384
+        ],
+        "mode": "Balanced",
+        "scene": "connected_with_enclosed_island"
+      },
+      "comparison": "Complete output RGB and all simplification metadata, including coverage/changed pixels/rejection reason."
+    },
+    "background_coverage_rejected": {
+      "before_samples_ms": [
+        1.51776299753692,
+        1.7653879986028187,
+        1.7001509986585006,
+        1.632562001759652,
+        1.6777679993538186
+      ],
+      "after_samples_ms": [
+        1.6258320029010065,
+        1.674083003308624,
+        1.9139369978802279,
+        1.8816200026776642,
+        1.7355340023641475
+      ],
+      "before_median_ms": 1.6777679993538186,
+      "after_median_ms": 1.7355340023641475,
+      "exact_output_parity": true,
+      "output_sha256": "54ff0076e00553220512fa1472cb55a8510be0c8a85bfb85b6cb7f41c121bf68",
+      "before_peak_python_bytes": 128465,
+      "after_peak_python_bytes": 128409,
+      "parameters": {
+        "size": [
+          128,
+          128
+        ],
+        "mode": "Balanced",
+        "scene": "coverage_rejected"
+      },
+      "comparison": "Complete output RGB and all simplification metadata, including coverage/changed pixels/rejection reason."
+    },
+    "actual_make_plan_partial_and_zero_alpha": {
+      "before_samples_ms": [
+        132.22031500481535,
+        129.62386199797038,
+        114.68195499764988,
+        116.88615099410526,
+        126.9068170004175
+      ],
+      "after_samples_ms": [
+        123.21750099363271,
+        140.480464004213,
+        119.5238279979094,
+        119.9668629997177,
+        116.6653350010165
+      ],
+      "before_median_ms": 126.9068170004175,
+      "after_median_ms": 119.9668629997177,
+      "exact_output_parity": true,
+      "output_sha256": "089012f437717c3c3be6d904430155400cf4ddd3a9873e062710db855bed3cf8",
+      "before_peak_python_bytes": 4911765,
+      "after_peak_python_bytes": 4911749,
+      "parameters": {
+        "size": [
+          256,
+          192
+        ],
+        "source": "Gray connected background, closed black rectangle, half-alpha blue interior and zero-alpha central hole",
+        "options": {
+          "detail": 10,
+          "delay": 0.001,
+          "speed": "Balanced",
+          "precision": "Ultra",
+          "lines": true,
+          "drawing_mode": "Smart paths (recommended)",
+          "smart_paths": true,
+          "render_preset": "Manual",
+          "render_style": "Standard / pixel",
+          "draw_quality": "High likeness",
+          "human_mode": "Off",
+          "gpu_mode": "CPU",
+          "gpu_vram": "Auto",
+          "gpu_performance": "High throughput",
+          "cpu_workers": "4",
+          "cpu_engine": "Threads",
+          "ram_budget": "2 GB",
+          "ram_custom_mb": "2048",
+          "planning_resolution": "Standard",
+          "resource_scheduler": "Off",
+          "background_fill": "Off",
+          "background_simplification": "Balanced",
+          "use_region_fill_engine": false,
+          "color_grouping": "Accurate",
+          "color_workflow": "Finish color first",
+          "stroke_optimizer": "Travel only",
+          "adaptive_detail": "Off",
+          "detail_zoom": "Off",
+          "visual_verification": "Off",
+          "color_rendering": "RGB nearest",
+          "color_fidelity": "Fast",
+          "color_layers": "Off",
+          "custom_color_workflow": "Calibrated palette",
+          "exact_color_limit": "Auto",
+          "portrait_focus": false,
+          "skip_white": false,
+          "contrast": 1.0,
+          "outline": false,
+          "brush_px": 1,
+          "max_seconds": 600,
+          "manual_max_seconds": 600,
+          "time_budget_mode": "Unlimited",
+          "unlimited_time": true,
+          "target_stroke_count": "Auto",
+          "target_stroke_custom": "2500",
+          "paint_current_color": false,
+          "erase_mode": false,
+          "paint_tool": "Use current tool",
+          "effective_paint_tool": "Use current tool",
+          "tool_actions": [],
+          "fill_tool_available": false,
+          "fill_tool_actions": [],
+          "fill_restore_actions": [],
+          "_execution_cost_calibration_override": {}
+        }
+      },
+      "comparison": "No fields are excluded from helper results or PixelMap. Application comparison includes source/preview pixels, complete source/execution paths, sequence, counts, estimate, path statistics, simplification and transparency metadata. Volatile application profiling/timer metadata is outside that explicitly listed comparison.",
+      "baseline_adapter": "Accept current cancelled keyword and call unchanged baseline simplify_background(image, mode); benchmark cancellation remains false."
+    }
+  }
+}

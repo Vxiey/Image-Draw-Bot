@@ -1,6 +1,18 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 729 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05 and 30 changes in batch 06. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 745 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06 and 16 changes in batch 07. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 07: faithful imports, useful drawing plans and responsive controls
+
+- Normalize unsigned 16-bit grayscale imports with fixed-range rounding and original-precision transparency, before ICC conversion. Preserve borrowed clipboard input and identify the conversion in the source label.
+- Preserve cumulative GIF capture timing and release exact adjacent duplicate recording frames early. Static footage retains less pixel payload; changing footage retains its distinct frames. Paired real-worker measurements disclose the precise memory scope and unchanged/slower timing.
+- Make path importance invariant under reversal and redundant subdivision; charge initial deadline admission only for colors actually admitted. Preserve explicit white ink and choose raster orientation by retained source coverage before stroke cost.
+- Remove redundant shadow-map and background-simplification allocations with exact output checks. Preserve absent alpha pixels in actual standard/turbo/hybrid paths and Fill decisions without composing partial alpha twice.
+- Support keyboard focus/activation on custom controls, including scroll-to-focus and existing Start authorization. Keep error guidance from accidentally starting drawing; preserve plans on unchanged-profile events and enable the advertised Sketch + Auto Fill mode through validation and settings reload.
+- Queue bounded mobile-preview snapshots and publish the latest accepted source/plan consistently. Reuse unchanged view encoding, coalesce obsolete requests and preserve session identity through stop/restart.
+- Restrict public image imports to the supported raster decoder set, preventing unintended EPS/metafile renderer dispatch from misleading extensions or MIME labels. Preserve real APNG/MPO/AVIF inputs. Complete existing ICO pre-decode pixel bounds and HTTP redirect-body limits without duplicate improvement counts.
+
+Batch 07: final frozen-source discovery passed 3,355 tests in 71.096 seconds (35 platform/hardware skips), with unchanged source hashes. All four area reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
 
 ## Batch 06: color-correct imports, useful previews and responsive workflows
 
@@ -13,7 +25,7 @@
 - Keep all twelve preview pages and Tools actions accessible, scroll tall calibration forms and adapt the main workspace to narrow/high-scale windows while retaining the existing Start/Stop/Pause and authorization controls.
 - Check bounded linked release pages, reuse fully rehashed owned installers and preserve completed diagnostics when Explorer cannot open their folder. Use per-user expandable WER paths and contain corrupt optional package metadata.
 
-Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
+Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. The existing Windows scaling and compact-height repairs through `ace8fd741b363ab9f7a01ccd1fad94231a70a1f4` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42300520218](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42300520218). These repairs add no duplicate improvement IDs. No 1.0.148 release is published.
 
 ## Batch 05: drawing verification, recovery and publication identity
 

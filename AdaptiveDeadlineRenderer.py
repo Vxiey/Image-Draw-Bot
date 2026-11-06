@@ -101,10 +101,28 @@ def _path_cost(path, transform: CanvasTransform, options: dict[str, Any], *, tim
             moves * path_wait + .0015)
 
 
+def _color_selection_cost(options, color_index, delivery):
+    """Conditional cost of selecting one colour, excluding stroke geometry."""
+    if options.get('paint_current_color'):
+        return 0.0, 0.0, 0.0
+    selectors = options.get('color_selectors') or ()
+    selector = selectors[color_index] if color_index < len(selectors) else None
+    custom = .78 if (options.get('exact_color_available') and
+                     isinstance(selector, dict) and selector.get('kind') == 'custom') else 0.0
+    verification = delivery.palette_click_delay + .14 if options.get('adaptive_color_verification') else 0.0
+    # Runtime verifies each retained colour once. Ordinary deadline sequences
+    # do not run the separate after-batch visual verifier; that is reserved for
+    # a sequence which Detail Zoom creates from an otherwise batched plan.
+    return delivery.palette_click_delay, custom, verification
+
+
 def _fixed_overhead(options: dict[str, Any], groups, image_size, fitted) -> tuple[float, dict[str, float]]:
     delivery = resolve_stroke_delivery(options, dry_run=False)
-    active_colors = sum(any(bool(path) for path in g) for g in groups)
-    palette = 0.0 if options.get("paint_current_color") else active_colors * delivery.palette_click_delay
+    active_colors = [i for i, group in enumerate(groups) if any(bool(path) for path in group)]
+    selections = [_color_selection_cost(options, i, delivery) for i in active_colors]
+    palette = sum(cost[0] for cost in selections)
+    custom_color = sum(cost[1] for cost in selections)
+    verification = sum(cost[2] for cost in selections)
     tool = len(options.get("tool_actions") or ()) * delivery.ui_control_delay
     clear = max(0.0, float(options.get("canvas_clear_estimate_seconds", 0.0) or 0.0))
     fill = 0.0
@@ -120,13 +138,6 @@ def _fixed_overhead(options: dict[str, Any], groups, image_size, fitted) -> tupl
     bg = options.get("background_fill_plan") or {}
     if bg.get("enabled"):
         fill += .34 + (len(options.get("fill_tool_actions") or ()) + len(options.get("fill_restore_actions") or ())) * delivery.ui_control_delay
-    custom_selectors=sum(1 for x in (options.get('color_selectors') or ()) if isinstance(x,dict) and x.get('kind')=='custom')
-    custom_color=custom_selectors*(.78 if options.get('exact_color_available') else 0.0)
-    verification=0.0
-    if options.get('adaptive_color_verification'):
-        verification += active_colors*(delivery.palette_click_delay+.14)
-    if options.get('visual_verification_enabled'):
-        verification += active_colors*.08
     countdown = 3.0
     path_count=sum(sum(bool(path) for path in (g or ())) for g in groups)
     focus = 0.0 if options.get("paint_profile") else .35
@@ -228,15 +239,21 @@ def _fit_ordered_delivery(entries, transform, *, palette_seconds, multiplier, fi
     following=[i+1 if i+1<count else None for i in range(count)]
     kept=[True]*count
     color_extras=color_extras or {}
+    color_counts={}
+    for index,entry in enumerate(entries):
+        if index % 128 == 0 and cancelled():raise InterruptedError()
+        color_counts[entry.color_index]=color_counts.get(entry.color_index,0)+1
     def boundary(left,right):
-        if right is None:return 0.0,0.0,0.0,0.0
-        changed=left is None or entries[left].color_index!=entries[right].color_index
+        if right is None:return 0.0,0.0,0.0
+        changed=(left is None or entries[left].color_index!=entries[right].color_index
+                 or entries[left].phase!=entries[right].phase)
         palette=palette_seconds if changed else 0.0
-        custom,verification=color_extras.get(entries[right].color_index,(0.0,0.0)) if changed else (0.0,0.0)
+        custom=color_extras.get(entries[right].color_index,(0.0,0.0))[0] if changed else 0.0
         travel=0.0 if left is None else min(.10,math.dist(ends[left],starts[right])*.000045)*multiplier
-        return palette,travel,custom,verification
+        return palette,travel,custom
     total=fixed_seconds+sum(e.estimated_cost_seconds for e in entries)
     total+=sum(sum(boundary(previous[i],i)) for i in range(count))
+    total+=sum(color_extras.get(color,(0.0,0.0))[1] for color in color_counts)
     priority=sorted(range(count),key=lambda i:(-PHASES.index(entries[i].phase),
                     entries[i].value_score/max(.001,entries[i].estimated_cost_seconds),-entries[i].source_index))
     trimmed=0
@@ -246,13 +263,21 @@ def _fit_ordered_delivery(entries, transform, *, palette_seconds, multiplier, fi
         left,right=previous[index],following[index]
         total-=entries[index].estimated_cost_seconds+sum(boundary(left,index))+sum(boundary(index,right))
         total+=sum(boundary(left,right))
+        color=entries[index].color_index
+        color_counts[color]-=1
+        if not color_counts[color]:
+            total-=color_extras.get(color,(0.0,0.0))[1]
         kept[index]=False;trimmed+=1
         if left is not None:following[left]=right
         if right is not None:previous[right]=left
     retained=[];palette_total=travel_total=custom_total=verification_total=0.0;palette_changes=0
+    verified_colors=set()
     for index,entry in enumerate(entries):
+        if index % 128 == 0 and cancelled():raise InterruptedError()
         if not kept[index]:continue
-        palette,travel,custom,verification=boundary(previous[index],index)
+        palette,travel,custom=boundary(previous[index],index)
+        verification=0.0 if entry.color_index in verified_colors else color_extras.get(entry.color_index,(0.0,0.0))[1]
+        verified_colors.add(entry.color_index)
         # Runtime scheduling must see these same costs instead of learning an
         # artificial slowdown whenever a colour is revisited by a later pass.
         entry.estimated_cost_seconds+=palette+travel+custom+verification
@@ -289,7 +314,7 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
             path = tuple(path)
             if not path:
                 continue
-            imp = sample_path_importance(path, importance)
+            imp = sample_path_importance(path, importance, cancelled=cancelled)
             span, length, closed, center = _path_geometry(path, image.size)
             structural = min(1.0, span * 1.55 + closed * .25 + min(1.0, length) * .20)
             phase = _phase_for(imp, span, closed, length)
@@ -309,11 +334,21 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
         e.estimated_cost_seconds *= cost_multiplier
     fixed *= cost_multiplier
     fixed_meta={k:(float(v)*cost_multiplier if isinstance(v,(int,float)) else v) for k,v in fixed_meta.items()}
-    path_budget = max(0.0, render_budget - fixed - uncertainty)
-
     before_cost = fixed + sum(e.estimated_cost_seconds for e in entries)
+    # A source palette is a set of candidates, not a mandatory UI prelude.
+    # Debit a colour only when admitting its first path; the final ordered gate
+    # below still prices every actual revisit and cursor transition.
+    for key in ('palette_seconds', 'custom_color_seconds', 'verification_seconds'):
+        fixed -= fixed_meta[key]
+        fixed_meta[key] = 0.0
+    selection_costs = {color: tuple(value * cost_multiplier for value in
+                                    _color_selection_cost(options, color, timing[0]))
+                       for color in {e.color_index for e in entries}}
+    color_extras = {color: costs[1:] for color, costs in selection_costs.items()}
+    path_budget = max(0.0, render_budget - fixed - uncertainty)
     selected: list[DeadlineEntry] = []
     used = 0.0
+    selected_colors = set()
 
     # Preserve one strong path per coarse spatial cell before optional detail.
     w, h = image.size
@@ -330,8 +365,12 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
     seeded = sorted(cell_best.values(), key=lambda e: -e.value_score)
     chosen_ids = set()
     for e in seeded:
-        if used + e.estimated_cost_seconds <= path_budget:
-            selected.append(e); chosen_ids.add(e.source_index); used += e.estimated_cost_seconds
+        admission = e.estimated_cost_seconds
+        if e.color_index not in selected_colors:
+            admission += sum(selection_costs[e.color_index])
+        if used + admission <= path_budget:
+            selected.append(e); chosen_ids.add(e.source_index); used += admission
+            selected_colors.add(e.color_index)
 
     phase_weight = {"major_coverage": 1.40, "structure": 1.28, "important_details": 1.12,
                     "accuracy": .78, "correction": .45}
@@ -339,8 +378,12 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
     candidates.sort(key=lambda e: (PHASES.index(e.phase), -(e.value_score * phase_weight[e.phase] / max(.001, e.estimated_cost_seconds)), e.source_index))
     for e in candidates:
         if cancelled():raise InterruptedError()
-        if used + e.estimated_cost_seconds <= path_budget:
-            selected.append(e); chosen_ids.add(e.source_index); used += e.estimated_cost_seconds
+        admission = e.estimated_cost_seconds
+        if e.color_index not in selected_colors:
+            admission += sum(selection_costs[e.color_index])
+        if used + admission <= path_budget:
+            selected.append(e); chosen_ids.add(e.source_index); used += admission
+            selected_colors.add(e.color_index)
 
     # Progressive order first, then bounded local colour/travel optimisation.
     ordered: list[DeadlineEntry] = []
@@ -352,19 +395,6 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
     # Unique-colour overhead is insufficient for progressive phases that visit
     # a swatch again. Account for the actual ordered UI/travel boundaries, then
     # trim whole low-priority paths if those costs consume the remaining margin.
-    fixed-=fixed_meta['palette_seconds']
-    fixed_meta['palette_seconds']=0.0
-    color_extras={}
-    if not options.get('paint_current_color'):
-        selectors=options.get('color_selectors') or ()
-        verification=((timing[0].palette_click_delay+.14) if options.get('adaptive_color_verification') else 0.0)
-        if options.get('visual_verification_enabled'):verification+=.08
-        for color_index in {e.color_index for e in ordered}:
-            selector=selectors[color_index] if color_index<len(selectors) else None
-            custom=.78 if options.get('exact_color_available') and isinstance(selector,dict) and selector.get('kind')=='custom' else 0.0
-            color_extras[color_index]=(custom*cost_multiplier,verification*cost_multiplier)
-        for key in ('custom_color_seconds','verification_seconds'):
-            fixed-=fixed_meta[key];fixed_meta[key]=0.0
     ordered,delivery_meta=_fit_ordered_delivery(
         ordered,transform,palette_seconds=0.0 if options.get('paint_current_color') else timing[0].palette_click_delay*cost_multiplier,
         multiplier=cost_multiplier,fixed_seconds=fixed,reserve_seconds=uncertainty,
@@ -390,7 +420,7 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
         "palette_change":delivery_meta['ordered_palette_changes'],
         "tool_change":len(options.get("tool_actions") or ()),
         "fill":len(options.get("fill_regions") or ()) + (1 if (options.get("background_fill_plan") or {}).get("enabled") else 0),
-        "verification":delivery_meta['ordered_palette_changes'] if options.get("adaptive_color_verification") else 0,
+        "verification":active_colors if options.get("adaptive_color_verification") and not options.get('paint_current_color') else 0,
         "focus_change":0 if options.get("paint_profile") else 1,
     })
     meta = {

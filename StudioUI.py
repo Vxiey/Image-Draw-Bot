@@ -8,6 +8,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
+from UiKeyboardNavigation import KeyboardButton
 from GameProfiles import PROFILES, profile_ui, profile_defaults
 from ProfileEngine import PROFILE_ENGINE_MODES, policy_summary
 from ProfilePortability import export_profile_dialog, import_profile_dialog, reset_profile_dialog
@@ -49,8 +50,11 @@ class ToolTip:
         widget.bind('<Enter>', self._enter, add='+'); widget.bind('<Leave>', self._leave, add='+')
         widget.bind('<ButtonPress>', self._leave, add='+')
         widget.bind('<Destroy>', self._leave, add='+')
-        widget.bind('<FocusIn>', self._enter, add='+')
-        widget.bind('<FocusOut>', self._leave, add='+')
+        for sequence, callback in (('<FocusIn>', self._enter), ('<FocusOut>', self._leave)):
+            if isinstance(widget, KeyboardButton):
+                tk.Misc.bind(widget, sequence, callback, add='+')
+            else:
+                widget.bind(sequence, callback, add='+')
     def _enter(self, _event=None):
         self._cancel()
         try:self.job=self.widget.after(self.delay,self._show)
@@ -103,7 +107,21 @@ def button(parent, text, command, primary=False, danger=False, **kwargs):
         text_color='#102d25' if primary else ('#ffd2da' if danger else TEXT),
         text_color_disabled='#64748b', font=('Segoe UI', 12, 'bold'))
     defaults.update(kwargs)
-    return ctk.CTkButton(parent, text=text, command=command, **defaults)
+    return KeyboardButton(parent, text=text, command=command, **defaults)
+
+
+def show_error_help(app):
+    """Explain the current failure without interpreting Help as a drawing request."""
+    if getattr(app, 'closing', False):
+        return False
+    error = classify_error(app.status.get())
+    if error is None:
+        return False
+    from tkinter import messagebox
+    messagebox.showinfo(error['title'],
+        error['message'] + '\n\nRecommended next step:\n' + error['action'],
+        parent=app.root)
+    return True
 
 
 def _configure_presentation(widget, **values):
@@ -191,7 +209,7 @@ def build_ui(a, quality, speed):
         title_label = label(heading, title, bold=True, size=11, wraplength=145)
         title_label.pack(side='left')
         tooltip(title_label, explanation)
-        help_button = ctk.CTkButton(heading, text='?', width=24, height=24,
+        help_button = KeyboardButton(heading, text='?', width=24, height=24,
             fg_color=FIELD, hover_color=LINE,
             command=lambda: messagebox.showinfo(title, explanation, parent=root))
         help_button.pack(side='left', padx=5)
@@ -217,7 +235,7 @@ def build_ui(a, quality, speed):
         title_label = label(heading, title, bold=True, size=11, wraplength=145)
         title_label.pack(side='left')
         tooltip(title_label, explanation)
-        help_button = ctk.CTkButton(heading, text='?', width=24, height=24,
+        help_button = KeyboardButton(heading, text='?', width=24, height=24,
             fg_color=FIELD, hover_color=LINE,
             command=lambda: messagebox.showinfo(title, explanation, parent=root))
         help_button.pack(side='left', padx=5)
@@ -928,7 +946,7 @@ def build_ui(a, quality, speed):
     erow.pack(fill='x', padx=10, pady=(0, 10))
     button(erow, '📂 Logs', a.open_app_data_folder, width=76, height=30).pack(side='left')
     button(erow, '📦 Diagnostics', a.collect_diagnostics, width=104, height=30).pack(side='left', padx=5)
-    button(erow, '🧪 Retry', lambda: a.draw(test=True, user_initiated=True), width=78, height=30).pack(side='left')
+    button(erow, '❓ Help', lambda: show_error_help(a), width=78, height=30).pack(side='left')
     from ResponsiveWorkspace import ResponsiveWorkspace
     a.workspace_layout=ResponsiveWorkspace(main,{'Setup':sidebar_shell,'Workspace':center_host,'Readiness':right},
         header=header,header_groups=(header_brand,header_info,header_actions),

@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 729,
+  "implemented": 745,
   "release_published": false,
-  "validation": "Batch 06: final frozen-source discovery passed 3,201 tests in 71.794 seconds (31 platform/hardware skips), with unchanged source hashes. All four area reviews and the separate ICC/alpha and delivered-probe reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.",
+  "validation": "Batch 07: final frozen-source discovery passed 3,355 tests in 71.096 seconds (35 platform/hardware skips), with unchanged source hashes. All four area reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.",
   "improvements": [
     {
       "id": 1,
@@ -5651,6 +5651,134 @@
       "local_id": "PF05",
       "description": "The standalone diagnostics helper reported collection failure and returned exit code 1 when Explorer could not open the folder, even though the complete ZIP was already saved. `DiagnosticsPackage.main` separates archive creation from folder presentation. Successful publication retains exit code 0 and the concrete saved path when automatic opening fails; the windowed frozen helper also shows the saved path in a notice. A real public-main regression creates and validates the ZIP, injects the shell-open failure and checks success, console result and windowed notice.",
       "ledger": "v148-batch06-platform.md"
+    },
+    {
+      "id": 730,
+      "area": "batch07-application",
+      "batch": 7,
+      "local_id": "AY01",
+      "description": "Importing a real unsigned 16-bit grayscale PNG containing values `0, 257, 32768, 65535` produced 8-bit gray values `0, 255, 255, 255`. The direct Pillow conversion clipped most of the tonal range. `SourcePixelDepth.grayscale_8bit` maps the fixed unsigned range to `0, 1, 128, 255` using nearest rounding. File and borrowed bitmap-clipboard input pass through this conversion after EXIF orientation and before any ICC transform. Transparency keys are compared at their original precision, so adjacent values that become the same 8-bit tone retain different opacity. The source label identifies the conversion. Tests read real PNG and both-endian TIFF files, compare all 65,536 input values against an independent rounding oracle, exercise a real transparent PNG with and without a valid gray ICC profile, orientation, the actual clipboard handler, ownership and cancellation.",
+      "ledger": "v148-batch07-application.md"
+    },
+    {
+      "id": 731,
+      "area": "batch07-application",
+      "batch": 7,
+      "local_id": "AY02",
+      "description": "Recording durations were first rounded to integer milliseconds and then independently truncated to GIF's 10 ms units. One hundred changing frames captured for 259 ms each encoded as 25,000 ms rather than 25,900 ms. Retain fractional capture milliseconds until encoding; quantize cumulative frame boundaries to the GIF clock. Every boundary stays within 5 ms of the recorded timeline instead of accumulating truncation loss. Decode real GIFs to verify exact frame colors, variable durations, half-tick boundaries and identical-frame merging. An actual `record_screen` worker with a controlled capture clock retains a 25,949 ms recording as 25,950 ms. Timing validation occurs before staging and preserves an existing file on invalid input.",
+      "ledger": "v148-batch07-application.md"
+    },
+    {
+      "id": 732,
+      "area": "batch07-application",
+      "batch": 7,
+      "local_id": "AY03",
+      "description": "The recorder retained every quantized frame until the final GIF encoder, even when adjacent captures were identical and Pillow would later merge them. A static 100-frame 800×500 recording retained 40,000,000 bytes of paletted pixel payload. Coalesce exact adjacent captures during recording, summing their raw durations and releasing duplicate owned images immediately. Compare dimensions, mode, RGBA palette, transparency and pixel indexes; an identical index with another palette cannot merge. The static fixture retains one frame/400,000 pixel bytes. Changing footage still retains every distinct frame. Actual-worker tests verify early duplicate release, failure cleanup and the final decoded visible timeline.",
+      "ledger": "v148-batch07-application.md"
+    },
+    {
+      "id": 733,
+      "area": "batch07-rendering",
+      "batch": 7,
+      "local_id": "RC01",
+      "description": "Deadline importance sampled stored vertices, so reversing or subdividing an unchanged path could alter its priority, phase and protection. A two-endpoint line also omitted every interior pixel. In an actual source fixture, reversing the same segment changed importance from about 0.391 to 0.841 and changed an optional accuracy stroke into a protected structure stroke. Stream canonical forward/reverse geometry, remove redundant forward-collinear vertices while preserving turns and backtracking, and sample up to 24 locations at uniform arc-length intervals. Pixel coordinates are deduplicated; the existing mean/high-percentile weighting remains.",
+      "ledger": "v148-batch07-rendering.md"
+    },
+    {
+      "id": 734,
+      "area": "batch07-rendering",
+      "batch": 7,
+      "local_id": "RC02",
+      "description": "Shadow analysis copied already-owned float32 luminance/blur/gradient planes and a second full set of five published guidance maps. Transfer the existing owned float32 planes without redundant `astype` copies. Output planes remain independent of borrowed inputs; formulas and dtype remain unchanged.",
+      "ledger": "v148-batch07-rendering.md"
+    },
+    {
+      "id": 735,
+      "area": "batch07-rendering",
+      "batch": 7,
+      "local_id": "RC03",
+      "description": "Initial deadline admission debited every custom selector before any path was admitted, including empty/unselected colors. A real 32-color, 30-second plan admitted zero paths even though a useful subset fit. The later ordered-cost gate could remove overbudget paths but could not recover candidates rejected at this earlier stage. Keep unconditional preparation overhead separate from conditional color costs. Debit palette/custom/adaptive-verification setup only when the first path using a color is admitted, then retain the final ordered delivery gate. Empty groups and current-color-only plans do not buy unused color controls.",
+      "ledger": "v148-batch07-rendering.md"
+    },
+    {
+      "id": 736,
+      "area": "batch07-rendering",
+      "batch": 7,
+      "local_id": "RC04",
+      "description": "Both fast browser rasterizers unconditionally excluded supplied white groups, even after the source planner had deliberately retained white ink or correction strokes with Skip white disabled. White variants could also be mapped into a colored swatch or lose short fragments. Preserve explicit supplied white geometry, retain a white anchor within the color ceiling, map white variants only to retained white, and prevent white gap joining or minimum-run pruning. Source white-skipping stays with the upstream source mask.",
+      "ledger": "v148-batch07-rendering.md"
+    },
+    {
+      "id": 737,
+      "area": "batch07-rendering",
+      "batch": 7,
+      "local_id": "RC05",
+      "description": "Background simplification retained a Python `(x,y)` tuple for every reached pixel alongside its existing visited mask, then copied its private RGB image before applying exactly those pixels. Retain only the component count during traversal. After the unchanged coverage gate, scan membership spans from the existing byte mask and update the owned RGB conversion. Eliminate the full coordinate list and second RGB image copy.",
+      "ledger": "v148-batch07-rendering.md"
+    },
+    {
+      "id": 738,
+      "area": "batch07-rendering",
+      "batch": 7,
+      "local_id": "RC06",
+      "description": "Gartic's dual-axis choice ranked only surviving stroke cost. With minimum run 2, a 36-pixel horizontal blue line was pruned into zero vertical candidates; the empty candidate won as cheaper and deleted the line. Rotating the source caused the corresponding horizontal loss. Compare retained original-pixel coverage first, then the existing stroke-count and pen-distance cost. Count source interval unions and exclude pixels invented by gap bridging. Preserve the original vertical storage ceiling and minimum-fragment policy.",
+      "ledger": "v148-batch07-rendering.md"
+    },
+    {
+      "id": 739,
+      "area": "batch07-ui-workflow",
+      "batch": 7,
+      "local_id": "UK01",
+      "description": "Application-created CustomTkinter buttons had pointer bindings but no consistent Tab traversal or Return/Space activation. Decorative labels could acquire their own focus stops through tooltip bindings. `UiKeyboardNavigation.KeyboardButton` gives each live, mapped, enabled action one outer-frame Tab stop and a visible focus outline. Return, keypad Enter and Space invoke the existing button command once on release; autorepeat, focus loss, hidden/disabled controls and destruction cannot deliver a stale activation. Focus reveals the target through owned nested CTk scroll frames, and activation rechecks that its centre remains inside every viewport. Tooltips receive that logical focus while retaining pointer behavior. `StudioUI.button`, inline setting help and `UICompactLayout.CompactGroup` use the local subclass. K executes the inherited CTk `invoke()` with live states, cancellation and repeated-event sequences; actual tooltip callbacks and vertical/horizontal/nested/failing scroll models cover integration. Three Windows tests verify real Tk traversal, recreated labels, key delivery, focus rendering/tooltips, Tab-to-bottom visibility, owned Tcl-command deletion, unchanged global bindings and the actual controller's Start setup guard. One shared button-interaction group, not one per key or widget.",
+      "ledger": "v148-batch07-ui-workflow.md"
+    },
+    {
+      "id": 740,
+      "area": "batch07-ui-workflow",
+      "batch": 7,
+      "local_id": "UK02",
+      "description": "The generic error card's Retry action always called `draw(test=True, user_initiated=True)`, even for an image import, disk-write or GPU failure. It could request drawing unrelated to the failed operation. The card now offers Help. `StudioUI.show_error_help` reads the current classified error and displays its explanation and next step; resolved errors and shutdown do nothing. W extracts and executes the actual card callback for storage, import, GPU and palette errors, checks the live error after a status change, and asserts that drawing, Quick Start and worker methods are never called. Existing dedicated correction/retry workflows are unchanged.",
+      "ledger": "v148-batch07-ui-workflow.md"
+    },
+    {
+      "id": 741,
+      "area": "batch07-ui-workflow",
+      "batch": 7,
+      "local_id": "UK03",
+      "description": "A native combobox selection event for the already active profile still saved settings, cleared the plan/area/resume and disarmed the drawing state. Choosing the same profile therefore discarded valid setup despite no configuration change. `DrawBot.change_profile` treats an already active selection as a no-op and cancels an outstanding queued switch when the user returns to the active profile. The explicit internal `_apply_profile_change` path remains available for Import/Reset to reload that same profile. P calls the actual methods and verifies preservation of plan, area, resume, paths and permissions; no save/disarm; cancellation of the previous callback; and continued forced reload behavior. Root owns this implementation and its tests; it is counted only in this UI ledger.",
+      "ledger": "v148-batch07-ui-workflow.md"
+    },
+    {
+      "id": 742,
+      "area": "batch07-ui-workflow",
+      "batch": 7,
+      "local_id": "UK04",
+      "description": "The UI advertised Sketch + Auto Fill, and its Paint renderer existed, but `DrawBot.options` rejected that selection as an invalid rendering style. Reading saved settings silently left Auto instead of restoring it. Both existing rendering-style membership checks now include the already imported `SKETCH_FILL_RENDER_STYLE`. R reproduces the three failures before the change, then runs the actual Paint `options` → `make_plan` chain and verifies its ordered sketch/color-fill/re-outline sequence, actual save/read restoration, continued browser-target restriction and rejection of unknown style names. This is one advertised-renderer activation/persistence group; it does not change UP01's automatic profile policy or the renderer algorithm.",
+      "ledger": "v148-batch07-ui-workflow.md"
+    },
+    {
+      "id": 743,
+      "area": "batch07-platform",
+      "batch": 7,
+      "local_id": "MP01",
+      "description": "Starting mobile preview or accepting another plan synchronously resized, flattened and encoded all three PNGs on the Tk callback. Even an unchanged Original was recompressed for each plan. Equality was checked only after encoding. `MobilePreviewServer.queue_images` captures owned snapshots on the image-owning thread and uses `MobilePreviewQueue.LatestImageQueue`: one encoder and one latest pending request. Unchanged immutable identities skip capture/encoding, individual unchanged views reuse their encoded bytes, and aliased views share one snapshot/PNG. Requests reserve generation/sequence before capture; superseded work cannot publish. Capture and encoder failures close owned buffers and allow an identical request to retry. The synchronous `update_images` API still rereads mutable inputs. `test_v148_platform_batch07_mobile_queue.py` and `_mobile_snapshots.py` exercise real PIL images, races, cleanup while exception tracebacks remain referenced, cancellation, thread construction/start failure, source mutation/closure after capture, weak identities, exact PNG parity and the actual memory limit.",
+      "ledger": "v148-batch07-platform.md"
+    },
+    {
+      "id": 744,
+      "area": "batch07-platform",
+      "batch": 7,
+      "local_id": "MP02",
+      "description": "Several accepted source changes and plan invalidations never notified mobile preview. In Manual mode, Undo could restore a red desktop Original and clear its plan while the phone indefinitely retained the previous blue image and old plan. Root's `DrawBot._sync_mobile_preview` coalesces a single Tk-idle callback, which reads current `PreviewViews` only when it runs. `show_previews`, `_mark_plan_stale` and existing adoption paths cover accepted source changes, settings/profile invalidation and new plans. Missing views are explicitly cleared. Mobile stop cancels the pending callback, invalidates its ticket and retains the server instance for restart, so an old native encode does not create a second independent encoder owner. Ordinary drawing Stop does not suppress already accepted images. `test_v148_application_batch07_mobile.py` exercises the real Undo and load handlers, Manual invalidation, current-state coalescing, display-layer selection, stale callbacks, session replacement/shutdown and safe retry after capture failure.",
+      "ledger": "v148-batch07-platform.md"
+    },
+    {
+      "id": 745,
+      "area": "batch07-platform",
+      "batch": 7,
+      "local_id": "MP03",
+      "description": "Public image import tried every Pillow plugin. An EPS document named `.png`, labeled `image/png` in a data URL, or returned as `image/png` over HTTP reached Pillow's Ghostscript renderer even though the application advertises raster-image input. This renderer was outside the import worker's cooperative Stop handling. `ImageImport.read_image` passes an explicit raster-format tuple to `Image.open`, preserving PNG/APNG, JPEG/MPO, WEBP, BMP/DIB, GIF, TIFF, ICO and AVIF. Unsupported documents/vector formats get a useful export-to-raster message before a document decoder or renderer runs. Four policy regression tests in `test_v148_platform_batch07_image_decoders.py` exercise local/data/HTTP EPS and WMF rejection with mocked renderer boundaries, all advertised raster decoders, AVIF, animated PNG and actual two-frame MPO files. Existing ICC, unsigned 16-bit, orientation, pixel/byte budgets and cancellation stay in place.",
+      "ledger": "v148-batch07-platform.md"
     }
   ]
 }

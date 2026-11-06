@@ -16,9 +16,17 @@ def srgb_source(image, *, cancelled=lambda: False):
     error rather than silently painting with a different color interpretation.
     """
     if cancelled():raise InterruptedError('Image color conversion cancelled.')
+    from SourcePixelDepth import UNSIGNED_16BIT_MODES,grayscale_8bit
+    if image.mode in UNSIGNED_16BIT_MODES:
+        with closing(grayscale_8bit(image,cancelled=cancelled)) as normalized:
+            return srgb_source(normalized,cancelled=cancelled)
     raw = image.info.get('icc_profile')
     if raw is None or raw == b'':
-        return image.convert('RGBA')
+        result=image.convert('RGBA')
+        if cancelled():
+            result.close()
+            raise InterruptedError('Image color conversion cancelled.')
+        return result
     if not isinstance(raw, bytes) or len(raw) > MAX_ICC_BYTES:
         raise ValueError('The embedded image color profile is invalid or larger than 4 MiB. Export the image as sRGB and try again.')
     result = None

@@ -27,7 +27,7 @@ def response(data,headers=None,*,reader=False):
 
 class ImageImportTests(unittest.TestCase):
     def test_precancelled_import_does_not_open_source_or_allocate_snapshot(self):
-        with patch.object(imports.tempfile,'SpooledTemporaryFile') as spool,patch('requests.get') as request:
+        with patch.object(imports.tempfile,'SpooledTemporaryFile') as spool,patch('requests.Session.get') as request:
             for source in ('missing.png','https://example.test/image.png','data:image/png;base64,YQ=='):
                 with self.subTest(source=source),self.assertRaises(InterruptedError):imports.read_image(source,lambda:True)
         spool.assert_not_called();request.assert_not_called()
@@ -111,7 +111,7 @@ class ImageImportTests(unittest.TestCase):
 
     def test_download_uses_available_body_reads_instead_of_waiting_for_large_chunk(self):
         item=response(png_data(),reader=True)
-        with patch('requests.get',return_value=item):result=imports.read_image('https://example.test/image.png')
+        with patch('requests.Session.get',return_value=item):result=imports.read_image('https://example.test/image.png')
         self.assertEqual(result.size,(5,4));item.iter_content.assert_not_called()
         item.raw.read1.assert_called_with(imports._BLOCK_BYTES,decode_content=True)
         item.close.assert_called_once()
@@ -120,19 +120,19 @@ class ImageImportTests(unittest.TestCase):
         data=png_data()
         for length in ('-1','x','12, 12','9'*21,str(len(data)+1)):
             item=response(data,{'Content-Length':length})
-            with self.subTest(length=length),patch('requests.get',return_value=item),self.assertRaises(ValueError):
+            with self.subTest(length=length),patch('requests.Session.get',return_value=item),self.assertRaises(ValueError):
                 imports.read_image('https://example.test/image.png')
             item.close.assert_called_once()
         item=response(data,{'Content-Length':'20','Content-Encoding':'gzip'})
-        with patch('requests.get',return_value=item):self.assertEqual(imports.read_image('https://example.test/image.png').size,(5,4))
+        with patch('requests.Session.get',return_value=item):self.assertEqual(imports.read_image('https://example.test/image.png').size,(5,4))
         item=response(data,{'Content-Length':f'\t {len(data)} '})
-        with patch('requests.get',return_value=item):self.assertEqual(imports.read_image('https://example.test/image.png').size,(5,4))
+        with patch('requests.Session.get',return_value=item):self.assertEqual(imports.read_image('https://example.test/image.png').size,(5,4))
 
     def test_cancel_during_download_preserves_interruption_even_if_close_fails(self):
         stop=threading.Event();item=response(png_data())
         def chunks(size):stop.set();yield png_data()
         item.iter_content=chunks;item.close.side_effect=OSError('cleanup failed')
-        with patch('requests.get',return_value=item),self.assertRaises(InterruptedError):
+        with patch('requests.Session.get',return_value=item),self.assertRaises(InterruptedError):
             imports.read_image('https://example.test/image.png',stop.is_set)
 
     def test_stop_after_decoding_closes_unpublished_result(self):

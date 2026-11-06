@@ -74,7 +74,7 @@ class SidebarTests(unittest.TestCase):
         original_order=list(parent.order)
         def frame(*args,**kwargs):
             widget=Widget(*args,**kwargs);widget.fail_pack=1;return widget
-        with patch.object(compact.ctk,'CTkFrame',side_effect=frame),patch.object(compact.ctk,'CTkButton',Widget),patch.object(compact.ctk,'CTkLabel',Widget):
+        with patch.object(compact.ctk,'CTkFrame',side_effect=frame),patch.object(compact,'KeyboardButton',Widget),patch.object(compact.ctk,'CTkLabel',Widget):
             with self.assertRaisesRegex(tk.TclError,'shell layout failed'):
                 compact.CompactGroup(SimpleNamespace(),parent,'Controls','Help',[controls[1],controls[3],hidden])
         self.assertEqual(parent.order,original_order)
@@ -95,7 +95,7 @@ class SidebarTests(unittest.TestCase):
             return widget
         with ExitStack() as stack:
             stack.enter_context(patch.object(compact.ctk,'CTkFrame',side_effect=frame))
-            stack.enter_context(patch.object(compact.ctk,'CTkButton',Widget))
+            stack.enter_context(patch.object(compact,'KeyboardButton',Widget))
             stack.enter_context(patch.object(compact.ctk,'CTkLabel',Widget))
             stack.enter_context(patch.object(layout,'_install_profile_group',side_effect=lambda:layout.add(root,'One','Help',[controls[0]])))
             stack.enter_context(patch.object(layout,'_install_image_group',side_effect=lambda:layout.add(root,'Two','Help',[controls[2]])))
