@@ -2,6 +2,8 @@
 from contextlib import ExitStack
 from types import SimpleNamespace
 import sys
+import time
+import tkinter as tk
 import unittest
 from unittest.mock import Mock,patch
 
@@ -178,6 +180,45 @@ class ActionBarTests(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform=='win32','Actual complete Windows Tk workspace layout')
 class WindowsCompleteWorkspaceTests(unittest.TestCase):
+    def wait_for_native_layout(self, root, predicate, description):
+        deadline=time.monotonic()+4
+        while True:
+            root.update()
+            if predicate():return
+            if time.monotonic()>=deadline:
+                self.fail(description+'; actual geometry='+root.geometry()+
+                          '; native min/max='+str((tk.Wm.wm_minsize(root),tk.Wm.wm_maxsize(root))))
+            time.sleep(.01)
+
+    def resize_native(self, root, app, width, height):
+        # CTk._set_scaling temporarily locks the native window min/max to its
+        # previous size and restores those limits after 1000 ms. An immediate
+        # geometry()+update() can therefore test a different size than claimed.
+        factor=root._get_window_scaling()
+        expected=(round(width*factor),round(height*factor))
+        def limits_allow_resize():
+            low,high=tk.Wm.wm_minsize(root),tk.Wm.wm_maxsize(root)
+            return all(lower<=value<=upper for lower,value,upper in zip(low,expected,high))
+        self.wait_for_native_layout(root,limits_allow_resize,'CTk did not restore resize limits')
+        root.geometry(f'{width}x{height}')
+        def settled():
+            return ((root.winfo_width(),root.winfo_height())==expected and
+                    all(bar.job is None for bar in
+                        (app.workspace_layout,app.draw_action_bar,app.help_action_bar)))
+        self.wait_for_native_layout(root,settled,'The requested physical client size did not settle')
+        self.assertEqual((root.winfo_width(),root.winfo_height()),expected)
+
+    def layout_diagnostics(self, root, app, widget):
+        def describe(item):
+            return (str(item),item.winfo_manager(),item.winfo_ismapped(),
+                    item.winfo_geometry(),(item.winfo_reqwidth(),item.winfo_reqheight()))
+        ancestors=[];current=widget
+        while current is not None:
+            ancestors.append(describe(current));current=getattr(current,'master',None)
+        return {'selected':app.workspace_layout.selected,'compact':app.workspace_layout.compact,
+                'ancestors':ancestors,'root_packed':[describe(item) for item in root.pack_slaves()],
+                'actions':[describe(item) for item in (*app.draw_action_bar.visible,app.draw_action_bar.menu_button)]}
+
     def test_actual_studio_keeps_start_stop_and_all_panels_inside_compact_windows(self):
         import customtkinter as ctk
         from DrawBot import DrawBotApp
@@ -202,13 +243,13 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
                 app=DrawBotApp(root,NoInput(),NoInput());root.minsize(500,400)
                 root.update()
                 def inside(widget):
-                    self.assertTrue(widget.winfo_ismapped(),widget)
+                    if not widget.winfo_ismapped():self.fail(str(self.layout_diagnostics(root,app,widget)))
                     self.assertGreaterEqual(widget.winfo_rootx(),root.winfo_rootx())
                     self.assertGreaterEqual(widget.winfo_rooty(),root.winfo_rooty())
                     self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(),root.winfo_rootx()+root.winfo_width()+1)
                     self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),root.winfo_rooty()+root.winfo_height()+1)
                 for scale,width,height in ((1,1024,700),(1,650,500),(1.5,1024,700),(1.5,650,500),(1,1560,960)):
-                    ctk.set_widget_scaling(scale);root.geometry(f'{width}x{height}');root.update()
+                    ctk.set_widget_scaling(scale);self.resize_native(root,app,width,height)
                     with self.subTest(scale=scale,width=width,height=height):
                         inside(app.start);inside(app.stop_button)
                         bar=app.draw_action_bar
