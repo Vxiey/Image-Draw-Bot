@@ -5,6 +5,7 @@ common local identifiers/secrets from text before a diagnostics ZIP is created.
 """
 from __future__ import annotations
 from pathlib import Path
+import json
 import math
 import re
 
@@ -25,6 +26,30 @@ _COOKIE_RE = re.compile(
     r'''(?im)((?<![\w-])(?:set-cookie|cookie)["']?\s*[:=]\s*)'''
     r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n]+)'''
 )
+# JSON and repr escape Windows separators and may encode a Unicode username.
+# Keep those escape sequences inside the username being removed, while leaving
+# the original separators and the surrounding serialized document intact.
+_WINDOWS_HOME_RE = re.compile(
+    r'''(?i)([a-z]:(?:\\+|/)Users(?:\\+|/))'''
+    r'''(?:\\+(?:u[0-9a-f]{4}|U[0-9a-f]{8}|x[0-9a-f]{2}|')|[^\\/\r\n"<>])+'''
+)
+_POSIX_HOME_RE = re.compile(r'(/(?:home|Users)/)[^/\r\n"<>]+')
+# Escaped quotes cannot begin another literal. Without this guard a malformed
+# line containing thousands of escaped quotes is rescanned quadratically.
+_QUOTED_TEXT_RE = re.compile(r'''(?<!\\)(?P<quote>["'])(?:\\.|(?!(?P=quote))[^\\\r\n])*(?P=quote)''')
+
+
+def _redact_profile_paths(text):
+    text = _WINDOWS_HOME_RE.sub(r'\1<user>', text)
+    return _POSIX_HOME_RE.sub(r'\1<user>', text)
+
+
+def _redact_quoted_profile_paths(match):
+    value = match.group(0)
+    # Redact inside the literal's own boundaries first. This keeps a bare home
+    # followed by a closing apostrophe from consuming later repr arguments,
+    # without treating a real apostrophe inside a username as a delimiter.
+    return value[0] + _redact_profile_paths(value[1:-1]) + value[-1]
 
 
 def _redact_url_value(original):
@@ -67,10 +92,11 @@ def sanitize_text(text: str) -> str:
     except (OSError, RuntimeError):
         home = ''
     if home:
-        text = text.replace(home, "<USER_HOME>")
-        text = text.replace(home.replace("\\", "/"), "<USER_HOME>")
-    text = re.sub(r'(?i)([a-z]:[\\/]Users[\\/])[^\\/\r\n"<>]+', r'\1<user>', text)
-    text = re.sub(r'(/(?:home|Users)/)[^/\r\n"<>]+', r'\1<user>', text)
+        for variant in (home, home.replace("\\", "/")):
+            for spelling in (variant, json.dumps(variant)[1:-1], repr(variant)[1:-1]):
+                text = text.replace(spelling, "<USER_HOME>")
+    text = _QUOTED_TEXT_RE.sub(_redact_quoted_profile_paths, text)
+    text = _redact_profile_paths(text)
     text = _AUTHORIZATION_RE.sub(_redact_authorization, text)
     text = _COOKIE_RE.sub(_redact_credential, text)
     text = _CREDENTIAL_RE.sub(_redact_credential, text)

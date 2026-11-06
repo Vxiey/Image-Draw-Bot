@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 614,
+  "implemented": 668,
   "release_published": false,
-  "validation": "Batch 03: final frozen-source discovery passed 2,800 tests in 70.634 seconds (22 platform/hardware skips), with unchanged source hashes. All four independent area reviews closed. Source gate passed 5,000 cycles; source-package hygiene passed for 860 files; eight exact-raster engine fixtures passed with zero mismatched pixels. New checkpoint Windows CI pending.",
+  "validation": "Batch 04: final frozen-source discovery passed 2,934 tests in 75.509 seconds (23 platform/hardware skips), with unchanged source hashes. Independent area and cross-area reviews closed. Source gate passed 5,000 cycles; source-package hygiene passed; eight exact-raster engine fixtures passed with zero mismatched pixels. New checkpoint Windows/Linux CI pending. Prior checkpoint 2aca72a passed Windows/Linux, dependency, CodeQL and packaged Windows GUI/native drag-and-drop CI in run 42273234504.",
   "improvements": [
     {
       "id": 1,
@@ -4816,6 +4816,384 @@
       "local_id": "IW40",
       "description": "Run manual/automatic hardware, GPU and resource tests through the shared tracked worker lifecycle; prevent concurrent drawing/tests, snapshot Tk settings before dispatch and reject cancelled late recommendations.",
       "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 615,
+      "area": "batch04-application",
+      "local_id": "AW01",
+      "description": "Read the exact deterministic palette-refinement sample through bounded 256 × 256 tiles instead of copying and converting the entire source raster. Sample order, duplicate indices, transparency and original source coordinates are preserved.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 616,
+      "area": "batch04-application",
+      "local_id": "AW02",
+      "description": "Reject invalid palette seeds, wrapped/out-of-range RGB channels, nonintegral or nonpositive palette sizes and oversized seed sequences before refinement allocation.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 617,
+      "area": "batch04-application",
+      "local_id": "AW03",
+      "description": "Weight palette strokes by their covered raster length rather than Manhattan length, which disproportionately favored diagonal strokes when ranking color groups.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 618,
+      "area": "batch04-application",
+      "local_id": "AW04",
+      "description": "Bound reduced-palette merging against every original source color, preventing successive near-color merges from drifting beyond the advertised color-distance limit.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 619,
+      "area": "batch04-application",
+      "local_id": "AW05",
+      "description": "Compute OKLab metrics once per source color and keep one representative accumulator per hue family instead of retaining every family member and calculating the same metrics twice.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 620,
+      "area": "batch04-application",
+      "local_id": "AW06",
+      "description": "Require matching, finite, nonnegative hue weights and valid family limits/chroma thresholds; reject overflowing total mass rather than publishing invalid coverage. Zero mass/capacity avoids color work.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 621,
+      "area": "batch04-application",
+      "local_id": "AW07",
+      "description": "Isolate malformed local settings fields so one corrupt scalar cannot abort unrelated valid preferences; portable imports reject those same invalid domains before publication.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 622,
+      "area": "batch04-application",
+      "local_id": "AW08",
+      "description": "Apply settings as a guarded UI transaction: suppress intermediate profile callbacks and restore prior variables/geometry if a setter fails.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 623,
+      "area": "batch04-application",
+      "local_id": "AW09",
+      "description": "Preserve the selected profile's defaults for absent legacy settings and display extras instead of replacing them with generic fallback values.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 624,
+      "area": "batch04-application",
+      "local_id": "AW10",
+      "description": "Recognize unsupported settings schemas and preserve the existing document through later saves until the user explicitly resets that profile.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 625,
+      "area": "batch04-application",
+      "local_id": "AW11",
+      "description": "Remove consumed legacy setting aliases after migration so portable-profile validation accepts migrated older documents while giving explicit current keys precedence.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 626,
+      "area": "batch04-application",
+      "local_id": "AW12",
+      "description": "Persist and restore the chosen Gartic opacity in the active profile.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 627,
+      "area": "batch04-application",
+      "local_id": "AW13",
+      "description": "Propagate a failed settings save to dependent operations: retain the active profile/selection, and block export or import that would otherwise continue with stale settings.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 628,
+      "area": "batch04-application",
+      "local_id": "AW14",
+      "description": "Reject duplicate canvas fields across portable-profile sections and nonobject canvas sections instead of silently overriding or ignoring ambiguous input.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 629,
+      "area": "batch04-application",
+      "local_id": "AW15",
+      "description": "Prevent profile management while a profile transition is queued/running or the application is closing, keeping the requested identity and stored settings consistent.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 630,
+      "area": "batch04-application",
+      "local_id": "AW16",
+      "description": "Verify/hash/decode a recovery image in a tracked, cancellable worker; apply it only after that worker completes, with a fresh idle/shutdown check after the recovery dialog.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 631,
+      "area": "batch04-application",
+      "local_id": "AW17",
+      "description": "Explicit recovery clearing cancels a queued checkpoint and suppresses re-creation; forget in-memory resume state only after successful deletion.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 632,
+      "area": "batch04-application",
+      "local_id": "AW18",
+      "description": "Disarm native input before recovery profile/settings/image work so an exception during recovery cannot leave the previous armed state alive.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 633,
+      "area": "batch04-application",
+      "local_id": "AW19",
+      "description": "Stream recovery-directory enumeration and filter names before creating Path objects instead of retaining every unrelated directory entry during cleanup.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 634,
+      "area": "batch04-application",
+      "local_id": "AW20",
+      "description": "Respect portrait time semantics: Unlimited does not impose the numeric fallback budget or time-based thinning; short explicit budgets can reduce below the old minimum stroke counts.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 635,
+      "area": "batch04-application",
+      "local_id": "AW21",
+      "description": "Base end-to-end tuner statistics on the visible white-canvas composite, preventing invisible RGB/keyed transparency from being reported as visible chromatic content.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 636,
+      "area": "batch04-application",
+      "local_id": "AW22",
+      "description": "Permit a bounded Pixel Accurate quality rescue for an Unlimited photo plan, rather than treating the absence of a deadline as a one-second budget. The existing target-pixel limit remains enforced.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 637,
+      "area": "batch04-application",
+      "local_id": "AW23",
+      "description": "Quality rescue moves planning resolution upward or preserves Extreme; it no longer downgrades Extreme to Ultra.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 638,
+      "area": "batch04-application",
+      "local_id": "AW24",
+      "description": "Remove a previous Quick Sketch renderer policy when a rescue chooses another renderer, preventing the next planning pass from overwriting the rescue's detail/quality choices.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 639,
+      "area": "batch04-application",
+      "local_id": "AW25",
+      "description": "Planning watchdog Off disables its hidden automatic deadline, while user Stop and the separate bounded dry-run policy remain available. Heartbeat text reports the actual timeout state.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 640,
+      "area": "batch04-application",
+      "local_id": "AW26",
+      "description": "Watchdog fallback preserves explicit Pixel Accurate/Unlimited quality fields, while allowing CPU/GPU execution-route fallback and retaining finite attempt limits when enabled.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 641,
+      "area": "batch04-application",
+      "local_id": "AW27",
+      "description": "Treat a verified, fully completed sequence checkpoint as a completed no-op before target activation, countdown, drawing or post-draw correction; preserve Stop and unconditional input cleanup. An empty remaining sequence no longer falls back to drawing legacy color groups again.",
+      "ledger": "v148-batch04-application.md"
+    },
+    {
+      "id": 642,
+      "area": "batch04-planning",
+      "local_id": "PB01",
+      "description": "Transfer the filtered visible-color delta back into unassociated source channels while retaining alpha. Unchanged/protected pixels remain byte-exact; invisible source RGB cannot affect visible smoothing.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 643,
+      "area": "batch04-planning",
+      "local_id": "PB02",
+      "description": "Assign each ordered-Bayer source pixel to exactly one primary or secondary group. Both palette orders now reproduce the same intended mixture, for serial and worker planners.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 644,
+      "area": "batch04-planning",
+      "local_id": "PB03",
+      "description": "Materialize the complete established base colour order, then append the detail pass. Preserve path phase hints, explicit detail brush size and all base geometry. Target and guarded preview must follow this same sequence; existing configured visual verification is retained by the coordinated runtime integration.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 645,
+      "area": "batch04-planning",
+      "local_id": "PB04",
+      "description": "Compare the complete candidate route with the supplied route and retain the shorter one. Apply the same nonregression contract to segment and polyline optimizers without changing geometry, structural windows or reversal policy.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 646,
+      "area": "batch04-planning",
+      "local_id": "PB05",
+      "description": "Normalize the existing aliases before those planner decisions, so old profiles receive the same planning semantics as their canonical speed.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 647,
+      "area": "batch04-planning",
+      "local_id": "PB06",
+      "description": "Keep removal/protected-peak evidence only while the component can still be rejected as small; clear that evidence at the acceptance threshold. The connectivity frontier and seen/output masks remain. Both legacy and Sketch 2.0 implementations share one count.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 648,
+      "area": "batch04-planning",
+      "local_id": "PB07",
+      "description": "Compute transitions in blocks of 64 columns, transposed into the same x-major/y-major result order, while keeping the existing area bound.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 649,
+      "area": "batch04-planning",
+      "local_id": "PB08",
+      "description": "Stream ranked entries into the bounded heap. Retain protected-prefix priority, stable ties, source order and aligned phase/semantic metadata.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 650,
+      "area": "batch04-planning",
+      "local_id": "PB09",
+      "description": "Keep only the best bounded micro-stroke candidates in a heap; prefer two-pixel strokes and then earlier colour/source positions while leaving all longer strokes intact.",
+      "ledger": "v148-batch04-planning.md"
+    },
+    {
+      "id": 651,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP01",
+      "description": "The final `ProfilePolish` pass undid `ProfileEngine`'s explicit Pixel Accurate lock and Unlimited time choice in the four core profiles. The engine also failed to preserve the current `Unlimited / Accuracy` spelling. Both automatic passes now share the same protected-setting contract; normal Auto presets and Manual settings retain their behavior.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 652,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP02",
+      "description": "Region-fill enablement and aggressiveness were absent from the profile-default snapshot. A new target with no settings file could inherit the preceding target's disabled fill engine or Aggressive policy. `ProfileIsolation` now resets these controls and includes the current detail/quick-sketch variables in its shared snapshot. The detail-zoom viewport also resets with the other preview pages.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 653,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP03",
+      "description": "StudioUI disabled Paint's secondary Prepare Paint & draw button using the obsolete test/lock/preflight sequence even when the controller's primary button and setup wizard allowed preparation. The secondary button now mirrors the controller's actual state. The workspace model has an explicit Paint preparation mode with optional diagnostics; it does not claim `can_test` before calibration exists.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 654,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP04",
+      "description": "The local F1 help binding conflicted with the global F1 Quick Start binding. Help now uses Shift+F1 and its tooltip identifies both shortcuts.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 655,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP05",
+      "description": "A single workspace refresh independently checked target locks, preflight and dry-run validity twice for its checklist and wizard. It now reads each once and shares that snapshot, avoiding duplicate calibration-backed validation and disagreement between the two displays during a refresh.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 656,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP06",
+      "description": "The beginner wizard instructed manual-only targets such as Kleki, Magma and Drawize to use browser Auto setup. It now selects its action and setup label from the actual target capability, and treats optional tool calibration consistently when a palette is already usable.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 657,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP07",
+      "description": "A successfully unlocked wizard still said that Start was locked and asked for another Unlock. Its status and next action now point to Start while the confirmation is valid, and revert to Unlock when it expires.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 658,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP08",
+      "description": "Case folding decomposed valid letters such as `ǰ` and `ΐ` after the word guesser's NFC normalization. Its own letter validator then rejected them or miscounted the pattern. A final NFC pass restores canonical letters before validation, indexing and wildcard matching.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 659,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP09",
+      "description": "CTk sliders/scrollbars wrap Canvas or Frame widgets, so native class-name checks missed their existing wheel handlers and scrolled the surrounding panel as well. The dispatcher now recognizes those actual CTk control classes while walking the event target's ancestors.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 660,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP10",
+      "description": "On Windows, CTk's one-pixel scroll increment made the coalesced handler move only one pixel per 120-delta notch. The dispatcher preserves CTk's normal 20-pixel distance while retaining fractional accumulation and the bounded 12-notch batch. Generic canvases and macOS/Linux keep their existing units.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 661,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP11",
+      "description": "Moving the pointer to another panel before the 16 ms wheel flush discarded the first panel's complete queued motion. The dispatcher flushes that motion to its original panel before changing the destination.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 662,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP12",
+      "description": "A compact sidebar group hid existing controls before packing its new shell. If that pack or a later group's construction failed, the supposed original-layout fallback left controls hidden. Group and whole-install rollback now restore prior packing/options/order and destroy only the newly owned shells. CTk controls retain their logical padding so repacking and profile visibility do not apply DPI scaling twice.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 663,
+      "area": "batch04-ui-profiles",
+      "local_id": "UP13",
+      "description": "Sidebar discovery repeatedly crossed the Tk boundary for the same text/tree data, and genuine CTk containers without a `text` option raised an uncaught `ValueError`. Installation now indexes the original tree once, treats those containers as non-text widgets, preserves scoped preorder matches, and releases the index after installation.",
+      "ledger": "v148-batch04-ui-profiles.md"
+    },
+    {
+      "id": 664,
+      "area": "batch04-platform-release",
+      "local_id": "NR01",
+      "description": "Preserve the owned press until LEFTUP succeeds. A failed release revokes input authorization, disarm remains unconditional, and a later cleanup or explicit arm retries only the application's pending release.",
+      "ledger": "v148-batch04-platform-release.md"
+    },
+    {
+      "id": 665,
+      "area": "batch04-platform-release",
+      "local_id": "NR02",
+      "description": "A per-instance reentrant lock serializes arm, disarm, press, release and move. Disarm waits for an in-flight command, releases an owned button, then revokes authorization before returning. Later ordinary commands see the revoked arm.",
+      "ledger": "v148-batch04-platform-release.md"
+    },
+    {
+      "id": 666,
+      "area": "batch04-platform-release",
+      "local_id": "NR03",
+      "description": "`TargetCapture` exposes an optional keyword-only `cancelled` callback. Its cancellable path checks before spawn, polls communication at most every 100 ms, rejects late completed results, and performs bounded terminate/wait/kill/reap cleanup on interruption. Root forwards the callback through four calibration worker call sites; both picture-palette probes before and after RGB calibration also receive it.",
+      "ledger": "v148-batch04-platform-release.md"
+    },
+    {
+      "id": 667,
+      "area": "batch04-platform-release",
+      "local_id": "NR04",
+      "description": "Every process failure records its current reason and available output through the existing sanitized, bounded log path. Bytes are decoded before sanitization. Diagnostic-storage failure cannot replace the actual operation exception.",
+      "ledger": "v148-batch04-platform-release.md"
+    },
+    {
+      "id": 668,
+      "area": "batch04-platform-release",
+      "local_id": "NR05",
+      "description": "`LocalSanitization` recognizes escaped separators, Unicode escapes and serialized custom home paths. It redacts within quoted-literal boundaries before handling ordinary paths, preserving legitimate apostrophes in names and the surrounding JSON/repr syntax. Escaped quotes cannot start new literals, avoiding repeated rescans of a malformed line.",
+      "ledger": "v148-batch04-platform-release.md"
     }
   ]
 }

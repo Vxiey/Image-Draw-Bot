@@ -47,7 +47,11 @@ _OPTION_KEYS = {
     "max_seconds", "paint_simple", "paint_tool", "resource_scheduler",
     "detail_zoom", "visual_verification", "color_fidelity", "profile_engine",
     "edge_behavior", "sketch_detail", "read_gartic_timer", "render_preset",
+    "adaptive_deadline_renderer", "deadline_safety_reserve", "use_region_fill_engine",
+    "fill_aggressiveness", "quick_sketch_style", "quick_sketch_fill_preference",
+    "hybrid_mode", "gartic_opacity", "preview_detail_level",
 }
+RECOVERABLE_OPTION_KEYS = frozenset(_OPTION_KEYS)
 
 
 def _safe_primitive(value):
@@ -143,10 +147,11 @@ def _snapshot_guard():
             yield
 
 
-def _stream_digest(stream):
+def _stream_digest(stream, *, cancelled=lambda: False):
     digest = hashlib.sha256()
     total = 0
     for block in iter(lambda: stream.read(65536), b''):
+        if cancelled():raise InterruptedError('Recovery loading cancelled.')
         total += len(block)
         if total > MAX_CACHED_IMAGE_BYTES:
             raise ValueError('Cached image is too large.')
@@ -168,8 +173,11 @@ def _store_image(image=None, *, legacy_path=None):
             if image is not None:
                 if image.width < 1 or image.height < 1 or image.width * image.height > MAX_CACHED_IMAGE_PIXELS:
                     raise ValueError('Recovery image exceeds the supported pixel limit.')
-                with image.convert('RGBA') as rgba:
-                    rgba.save(stream, format='PNG')
+                if image.mode=='RGBA':
+                    image.save(stream,format='PNG')
+                else:
+                    with image.convert('RGBA') as rgba:
+                        rgba.save(stream, format='PNG')
             else:
                 with Path(legacy_path).open('rb') as source:
                     copied = 0
@@ -196,23 +204,25 @@ def _clean_old_images(keep, *, strict=False):
         keep.add(current_digest)
     failures = []
     try:
-        entries = tuple(IMAGE_FILE.parent.iterdir())
+        # scandir does not materialize unrelated directory entries before the
+        # first deletion; the snapshot guard excludes cooperative writers.
+        with os.scandir(IMAGE_FILE.parent) as entries:
+            for entry in entries:
+                name=entry.name
+                digest = name[len(IMAGE_FILE.stem)+1:-4] if name.startswith(IMAGE_FILE.stem+'-') and name.endswith('.png') else None
+                staging = name.startswith('.recovery-image-') and name.endswith('.png.tmp')
+                if staging or (_valid_digest(digest) and digest not in keep):
+                    path=Path(entry.path)
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError as error:
+                        failures.append((path,error))
     except FileNotFoundError:
         return
     except OSError as error:
         if strict:
             raise OSError('Could not enumerate cached recovery files.') from error
         return
-    for path in entries:
-        digest = path.stem[len(IMAGE_FILE.stem) + 1:] if path.name.startswith(IMAGE_FILE.stem + '-') and path.suffix == '.png' else None
-        # A process can stop while encoding a uniquely named PNG. The publish
-        # lock excludes any other cooperative writer using a staging file.
-        staging = path.name.startswith('.recovery-image-') and path.name.endswith('.png.tmp')
-        if staging or (_valid_digest(digest) and digest not in keep):
-            try:
-                path.unlink(missing_ok=True)
-            except OSError as error:
-                failures.append((path, error))
     if strict and failures:
         names = ', '.join(path.name for path, _error in failures)
         raise OSError(f'Could not remove cached recovery files: {names}') from failures[0][1]
@@ -286,13 +296,14 @@ def save_render_progress(progress: dict) -> Path:
     corrupt or incompatible, the session checkpoint can still restore the image
     and settings while rendering restarts safely from color 1.
     """
-    from RenderResume import validate_progress
-    clean = validate_progress(progress)
-    if clean is None:
-        raise ValueError('Invalid render resume checkpoint.')
-    RECOVERY_DIR.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(RENDER_FILE, json.dumps(clean, ensure_ascii=False, indent=2))
-    return RENDER_FILE
+    with _snapshot_guard():
+        from RenderResume import validate_progress
+        clean = validate_progress(progress)
+        if clean is None:
+            raise ValueError('Invalid render resume checkpoint.')
+        RECOVERY_DIR.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(RENDER_FILE, json.dumps(clean, ensure_ascii=False, indent=2))
+        return RENDER_FILE
 
 def clear_render_progress() -> None:
     with _snapshot_guard():
@@ -330,9 +341,10 @@ def load_snapshot() -> dict | None:
     }
 
 
-def load_cached_image(expected_sha256=_CURRENT_IMAGE):
+def load_cached_image(expected_sha256=_CURRENT_IMAGE, *, cancelled=lambda: False):
     """Load only the image associated with the checkpoint (legacy files supported)."""
     from PIL import Image
+    if cancelled():raise InterruptedError('Recovery loading cancelled.')
     try:
         if expected_sha256 is _CURRENT_IMAGE:
             state = _read_state()
@@ -352,14 +364,21 @@ def load_cached_image(expected_sha256=_CURRENT_IMAGE):
         with path.open('rb') as stream, warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
             if digest is not None:
-                actual = _stream_digest(stream)
+                actual = _stream_digest(stream,cancelled=cancelled)
                 if actual != digest:
                     return None
                 stream.seek(0)
             with Image.open(stream) as image:
                 if image.width < 1 or image.height < 1 or image.width * image.height > MAX_CACHED_IMAGE_PIXELS:
                     return None
-                return image.convert('RGBA')
+                if cancelled():raise InterruptedError('Recovery loading cancelled.')
+                result=image.convert('RGBA')
+                if cancelled():
+                    result.close()
+                    raise InterruptedError('Recovery loading cancelled.')
+                return result
+    except InterruptedError:
+        raise
     except (OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
         return None
 

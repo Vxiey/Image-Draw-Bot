@@ -83,6 +83,13 @@ def _finite(value: Any, default: float = 0.0) -> float:
 
 
 def _bounded_stats(image: Image.Image, max_side: int = 128) -> tuple[float, float]:
+    if image.mode not in ('RGB', 'L') or 'transparency' in image.info:
+        # The automatic renderer sees the white canvas composite, just like
+        # the colour analyser. Hidden RGB must not turn transparent line art
+        # into a supposedly chromatic photograph.
+        from ColorMatchingEngine import visible_rgb_image
+        with visible_rgb_image(image) as visible:
+            return _bounded_stats(visible, max_side)
     w, h = image.size
     rgb = image
     if max(w, h) > max_side:
@@ -607,7 +614,8 @@ def propose_rescue_options(plan: dict[str, Any], acceptance: dict[str, Any] | No
         # This is intentionally disabled for Paint (custom RGB/tool overhead can
         # dominate there) and for large/unknown target rasters.
         pixel_rescue = (source_kind == 'photo / texture' and profile_group in ('browser','skribbl-fast','generic')
-                        and 0 < plan_pixels <= 220_000 and projected <= usable * .32)
+                        and 0 < plan_pixels <= 220_000
+                        and (acceptance.get('usable_deadline_seconds') is None or projected <= usable * .32))
         if pixel_rescue:
             out.update({
                 'draw_quality':'Pixel Accurate','planning_resolution':'Extreme',
@@ -623,7 +631,9 @@ def propose_rescue_options(plan: dict[str, Any], acceptance: dict[str, Any] | No
         else:
             q = str(out.get('draw_quality') or 'High likeness')
             out['draw_quality'] = {'Balanced':'High likeness', 'High likeness':'Maximum likeness'}.get(q, q)
-            out['planning_resolution'] = 'High' if str(out.get('planning_resolution')) == 'Standard' else 'Ultra'
+            resolution = str(out.get('planning_resolution') or 'Auto')
+            out['planning_resolution'] = {'Auto':'High', 'Standard':'High', 'High':'Ultra',
+                                          'Ultra':'Extreme', 'Extreme':'Extreme'}.get(resolution, 'High')
             out['quality'] = 'Maximum detail'; out['detail'] = 10; out['adaptive_detail'] = 'Preserve detail'
             out['speed'] = 'Balanced'; out['delay'] = base_delay('Balanced'); out['precision'] = 'High'
             if source_kind == 'flat illustration':
@@ -635,6 +645,13 @@ def propose_rescue_options(plan: dict[str, Any], acceptance: dict[str, Any] | No
             rescue_name = 'quality-rescue'
     else:
         return None
+
+    # Rescue owns the renderer selected above. A previous Quick Sketch policy
+    # would otherwise reapply its lower detail settings on the next make_plan.
+    if out.get('quick_sketch_auto') or out.get('render_style') == 'Quick Sketch Fill + Contour':
+        out['render_style'] = 'Standard / pixel'
+        out['quick_sketch_auto'] = False
+        out.pop('quick_sketch_meta', None)
 
     new_tuner = dict(tuner)
     new_tuner.update({

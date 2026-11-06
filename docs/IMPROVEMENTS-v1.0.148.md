@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 614 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **386 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 668 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **332 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -20,12 +20,22 @@ The count excludes tests, assertions, documentation, version changes, formatting
 | 553–574 | GP01–GP22 | Batch 03 GPU, benchmarks and platform behavior | 22 | [GPU/platform ledger](v148-batch03-gpu-platform.md); independent planner-agent review. |
 | 575–614 | IW01–IW40 | Batch 03 image workflow, imports and UI | 40 | [Image-workflow ledger](v148-batch03-image-workflow.md); independent colour-agent review. |
 
+| 615–641 | AW01–AW27 | Batch 04 application settings, recovery and planning policy | 27 | [Application ledger](v148-batch04-application.md); independent UI and planner reviews. |
+| 642–650 | PB01–PB09 | Batch 04 colour planning, detail order and bounded working sets | 9 | [Planning ledger](v148-batch04-planning.md); independent integration-owner review. |
+| 651–663 | UP01–UP13 | Batch 04 profiles, setup guidance and UI layout | 13 | [UI/profile ledger](v148-batch04-ui-profiles.md); independent integration-owner review. |
+| 664–668 | NR01–NR05 | Batch 04 native input, helper lifecycle and diagnostic privacy | 5 | [Platform ledger](v148-batch04-platform-release.md); independent integration-owner review. |
+
 The [machine-readable registry](v148-improvements.json) maps every global ID to its area-local ID and evidence ledger. The [working plan](v148-improvement-progress.md) records release conditions and the next review cycle.
 
 ## Integration evidence
 
+- Batch 04 product reference: `1d48eabaf349a5fd8049a2c96ef5426745c3078c`; subsequent `2aca72a` only repairs test fixtures.
+- Final batch 04 frozen-source discovery: **2,934 tests in 75.509 seconds, passed with 23 platform/hardware skips**. Source hashes stayed unchanged; independent area reviews and the coordinated detail-order/verification review are closed. The new checkpoint still requires its own Windows/Linux CI.
+- Batch 04 source gate passed 5,000 lifecycle/profile cycles and source-package hygiene passed. Eight engine fixtures have zero mismatched pixels; [raw results](v148-batch04-engine-benchmarks.json).
+- One old mouse-cleanup assertion was updated: failed native LEFTUP retains ownership for a later cleanup attempt while input remains disarmed. The production semantics and retry tests are documented under NR01.
+
 - Batch 03 reference: `2fb7abf470a4ef498df9c53f42cddda62d8b652b`.
-- Final batch 03 frozen-source discovery: **2,800 tests in 70.634 seconds, passed with 22 platform/hardware skips**. Source hashes stayed unchanged during the run; all four independent area reviews are closed. The new Windows CI run is pending.
+- Final batch 03 frozen-source discovery: **2,800 tests in 70.634 seconds, passed with 22 platform/hardware skips**. Source hashes stayed unchanged during the run; all four independent area reviews are closed. Checkpoint `2aca72acb36b547d75e12a0a59d78325552c21a8` passed Windows/Linux regression, dependencies, CodeQL and packaged Windows GUI/native drag-and-drop checks in [run 42273234504](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42273234504). Its Ubuntu browser test initially timed out during Node startup; an unchanged-source rerun passed without increasing its timeout.
 - Batch 03 source gate passed 5,000 lifecycle/profile cycles and source-package hygiene passed for 860 files; its eight exact-raster engine fixtures have zero mismatched pixels. [Raw engine results](v148-batch03-engine-benchmarks.json).
 
 - Batch 01 reference: `94a748ec7690eebb542c70311c594aa835434a98`; batch 02 reference: `1c09774ad22088c5c30a8f8220b6b451fdee9659`.

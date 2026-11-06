@@ -183,7 +183,7 @@ class SessionRecoveryIntegrityTests(unittest.TestCase):
                 SR.clear_snapshot()
                 self.assertFalse(locked.exists())
         SR.save_snapshot(profile='red', options={}, image=Image.new('RGBA', (7, 5), 'red'))
-        with patch.object(Path, 'iterdir', side_effect=PermissionError('directory cannot be listed')):
+        with patch.object(SR.os, 'scandir', side_effect=PermissionError('directory cannot be listed')):
             with self.assertRaisesRegex(OSError, 'Could not enumerate'):
                 SR.clear_snapshot()
         SR.clear_snapshot()

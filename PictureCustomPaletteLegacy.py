@@ -411,7 +411,7 @@ def start_picture_custom_palette(app) -> bool:
         if app.stop.wait(0.20):
             raise InterruptedError("Picture custom palette cancelled.")
         from TargetCapture import probe_handle_isolated
-        meta = probe_handle_isolated(handle)
+        meta = probe_handle_isolated(handle, cancelled=app.stop.is_set)
         from ExactColorTools import numeric_rgb_available, resolved_controls, save as save_exact_colors
         if not numeric_rgb_available(PROFILE_KEY):
             # This is deliberately independent from full Paint canvas detection.
@@ -420,7 +420,7 @@ def start_picture_custom_palette(app) -> bool:
             from CalibrationAnchors import make_anchor
             app.events.put(("status", "Custom color palette for picture: calibrating Paint Edit colors R/G/B controls…"))
             exact_controls = calibrate_rgb_controls(handle, cancelled=app.stop.is_set)
-            meta = probe_handle_isolated(handle)
+            meta = probe_handle_isolated(handle, cancelled=app.stop.is_set)
             save_exact_colors(PROFILE_KEY, exact_controls, anchor=make_anchor(tuple(meta["client_rect"])))
         controls = resolved_controls(PROFILE_KEY, tuple(meta["client_rect"]))
         from ProfileStorage import calibration_context_fingerprint

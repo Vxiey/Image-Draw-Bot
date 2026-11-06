@@ -54,9 +54,12 @@ def compute_workspace_state(*, image_loaded: bool, target_name: str,
                             preflight_passed: bool = True,
                             dry_run_passed: bool = True,
                             gpu_text: str = "CPU fallback available", strict_safety: bool = True,
+                            prepare_on_start: bool = False,
                             activity: str | None = None, status: str = "") -> WorkspaceState:
     """Return a compact, deterministic readiness model for the GUI."""
     paint_selected = target_name == "Microsoft Paint"
+    automatic_paint = paint_selected and prepare_on_start
+    diagnostic_required = strict_safety and not automatic_paint
     target_selected = bool((target_name or "").strip())
     target_label = f"{target_name} profile selected" if target_selected else "Target profile selected"
     tools_label = "Paint drawing tool ready" if paint_selected else "Drawing controls ready"
@@ -68,19 +71,20 @@ def compute_workspace_state(*, image_loaded: bool, target_name: str,
         ChecklistItem("target", target_label, "ready" if target_selected else "blocked",
                       f"Current profile: {target_name}" if target_selected else "Choose the drawing application/profile."),
         ChecklistItem("tools", tools_label,
-                      "ready" if paint_tools_ready else "attention", tools_detail),
-        ChecklistItem("area", "Drawing area selected", "ready" if area_ready else "blocked",
-                      "Canvas coordinates locked." if area_ready else "Select only the drawable canvas."),
-        ChecklistItem("palette", "Palette ready", "ready" if palette_ready else "attention",
-                      "Color input is ready." if palette_ready else "Read colors or use a Paint mode that bypasses palette clicks."),
-        ChecklistItem("test", "First stroke test passed", "ready" if test_passed else ("blocked" if strict_safety else "optional"),
-                      "Small test completed." if test_passed else ("Required for Microsoft Paint." if strict_safety else "Optional diagnostic for this profile.")),
-        ChecklistItem("lock", "Setup locked", "ready" if target_locked else ("blocked" if strict_safety else "optional"),
-                      "Target, DPI, area and palette are fingerprinted." if target_locked else ("Required for Microsoft Paint." if strict_safety else "Optional extra safety for this profile.")),
-        ChecklistItem("preflight", "Safety preflight passed", "ready" if preflight_passed else ("blocked" if strict_safety else "optional"),
-                      "No-click safety validation is current." if preflight_passed else ("Required for Microsoft Paint." if strict_safety else "Optional no-click diagnostic.")),
-        ChecklistItem("dryrun", "Dry run passed", "ready" if dry_run_passed else ("blocked" if strict_safety else "optional"),
-                      "Full route was simulated without clicks." if dry_run_passed else ("Required for Microsoft Paint." if strict_safety else "Optional route diagnostic.")),
+                      "ready" if paint_tools_ready else ("optional" if automatic_paint else "attention"),
+                      "Prepare Paint & draw verifies the pencil and its size." if automatic_paint and not paint_tools_ready else tools_detail),
+        ChecklistItem("area", "Drawing area selected", "ready" if area_ready else ("optional" if automatic_paint else "blocked"),
+                      "Canvas coordinates locked." if area_ready else ("Prepare Paint & draw detects and verifies the canvas." if automatic_paint else "Select only the drawable canvas.")),
+        ChecklistItem("palette", "Palette ready", "ready" if palette_ready else ("optional" if automatic_paint else "attention"),
+                      "Color input is ready." if palette_ready else ("Prepare Paint & draw calibrates color input." if automatic_paint else "Read colors or use a Paint mode that bypasses palette clicks.")),
+        ChecklistItem("test", "First stroke test passed", "ready" if test_passed else ("blocked" if diagnostic_required else "optional"),
+                      "Small test completed." if test_passed else ("Required for this setup." if diagnostic_required else "Optional diagnostic for this profile.")),
+        ChecklistItem("lock", "Setup locked", "ready" if target_locked else ("blocked" if diagnostic_required else "optional"),
+                      "Target, DPI, area and palette are fingerprinted." if target_locked else ("Required for this setup." if diagnostic_required else "Optional extra safety for this profile.")),
+        ChecklistItem("preflight", "Safety preflight passed", "ready" if preflight_passed else ("blocked" if diagnostic_required else "optional"),
+                      "No-click safety validation is current." if preflight_passed else ("Required for this setup." if diagnostic_required else "Optional no-click diagnostic.")),
+        ChecklistItem("dryrun", "Dry run passed", "ready" if dry_run_passed else ("blocked" if diagnostic_required else "optional"),
+                      "Full route was simulated without clicks." if dry_run_passed else ("Required for this setup." if diagnostic_required else "Optional route diagnostic.")),
         ChecklistItem("gpu", "GPU ready / CPU fallback active", "ready", gpu_text or "CPU fallback available."),
     )
     if activity:
@@ -88,6 +92,8 @@ def compute_workspace_state(*, image_loaded: bool, target_name: str,
     if _looks_like_error(status):
         return WorkspaceState("Error", "error", False, False, items)
     can_test = target_selected and image_loaded and area_ready and paint_tools_ready and palette_ready
+    if automatic_paint and image_loaded:
+        return WorkspaceState("Ready to prepare Paint", "ready", True, can_test, items)
     ready = can_test and ((test_passed and target_locked and preflight_passed and dry_run_passed) if strict_safety else True)
     if ready:
         return WorkspaceState("Ready to draw", "ready", True, True, items)
@@ -126,7 +132,7 @@ def classify_error(status: str) -> dict[str, str] | None:
         return {
             "title": "Start is still safely locked",
             "message": text,
-            "action": "Open Setup wizard to see the missing step. Paint uses Small test → Lock setup → Safety preflight → Fast Dry run → Unlock → Start.",
+            "action": "Open Setup wizard to see the next step. Paint uses Prepare Paint & draw; its tests and previews are optional. Other profiles use Unlock full drawing, then Start after setup.",
         }
     if "gpu" in low or "cuda" in low or "vram" in low:
         return {

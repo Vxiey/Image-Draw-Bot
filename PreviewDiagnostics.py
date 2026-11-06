@@ -60,6 +60,7 @@ def _draw_clipped_segment(draw, size, segment, color):
 def _render_quantized_target(source_size: tuple[int, int], groups, palette_rgb,
                             *, fill_regions=(), background_fill_plan=None,
                             color_order=None, explicit_target: Image.Image | None = None,
+                            execution_sequence=None,
                             cancelled: Callable[[], bool] = lambda: False, _owned=None) -> Image.Image:
     """Render the palette/quantized target before physical brush simulation.
 
@@ -113,6 +114,23 @@ def _render_quantized_target(source_size: tuple[int, int], groups, palette_rgb,
         except (TypeError, ValueError, OverflowError, KeyError, IndexError):
             continue
 
+    if execution_sequence is not None:
+        # A late detail pass can revisit a colour after the background batch.
+        # Collapsing that order back into colour groups hides the recovered ink.
+        for entry in execution_sequence:
+            if cancelled():raise InterruptedError()
+            index=int(entry['color_index'])
+            if not 0<=index<len(palette):raise ValueError('Invalid sequence palette index.')
+            previous=None
+            for number,raw in enumerate(entry.get('path') or ()):
+                if number%512==0 and cancelled():raise InterruptedError()
+                x,y=map(int,raw)
+                if previous is None:previous=(x,y)
+                _draw_clipped_segment(draw,(w,h),(*previous,x,y),palette[index])
+                previous=(x,y)
+        if cancelled():raise InterruptedError()
+        return target
+
     if color_order is None:
         order = range(len(groups or ()))
     else:
@@ -149,6 +167,7 @@ def _render_quantized_target(source_size: tuple[int, int], groups, palette_rgb,
 
 def render_quantized_target(source_size,groups,palette_rgb,*,fill_regions=(),
                             background_fill_plan=None,color_order=None,explicit_target=None,
+                            execution_sequence=None,
                             cancelled=lambda:False):
     arguments=locals().copy();owned=[];result=None
     try:

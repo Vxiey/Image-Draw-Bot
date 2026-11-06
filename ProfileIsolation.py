@@ -1,8 +1,8 @@
 """Complete defaults reset and scoped profile control visibility."""
-from UICompactLayout import install_compact_layout
+from UICompactLayout import install_compact_layout, _pack_options
 from tkinter import TclError
 
-SETTING_NAMES=('quality', 'speed', 'precision', 'mode', 'shape_order', 'shape_model', 'max_stroke_cap', 'progressive_rendering', 'planning_watchdog', 'time_budget_mode', 'adaptive_deadline_renderer', 'deadline_safety_reserve', 'target_stroke_count', 'target_stroke_custom', 'drawing_style', 'render_style', 'hybrid_mode', 'draw_quality', 'human_mode', 'gpu_mode', 'gpu_vram', 'gpu_performance', 'cpu_workers', 'cpu_engine', 'ram_budget', 'ram_custom_mb', 'planning_resolution', 'resource_scheduler', 'background_fill', 'fill_engine', 'background_simplification', 'color_grouping', 'color_workflow', 'stroke_optimizer', 'adaptive_detail', 'visual_verification', 'color_rendering', 'color_fidelity', 'color_layers', 'profile_engine', 'edge_behavior', 'custom_color_workflow', 'exact_color_limit', 'tool_strategy', 'portrait_focus', 'skip_white', 'contrast', 'outline', 'brush_px', 'gartic_opacity', 'max_seconds', 'paint_simple', 'paint_tool', 'sketch_detail', 'read_gartic_timer', 'render_preset', 'subject_focus', 'ui_mode', 'preview_show_background', 'preview_show_fill', 'preview_show_strokes', 'preview_detail_level')
+SETTING_NAMES=('quality', 'speed', 'precision', 'mode', 'shape_order', 'shape_model', 'max_stroke_cap', 'progressive_rendering', 'planning_watchdog', 'time_budget_mode', 'adaptive_deadline_renderer', 'deadline_safety_reserve', 'target_stroke_count', 'target_stroke_custom', 'drawing_style', 'render_style', 'hybrid_mode', 'draw_quality', 'human_mode', 'gpu_mode', 'gpu_vram', 'gpu_performance', 'cpu_workers', 'cpu_engine', 'ram_budget', 'ram_custom_mb', 'planning_resolution', 'resource_scheduler', 'background_fill', 'fill_engine', 'use_region_fill_engine', 'fill_aggressiveness', 'background_simplification', 'color_grouping', 'color_workflow', 'stroke_optimizer', 'adaptive_detail', 'detail_zoom', 'quick_sketch_style', 'quick_sketch_fill_preference', 'visual_verification', 'color_rendering', 'color_fidelity', 'color_layers', 'profile_engine', 'edge_behavior', 'custom_color_workflow', 'exact_color_limit', 'tool_strategy', 'portrait_focus', 'skip_white', 'contrast', 'outline', 'brush_px', 'gartic_opacity', 'max_seconds', 'paint_simple', 'paint_tool', 'sketch_detail', 'read_gartic_timer', 'render_preset', 'subject_focus', 'ui_mode', 'preview_show_background', 'preview_show_fill', 'preview_show_strokes', 'preview_detail_level')
 
 EXTRA_DEFAULTS={'subject_focus':'Off','ui_mode':'Simple','preview_show_background':True,'preview_show_fill':True,'preview_show_strokes':True}
 
@@ -47,7 +47,7 @@ def reset_settings(app):
     # Preview viewport and one-shot input authorization are session state.
     var=getattr(app,'preview_zoom',None)
     if var is not None:var.set(0.)
-    for name in ('original_canvas','result_canvas','quantized_target_canvas','delta_e_canvas','safety_canvas','safety_debug_canvas','stroke_canvas','fill_canvas','color_canvas','coverage_canvas','accuracy_error_canvas'):
+    for name in ('original_canvas','result_canvas','quantized_target_canvas','delta_e_canvas','detail_zoom_canvas','safety_canvas','safety_debug_canvas','stroke_canvas','fill_canvas','color_canvas','coverage_canvas','accuracy_error_canvas'):
         canvas=getattr(app,name,None)
         if canvas is not None:canvas._preview_pan=(0,0)
 
@@ -60,7 +60,8 @@ def restore_extra(app,data):
     values=data.get('profile_extras',{})
     if not isinstance(values,dict):return
     for name,default in EXTRA_DEFAULTS.items():
-        value=values.get(name,default)
+        if name not in values:continue
+        value=values[name]
         if type(value) is not type(default):continue
         if name=='ui_mode' and value not in ('Simple','Advanced','Developer'):continue
         if name=='subject_focus' and value not in ('Off','Subject first','Subject only'):continue
@@ -95,7 +96,8 @@ def _refresh_compact_layout(app):
 
 
 def register_controls(app,entries):
-    app._scoped_profile_controls=[(w,scope,dict(w.pack_info())) for w,scope in entries]
+    entries=tuple(entries)
+    app._scoped_profile_controls=[(w,scope,_pack_options(w)) for w,scope in entries]
     app._profile_visibility_key=None
     app._compact_ui_layout=None
     root=getattr(app,'root',None)
@@ -108,6 +110,8 @@ def register_controls(app,entries):
         # Fail open to the original StudioUI layout. This layer only changes
         # presentation and must never make the application unusable.
         app._compact_ui_layout_error=f'{type(exc).__name__}: {exc}'
+        notes=getattr(exc,'__notes__',())
+        if notes:app._compact_ui_layout_error+=' · '+' · '.join(notes)
 
 
 def update_visibility(app,key):
@@ -117,12 +121,15 @@ def update_visibility(app,key):
     entries=getattr(app,'_scoped_profile_controls',())
     # Restore in reverse sibling order, inserting before the next packed sibling.
     for widget,scope,options in reversed(entries):
-        if not scope_visible(scope,key):widget.pack_forget();continue
-        if widget.winfo_manager()=='pack':continue
-        siblings=list(widget.master.winfo_children());index=siblings.index(widget)
-        next_widget=next((w for w in siblings[index+1:] if w.winfo_manager()=='pack'),None)
-        args=dict(options)
-        if next_widget is not None:args['before']=next_widget
-        widget.pack(**args)
+        try:
+            if not scope_visible(scope,key):widget.pack_forget();continue
+            if widget.winfo_manager()=='pack':continue
+            siblings=list(widget.master.winfo_children());index=siblings.index(widget)
+            next_widget=next((w for w in siblings[index+1:] if w.winfo_manager()=='pack'),None)
+            args=dict(options)
+            if next_widget is not None:args['before']=next_widget
+            widget.pack(**args)
+        except TclError:
+            continue
     app._profile_visibility_key=key
     _refresh_compact_layout(app)

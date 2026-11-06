@@ -14,7 +14,9 @@ def validate_color_grouping(mode: str) -> str:
 
 def _stroke_weight(stroke):
     x1,y1,x2,y2 = stroke
-    return max(1, abs(int(x2)-int(x1)) + abs(int(y2)-int(y1)) + 1)
+    # Bresenham takes one step on its major axis: a diagonal contains max(dx,dy)
+    # + 1 pixels, not the sum used by Manhattan cursor travel.
+    return max(abs(int(x2)-int(x1)), abs(int(y2)-int(y1))) + 1
 
 
 def _distance2(a,b):
@@ -31,18 +33,23 @@ def group_palette_strokes(groups, palette_rgb, mode="Smart", color_fidelity="Bal
     validate_color_grouping(mode)
     validate_color_fidelity(color_fidelity)
     work = [list(group) for group in groups]
+    if len(palette_rgb) < len(work):
+        raise ValueError('Every stroke group needs a matching palette color.')
     weights = [sum(_stroke_weight(s) for s in group) for group in work]
     merged = 0
     if mode == "Reduced palette":
         total = max(1, sum(weights)); active = [i for i,w in enumerate(weights) if w]
+        origins = {i: {i} for i in active}
         # Merge a rare color only into a significantly more-used close color.
         for index in sorted(active, key=lambda i: weights[i]):
             if not work[index] or weights[index] > total * .10: continue
             candidates = [j for j in active if j != index and work[j] and weights[j] >= weights[index]
-                          and _distance2(palette_rgb[index], palette_rgb[j]) <= 38*38]
+                          and all(_distance2(palette_rgb[source], palette_rgb[j]) <= 38*38
+                                  for source in origins[index])]
             if not candidates: continue
             target = min(candidates, key=lambda j: (palette_match_cost(palette_rgb[index], palette_rgb[j], color_rendering="Perceptual match", fidelity=color_fidelity), -weights[j]))
             work[target].extend(work[index]); work[index] = []
+            origins[target].update(origins[index]); origins[index].clear()
             weights[target] += weights[index]; weights[index] = 0; merged += 1
     active = [i for i,w in enumerate(weights) if w]
     if mode == "Accurate":

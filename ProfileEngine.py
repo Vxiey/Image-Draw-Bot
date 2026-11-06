@@ -8,6 +8,21 @@ independent and authoritative.
 from __future__ import annotations
 
 PROFILE_ENGINE_MODES = ("Auto", "Manual settings")
+UNLIMITED_TIME_MODES = frozenset(("Unlimited", "Unlimited / Accuracy"))
+PIXEL_ACCURATE_SETTINGS = frozenset((
+    "draw_quality", "quality", "planning_resolution",
+    "background_simplification", "color_grouping", "stroke_optimizer",
+    "adaptive_detail", "time_budget_mode", "target_stroke_count",
+    "max_stroke_cap", "progressive_rendering", "color_rendering", "color_fidelity",
+))
+
+
+def profile_setting_is_locked(key: str, options: dict) -> bool:
+    """Keep explicit accuracy/budget choices through every automatic preset pass."""
+    budget=options.get(key)
+    if key == "time_budget_mode" and isinstance(budget,str) and budget in UNLIMITED_TIME_MODES:
+        return True
+    return options.get("draw_quality") == "Pixel Accurate" and key in PIXEL_ACCURATE_SETTINGS
 
 
 def validate_profile_engine(value: str) -> str:
@@ -274,19 +289,11 @@ def resolve_profile_policy(profile_name: str, requested: dict, *, mode: str = "A
     if mode == "Auto":
         pixel_accurate = str(effective.get("draw_quality") or "") == "Pixel Accurate"
         for key, value in policy["overrides"].items():
-            if key=="time_budget_mode" and effective.get(key)=="Unlimited":
-                continue
             # v1.0.86 Block A: explicit Pixel Accurate is a quality lock.
             # A browser speed policy may still supply safe target/tool defaults,
             # but it must not reduce source information or impose destructive
             # stroke/color caps before the accuracy planner runs.
-            if pixel_accurate and key in {
-                "draw_quality", "quality", "planning_resolution",
-                "background_simplification", "color_grouping",
-                "stroke_optimizer", "adaptive_detail", "time_budget_mode",
-                "target_stroke_count", "max_stroke_cap", "progressive_rendering",
-                "color_rendering", "color_fidelity"
-            }:
+            if profile_setting_is_locked(key, effective):
                 continue
             old = effective.get(key)
             # Step 5: when the user selected Auto and this profile uses the

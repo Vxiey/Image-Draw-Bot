@@ -11,7 +11,9 @@ DEFAULT_WORDS=tuple(sorted(set('''airplane apple arm banana bear bed bee bicycle
 
 
 def normalize(text):
-    return unicodedata.normalize('NFC',text).casefold().strip()
+    # Case folding can decompose a precomposed letter (e.g. ǰ or ΐ). Compose
+    # afterwards too so our letter validator and wildcard count see one letter.
+    return unicodedata.normalize('NFC',unicodedata.normalize('NFC',text).casefold()).strip()
 
 
 def load_words(path):

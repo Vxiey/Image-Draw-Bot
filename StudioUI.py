@@ -238,7 +238,7 @@ def build_ui(a, quality, speed):
     profile_pill.pack(side='left', padx=(8, 0))
 
     btn(header, 'ℹ  About', a.show_about, width=76, height=34).pack(side='right')
-    guide_btn=btn(header, '❔  Get started', a.show_welcome, width=112, height=34); guide_btn.pack(side='right', padx=(0, 8)); tooltip(guide_btn,'Learn target setup, drawing modes, previews and troubleshooting.')
+    guide_btn=btn(header, '❔  Get started', a.show_welcome, width=112, height=34); guide_btn.pack(side='right', padx=(0, 8)); tooltip(guide_btn,'Learn target setup, drawing modes, previews and troubleshooting. Shift+F1 opens this guide; F1 is Quick Start.')
     wizard_btn=btn(header, '🧭  Setup wizard', a.show_beginner_setup_wizard, width=126, height=34); wizard_btn.pack(side='right', padx=(0, 8)); tooltip(wizard_btn,'Step 20: show exactly what is missing before Start. No mouse input is used.')
     tools_button = button(header, '🧰  Tools', lambda: None, width=78, height=34)
     tools_button.pack(side='right', padx=(0, 8))
@@ -917,24 +917,32 @@ def build_ui(a, quality, speed):
         ui_state_running['value'] = True
         try:
             tool_ready = bool(a._paint_tool_preflight_ready())
+            # The checklist and wizard describe one snapshot. In particular,
+            # target-lock validation may read calibration files; do it once.
+            target_locked = bool(a._target_lock_valid())
+            preflight_passed = bool(a._safety_preflight_valid())
+            dry_run_passed = bool(a._dry_run_valid())
+            full_draw_unlocked = bool(a._full_draw_unlocked())
+            palette_ready = palette_ready_now()
             state = compute_workspace_state(
                 image_loaded=a.original is not None,
                 target_name=a.game.get(),
                 paint_tools_ready=tool_ready,
                 area_ready=len(a.corners) == 2,
-                palette_ready=palette_ready_now(),
+                palette_ready=palette_ready,
                 test_passed=bool(getattr(a, 'small_test_passed', False)),
-                target_locked=bool(a._target_lock_valid()),
-                preflight_passed=bool(a._safety_preflight_valid()),
-                dry_run_passed=bool(a._dry_run_valid()),
-                gpu_text=gpu_summary(), strict_safety=(a.game.get() == 'Microsoft Paint'), activity=a.activity, status=a.status.get())
+                target_locked=target_locked,
+                preflight_passed=preflight_passed,
+                dry_run_passed=dry_run_passed,
+                gpu_text=gpu_summary(), strict_safety=(a.game.get() == 'Microsoft Paint'),
+                prepare_on_start=(a.game.get() == 'Microsoft Paint'), activity=a.activity, status=a.status.get())
             try:
                 from BeginnerSetupWizard import build_setup_wizard, format_setup_status
                 steps_for_wizard = build_setup_wizard(profile_name=a.game.get(), image_loaded=a.original is not None,
-                    tools_ready=tool_ready, palette_ready=palette_ready_now(), area_ready=len(a.corners) == 2,
+                    tools_ready=tool_ready, palette_ready=palette_ready, area_ready=len(a.corners) == 2,
                     small_test_passed=bool(getattr(a, 'small_test_passed', False)),
-                    target_locked=bool(a._target_lock_valid()), preflight_passed=bool(a._safety_preflight_valid()),
-                    dry_run_passed=bool(a._dry_run_valid()), full_draw_unlocked=bool(a._full_draw_unlocked()), activity=a.activity)
+                    target_locked=target_locked, preflight_passed=preflight_passed,
+                    dry_run_passed=dry_run_passed, full_draw_unlocked=full_draw_unlocked, activity=a.activity)
                 a.setup_wizard_text.set(format_setup_status(steps_for_wizard))
             except Exception:
                 pass
@@ -1046,7 +1054,11 @@ def build_ui(a, quality, speed):
                 error_card.pack_forget()
 
             # The sidebar start button mirrors the controller-owned footer button.
-            ready = state.ready and not a.activity and bool(a._full_draw_unlocked())
+            try:
+                primary_state = a.start.cget('state')
+            except (tk.TclError, RuntimeError, AttributeError):
+                primary_state = 'disabled'
+            ready = primary_state == 'normal' and not a.activity and not a.closing
             a._safe_widget_configure(a.start_secondary, state='normal' if ready else 'disabled')
         finally:
             ui_state_running['value'] = False
@@ -1075,7 +1087,7 @@ def build_ui(a, quality, speed):
     refresh_ui_state()
 
     root.bind('<Control-o>', lambda _e: a.open_file() if not a.activity else None)
-    root.bind('<F1>', lambda _e: a.show_welcome())
+    root.bind('<Shift-F1>', lambda _e: a.show_welcome())
 
     from SmoothScroll import install_scrolling
     a.scroll_dispatcher=install_scrolling(root)

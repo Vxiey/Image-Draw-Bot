@@ -28,6 +28,7 @@ class PreviewSafetyPlan:
     groups: list[list[Path]]
     mode: str
     meta: dict = field(default_factory=dict)
+    sequence: list[dict] | None = None
 
     def as_dict(self) -> dict:
         return deepcopy(self.meta)
@@ -116,6 +117,8 @@ def build_preview_safety_plan(
     execution_groups,
     options: dict,
     cancelled=lambda: False,
+    *,
+    execution_sequence=None,
 ) -> PreviewSafetyPlan:
     """Replay execution path safety in preview-local canvas coordinates."""
     if cancelled():
@@ -130,11 +133,15 @@ def build_preview_safety_plan(
         outline=bool(options.get('outline')),
     )
     source_groups = execution_groups if execution_groups is not None else groups
-    safe_groups: list[list[Path]] = []
+    safe_groups: list[list[Path]] = [[] for _ in (source_groups or [])]
+    safe_sequence = [] if execution_sequence is not None else None
+    guards = {max(1, int(options.get('brush_px', 3))): guard}
+    used_brushes = set()
     meta = {
         'active': True,
         'mode': edge_mode,
-        'source': 'execution_groups' if execution_groups is not None else 'legacy_groups',
+        'source': ('execution_sequence' if execution_sequence is not None else
+                   'execution_groups' if execution_groups is not None else 'legacy_groups'),
         'paths_in': 0,
         'drawable_subpaths': 0,
         'output_points': 0,
@@ -147,51 +154,58 @@ def build_preview_safety_plan(
         'stopped': False,
         'canvas_guard': guard.model.as_dict(),
     }
-    path_index = 0
-    for color_index, items in enumerate(source_groups or []):
+    def source_paths():
+        if execution_sequence is not None:
+            for entry in execution_sequence:
+                index = entry['color_index']
+                if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(safe_groups):
+                    raise ValueError('Invalid sequence palette index.')
+                yield index, entry.get('path') or (), max(1, int(entry.get('brush_px') or options.get('brush_px', 3)))
+        else:
+            for index, items in enumerate(source_groups or []):
+                for item in items:
+                    yield index, item, max(1, int(options.get('brush_px', 3)))
+
+    for path_index, (color_index, item, physical_brush) in enumerate(source_paths(), 1):
         if cancelled():
             raise InterruptedError()
-        color_paths: list[Path] = []
-        for item in items:
-            if cancelled():
-                raise InterruptedError()
-            path_index += 1
-            meta['paths_in'] += 1
-            if execution_groups is not None:
-                raw_canvas_points = []
-                for number, (x, y) in enumerate(item):
-                    if number % 512 == 0 and cancelled():
-                        raise InterruptedError()
-                    raw_canvas_points.append(transform.point(x, y))
-            else:
-                x1, y1, x2, y2 = item
-                raw_canvas_points = [transform.point(x1, y1), transform.point(x2, y2)]
-            try:
-                result = apply_edge_behavior(
-                    guard,
-                    raw_canvas_points,
-                    behavior=edge_mode,
-                    profile_name=options.get('profile_name'),
-                    drawing_mode=options.get('drawing_mode'),
-                    outline=bool(options.get('outline')),
-                    context='preview stroke',
-                    cancelled=cancelled,
-                )
-            except CanvasSafetyStop as error:
-                meta['source_outside_canvas'] += 1
-                meta['stopped'] = True
-                record_debug_event(meta, path_index, color_index, raw_canvas_points, exception=error)
-                continue
-            meta[result.strategy] = int(meta.get(result.strategy, 0)) + 1
-            record_debug_event(meta, path_index, color_index, raw_canvas_points, result)
-            if not result.subpaths:
-                continue
-            for subpath in result.subpaths:
-                if len(subpath) >= 1:
-                    color_paths.append(tuple(subpath))
-                    meta['drawable_subpaths'] += 1
-                    meta['output_points'] += len(subpath)
-        safe_groups.append(color_paths)
+        meta['paths_in'] += 1
+        if execution_groups is not None or execution_sequence is not None:
+            raw_canvas_points = []
+            for number, (x, y) in enumerate(item):
+                if number % 512 == 0 and cancelled():
+                    raise InterruptedError()
+                raw_canvas_points.append(transform.point(x, y))
+        else:
+            x1, y1, x2, y2 = item
+            raw_canvas_points = [transform.point(x1, y1), transform.point(x2, y2)]
+        if physical_brush not in guards:
+            guards[physical_brush] = preview_canvas_guard(dict(options, brush_px=physical_brush), fitted)
+        used_brushes.add(physical_brush)
+        try:
+            result = apply_edge_behavior(
+                guards[physical_brush], raw_canvas_points,
+                behavior=edge_mode,
+                profile_name=options.get('profile_name'),
+                drawing_mode=options.get('drawing_mode'),
+                outline=bool(options.get('outline')),
+                context='preview stroke', cancelled=cancelled,
+            )
+        except CanvasSafetyStop as error:
+            meta['source_outside_canvas'] += 1
+            meta['stopped'] = True
+            record_debug_event(meta, path_index, color_index, raw_canvas_points, exception=error)
+            continue
+        meta[result.strategy] = int(meta.get(result.strategy, 0)) + 1
+        record_debug_event(meta, path_index, color_index, raw_canvas_points, result)
+        for subpath in result.subpaths:
+            if len(subpath) >= 1:
+                path = tuple(subpath)
+                safe_groups[color_index].append(path)
+                if safe_sequence is not None:
+                    safe_sequence.append({'color_index': color_index, 'path': path, 'brush_px': physical_brush})
+                meta['drawable_subpaths'] += 1
+                meta['output_points'] += len(subpath)
     skipped = int(meta.get('hard_skip', 0)) + int(meta.get('safe_skip', 0)) + int(meta.get('source_outside_canvas', 0))
     adapted = int(meta.get('adaptive_boundary', 0)) + int(meta.get('preserve_outline_boundary', 0))
     meta['skipped_total'] = skipped
@@ -199,9 +213,14 @@ def build_preview_safety_plan(
     meta['changed_total'] = skipped + adapted
     meta['clipped_or_guarded'] = int(meta.get('hard_clip', 0)) + adapted
     meta['safety_debug'] = summarize_debug(meta)
+    if safe_sequence is not None:
+        meta['execution_sequence_rendered'] = True
+        meta['canvas_guards_by_brush'] = {str(width): guards[width].model.as_dict() for width in sorted(used_brushes)}
+        if used_brushes:
+            meta['canvas_guard'] = guards[min(used_brushes)].model.as_dict()
     if cancelled():
         raise InterruptedError()
-    return PreviewSafetyPlan(safe_groups, edge_mode, meta)
+    return PreviewSafetyPlan(safe_groups, edge_mode, meta, safe_sequence)
 
 
 def canvas_to_preview(point: Sequence[int | float], fitted: Sequence[int | float], preview_size: Sequence[int | float]) -> tuple[float, float]:
@@ -215,31 +234,56 @@ def draw_safe_paths(draw: ImageDraw.ImageDraw, safety_plan: PreviewSafetyPlan, f
         raise InterruptedError()
     path_count = 0
     dot_count = 0
-    for index, paths in enumerate(safety_plan.groups):
+    def render_paths():
+        if safety_plan.sequence is not None:
+            scale = float(preview_size[0]) / float(fitted[0])
+            for entry in safety_plan.sequence:
+                yield entry['color_index'], entry['path'], max(1, round(entry['brush_px'] * scale))
+        else:
+            for index, paths in enumerate(safety_plan.groups):
+                for path in paths:
+                    yield index, path, max(1, int(brush))
+
+    for index, path, width in render_paths():
         color = palette_rgb[index] if index < len(palette_rgb) else (0, 0, 0)
-        for path in paths:
-            if cancelled():
+        if cancelled():
+            raise InterruptedError()
+        if not path:
+            continue
+        mapped = []
+        for number, p in enumerate(path):
+            if number % 512 == 0 and cancelled():
                 raise InterruptedError()
-            if not path:
-                continue
-            mapped = []
-            for number, p in enumerate(path):
-                if number % 512 == 0 and cancelled():
-                    raise InterruptedError()
-                mapped.append(canvas_to_preview(p, fitted, preview_size))
-            if len(mapped) == 1:
-                x, y = mapped[0]
-                radius = max(1, brush) / 2
-                draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
-                dot_count += 1
-                path_count += 1
-                continue
-            draw.line([coord for p in mapped for coord in p], fill=color, width=max(1, int(brush)), joint='curve')
-            radius = max(1, brush) / 2
-            for x, y in (mapped[0], mapped[-1]):
-                draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color)
+            mapped.append(canvas_to_preview(p, fitted, preview_size))
+        def cap(point):
+            x, y = point
+            if width == 1:
+                draw.point((x, y), fill=color)
+            else:
+                before, after = (width - 1) // 2, width // 2
+                draw.ellipse((x - before, y - before, x + after, y + after), fill=color)
+        if len(mapped) == 1:
+            cap(mapped[0])
+            dot_count += 1
             path_count += 1
+            continue
+        draw.line([coord for p in mapped for coord in p], fill=color, width=width, joint='curve')
+        for p in (mapped[0], mapped[-1]):cap(p)
+        path_count += 1
+    if cancelled():raise InterruptedError()
     return path_count, dot_count
+
+
+def draw_safe_sequence(draw, image_size, fitted, preview_size, sequence, palette_rgb,
+                       options, cancelled=lambda: False):
+    """Replay ordered passes with each entry's physical brush and CanvasGuard.
+
+    Reuse a guard per brush width; paths stay in sequence order instead of being
+    regrouped by colour, which would erase late recovered details.
+    """
+    plan = build_preview_safety_plan(image_size, fitted, [[] for _ in palette_rgb], None,
+                                    options, cancelled, execution_sequence=sequence)
+    return draw_safe_paths(draw, plan, fitted, preview_size, palette_rgb, 1, cancelled)
 
 
 def render_preview_safety_map(source: Image.Image, preview_size, safety_plan: PreviewSafetyPlan, palette_rgb, brush: int, cancelled=lambda: False) -> Image.Image:
@@ -272,6 +316,13 @@ def render_preview_safety_map(source: Image.Image, preview_size, safety_plan: Pr
         draw.line([coord for p in outer + outer[:1] for coord in p], fill=(220, 87, 87), width=2)
     if len(inner) >= 2:
         draw.line([coord for p in inner + inner[:1] for coord in p], fill=(98, 226, 146), width=2)
+    for other in (safety_plan.meta.get('canvas_guards_by_brush') or {}).values():
+        other_polygon = other.get('safe_polygon') or ()
+        if other_polygon == safe_polygon:
+            continue
+        boundary = mapped_poly(other_polygon)
+        if len(boundary) >= 2:
+            draw.line([coord for p in boundary + boundary[:1] for coord in p], fill=(73, 147, 106), width=1)
 
     # Draw the executable preview paths.  Use a slightly brighter visible palette
     # against the dark safety map without changing the actual drawing preview.

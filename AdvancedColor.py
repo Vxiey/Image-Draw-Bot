@@ -242,11 +242,17 @@ def _color_rows_worker(args):
                             custom_color_workflow, color_layers, color_fidelity)
                         if secondary is not None and _should_overlay(x, y, ratio, color_layers):
                             overlay_index = secondary
+                            # The public plan is executed by colour, not in a
+                            # global base-then-overlay order. Assign each Bayer
+                            # pixel to exactly one colour so a later base batch
+                            # cannot erase an earlier secondary stipple.
+                            base_index = None
                     else:
                         base_index = _closest_palette_index_cached(
                             tuple(map(int, source_rgb[:3])), palette, names,
                             color_rendering, custom_color_workflow, color_fidelity)
-                    unique_base.add(base_index)
+                    if base_index is not None:
+                        unique_base.add(base_index)
                     if overlay_index is not None:
                         unique_overlay.add(overlay_index); layered_pixels += 1
             if not lines:
@@ -455,11 +461,13 @@ def build_color_strokes(image, *, lines: bool = True, skip_white: bool = True,
                                 custom_color_workflow, color_layers, color_fidelity)
                             if secondary is not None and _should_overlay(x, y, ratio, color_layers):
                                 overlay_index = secondary
+                                base_index = None
                         else:
                             base_index = _closest_palette_index_cached(
                                 source_rgb, palette, names, color_rendering,
                                 custom_color_workflow, color_fidelity)
-                        unique_base.add(base_index)
+                        if base_index is not None:
+                            unique_base.add(base_index)
                         if overlay_index is not None:
                             unique_overlay.add(overlay_index); layered_pixels += 1
                 if not lines:

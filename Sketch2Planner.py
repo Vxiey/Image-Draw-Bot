@@ -50,10 +50,17 @@ def _filter_components(mask: np.ndarray, strength: np.ndarray, threshold: float,
         if cancelled():raise InterruptedError()
         for x in range(w):
             if not mask[y,x] or seen[y,x]:continue
-            q=deque([(y,x)]);seen[y,x]=True;cells=[];peak=0.0
+            q=deque([(y,x)]);seen[y,x]=True;cells=[];peak=0.0;count=0
             while q:
-                cy,cx=q.popleft();cells.append((cy,cx));peak=max(peak,float(strength[cy,cx]))
-                if len(cells) % 512 == 0 and cancelled():
+                cy,cx=q.popleft();count+=1
+                # A component meeting the size floor is already guaranteed to
+                # survive. Retain coordinates/peak evidence only while it can
+                # still be a removable or protected small component.
+                if count < min_component:
+                    cells.append((cy,cx));peak=max(peak,float(strength[cy,cx]))
+                elif count == min_component:
+                    cells.clear()
+                if count % 512 == 0 and cancelled():
                     raise InterruptedError()
                 for dy in (-1,0,1):
                     for dx in (-1,0,1):
@@ -61,9 +68,9 @@ def _filter_components(mask: np.ndarray, strength: np.ndarray, threshold: float,
                         ny,nx=cy+dy,cx+dx
                         if 0<=ny<h and 0<=nx<w and mask[ny,nx] and not seen[ny,nx]:
                             seen[ny,nx]=True;q.append((ny,nx))
-            keep=len(cells)>=min_component or (len(cells)>=2 and peak>=threshold*protect_factor)
+            keep=count>=min_component or (count>=2 and peak>=threshold*protect_factor)
             if keep:
-                if len(cells)<min_component:protected+=1
+                if count<min_component:protected+=1
             else:
                 removed+=1
                 for cy,cx in cells:out[cy,cx]=False

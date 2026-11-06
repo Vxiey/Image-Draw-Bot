@@ -67,7 +67,10 @@ def _clean_path(path) -> Path:
 def _nearest_order(paths: Sequence[Path], *, speed: str = 'Balanced', allow_reverse: bool = True,
                    cancelled=lambda: False) -> list[Path]:
     """Adaptive bounded nearest-neighbour ordering."""
+    from SpeedOptimizer import normalize_speed
+    speed = normalize_speed(speed or 'Balanced')
     remaining = [_clean_path(p) for p in paths if p]
+    original = remaining
     if len(remaining) < 3:
         return remaining
     if speed == 'Safe':
@@ -117,7 +120,9 @@ def _nearest_order(paths: Sequence[Path], *, speed: str = 'Balanced', allow_reve
         following = next(source, None)
         if following is not None:
             remaining.append(following)
-    return output
+    # A local greedy choice can make the eventual pen-up route longer. Ordering
+    # changes no drawing work, so keep it only when the complete route improves.
+    return output if pen_up_distance(output) <= pen_up_distance(original) + 1e-9 else original
 
 
 def _two_opt_budget(speed: str, path_count: int) -> tuple[int, int]:
@@ -127,6 +132,8 @@ def _two_opt_budget(speed: str, path_count: int) -> tuple[int, int]:
     TSP solver. Very large jobs reduce their budget to protect preview/draw-start
     latency.
     """
+    from SpeedOptimizer import normalize_speed
+    speed = normalize_speed(speed or 'Balanced')
     if path_count < 4:
         return 0, 0
     if speed == 'Safe':

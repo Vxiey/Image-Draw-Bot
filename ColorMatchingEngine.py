@@ -52,12 +52,12 @@ def visible_rgb_image(image: Image.Image, background: RGB=(255,255,255)) -> Imag
     """Return the RGB pixels the user actually sees, including alpha compositing."""
     if image.mode == 'RGB' and 'transparency' not in image.info:
         return image.copy()
-    rgba=image.convert('RGBA')
-    if rgba.getextrema()[3] == (255,255):
-        return rgba.convert('RGB')
-    backdrop=Image.new('RGBA',rgba.size,tuple(background)+(255,))
-    backdrop.alpha_composite(rgba)
-    return backdrop.convert('RGB')
+    with image.convert('RGBA') as rgba:
+        if rgba.getextrema()[3] == (255,255):
+            return rgba.convert('RGB')
+        with Image.new('RGBA',rgba.size,tuple(background)+(255,)) as backdrop:
+            backdrop.alpha_composite(rgba)
+            return backdrop.convert('RGB')
 
 
 def _dominant_exact(pixels: np.ndarray) -> tuple[RGB,float]:

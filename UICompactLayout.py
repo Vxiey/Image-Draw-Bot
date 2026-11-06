@@ -22,7 +22,7 @@ PANEL_ALT = '#1b2635'
 def _widget_text(widget):
     try:
         return str(widget.cget('text') or '')
-    except (tk.TclError, AttributeError, TypeError):
+    except (tk.TclError, AttributeError, TypeError, ValueError):
         return ''
 
 
@@ -38,6 +38,36 @@ def _find_text(parent, needle):
         if needle in _widget_text(widget):
             return widget
     return None
+
+
+class _WidgetLookup:
+    """Read the original widget tree once while installing sidebar groups."""
+
+    def __init__(self, root):
+        self.rows=[]
+        self.ranges={}
+        stack=[(root,False,False)]
+        while stack:
+            widget,finished,include=stack.pop()
+            if finished:
+                start,_=self.ranges[id(widget)]
+                self.ranges[id(widget)]=(start,len(self.rows))
+                continue
+            if include:self.rows.append((widget,_widget_text(widget)))
+            self.ranges[id(widget)]=(len(self.rows),None)
+            stack.append((widget,True,include))
+            try:children=tuple(widget.winfo_children())
+            except tk.TclError:children=()
+            stack.extend((child,False,True) for child in reversed(children))
+
+    def find(self,parent,needle):
+        bounds=self.ranges.get(id(parent))
+        if bounds is None:return None
+        needle=str(needle)
+        for index in range(*bounds):
+            widget,text=self.rows[index]
+            if needle in text:return widget
+        return None
 
 
 def _direct_child(widget, parent):
@@ -64,12 +94,21 @@ def _unique(items):
 
 def _pack_options(widget):
     try:
-        options = dict(widget.pack_info())
+        # CTk's pack_info contains physical padding, whereas its pack() expects
+        # logical padding and scales it. Reusing pack_info would scale twice.
+        previous=(getattr(widget,'_last_geometry_manager_call',None)
+                  if isinstance(widget,ctk.CTkBaseClass) else None)
+        if (isinstance(previous,dict) and isinstance(previous.get('kwargs'),dict) and
+                getattr(previous.get('function'),'__name__','') in ('pack','pack_configure') and
+                widget.winfo_manager()=='pack'):
+            options=dict(previous['kwargs'])
+        else:
+            options = dict(widget.pack_info())
     except (tk.TclError, AttributeError):
         return {}
     # Tk returns the containing widget and ordering helpers too; those are stale
     # after progressive-disclosure moves the control below its section header.
-    for key in ('in', 'before', 'after'):
+    for key in ('in', 'in_', 'before', 'after'):
         options.pop(key, None)
     return options
 
@@ -92,31 +131,63 @@ class CompactGroup:
         self.hint = str(hint)
         self.items = [w for w in _unique(items) if getattr(w, 'master', None) is parent]
         self.saved_pack = {id(w): _pack_options(w) for w in self.items}
+        self.original_order=tuple(parent.pack_slaves())
+        self.shell=None
+        self._rolled_back=False
         self.open = False
 
-        self.shell = ctk.CTkFrame(parent, fg_color=PANEL_ALT, corner_radius=10,
-                                  border_width=1, border_color=LINE)
-        self.toggle = ctk.CTkButton(
-            self.shell, text='›  ' + self.title, command=self.toggle_open,
-            height=34, anchor='w', corner_radius=8, border_width=0,
-            fg_color='transparent', hover_color=FIELD,
-            text_color=TEXT, font=('Segoe UI', 10, 'bold'))
-        self.toggle.pack(fill='x', padx=5, pady=(4, 0))
-        self.caption = ctk.CTkLabel(
-            self.shell, text=self.hint, anchor='w', justify='left',
-            text_color=MUTED, font=('Segoe UI', 9), wraplength=248)
-        self.caption.pack(fill='x', padx=11, pady=(0, 6))
+        try:
+            self.shell = ctk.CTkFrame(parent, fg_color=PANEL_ALT, corner_radius=10,
+                                      border_width=1, border_color=LINE)
+            self.toggle = ctk.CTkButton(
+                self.shell, text='›  ' + self.title, command=self.toggle_open,
+                height=34, anchor='w', corner_radius=8, border_width=0,
+                fg_color='transparent', hover_color=FIELD,
+                text_color=TEXT, font=('Segoe UI', 10, 'bold'))
+            self.toggle.pack(fill='x', padx=5, pady=(4, 0))
+            self.caption = ctk.CTkLabel(
+                self.shell, text=self.hint, anchor='w', justify='left',
+                text_color=MUTED, font=('Segoe UI', 9), wraplength=248)
+            self.caption.pack(fill='x', padx=11, pady=(0, 6))
 
+            for widget in self.items:
+                if widget.winfo_manager() == 'pack':
+                    widget.pack_forget()
+
+            pack = dict(fill='x', pady=5)
+            if before is not None and before.winfo_manager() == 'pack':
+                pack['before'] = before
+            elif after is not None and after.winfo_manager() == 'pack':
+                pack['after'] = after
+            self.shell.pack(**pack)
+        except BaseException as error:
+            problems=self.rollback()
+            if problems:error.add_note('Sidebar rollback: '+'; '.join(problems))
+            raise
+
+    def rollback(self):
+        """Restore original controls/order and destroy only our disclosure shell."""
+        if self._rolled_back:return ()
+        self._rolled_back=True
+        wanted={id(widget) for widget in self.items}
+        originally_packed={id(widget) for widget in self.original_order}
+        problems=[];following=None
+        for widget in reversed(self.original_order):
+            try:
+                if id(widget) in wanted:
+                    options=dict(self.saved_pack[id(widget)])
+                    if following is not None:options['before']=following
+                    widget.pack(**options)
+                if widget.winfo_manager()=='pack':following=widget
+            except Exception as error:problems.append(str(error))
         for widget in self.items:
-            if widget.winfo_manager() == 'pack':
-                widget.pack_forget()
-
-        pack = dict(fill='x', pady=5)
-        if before is not None and before.winfo_manager() == 'pack':
-            pack['before'] = before
-        elif after is not None and after.winfo_manager() == 'pack':
-            pack['after'] = after
-        self.shell.pack(**pack)
+            if id(widget) not in originally_packed:
+                try:widget.pack_forget()
+                except Exception as error:problems.append(str(error))
+        if self.shell is not None:
+            try:self.shell.destroy()
+            except Exception as error:problems.append(str(error))
+        return tuple(problems)
 
     def _scope_allowed(self, widget):
         scope = self.layout.scope_by_widget.get(id(widget))
@@ -183,6 +254,14 @@ class CompactLayout:
         self.app = app
         self.scope_by_widget = {id(widget): scope for widget, scope in scoped_entries}
         self.groups = []
+        self._lookup=None
+
+    def _find(self,parent,needle):
+        return self._lookup.find(parent,needle) if self._lookup is not None else _find_text(parent,needle)
+
+    def _direct(self,parent,needle):
+        widget=self._find(parent,needle)
+        return _direct_child(widget,parent) if widget is not None else None
 
     def add(self, parent, title, hint, items, *, before=None, after=None):
         items = _unique(items)
@@ -197,11 +276,11 @@ class CompactLayout:
         if selector is None:
             return
         parent = selector.master
-        guide = _direct_containing(parent, 'Profile guide')
+        guide = self._direct(parent, 'Profile guide')
         items = [
-            _direct_containing(parent, 'Custom app profile'),
-            _direct_containing(parent, 'Export'),
-            _direct_containing(parent, 'Reset profile to defaults'),
+            self._direct(parent, 'Custom app profile'),
+            self._direct(parent, 'Export'),
+            self._direct(parent, 'Reset profile to defaults'),
             _direct_child(getattr(self.app, 'paint_check', None), parent),
             _direct_child(getattr(self.app, 'paint_tool_menu', None), parent),
             _direct_child(getattr(self.app, 'paint_tool_label', None), parent),
@@ -215,8 +294,8 @@ class CompactLayout:
         if button is None:
             return
         parent = button.master
-        first = _direct_containing(parent, 'Clear image')
-        info = _direct_containing(parent, 'No image information yet.')
+        first = self._direct(parent, 'Clear image')
+        info = self._direct(parent, 'No image information yet.')
         if first is None or info is None:
             return
         self.add(parent, 'Image options & automation',
@@ -241,18 +320,18 @@ class CompactLayout:
         # Step 4 has no public frame handle. Resolve it from the stable control
         # labels already used by StudioUI regression tests.
         root = self.app.root
-        sketch_detail = _find_text(root, 'Sketch detail')
+        sketch_detail = self._find(root, 'Sketch detail')
         if sketch_detail is None:
             return
         row = getattr(sketch_detail, 'master', None)
-        while row is not None and _direct_containing(row, 'Black contour sketch') is None:
+        while row is not None and self._direct(row, 'Black contour sketch') is None:
             row = getattr(row, 'master', None)
         parent = row
         if parent is None:
             return
-        first = _direct_containing(parent, 'Sketch detail')
-        stop = _direct_containing(parent, '🎨  Quality')
-        anchor = _direct_containing(parent, 'Black contour sketch')
+        first = self._direct(parent, 'Sketch detail')
+        stop = self._direct(parent, '🎨  Quality')
+        anchor = self._direct(parent, 'Black contour sketch')
         if first is None or stop is None:
             return
         self.add(parent, 'Fine tuning',
@@ -265,8 +344,8 @@ class CompactLayout:
         if start is None or review_button is None:
             return
         parent = start.master
-        preview_mode = _direct_containing(parent, 'Preview mode')
-        build_preview = _direct_containing(parent, 'Build preview')
+        preview_mode = self._direct(parent, 'Preview mode')
+        build_preview = self._direct(parent, 'Build preview')
         if preview_mode is not None and build_preview is not None:
             preview_items = _slice_children(parent, preview_mode, build_preview)
             self.add(parent, 'Preview options',
@@ -274,8 +353,8 @@ class CompactLayout:
                      preview_items, before=build_preview)
 
         review_card = _direct_child(review_button, parent)
-        wizard = _direct_containing(parent, 'Open setup wizard')
-        final_help = _direct_containing(parent, 'Paint: load an image')
+        wizard = self._direct(parent, 'Open setup wizard')
+        final_help = self._direct(parent, 'Paint: load an image')
         items = [wizard, review_card,
                  _direct_child(getattr(self.app, 'target_lock_secondary', None), parent),
                  _direct_child(getattr(self.app, 'safety_preflight_secondary', None), parent),
@@ -290,7 +369,7 @@ class CompactLayout:
         # StudioUI's existing collapsibles keep their own state; invoke their
         # button instead of directly hiding the body so the next click opens it.
         for marker in ('🎨  Quality', '🛠  Developer tools'):
-            button = _find_text(self.app.root, '▾  ' + marker)
+            button = self._find(self.app.root, '▾  ' + marker)
             if button is None:
                 continue
             invoke = getattr(button, 'invoke', None)
@@ -301,13 +380,23 @@ class CompactLayout:
                     pass
 
     def install(self):
-        self._install_profile_group()
-        self._install_image_group()
-        self._install_target_group()
-        self._install_tuning_group()
-        self._install_safety_group()
-        self._collapse_existing_heavy_cards()
-        return self
+        try:
+            self._lookup=_WidgetLookup(self.app.root)
+            self._install_profile_group()
+            self._install_image_group()
+            self._install_target_group()
+            self._install_tuning_group()
+            self._install_safety_group()
+            self._collapse_existing_heavy_cards()
+            return self
+        except BaseException as error:
+            for group in reversed(self.groups):
+                problems=group.rollback()
+                if problems:error.add_note('Sidebar rollback: '+'; '.join(problems))
+            self.groups.clear()
+            raise
+        finally:
+            self._lookup=None
 
     def refresh(self):
         for group in self.groups:

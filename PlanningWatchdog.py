@@ -20,7 +20,7 @@ class PlanningAttempt:
     total: int
     name: str
     options: dict
-    timeout_seconds: float
+    timeout_seconds: float | None
     fallback: bool = False
 
 
@@ -68,14 +68,14 @@ def _reduced_target(current: Any, *, ceiling: int) -> str:
         return str(ceiling)
 
 
-def _with_meta(options: Mapping[str, Any], name: str, *, timeout: float,
+def _with_meta(options: Mapping[str, Any], name: str, *, timeout: float | None,
                fallback_level: int, overrides: Mapping[str, Any] | None = None) -> dict:
     out = dict(options)
     if overrides:
         out.update(overrides)
     out["planning_attempt_name"] = name
     out["planning_watchdog_fallback_level"] = int(fallback_level)
-    out["planning_watchdog_attempt_timeout_seconds"] = float(timeout)
+    out["planning_watchdog_attempt_timeout_seconds"] = None if timeout is None else float(timeout)
     return out
 
 
@@ -103,9 +103,9 @@ def build_planning_attempts(options: Mapping[str, Any], *, test: bool = False,
     mode = str(options.get("planning_watchdog", "Auto"))
     enabled = watchdog_enabled(mode, preview=preview, test=test)
     base = _base_timeout(options)
-    primary_timeout = base if not enabled else min(base, 24.0)
+    primary_timeout = None if mode == 'Off' else base if not enabled else min(base, 24.0)
 
-    attempts: list[tuple[str, dict, float, bool]] = [(
+    attempts: list[tuple[str, dict, float | None, bool]] = [(
         "Primary settings",
         _with_meta(options, "Primary settings", timeout=primary_timeout, fallback_level=0),
         primary_timeout,
@@ -158,11 +158,13 @@ def build_planning_attempts(options: Mapping[str, Any], *, test: bool = False,
             True,
         ))
 
-    if options.get("time_budget_mode") in ("Unlimited", "Unlimited / Accuracy"):
+    if (options.get("time_budget_mode") in ("Unlimited", "Unlimited / Accuracy")
+            or options.get("unlimited_time") or options.get("draw_quality") == 'Pixel Accurate'):
         for _name, opts, _timeout, fallback in attempts:
             if fallback:
                 for key in ("target_stroke_count", "target_stroke_count_resolved", "max_stroke_cap",
-                            "background_simplification", "color_rendering", "custom_color_workflow"):
+                            "background_simplification", "color_rendering", "custom_color_workflow",
+                            "planning_resolution", "color_layers", "background_fill", "use_region_fill_engine"):
                     if key in options:
                         opts[key] = options[key]
                     else:

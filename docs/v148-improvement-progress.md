@@ -15,12 +15,18 @@ Continue application-wide correctness, performance and security improvements, wi
 - The requested count of 1,000 has **not** been reached. No release claims, antivirus verdicts or signing status should be inferred from source improvements or old binary scans.
 
 Batch 03 adds 116 distinct changes: colour quality 16, rendering/planning 38,
-GPU/platform 22 and image workflow/UI 40. The implemented total is **614**;
-**386 remain**. Final frozen-source integration passed 2,800 tests in 70.634 seconds
+GPU/platform 22 and image workflow/UI 40. That checkpoint brought the implemented total to **614**. Final frozen-source integration passed 2,800 tests in 70.634 seconds
 with 22 platform/hardware skips and unchanged source hashes. All four independent
 area reviews are closed. The 5,000-cycle source gate, source-package hygiene for
-860 files and eight exact-raster fixtures also passed. This checkpoint has not yet
-passed its own Windows CI.
+860 files and eight exact-raster fixtures also passed. Checkpoint `2aca72acb36b547d75e12a0a59d78325552c21a8` passed Windows/Linux, dependency, CodeQL and packaged Windows GUI/native drag-and-drop CI in [run 42273234504](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42273234504). The initial Ubuntu Node-startup timeout passed on rerun with unchanged source and test timeout.
+
+Batch 04 adds 54 distinct changes: application workflow 27, planning 9,
+UI/profiles 13 and native input/helper lifecycle/privacy 5. The implemented total
+is **668**, with **332 remaining**. Frozen-source integration passed **2,934 tests
+in 75.509 seconds**, with 23 platform/hardware skips and unchanged source hashes.
+Independent source and cross-area reviews are closed. The 5,000-cycle source gate,
+source-package hygiene and eight exact-raster engine fixtures passed. This new
+checkpoint still requires its own Windows/Linux CI; no 1.0.148 release is published.
 
 ## Review method
 
@@ -40,6 +46,7 @@ passed its own Windows CI.
 - [Batch 01 storage/resources](v148-batch01-storage-security.md).
 - [Batch 02 calibration](v148-batch02-calibration.md), [delivery/planning](v148-batch02-delivery-planning.md), [storage/resources](v148-batch02-storage-runtime.md), and [UI/input](v148-batch02-ui-input.md).
 - Batch 03: [colour quality](v148-batch03-colour-quality.md), [rendering/planning](v148-batch03-rendering-planning.md), [GPU/platform](v148-batch03-gpu-platform.md), and [image workflow/UI](v148-batch03-image-workflow.md).
+- Batch 04: [application workflow](v148-batch04-application.md), [planning](v148-batch04-planning.md), [UI/profiles](v148-batch04-ui-profiles.md), and [native input/helpers/privacy](v148-batch04-platform-release.md).
 - [Combined numbered index](IMPROVEMENTS-v1.0.148.md) and [machine-readable registry](v148-improvements.json).
 - `benchmark_engine.py` validates eight deterministic planning fixtures against quantized target geometry. The saved reference has zero mismatched pixels in all eight fixtures.
 - `benchmark_v148_ui.py` reproduces UI helper workload comparisons. It does not exercise real Windows input or physical GPU hardware.

@@ -11,6 +11,8 @@ from dataclasses import dataclass, fields
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from ProfileEngine import profile_setting_is_locked
+
 
 CORE_RELEASE_PROFILES = ("Microsoft Paint", "Gartic Phone", "Skribbl.io", "Skribbl.io Fast")
 BROWSER_RELEASE_PROFILES = ("Gartic Phone", "Skribbl.io", "Skribbl.io Fast")
@@ -277,6 +279,8 @@ def apply_profile_polish(profile_name: str | None, options: Mapping[str, Any] | 
     changed: dict[str, dict[str, Any]] = {}
     if str(out.get("profile_engine") or "Auto") == "Auto":
         for key, value in preset.default_overrides.items():
+            if profile_setting_is_locked(key, out):
+                continue
             old = out.get(key)
             if old != value:
                 out[key] = value
@@ -288,6 +292,7 @@ def apply_profile_polish(profile_name: str | None, options: Mapping[str, Any] | 
         "profile_key": preset.profile_key,
         "preset_name": preset.preset_name,
         "recommended_time_budget": preset.recommended_time_budget,
+        "effective_time_budget": out.get("time_budget_mode", preset.recommended_time_budget),
         "renderer": preset.renderer,
         "detail_level": preset.detail_level,
         "planning_resolution": preset.planning_resolution,
@@ -309,7 +314,7 @@ def format_profile_polish(meta: Mapping[str, Any] | None, *, compact: bool = Tru
     if not isinstance(meta, Mapping) or not meta:
         return "Profile polish: unavailable"
     name = str(meta.get("preset_name") or meta.get("profile_name") or "profile")
-    budget = str(meta.get("recommended_time_budget") or "Manual")
+    budget = str(meta.get("effective_time_budget") or meta.get("recommended_time_budget") or "Manual")
     renderer = str(meta.get("renderer") or "renderer")
     color = str(meta.get("color_policy") or "color policy")
     raw_warnings = meta.get("warnings")

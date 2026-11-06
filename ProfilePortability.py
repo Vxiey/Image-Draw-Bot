@@ -178,7 +178,11 @@ def portable_path_map(profile_key: str, root: Path | None = None):
 def sanitize_settings(data: dict, *, strict: bool = True) -> dict:
     if not isinstance(data, dict):
         raise ProfilePortabilityError("Profile settings must be a JSON object.")
-    migrated = migrate_settings(data)
+    from SettingsValidation import validated_settings
+    try:
+        migrated = validated_settings(data, strict=strict)
+    except ValueError as error:
+        raise ProfilePortabilityError(str(error)) from error
     for forbidden in FORBIDDEN_SETTING_NAMES:
         migrated.pop(forbidden, None)
     unknown = sorted(set(migrated) - PORTABLE_SETTING_NAMES)
@@ -214,11 +218,13 @@ def flatten_settings(package_settings: dict, canvas: dict | None = None) -> dict
         if overlap:
             raise ProfilePortabilityError("Profile contains duplicate setting names.")
         clean.update(values)
-    if canvas:
+    if canvas is not None:
         if not isinstance(canvas, dict):
             raise ProfilePortabilityError("Canvas metadata must be an object.")
         for key in CANVAS_SETTING_NAMES:
             if key in canvas:
+                if key in clean:
+                    raise ProfilePortabilityError('Profile repeats canvas metadata in its settings section.')
                 clean[key] = canvas[key]
     return sanitize_settings(clean)
 
@@ -439,13 +445,20 @@ def _capture_calibration(profile_key: str):
     return result
 
 
+def _require_idle_profile(app):
+    if (getattr(app,'activity',None) or getattr(app,'closing',False) or
+            getattr(app,'profile_change_in_progress',False) or
+            getattr(app,'profile_change_after',None) is not None):
+        raise ProfilePortabilityError('Wait for the current operation or profile change to finish before managing profiles.')
+
+
 def package_from_app(app) -> dict:
-    if getattr(app, "activity", None):
-        raise ProfilePortabilityError("Wait for the current Image Draw Bot task to finish before exporting a profile.")
+    _require_idle_profile(app)
     profile_name = str(app.game.get())
     name, key = _profile_identity(profile_name)
     try:
-        app.save_settings()
+        if app.save_settings() is False:
+            raise OSError('The current settings could not be saved.')
     except Exception as error:
         raise ProfilePortabilityError(f"Could not save current profile settings: {error}") from error
     settings_path = Path(getattr(app, "settings_path", profile_settings_file(key)))
@@ -562,8 +575,7 @@ def _reload_profile(app, name: str):
 
 
 def import_package_into_app(app, package: dict, *, action: str = "replace", copy_name: str | None = None):
-    if getattr(app, "activity", None):
-        raise ProfilePortabilityError("Wait for the current Image Draw Bot task to finish before importing a profile.")
+    _require_idle_profile(app)
     package = validate_package(package)
     source_name = package["profile"]["name"]
     if action not in ("replace", "copy"):
@@ -571,7 +583,8 @@ def import_package_into_app(app, package: dict, *, action: str = "replace", copy
 
     try:
         if hasattr(app, "save_settings"):
-            app.save_settings()
+            if app.save_settings() is False:
+                raise OSError('The current settings could not be saved.')
     except Exception as error:
         raise ProfilePortabilityError(f"Could not save the current profile before import: {error}") from error
 
@@ -606,8 +619,7 @@ def import_package_into_app(app, package: dict, *, action: str = "replace", copy
 
 
 def reset_profile(app):
-    if getattr(app, "activity", None):
-        raise ProfilePortabilityError("Wait for the current Image Draw Bot task to finish before resetting a profile.")
+    _require_idle_profile(app)
     name, key = _profile_identity(str(app.game.get()))
     # Do not let the profile-change wrapper save the old values after deletion.
     changes = {path: None for path in profile_reset_paths(key)}

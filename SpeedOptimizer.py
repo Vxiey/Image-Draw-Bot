@@ -156,7 +156,10 @@ def optimize_strokes(strokes: Sequence[tuple[int, int, int, int]], speed: str,
             current = chosen[2:]
         previous_end = current
 
-    return result
+    # Local nearest-neighbour choices can lengthen the complete route, including
+    # the transition into the next anchored window. Keep the supplied route in
+    # that case; both alternatives preserve its structural window boundaries.
+    return result if travel_distance(result) <= travel_distance(strokes) + 1e-9 else list(strokes)
 
 
 def estimated_motion_seconds(path_moves: int, stroke_count: int, dot_count: int,

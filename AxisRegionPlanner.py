@@ -159,15 +159,19 @@ def verticalize_horizontal_runs(strokes: Sequence[Sequence[int]], *,
         if i % 256 == 0 and cancelled():
             raise InterruptedError()
         mask[y - y0 + 1, left - x0:right - x0 + 1] = 1
-    transitions = np.diff(mask, axis=0)
     result: list[Segment] = []
-    for x in range(width):
-        if x % 256 == 0 and cancelled():
+    # Process a few columns together. Transposition makes nonzero return the
+    # exact previous x-major/y-major order without two NumPy calls per column,
+    # and avoids retaining a second full-area transition raster.
+    for start_x in range(0, width, 64):
+        if cancelled():
             raise InterruptedError()
-        starts = np.flatnonzero(transitions[:, x] == 1)
-        ends = np.flatnonzero(transitions[:, x] == -1) - 1
-        result.extend((int(x + x0), int(a + y0), int(x + x0), int(b + y0))
-                      for a, b in zip(starts, ends))
+        transitions = np.diff(mask[:, start_x:start_x + 64], axis=0).T
+        columns, starts = np.nonzero(transitions == 1)
+        _, ends = np.nonzero(transitions == -1)
+        result.extend((int(x + start_x + x0), int(a + y0),
+                       int(x + start_x + x0), int(b - 1 + y0))
+                      for x, a, b in zip(columns, starts, ends))
     return tuple(result)
 
 

@@ -107,6 +107,35 @@ def _detail_signal(rgb):
     return ImageChops.subtract(local_hi, local_lo)
 
 
+def _restore_source_alpha(source, visible_rgb, processed_rgb, cancelled):
+    """Apply a visible-colour change once while preserving source alpha.
+
+    Filtering is performed against white, where transparent pixels have their
+    actual visible colour. Reattaching alpha to that flattened RGB would blend
+    white a second time. Transfer only the visible delta back to the original
+    unassociated channels; unchanged and hard-protected pixels stay exact.
+    """
+    import numpy as np
+    from PIL import Image
+
+    rgba = np.array(source, dtype=np.uint8, copy=True)
+    before = np.asarray(visible_rgb, dtype=np.uint8)
+    after = np.asarray(processed_rgb, dtype=np.uint8)
+    for y in range(0, source.height, 128):
+        if cancelled():
+            raise InterruptedError()
+        rows = rgba[y:y + 128]
+        alpha = rows[..., 3:4].astype(np.int32)
+        delta = after[y:y + 128].astype(np.int32) - before[y:y + 128]
+        numerator = delta * 255
+        adjustment = np.sign(numerator) * ((np.abs(numerator) + alpha // 2) // np.maximum(alpha, 1))
+        adjustment[rows[..., 3] == 0] = 0
+        rows[..., :3] = np.clip(rows[..., :3].astype(np.int32) + adjustment, 0, 255).astype(np.uint8)
+    if cancelled():
+        raise InterruptedError()
+    return Image.fromarray(rgba)
+
+
 def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = False,
                           drawing_mode: str | None = None, preview: bool = False,
                           cancelled=lambda: False):
@@ -172,8 +201,10 @@ def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = Fa
     # Use the soft 96-valued focus area as a blend instead of a hard mask; hard
     # detail edges remain 255 and are copied exactly from the source.
     processed_rgb = Image.composite(rgb, simplified, protected)
-    processed = processed_rgb.convert("RGBA")
-    processed.putalpha(alpha)
+    if alpha.getextrema() == (255, 255):
+        processed = processed_rgb.convert("RGBA")
+    else:
+        processed = _restore_source_alpha(source, rgb, processed_rgb, cancelled)
 
     hist = protected.histogram()
     # Any nonzero protection contributes; 255 pixels are hard-protected.

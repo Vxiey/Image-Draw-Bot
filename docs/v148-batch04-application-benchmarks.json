@@ -1,0 +1,169 @@
+{
+  "baseline": "1d48eabaf349a5fd8049a2c96ef5426745c3078c",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "Warm parity pair, alternating before/after elapsed samples; separate Python traced allocation peak.",
+  "scope": "Generated CPU helper fixtures only; not total drawing speed, Windows input or total process RAM. Python tracing excludes most native Pillow buffers. Baseline modules use current shared dependencies.",
+  "after_source_sha256": {
+    "AutoDrawing": "7586e98075f879aa4c6445637844f2fe5783a1297e26833537bf1d393a7ad148",
+    "PicturePaletteRefinement": "3f28cd7c69d5e09dc53c74ff72ef5f470a40538dede08827990e025365454aa5",
+    "DominantHuePreservation": "ac78c877f4df1c114f45b943c8ad9a64081228bc855eee43c5de5331888b5a33",
+    "SessionRecovery": "1b8f5c3dab1b8c281d3c1d682e7501a69d0ef24331fcff1e29574e09616dce1a",
+    "ColorMatchingEngine": "a947fbe2faf71148178a9f0de8125cae73129731622dcb7429d87a08b872f7ae",
+    "ImageSampling": "e331f52a99196cf8ae8b5a15c917de20ed72db43cbe416329fb9e884ad411d58",
+    "ImageGeometry": "34bccf137dc31f7136d6b904e4fa41ce074fefd27121ee35cbe65ab202583467"
+  },
+  "measurements": {
+    "automatic_statistics_4000x3000_rgb": {
+      "before_samples_ms": [
+        31.2323939979251,
+        31.342956001026323,
+        32.81078199870535,
+        32.657319999998435,
+        27.868970999406883
+      ],
+      "after_samples_ms": [
+        12.958808001712896,
+        12.363361998723121,
+        12.377603001368698,
+        11.484878999908688,
+        12.03597399944556
+      ],
+      "before_median_ms": 31.342956001026323,
+      "after_median_ms": 12.363361998723121,
+      "exact_output_parity": true,
+      "output_sha256": "e654a80333a2a785ca45ad03c837181cfb7d5654a913287ad4bdd4227665535d",
+      "before_peak_python_bytes": 375448,
+      "after_peak_python_bytes": 375328,
+      "parameters": {
+        "size": [
+          4000,
+          3000
+        ],
+        "seed": 1480401,
+        "source": "96x128 RGB tile enlarged with NEAREST"
+      }
+    },
+    "palette_refinement_4000x3000_rgb": {
+      "before_samples_ms": [
+        134.24959199983277,
+        148.40715199898113,
+        132.83272300031967,
+        110.25179400166962,
+        120.30186700212653
+      ],
+      "after_samples_ms": [
+        117.20145900108037,
+        103.65484999783803,
+        96.0854709992418,
+        90.61644499888644,
+        103.34689500086824
+      ],
+      "before_median_ms": 132.83272300031967,
+      "after_median_ms": 103.34689500086824,
+      "exact_output_parity": true,
+      "output_sha256": "7cbe4fb7c6e053ecf0749f521dcf897deaed0e2150d87cc93ca6a953bf764a9e",
+      "before_peak_python_bytes": 72074865,
+      "after_peak_python_bytes": 1433186,
+      "parameters": {
+        "size": [
+          4000,
+          3000
+        ],
+        "seed": 1480401,
+        "colors": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            255,
+            255,
+            255
+          ],
+          [
+            230,
+            30,
+            40
+          ],
+          [
+            30,
+            90,
+            210
+          ],
+          [
+            40,
+            190,
+            60
+          ],
+          [
+            230,
+            210,
+            30
+          ]
+        ],
+        "max_colors": 12
+      }
+    },
+    "dominant_hue_summary_16000_colors": {
+      "before_samples_ms": [
+        147.7671159991587,
+        136.49836699914886,
+        145.72466599929612,
+        130.88059100118699,
+        140.87391499924706
+      ],
+      "after_samples_ms": [
+        85.81617800155072,
+        74.32496000183164,
+        75.7340230011323,
+        77.04872800240992,
+        73.57519200013485
+      ],
+      "before_median_ms": 140.87391499924706,
+      "after_median_ms": 75.7340230011323,
+      "exact_output_parity": true,
+      "output_sha256": "7929137e5b1b8ec17907a6aed85829b6fc211f8e31ea255f92383852db9efc06",
+      "before_peak_python_bytes": 3120908,
+      "after_peak_python_bytes": 142944,
+      "parameters": {
+        "colors": 16000,
+        "seed": 1480401,
+        "weight_range": [
+          1,
+          99
+        ]
+      }
+    },
+    "recovery_cleanup_10000_unrelated_files": {
+      "before_samples_ms": [
+        30.053189999307506,
+        27.150859001267236,
+        45.660382998903515,
+        34.095216000423534,
+        30.690602001413936
+      ],
+      "after_samples_ms": [
+        8.495269001286943,
+        7.518736001657089,
+        8.166733998223208,
+        9.559542002534727,
+        11.533892000443302
+      ],
+      "before_median_ms": 30.690602001413936,
+      "after_median_ms": 8.495269001286943,
+      "exact_output_parity": true,
+      "output_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "before_peak_python_bytes": 4270753,
+      "after_peak_python_bytes": 30513,
+      "parameters": {
+        "entries": 10000,
+        "deleted_files": 0
+      }
+    }
+  }
+}

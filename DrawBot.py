@@ -133,6 +133,7 @@ PREVIEW_PLAN_TIMEOUT_SECONDS = 14.0
 PREVIEW_FALLBACK_TIMEOUT_SECONDS = 6.0
 PREVIEW_MODES = ('Manual', 'Auto light', 'Auto full')
 COLOR_WORKFLOWS = ('Finish color first', 'Progressive passes')
+_RECOVERY_IMAGE_UNSET=object()
 
 
 def _validated_setup_payload(payload, *, require_canvas=False):
@@ -681,6 +682,7 @@ def _finalize_auto_tuned_plan(plan, original, area, cancelled=lambda: False):
 def make_plan(original, area, options, cancelled=lambda: False):
     from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageOps
     from AutoDrawing import resolve_drawing
+    if cancelled():raise InterruptedError('Planning cancelled.')
     # v1.0.131: Sketch + Auto Fill owns an explicit Paint-only phase order.
     # Route it before AutoDrawing so Auto cannot replace the user's selected
     # renderer. The recursive colour sub-plan is marked _sketch_fill_inner.
@@ -691,7 +693,7 @@ def make_plan(original, area, options, cancelled=lambda: False):
     # fields; CanvasGuard, calibration and input authorisation remain separate.
     if is_hybrid_renderer(options):
         options=apply_hybrid_policy(original,options,cancelled=cancelled)
-    options=resolve_drawing(original,options)
+    options=resolve_drawing(original,options,cancelled=cancelled)
     # v1.0.125 Step 1: retain an untouched source object for source-relative
     # preview accuracy. Downstream preprocessing/contrast/palette stages must not
     # overwrite the reference used by AccuracyEvaluator.
@@ -814,7 +816,8 @@ def make_plan(original, area, options, cancelled=lambda: False):
         # drawing immediately rejected them for exceeding the default 180 s.
         speed_name = normalize_speed(options.get('speed', 'Balanced'))
         seconds_per_stroke = {'Safe': .18, 'Balanced': .12, 'Fast': .08}[speed_name] + options['delay'] * 2.0
-        time_budget = max(120, int(options.get('max_seconds', 180) / seconds_per_stroke * .90))
+        unlimited=bool(options.get('unlimited_time'))
+        time_budget = None if unlimited else max(1, int(options.get('max_seconds', 180) / seconds_per_stroke * .90))
         _prof_color = profiler_start(options, 'color_planning')
         groups, stats = portrait_strokes(gray, options['detail'], options['lines'], cancelled,
                                          include_edges=True, max_strokes=time_budget,
@@ -846,8 +849,8 @@ def make_plan(original, area, options, cancelled=lambda: False):
         # and tone sets evenly (never just truncate the top of the image) until
         # the planned run fits with a small safety margin.
         target_seconds = max(5.0, options.get('max_seconds', 180) * .92)
-        for _ in range(3):
-            if plan['estimate'] <= target_seconds or plan['count'] <= 100:
+        for _ in range(0 if unlimited else 3):
+            if plan['estimate'] <= target_seconds or plan['count'] <= 1:
                 break
             ratio = max(.12, min(.95, target_seconds / max(plan['estimate'], .001) * .92))
             strokes = plan['groups'][0]
@@ -857,8 +860,8 @@ def make_plan(original, area, options, cancelled=lambda: False):
                 if wanted >= len(items): return list(items)
                 if wanted <= 0: return []
                 return [items[min(len(items)-1, int((i + .5) * len(items) / wanted))] for i in range(wanted)]
-            edge_keep = min(len(edges), max(24, int(len(edges) * ratio))) if edges else 0
-            tone_keep = min(len(tones), max(48, int(len(tones) * ratio))) if tones else 0
+            edge_keep = min(len(edges), max(1, int(len(edges) * ratio))) if edges else 0
+            tone_keep = min(len(tones), max(1, int(len(tones) * ratio))) if tones else 0
             edges = evenly_sample(edges, edge_keep)
             tones = evenly_sample(tones, tone_keep)
             plan_options = dict(plan_options)
@@ -1878,8 +1881,13 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
                     from PreviewDiagnostics import render_quantized_target
                     _zoom_target=render_quantized_target(
                         image.size,groups,palette_rgb,fill_regions=options.get('fill_regions') or (),
-                        background_fill_plan=fill_meta,color_order=options.get('color_order'),cancelled=cancelled)
-                    options['_preview_quantized_target']=_zoom_target.resize(size,Image.Resampling.NEAREST)
+                        background_fill_plan=fill_meta,color_order=options.get('color_order'),
+                        execution_sequence=execution_sequence or None,cancelled=cancelled)
+                    with closing(_zoom_target):
+                        _zoom_resized=_zoom_target.resize(size,Image.Resampling.NEAREST)
+                    _old_target=options.get('_preview_quantized_target')
+                    options['_preview_quantized_target']=_zoom_resized
+                    if isinstance(_old_target,Image.Image):_old_target.close()
                     options['_accuracy_quantized_target_available']=True
                 except InterruptedError:
                     raise
@@ -1902,10 +1910,13 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     estimate_step_px=estimate_delivery.step_px
     preview_safety=None
     try:
-        preview_safety=build_preview_safety_plan(image.size,fitted,groups,execution_groups,options,cancelled)
+        _detail_sequence=(execution_sequence if options.get('detail_zoom_meta',{}).get('enabled')
+                          and execution_sequence else None)
+        preview_safety=build_preview_safety_plan(image.size,fitted,groups,execution_groups,options,cancelled,
+                                                execution_sequence=_detail_sequence)
         options['preview_safety_meta']=preview_safety.as_dict()
         options['_preview_safety_groups']=preview_safety.groups
-        draw_safe_paths(draw,preview_safety,fitted,size,palette_rgb,brush)
+        draw_safe_paths(draw,preview_safety,fitted,size,palette_rgb,brush,cancelled)
         for paths in preview_safety.groups:
             for path in paths:
                 if len(path)==1:
@@ -2702,6 +2713,15 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         wait(max(boundary_delay,.010))
     visual_previous_snapshot=None
     try:
+        if (resume_sequence_level and resume_info.get('sequence_total',0)>0
+                and resume_info.get('sequence_remaining_count')==0):
+            # A verified complete sequence is already finished. Do not activate
+            # the target, repeat its setup/input, or launch a new correction or
+            # learning pass. Keep the normal Stop and release/disarm contract.
+            wait(0)
+            runtime_safety.mark_completed()
+            report('status','Render resume finished: all sequence operations are already complete. No new drawing input was sent.')
+            return
         precision=plan['options'].get('precision','High')
         if hasattr(mouse,'configure_precision'):mouse.configure_precision(precision)
         if hasattr(mouse,'configure_drag_backend'):mouse.configure_drag_backend(stroke_delivery.drag_backend)
@@ -3244,14 +3264,26 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 f'{(last or {}).get("reason","")} This is a verification stop, not a crash. '
                 + ('Run Auto Paint calibration and retry. If this color is outside the normal Paint palette, run Custom color palette for picture so Image Draw Bot can calibrate and select the image RGB colors.' if selected_tool!='Use current tool' else 'Verify the current Paint tool and selected color, then retry.'))
 
-        def visual_verify_color_batch(index, ordered_items, smart_group, color_number, total_colors):
+        def begin_visual_verification(total_colors):
+            nonlocal visual_previous_snapshot
+            if (not dry_run) and plan['options'].get('visual_verification_enabled',False) and visual_mode!='Off' and hasattr(mouse,'snapshot_canvas'):
+                try:
+                    visual_previous_snapshot=mouse.snapshot_canvas(area)
+                    report('visual_verification',{'current':0,'total':total_colors,'ok':True,'confidence':100.0,'summary':'baseline snapshot captured'})
+                except InterruptedError:
+                    raise
+                except Exception as error:
+                    plan['options']['visual_verification_enabled']=False
+                    report('visual_verification',{'current':0,'total':total_colors,'ok':False,'checked':False,'available':False,'confidence':0.0,'summary':f'visual baseline unavailable: {error}'})
+
+        def visual_verify_color_batch(index, ordered_items, smart_group, color_number, total_colors, *, brush_px=None):
             nonlocal visual_previous_snapshot
             if dry_run or not plan['options'].get('visual_verification_enabled',False) or visual_mode=='Off':
                 return None
             if not hasattr(mouse,'snapshot_canvas'):
                 return {'current':color_number,'total':total_colors,'ok':False,'checked':False,'available':False,'confidence':0.0,'summary':'not checked: snapshot unavailable on this mouse backend'}
             sample_limit={'Fast':80,'Balanced':130,'Strict':180}.get(visual_mode,130)
-            brush_px=plan['options'].get('brush_px',1)
+            if brush_px is None:brush_px=plan['options'].get('brush_px',1)
             expected=plan['colors'][index]
             planned_points=planned_batch_points(ordered_items,smart_group=smart_group,transform=point,sample_limit=sample_limit,cancelled=stop.is_set)
             expected_boxes=planned_batch_boxes(ordered_items,smart_group=smart_group,transform=point,brush_px=brush_px,cancelled=stop.is_set)
@@ -3488,6 +3520,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             return True
 
         execution_sequence=list(plan.get('execution_sequence') or [])
+        has_execution_sequence=bool(execution_sequence)
         sequence_completed_counts={}
         sequence_new_completed=0
         sequence_last_entry=None
@@ -3501,9 +3534,52 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 else:_remaining.append(_entry)
             execution_sequence=_remaining
             report('status',f'Sequence resume: skipped {_skipped:,} verified completed operation(s); {len(execution_sequence):,} remain. Dynamic Replanner may safely reorder only the remaining work.')
-        if execution_sequence:
-            if plan['options'].get('visual_verification_enabled',False) and visual_mode!='Off' and not dry_run:
+        if has_execution_sequence:
+            # Detail Zoom can materialize a formerly colour-batched plan only
+            # to put its extra strokes last. That representation change must
+            # retain the original configured after-batch visual safety check.
+            sequence_visual=bool((plan['options'].get('detail_zoom_meta') or {}).get('sequence_created_for_detail_pass')
+                                and plan['options'].get('visual_verification_enabled',False)
+                                and visual_mode!='Off' and not dry_run)
+            def sequence_visual_key(entry):
+                brush=entry.get('brush_px')
+                return (int(entry['color_index']),bool(entry.get('detail_zoom')),
+                        int(brush) if brush is not None else None)
+            sequence_visual_total=0
+            sequence_visual_previous_key=None
+            if sequence_visual:
+                for entry in execution_sequence:
+                    try:key=sequence_visual_key(entry)
+                    except (KeyError,TypeError,ValueError,OverflowError):continue
+                    if key!=sequence_visual_previous_key:
+                        sequence_visual_total+=1;sequence_visual_previous_key=key
+                begin_visual_verification(sequence_visual_total)
+                sequence_visual=bool(plan['options'].get('visual_verification_enabled',False))
+            elif plan['options'].get('visual_verification_enabled',False) and visual_mode!='Off' and not dry_run:
                 report('visual_verification',{'current':0,'total':0,'ok':True,'confidence':0.0,'summary':'skipped for progressive passes'})
+            sequence_visual_pending=[]
+            sequence_visual_batch_key=None
+            sequence_visual_brush=current_execution_brush
+            sequence_visual_number=0
+            def finish_sequence_visual_batch():
+                nonlocal sequence_visual_number,sequence_new_completed,sequence_last_entry
+                if not sequence_visual_pending:return
+                sequence_visual_number+=1
+                result=visual_verify_color_batch(sequence_visual_batch_key[0],
+                    [item for _,item in sequence_visual_pending],True,sequence_visual_number,
+                    sequence_visual_total,brush_px=sequence_visual_brush)
+                if result:report('visual_verification',result)
+                # Preserve the prior verified checkpoint if this batch fails.
+                # Pending paths are added only after the same verification
+                # contract as the original colour-batched execution succeeds.
+                for completed_entry,_ in sequence_visual_pending:
+                    key=sequence_entry_key(completed_entry)
+                    sequence_completed_counts[key]=int(sequence_completed_counts.get(key,0))+1
+                    sequence_new_completed+=1;sequence_last_entry=completed_entry
+                sequence_visual_pending.clear()
+                if checkpoint is not None and sequence_completed_counts:
+                    try:checkpoint(checkpoint_sequence_progress(plan,sequence_completed_counts,prelude_complete=True,last_entry=sequence_last_entry))
+                    except Exception as checkpoint_error:log_event(f'Verified detail sequence checkpoint skipped: {checkpoint_error!r}')
             current_color=None
             current_phase=None
             phases_present=[]
@@ -3582,6 +3658,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     continue
                 phase=str(entry.get('phase','details'))
                 entry_brush=max(1,int(entry.get('brush_px',current_execution_brush) or current_execution_brush))
+                if sequence_visual:
+                    entry_visual_key=sequence_visual_key(entry)
+                    if sequence_visual_pending and entry_visual_key!=sequence_visual_batch_key:
+                        finish_sequence_visual_batch()
+                        wait(0)
                 _tool_started=clock()
                 _tool_switched=switch_execution_brush(entry_brush)
                 if _tool_switched:
@@ -3601,6 +3682,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                         _verify_started=clock()
                         selected_method=verify_color_batch(index,item,True,selected_method,1,1)
                         note_runtime_operation('verification',clock()-_verify_started)
+                if sequence_visual and not sequence_visual_pending:
+                    sequence_visual_batch_key=entry_visual_key
+                    sequence_visual_brush=current_execution_brush
                 _path_started=clock()
                 _pause_before_path=paused_seconds
                 try:
@@ -3618,10 +3702,13 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                         except Exception as checkpoint_error:log_event(f'Sequence Smart Recovery checkpoint skipped: {checkpoint_error!r}')
                     raise
                 note_runtime_operation(entry.get('operation_type','stroke'),max(0.0,clock()-_path_started-(paused_seconds-_pause_before_path)))
-                _entry_key=sequence_entry_key(entry)
-                sequence_completed_counts[_entry_key]=int(sequence_completed_counts.get(_entry_key,0))+1
-                sequence_new_completed+=1;sequence_last_entry=entry
-                if checkpoint is not None and not dry_run and sequence_new_completed%25==0:
+                if sequence_visual:
+                    sequence_visual_pending.append((entry,item))
+                else:
+                    _entry_key=sequence_entry_key(entry)
+                    sequence_completed_counts[_entry_key]=int(sequence_completed_counts.get(_entry_key,0))+1
+                    sequence_new_completed+=1;sequence_last_entry=entry
+                if not sequence_visual and checkpoint is not None and not dry_run and sequence_new_completed%25==0:
                     try:checkpoint(checkpoint_sequence_progress(plan,sequence_completed_counts,prelude_complete=True,last_entry=entry))
                     except Exception as checkpoint_error:log_event(f'Sequence recovery checkpoint skipped: {checkpoint_error!r}')
                 if deadline_scheduler is not None:
@@ -3635,6 +3722,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     if _now-deadline_last_telemetry>=.75:
                         deadline_last_telemetry=_now
                         report('deadline_telemetry',deadline_scheduler.telemetry())
+            if sequence_visual:
+                finish_sequence_visual_batch()
+                wait(0)
             if deadline_scheduler is not None:
                 plan['options']['deadline_runtime_meta']=deadline_scheduler.meta()
                 report('deadline_telemetry',deadline_scheduler.telemetry())
@@ -3647,15 +3737,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             color_order=plan['options'].get('color_order') or list(range(len(plan['groups'])))
             execution_groups=plan.get('execution_groups')
             active_order=[int(i) for i in color_order if 0<=int(i)<len(plan['groups']) and (plan['groups'][int(i)] or (execution_groups is not None and int(i)<len(execution_groups) and execution_groups[int(i)]))]
-            if (not dry_run) and plan['options'].get('visual_verification_enabled',False) and visual_mode!='Off' and hasattr(mouse,'snapshot_canvas'):
-                try:
-                    visual_previous_snapshot=mouse.snapshot_canvas(area)
-                    report('visual_verification',{'current':0,'total':len(active_order),'ok':True,'confidence':100.0,'summary':'baseline snapshot captured'})
-                except InterruptedError:
-                    raise
-                except Exception as error:
-                    plan['options']['visual_verification_enabled']=False
-                    report('visual_verification',{'current':0,'total':len(active_order),'ok':False,'checked':False,'available':False,'confidence':0.0,'summary':f'visual baseline unavailable: {error}'})
+            begin_visual_verification(len(active_order))
             for color_number,index in enumerate(active_order,1):
                 if color_number <= resume_completed:
                     try:rgb_done=tuple(map(int,plan['colors'][int(index)]))
@@ -3997,6 +4079,7 @@ class DrawBotApp:
         from GameProfiles import load_custom_profiles
         load_custom_profiles(DATA_DIR/'profiles.json')
         self.game=tk.StringVar(value='Other drawing app')
+        self._active_profile_name=self.game.get()
         self.profile_hint=tk.StringVar()
         self.calibration_path=profile_palette_file('generic')
         self.settings_path=profile_settings_file('generic')
@@ -4129,8 +4212,8 @@ class DrawBotApp:
         from StudioUI import build_ui
         build_ui(self,QUALITY,SPEED)
         from ProfileIsolation import restore_extra
-        try:restore_extra(self,json.loads(self.settings_path.read_text(encoding='utf-8')))
-        except (OSError,ValueError):pass
+        try:restore_extra(self,{'profile_extras':getattr(self,'_loaded_profile_extras',{})})
+        except (OSError,ValueError,tk.TclError):pass
         self.refresh_runtime_safety_ui()
         self.refresh_auto_tuner_ui()
         # Step 22: first-run / hardware-change benchmark is deferred so startup
@@ -4198,14 +4281,8 @@ class DrawBotApp:
 
     def _recovery_option_snapshot(self):
         """Return only primitive configuration values; never safety/arming state."""
-        names=(
-            'quality','speed','precision','mode','shape_order','shape_model','max_stroke_cap',
-            'progressive_rendering','planning_watchdog','time_budget_mode','target_stroke_count',
-            'target_stroke_custom','drawing_style','render_style','draw_quality','human_mode','gpu_mode','gpu_vram',
-            'gpu_performance','cpu_workers','cpu_engine','ram_budget','ram_custom_mb','planning_resolution','resource_scheduler',
-            'background_fill','fill_engine','background_simplification','color_grouping','color_workflow','stroke_optimizer','adaptive_detail','detail_zoom','visual_verification','color_rendering','color_fidelity','color_layers','profile_engine','edge_behavior',
-            'custom_color_workflow','exact_color_limit','tool_strategy','portrait_focus','skip_white','contrast','outline',
-            'brush_px','max_seconds','paint_simple','paint_tool','sketch_detail','read_gartic_timer','render_preset')
+        from SessionRecovery import RECOVERABLE_OPTION_KEYS
+        names=sorted(RECOVERABLE_OPTION_KEYS)
         out={}
         for name in names:
             var=getattr(self,name,None)
@@ -4252,26 +4329,28 @@ class DrawBotApp:
         except (tk.TclError,AttributeError):pass
         log_event(f'Render resume checkpoint cleared: {reason}.')
 
-    def _apply_recovery_snapshot(self, state):
+    def _apply_recovery_snapshot(self, state, *, recovered_image=_RECOVERY_IMAGE_UNSET):
         """Restore local work only; every input safety gate remains reset/disarmed."""
         from SessionRecovery import load_cached_image
+        DrawBotApp._disarm_full_draw(self,'safe session recovery',update_text=True)
+        try:
+            if hasattr(self.mouse,'disarm_input'):self.mouse.disarm_input()
+        except OSError:pass
         profile=str(state.get('profile') or '')
         if profile in PROFILES and profile!=self.game.get():
             self.game.set(profile)
             self._apply_profile_change(profile)
         options=state.get('options') if isinstance(state,dict) else {}
-        if isinstance(options,dict):
-            for name,value in options.items():
-                if name=='preview_mode':continue
-                var=getattr(self,name,None);setter=getattr(var,'set',None)
-                if setter:
-                    try:setter(value)
-                    except (tk.TclError,TypeError,ValueError):pass
+        if isinstance(options,dict) and options:
+            from SettingsValidation import validated_settings, settings_application
+            restored=validated_settings(dict(options,preview_mode='Manual'))
+            with settings_application(self):
+                DrawBotApp._apply_settings_data(self,restored)
         # Manual preview is a hard recovery invariant.
         self.preview_mode.set('Manual')
         area=state.get('saved_area') if isinstance(state,dict) else None
         self.saved_area=[tuple(map(int,p)) for p in area] if isinstance(area,list) and len(area)==2 else None
-        image=load_cached_image(expected_sha256=state.get('image_sha256')) if state.get('has_image') is True else None
+        image=(load_cached_image(expected_sha256=state.get('image_sha256')) if state.get('has_image') is True else None) if recovered_image is _RECOVERY_IMAGE_UNSET else recovered_image
         if image is not None:
             self.original=image;self.plan=None;self.file_label.set('Recovered local image')
         resume=state.get('render_resume') if isinstance(state,dict) else None
@@ -4291,10 +4370,6 @@ class DrawBotApp:
         self.target_lock_passed=False;self.target_lock_fingerprint=None;self.target_lock_signature=None
         self.safety_preflight_passed=False;self.safety_preflight_signature=None;self.safety_preflight_valid_until=0.0
         self.dry_run_passed=False;self.dry_run_signature=None;self.dry_run_valid_until=0.0
-        DrawBotApp._disarm_full_draw(self,'safe session recovery',update_text=True)
-        try:
-            if hasattr(self.mouse,'disarm_input'):self.mouse.disarm_input()
-        except OSError:pass
         DrawBotApp._refresh_target_lock_text(self)
         self.area_text.set('Recovered area is only a suggestion. Re-select or explicitly reuse it, then run the full safety chain.')
         self._mark_plan_stale('Safe session recovered. Preview is Manual. Re-select target and rerun Small test → Lock setup → Preflight → Dry run before Start.')
@@ -4317,11 +4392,20 @@ class DrawBotApp:
             text=('Image Draw Bot did not close normally and a local recovery checkpoint is available.\n\n'
                   'Recover the image/settings from the checkpoint? Drawing will remain completely DISARMED: target lock, small test, preflight, dry run and Start authorization are never restored.')
             if messagebox.askyesno('Safe session recovery',text,parent=self.root):
-                try:DrawBotApp._apply_recovery_snapshot(self,state)
-                except Exception as error:
-                    log_event(f'Safe session recovery failed: {error!r}')
-                    messagebox.showerror('Recovery failed',f'The safe session could not be restored: {error}',parent=self.root)
+                if self.closing or self.activity:
+                    return
+                self.status.set('Loading the local recovery image…')
+                def work():
+                    from SessionRecovery import load_cached_image
+                    image=load_cached_image(expected_sha256=state.get('image_sha256'),cancelled=self.stop.is_set) if state.get('has_image') is True else None
+                    if self.stop.is_set():
+                        if image is not None:image.close()
+                        raise InterruptedError('Recovery loading cancelled.')
+                    self.events.put(('recovery_loaded',(state,image)))
+                self.begin_worker('recovery-load',work)
+                return
             else:
+                if self.closing or self.activity:return
                 try:
                     clear_snapshot()
                 except Exception as error:
@@ -4342,6 +4426,10 @@ class DrawBotApp:
 
     def _request_clear_drawing(self,remove_image):
         if self.closing:return
+        pending=getattr(self,'recovery_loaded_pending',None)
+        if pending is not None:
+            DrawBotApp._discard_worker_result(self,'recovery_loaded',pending)
+            self.recovery_loaded_pending=None
         previous=getattr(self,'pending_clear_drawing',None)
         self.pending_clear_drawing=bool(remove_image or previous)
         if previous is None:self._clear_worker=getattr(self,'worker',None)
@@ -4409,11 +4497,17 @@ class DrawBotApp:
         self.begin_worker('browser-auto-calibration',work)
 
     def clear_recovery_snapshot(self):
+        if self.closing:return
         if self.activity:
             self.status.set('Stop the current operation before clearing recovery data.');return
+        DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
+        self.recovery_image_pending=False
         try:
             from SessionRecovery import clear_snapshot
-            clear_snapshot();self.status.set('Local safe-recovery checkpoint cleared.')
+            clear_snapshot()
+            self._suppress_recovery=True
+            self.pending_render_resume=None
+            self.status.set('Local safe-recovery checkpoint cleared.')
             log_event('Recovery checkpoint cleared by user.')
         except Exception as error:self.status.set(f'Could not clear recovery checkpoint: {error}')
 
@@ -5969,8 +6063,8 @@ class DrawBotApp:
                 raise InterruptedError('Target browser moved or changed size before automatic calibration. Select the canvas again.')
             if not monitor.activate((handle,expected_rect)):
                 raise InterruptedError('Windows could not activate the selected browser for automatic calibration.')
-            _time.sleep(.20)
-            meta=probe_handle_isolated(handle)
+            if self.stop.wait(.20):raise InterruptedError()
+            meta=probe_handle_isolated(handle,cancelled=self.stop.is_set)
             # v1.0.76: try a previously verified layout first. One screenshot is
             # shared by the cache verifier and the full detector on cache miss.
             from ScreenGuard import _grab_rgb
@@ -6173,7 +6267,7 @@ class DrawBotApp:
                 if not monitor.activate(target):
                     raise ValueError('Could not activate Paint. Bring it into view and retry.')
                 if self.stop.wait(.35):raise InterruptedError()
-                meta=probe_handle_isolated(int(candidate['handle']))
+                meta=probe_handle_isolated(int(candidate['handle']),cancelled=self.stop.is_set)
                 prepare_tool_controls(int(candidate['handle']),brush_px=_paint_brush_px,cancelled=self.stop.is_set)
                 exact_controls=None
                 exact_reused=False
@@ -6198,7 +6292,7 @@ class DrawBotApp:
                         if not monitor.activate(target):
                             raise ValueError('Paint Edit colors closed, but Paint could not be reactivated. Bring Paint into view and retry.')
                         if self.stop.wait(.15):raise InterruptedError()
-                        meta=probe_handle_isolated(int(candidate['handle']))
+                        meta=probe_handle_isolated(int(candidate['handle']),cancelled=self.stop.is_set)
                 rect=tuple(meta['client_rect'])
                 manual_canvas=None
                 if selected_canvas_state is not None:
@@ -6217,7 +6311,7 @@ class DrawBotApp:
                 if shot.size!=(rect[2]-rect[0],rect[3]-rect[1]):raise ValueError('Paint window changed size. Try again.')
                 result=detect_setup(shot,screen_origin=rect[:2],cancelled=self.stop.is_set,canvas_box_override=manual_canvas)
                 if self.stop.is_set():raise InterruptedError()
-                fresh=probe_handle_isolated(int(candidate['handle']))
+                fresh=probe_handle_isolated(int(candidate['handle']),cancelled=self.stop.is_set)
                 if tuple(fresh['client_rect'])!=rect:raise ValueError('Paint moved during calibration. Try again.')
                 result=save_setup(result,meta,palette_path)
                 result['manual_canvas_reused']=manual_canvas is not None
@@ -6368,6 +6462,16 @@ class DrawBotApp:
     def change_profile(self,event=None):
         if self.activity or self.closing:
             return
+        selected=self.game.get()
+        if selected not in PROFILES:
+            self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
+            self.status.set('Unknown drawing application profile.')
+            return
+        if self.save_settings() is False:
+            self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
+            DrawBotApp._cancel_after_attr(self,'profile_change_after')
+            self.status.set('Profile change stopped because the current settings could not be saved.')
+            return
         DrawBotApp._disarm_manual_drop_in(self,'profile changed')
         DrawBotApp._clear_render_resume(self,'profile changed by user')
         # Profile changes are configuration-only. Explicitly lock native input
@@ -6376,11 +6480,6 @@ class DrawBotApp:
         if hasattr(mouse,'disarm_input'):
             try:mouse.disarm_input()
             except OSError:pass
-        self.save_settings()
-        selected=self.game.get()
-        if selected not in PROFILES:
-            self.status.set('Unknown drawing application profile.')
-            return
         if self.profile_change_after is not None:
             try:self.root.after_cancel(self.profile_change_after)
             except (tk.TclError,ValueError):pass
@@ -6439,162 +6538,208 @@ class DrawBotApp:
             # invalidate the old plan and redraw the placeholder/original image.
             self._mark_plan_stale('Profile changed. Preview was not rebuilt. Press Build preview manually when ready.')
             self.show_previews();self._schedule_recovery_checkpoint(delay=300)
+            self._active_profile_name=selected
         finally:
             self.profile_change_in_progress=False
 
     def read_settings(self):
+        from RuntimePaths import read_json
+        from SettingsValidation import validated_settings, settings_application
+        from StabilityRC import UnsupportedSettingsSchema
+        # A transient read failure must not revoke protection learned from a
+        # newer schema. Only a verified supported document or confirmed removal
+        # of this same path allows it to be replaced by the current writer.
+        self._settings_protected_path=getattr(self,'_settings_protected_path',None)
         try:
-            from StabilityRC import migrate_settings
-            data=migrate_settings(json.loads(self.settings_path.read_text(encoding='utf-8')))
-            quality = {'Snabb skiss':'Quick sketch','Balanserad':'Balanced','Hög detalj':'High detail','Max detalj':'Maximum detail'}.get(data.get('quality'), data.get('quality'))
-            if quality in QUALITY:self.quality.set(quality)
-            try:
-                speed=normalize_speed(data.get('speed','Balanced'))
-                self.speed.set(speed)
-            except ValueError:
-                pass
-            precision=data.get('precision','High')
-            if hasattr(self,'precision') and precision in ('Normal','High','Ultra'):self.precision.set(precision)
-            if data.get('mode') in DRAWING_MODES:self.mode.set(data['mode'])
-            elif data.get('mode') == 'Linjer (snabbast)': self.mode.set('Lines (fastest)')
-            elif data.get('mode') == 'Punkter': self.mode.set('Dots')
-            shape_order=data.get('shape_order','Fill first')
-            if hasattr(self,'shape_order') and shape_order in SHAPE_ORDERS:self.shape_order.set(shape_order)
-            shape_model=data.get('shape_model','Auto')
-            if hasattr(self,'shape_model') and shape_model in SHAPE_MODEL_MODES:self.shape_model.set(shape_model)
-            max_stroke_cap=data.get('max_stroke_cap','Auto')
-            if hasattr(self,'max_stroke_cap') and max_stroke_cap in STROKE_CAPS:self.max_stroke_cap.set(max_stroke_cap)
-            progressive_rendering=data.get('progressive_rendering','Auto')
-            if hasattr(self,'progressive_rendering') and progressive_rendering in PROGRESSIVE_RENDERING_MODES:self.progressive_rendering.set(progressive_rendering)
-            planning_watchdog=data.get('planning_watchdog','Auto')
-            if hasattr(self,'planning_watchdog') and planning_watchdog in PLANNING_WATCHDOG_MODES:self.planning_watchdog.set(planning_watchdog)
-            time_budget_mode=data.get('time_budget_mode','Manual')
-            if hasattr(self,'time_budget_mode') and time_budget_mode in TIME_BUDGET_MODES:self.time_budget_mode.set(time_budget_mode)
-            if hasattr(self,'adaptive_deadline_renderer') and type(data.get('adaptive_deadline_renderer')) is bool:
-                self.adaptive_deadline_renderer.set(data['adaptive_deadline_renderer'])
-            reserve=str(data.get('deadline_safety_reserve','Auto'))
-            if hasattr(self,'deadline_safety_reserve') and reserve in ('Auto','Off','3','5','7','8','10','12','15','20','25'):
-                self.deadline_safety_reserve.set(reserve)
-            target_stroke_count=data.get('target_stroke_count','Auto')
-            if hasattr(self,'target_stroke_count') and target_stroke_count in TARGET_STROKE_COUNTS:self.target_stroke_count.set(target_stroke_count)
-            if hasattr(self,'target_stroke_custom') and data.get('target_stroke_custom') is not None:
-                try:self.target_stroke_custom.set(str(parse_custom_stroke_count(data.get('target_stroke_custom'))))
-                except ValueError:pass
-            render_style=data.get('render_style','Auto')
-            if hasattr(self,'render_style') and render_style in ('Auto','Portrait / shaded','Standard / pixel',QUICK_SKETCH_RENDER_STYLE,HYBRID_RENDER_STYLE):self.render_style.set(render_style)
-            draw_quality=data.get('draw_quality','High likeness')
-            if hasattr(self,'draw_quality') and draw_quality in ('Balanced','High likeness','Maximum likeness','GPU enhanced','Pixel Accurate'):self.draw_quality.set(draw_quality)
-            human_mode='Off'  # Ignore humanization saved by earlier versions.
-            if hasattr(self,'human_mode') and human_mode in HUMAN_MODES:self.human_mode.set(human_mode)
-            gpu_mode=data.get('gpu_mode','Auto')
-            if hasattr(self,'gpu_mode') and gpu_mode in ACCELERATION_MODES:self.gpu_mode.set(gpu_mode)
-            gpu_vram=data.get('gpu_vram','Auto')
-            if hasattr(self,'gpu_vram') and gpu_vram in VRAM_BUDGETS:self.gpu_vram.set(gpu_vram)
-            gpu_performance=data.get('gpu_performance','High throughput')
-            if hasattr(self,'gpu_performance') and gpu_performance in GPU_PERFORMANCE_MODES:self.gpu_performance.set(gpu_performance)
-            cpu_workers=data.get('cpu_workers','Auto')
-            if hasattr(self,'cpu_workers') and cpu_workers in CPU_WORKER_CHOICES:self.cpu_workers.set(cpu_workers)
-            cpu_engine=data.get('cpu_engine','Auto')
-            if hasattr(self,'cpu_engine') and cpu_engine in CPU_ENGINE_MODES:self.cpu_engine.set(cpu_engine)
-            ram_budget=data.get('ram_budget','Auto')
-            if hasattr(self,'ram_budget') and ram_budget in RAM_BUDGETS:self.ram_budget.set(ram_budget)
-            custom_ram=data.get('ram_custom_mb','4096')
-            if hasattr(self,'ram_custom_mb'):
-                try:self.ram_custom_mb.set(str(parse_custom_ram_mb(custom_ram)))
-                except ValueError:pass
-            planning_resolution=data.get('planning_resolution','High')
-            if hasattr(self,'planning_resolution') and planning_resolution in PLANNING_RESOLUTION_MODES:self.planning_resolution.set(planning_resolution)
-            resource_scheduler=data.get('resource_scheduler','Auto')
-            if hasattr(self,'resource_scheduler') and resource_scheduler in RESOURCE_SCHEDULER_MODES:self.resource_scheduler.set(resource_scheduler)
-            profile_engine=data.get('profile_engine','Auto')
-            if hasattr(self,'profile_engine') and profile_engine in PROFILE_ENGINE_MODES:self.profile_engine.set(profile_engine)
-            edge_behavior=data.get('edge_behavior','Auto')
-            if hasattr(self,'edge_behavior') and edge_behavior in EDGE_BEHAVIOR_MODES:self.edge_behavior.set(edge_behavior)
-            background_fill=data.get('background_fill','Balanced')
-            if background_fill=='Auto': background_fill='Balanced'
-            if hasattr(self,'background_fill') and background_fill in ('Off','Conservative','Balanced','Aggressive'):self.background_fill.set(background_fill)
-            fill_engine=data.get('fill_engine','Auto')
-            if hasattr(self,'fill_engine') and fill_engine in FILL_ENGINES:self.fill_engine.set(fill_engine)
-            if hasattr(self,'use_region_fill_engine') and type(data.get('use_region_fill_engine')) is bool:
-                self.use_region_fill_engine.set(data['use_region_fill_engine'])
-            fill_aggressiveness=data.get('fill_aggressiveness','Balanced')
-            if hasattr(self,'fill_aggressiveness') and fill_aggressiveness in ('Safe','Balanced','Aggressive'):
-                self.fill_aggressiveness.set(fill_aggressiveness)
-            background_simplification=data.get('background_simplification','Balanced')
-            if hasattr(self,'background_simplification') and background_simplification in ('Off','Conservative','Balanced','Strong'):self.background_simplification.set(background_simplification)
-            color_grouping=data.get('color_grouping','Smart')
-            if hasattr(self,'color_grouping') and color_grouping in COLOR_GROUPING_MODES:self.color_grouping.set(color_grouping)
-            color_workflow=data.get('color_workflow','Finish color first')
-            if hasattr(self,'color_workflow') and color_workflow in COLOR_WORKFLOWS:self.color_workflow.set(color_workflow)
-            stroke_optimizer=data.get('stroke_optimizer','Auto')
-            if hasattr(self,'stroke_optimizer') and stroke_optimizer in STROKE_OPTIMIZER_MODES:self.stroke_optimizer.set(stroke_optimizer)
-            adaptive_detail=data.get('adaptive_detail','Auto')
-            if hasattr(self,'adaptive_detail') and adaptive_detail in ADAPTIVE_DETAIL_MODES:self.adaptive_detail.set(adaptive_detail)
-            detail_zoom=data.get('detail_zoom','Auto')
-            if hasattr(self,'detail_zoom') and detail_zoom in ('Auto','Off','2x','4x'):self.detail_zoom.set(detail_zoom)
-            quick_sketch_style=data.get('quick_sketch_style','Balanced')
-            if hasattr(self,'quick_sketch_style') and quick_sketch_style in QUICK_SKETCH_STYLES:self.quick_sketch_style.set(quick_sketch_style)
-            quick_sketch_fill_preference=data.get('quick_sketch_fill_preference','Safe Fill First')
-            if hasattr(self,'quick_sketch_fill_preference') and quick_sketch_fill_preference in QUICK_SKETCH_FILL_PREFERENCES:self.quick_sketch_fill_preference.set(quick_sketch_fill_preference)
-            hybrid_mode=data.get('hybrid_mode','Auto Hybrid')
-            if hasattr(self,'hybrid_mode') and hybrid_mode in HYBRID_MODES:self.hybrid_mode.set(hybrid_mode)
-            visual_verification=data.get('visual_verification','Auto')
-            if hasattr(self,'visual_verification') and visual_verification in VISUAL_VERIFICATION_MODES:self.visual_verification.set(visual_verification)
-            color_rendering=data.get('color_rendering','Perceptual match')
-            if hasattr(self,'color_rendering') and color_rendering in COLOR_RENDERING_MODES:self.color_rendering.set(color_rendering)
-            color_fidelity=data.get('color_fidelity','Faithful')
-            if hasattr(self,'color_fidelity') and color_fidelity in COLOR_FIDELITY_MODES:self.color_fidelity.set(color_fidelity)
-            color_layers=data.get('color_layers','Off')
-            if hasattr(self,'color_layers') and color_layers in COLOR_LAYER_MODES:self.color_layers.set(color_layers)
-            custom_color_workflow=data.get('custom_color_workflow','Calibrated palette')
-            if hasattr(self,'custom_color_workflow') and custom_color_workflow in CUSTOM_COLOR_WORKFLOWS:self.custom_color_workflow.set(custom_color_workflow)
-            exact_color_limit=data.get('exact_color_limit','Auto')
-            if hasattr(self,'exact_color_limit') and str(exact_color_limit) in EXACT_COLOR_LIMITS:self.exact_color_limit.set(str(exact_color_limit))
-            preview_mode=data.get('preview_mode','Manual')
-            if hasattr(self,'preview_mode') and preview_mode in PREVIEW_MODES:self.preview_mode.set(preview_mode)
-            preview_detail_level=data.get('preview_detail_level','Detailed')
-            if hasattr(self,'preview_detail_level') and preview_detail_level in PREVIEW_DETAIL_MODES:self.preview_detail_level.set(preview_detail_level)
-            if hasattr(self,'auto_clear_canvas') and type(data.get('auto_clear_canvas')) is bool:self.auto_clear_canvas.set(data['auto_clear_canvas'])
-            tool_strategy=data.get('tool_strategy','Auto')
-            if hasattr(self,'tool_strategy') and tool_strategy in TOOL_STRATEGIES:self.tool_strategy.set(tool_strategy)
-            if hasattr(self,'portrait_focus') and type(data.get('portrait_focus')) is bool:self.portrait_focus.set(data['portrait_focus'])
-            if type(data.get('skip_white')) is bool:self.skip_white.set(data['skip_white'])
-            if hasattr(self,'render_preset'):self.render_preset.set(data.get('render_preset') if data.get('render_preset') in ('Auto','Manual','Masterpiece','Extra fast') else 'Auto')
-            if hasattr(self,'drawing_style'):
-                from DrawingStyleProfiles import DRAWING_STYLES
-                self.drawing_style.set(data.get('drawing_style') if data.get('drawing_style') in DRAWING_STYLES else 'Auto')
-            if hasattr(self,'read_gartic_timer'):self.read_gartic_timer.set(data.get('read_gartic_timer',True) is not False)
-            if type(data.get('outline')) is bool:self.outline.set(data['outline'])
-            if hasattr(self,'sketch_detail'):self.sketch_detail.set(data.get('sketch_detail') if data.get('sketch_detail') in ('Auto','Simple','Balanced','Detailed') else 'Auto')
-            value=data.get('contrast',1)
-            if isinstance(value,(float,int)) and math.isfinite(value) and .5<=value<=2:self.contrast.set(value)
-            raw_brush=data.get('brush_px','Auto')
-            if isinstance(raw_brush,str) and raw_brush.strip().casefold()=='auto':
-                self.brush_px.set('Auto')
-            elif type(raw_brush) is int and 1<=raw_brush<=50:
-                self.brush_px.set(str(raw_brush))
-            elif isinstance(raw_brush,str) and raw_brush.isdecimal() and 1<=int(raw_brush)<=50:
-                self.brush_px.set(str(int(raw_brush)))
-            raw_limit=data.get('max_seconds')
-            if type(raw_limit) is int and 5<=raw_limit<=3600:self.max_seconds.set(str(raw_limit))
-            elif isinstance(raw_limit,str) and raw_limit.isdecimal() and 5<=int(raw_limit)<=3600:self.max_seconds.set(str(int(raw_limit)))
-            if hasattr(self,'paint_simple') and type(data.get('paint_simple')) is bool:self.paint_simple.set(data['paint_simple'])
-            if hasattr(self,'paint_tool') and data.get('paint_tool') in ('Auto (recommended)','Use current tool','Brush','Pencil','Eraser'):
-                self.paint_tool.set(data['paint_tool'])
-            if hasattr(self,'drop_mode'):
-                # Retire the old automatic-drop drawing mode safely.
-                self.drop_mode.set('Show image')
-            corners=data.get('corners')
-            if isinstance(corners,list) and len(corners)==2 and all(isinstance(p,list) and len(p)==2 and all(type(n) is int for n in p) for p in corners):self.saved_area=corners
-            from ProfileIsolation import restore_extra
-            restore_extra(self,data)
-            anchors=data.get('canvas_anchor_detection')
-            if isinstance(anchors,dict):self.canvas_anchor_detection=anchors
-        except (OSError,ValueError,TypeError,AttributeError) as error:
+            data=validated_settings(read_json(self.settings_path,max_bytes=256*1024,max_depth=16))
+            with settings_application(self):
+                DrawBotApp._apply_settings_data(self,data)
+            self._loaded_profile_extras=data.get('profile_extras',{})
+            if self._settings_protected_path==Path(self.settings_path):
+                self._settings_protected_path=None
+            return True
+        except UnsupportedSettingsSchema as error:
+            self._settings_protected_path=Path(self.settings_path)
+            log_event(f'Settings preserved for {self.settings_path.name}: {error!r}')
+            return False
+        except FileNotFoundError as error:
+            if self._settings_protected_path==Path(self.settings_path):
+                self._settings_protected_path=None
+            log_event(f'Settings unavailable for {self.settings_path.name}: {error!r}')
+            return False
+        except (OSError,ValueError,TypeError,AttributeError,OverflowError,RuntimeError,tk.TclError) as error:
             log_event(f'Settings ignored for {self.settings_path.name}: {error!r}')
+            return False
+
+    def _apply_settings_data(self,data):
+        def _set(name,value):
+            if name in data or name in ('human_mode','drop_mode'):
+                getattr(self,name).set(value)
+        quality = {'Snabb skiss':'Quick sketch','Balanserad':'Balanced','Hög detalj':'High detail','Max detalj':'Maximum detail'}.get(data.get('quality'), data.get('quality'))
+        if quality in QUALITY:_set('quality',quality)
+        try:
+            speed=normalize_speed(data.get('speed','Balanced'))
+            _set('speed',speed)
+        except ValueError:
+            pass
+        precision=data.get('precision','High')
+        if hasattr(self,'precision') and precision in ('Normal','High','Ultra'):_set('precision',precision)
+        if data.get('mode') in DRAWING_MODES:_set('mode',data['mode'])
+        elif data.get('mode') == 'Linjer (snabbast)': _set('mode','Lines (fastest)')
+        elif data.get('mode') == 'Punkter': _set('mode','Dots')
+        shape_order=data.get('shape_order','Fill first')
+        if hasattr(self,'shape_order') and shape_order in SHAPE_ORDERS:_set('shape_order',shape_order)
+        shape_model=data.get('shape_model','Auto')
+        if hasattr(self,'shape_model') and shape_model in SHAPE_MODEL_MODES:_set('shape_model',shape_model)
+        max_stroke_cap=data.get('max_stroke_cap','Auto')
+        if hasattr(self,'max_stroke_cap') and max_stroke_cap in STROKE_CAPS:_set('max_stroke_cap',max_stroke_cap)
+        progressive_rendering=data.get('progressive_rendering','Auto')
+        if hasattr(self,'progressive_rendering') and progressive_rendering in PROGRESSIVE_RENDERING_MODES:_set('progressive_rendering',progressive_rendering)
+        planning_watchdog=data.get('planning_watchdog','Auto')
+        if hasattr(self,'planning_watchdog') and planning_watchdog in PLANNING_WATCHDOG_MODES:_set('planning_watchdog',planning_watchdog)
+        time_budget_mode=data.get('time_budget_mode','Manual')
+        if hasattr(self,'time_budget_mode') and time_budget_mode in TIME_BUDGET_MODES:_set('time_budget_mode',time_budget_mode)
+        if hasattr(self,'adaptive_deadline_renderer') and type(data.get('adaptive_deadline_renderer')) is bool:
+            _set('adaptive_deadline_renderer',data['adaptive_deadline_renderer'])
+        reserve=str(data.get('deadline_safety_reserve','Auto'))
+        if hasattr(self,'deadline_safety_reserve') and reserve in ('Auto','Off','3','5','7','8','10','12','15','20','25'):
+            _set('deadline_safety_reserve',reserve)
+        target_stroke_count=data.get('target_stroke_count','Auto')
+        if hasattr(self,'target_stroke_count') and target_stroke_count in TARGET_STROKE_COUNTS:_set('target_stroke_count',target_stroke_count)
+        if hasattr(self,'target_stroke_custom') and data.get('target_stroke_custom') is not None:
+            try:_set('target_stroke_custom',str(parse_custom_stroke_count(data.get('target_stroke_custom'))))
+            except ValueError:pass
+        render_style=data.get('render_style','Auto')
+        if hasattr(self,'render_style') and render_style in ('Auto','Portrait / shaded','Standard / pixel',QUICK_SKETCH_RENDER_STYLE,HYBRID_RENDER_STYLE):_set('render_style',render_style)
+        draw_quality=data.get('draw_quality','High likeness')
+        if hasattr(self,'draw_quality') and draw_quality in ('Balanced','High likeness','Maximum likeness','GPU enhanced','Pixel Accurate'):_set('draw_quality',draw_quality)
+        human_mode='Off'  # Ignore humanization saved by earlier versions.
+        if hasattr(self,'human_mode') and human_mode in HUMAN_MODES:_set('human_mode',human_mode)
+        gpu_mode=data.get('gpu_mode','Auto')
+        if hasattr(self,'gpu_mode') and gpu_mode in ACCELERATION_MODES:_set('gpu_mode',gpu_mode)
+        gpu_vram=data.get('gpu_vram','Auto')
+        if hasattr(self,'gpu_vram') and gpu_vram in VRAM_BUDGETS:_set('gpu_vram',gpu_vram)
+        gpu_performance=data.get('gpu_performance','High throughput')
+        if hasattr(self,'gpu_performance') and gpu_performance in GPU_PERFORMANCE_MODES:_set('gpu_performance',gpu_performance)
+        cpu_workers=data.get('cpu_workers','Auto')
+        if hasattr(self,'cpu_workers') and cpu_workers in CPU_WORKER_CHOICES:_set('cpu_workers',cpu_workers)
+        cpu_engine=data.get('cpu_engine','Auto')
+        if hasattr(self,'cpu_engine') and cpu_engine in CPU_ENGINE_MODES:_set('cpu_engine',cpu_engine)
+        ram_budget=data.get('ram_budget','Auto')
+        if hasattr(self,'ram_budget') and ram_budget in RAM_BUDGETS:_set('ram_budget',ram_budget)
+        custom_ram=data.get('ram_custom_mb','4096')
+        if hasattr(self,'ram_custom_mb'):
+            try:_set('ram_custom_mb',str(parse_custom_ram_mb(custom_ram)))
+            except ValueError:pass
+        planning_resolution=data.get('planning_resolution','High')
+        if hasattr(self,'planning_resolution') and planning_resolution in PLANNING_RESOLUTION_MODES:_set('planning_resolution',planning_resolution)
+        resource_scheduler=data.get('resource_scheduler','Auto')
+        if hasattr(self,'resource_scheduler') and resource_scheduler in RESOURCE_SCHEDULER_MODES:_set('resource_scheduler',resource_scheduler)
+        profile_engine=data.get('profile_engine','Auto')
+        if hasattr(self,'profile_engine') and profile_engine in PROFILE_ENGINE_MODES:_set('profile_engine',profile_engine)
+        edge_behavior=data.get('edge_behavior','Auto')
+        if hasattr(self,'edge_behavior') and edge_behavior in EDGE_BEHAVIOR_MODES:_set('edge_behavior',edge_behavior)
+        background_fill=data.get('background_fill','Balanced')
+        if background_fill=='Auto': background_fill='Balanced'
+        if hasattr(self,'background_fill') and background_fill in ('Off','Conservative','Balanced','Aggressive'):_set('background_fill',background_fill)
+        fill_engine=data.get('fill_engine','Auto')
+        if hasattr(self,'fill_engine') and fill_engine in FILL_ENGINES:_set('fill_engine',fill_engine)
+        if hasattr(self,'use_region_fill_engine') and type(data.get('use_region_fill_engine')) is bool:
+            _set('use_region_fill_engine',data['use_region_fill_engine'])
+        fill_aggressiveness=data.get('fill_aggressiveness','Balanced')
+        if hasattr(self,'fill_aggressiveness') and fill_aggressiveness in ('Safe','Balanced','Aggressive'):
+            _set('fill_aggressiveness',fill_aggressiveness)
+        background_simplification=data.get('background_simplification','Balanced')
+        if hasattr(self,'background_simplification') and background_simplification in ('Off','Conservative','Balanced','Strong'):_set('background_simplification',background_simplification)
+        color_grouping=data.get('color_grouping','Smart')
+        if hasattr(self,'color_grouping') and color_grouping in COLOR_GROUPING_MODES:_set('color_grouping',color_grouping)
+        color_workflow=data.get('color_workflow','Finish color first')
+        if hasattr(self,'color_workflow') and color_workflow in COLOR_WORKFLOWS:_set('color_workflow',color_workflow)
+        stroke_optimizer=data.get('stroke_optimizer','Auto')
+        if hasattr(self,'stroke_optimizer') and stroke_optimizer in STROKE_OPTIMIZER_MODES:_set('stroke_optimizer',stroke_optimizer)
+        adaptive_detail=data.get('adaptive_detail','Auto')
+        if hasattr(self,'adaptive_detail') and adaptive_detail in ADAPTIVE_DETAIL_MODES:_set('adaptive_detail',adaptive_detail)
+        detail_zoom=data.get('detail_zoom','Auto')
+        if hasattr(self,'detail_zoom') and detail_zoom in ('Auto','Off','2x','4x'):_set('detail_zoom',detail_zoom)
+        quick_sketch_style=data.get('quick_sketch_style','Balanced')
+        if hasattr(self,'quick_sketch_style') and quick_sketch_style in QUICK_SKETCH_STYLES:_set('quick_sketch_style',quick_sketch_style)
+        quick_sketch_fill_preference=data.get('quick_sketch_fill_preference','Safe Fill First')
+        if hasattr(self,'quick_sketch_fill_preference') and quick_sketch_fill_preference in QUICK_SKETCH_FILL_PREFERENCES:_set('quick_sketch_fill_preference',quick_sketch_fill_preference)
+        hybrid_mode=data.get('hybrid_mode','Auto Hybrid')
+        if hasattr(self,'hybrid_mode') and hybrid_mode in HYBRID_MODES:_set('hybrid_mode',hybrid_mode)
+        visual_verification=data.get('visual_verification','Auto')
+        if hasattr(self,'visual_verification') and visual_verification in VISUAL_VERIFICATION_MODES:_set('visual_verification',visual_verification)
+        color_rendering=data.get('color_rendering','Perceptual match')
+        if hasattr(self,'color_rendering') and color_rendering in COLOR_RENDERING_MODES:_set('color_rendering',color_rendering)
+        color_fidelity=data.get('color_fidelity','Faithful')
+        if hasattr(self,'color_fidelity') and color_fidelity in COLOR_FIDELITY_MODES:_set('color_fidelity',color_fidelity)
+        color_layers=data.get('color_layers','Off')
+        if hasattr(self,'color_layers') and color_layers in COLOR_LAYER_MODES:_set('color_layers',color_layers)
+        custom_color_workflow=data.get('custom_color_workflow','Calibrated palette')
+        if hasattr(self,'custom_color_workflow') and custom_color_workflow in CUSTOM_COLOR_WORKFLOWS:_set('custom_color_workflow',custom_color_workflow)
+        exact_color_limit=data.get('exact_color_limit','Auto')
+        if hasattr(self,'exact_color_limit') and str(exact_color_limit) in EXACT_COLOR_LIMITS:_set('exact_color_limit',str(exact_color_limit))
+        preview_mode=data.get('preview_mode','Manual')
+        if hasattr(self,'preview_mode') and preview_mode in PREVIEW_MODES:_set('preview_mode',preview_mode)
+        preview_detail_level=data.get('preview_detail_level','Detailed')
+        if hasattr(self,'preview_detail_level') and preview_detail_level in PREVIEW_DETAIL_MODES:_set('preview_detail_level',preview_detail_level)
+        if hasattr(self,'auto_clear_canvas') and type(data.get('auto_clear_canvas')) is bool:_set('auto_clear_canvas',data['auto_clear_canvas'])
+        tool_strategy=data.get('tool_strategy','Auto')
+        if hasattr(self,'tool_strategy') and tool_strategy in TOOL_STRATEGIES:_set('tool_strategy',tool_strategy)
+        if hasattr(self,'portrait_focus') and type(data.get('portrait_focus')) is bool:_set('portrait_focus',data['portrait_focus'])
+        if type(data.get('skip_white')) is bool:_set('skip_white',data['skip_white'])
+        if hasattr(self,'render_preset'):_set('render_preset',data.get('render_preset') if data.get('render_preset') in ('Auto','Manual','Masterpiece','Extra fast') else 'Auto')
+        if hasattr(self,'drawing_style'):
+            from DrawingStyleProfiles import DRAWING_STYLES
+            _set('drawing_style',data.get('drawing_style') if data.get('drawing_style') in DRAWING_STYLES else 'Auto')
+        if hasattr(self,'read_gartic_timer'):_set('read_gartic_timer',data.get('read_gartic_timer',True) is not False)
+        if type(data.get('outline')) is bool:_set('outline',data['outline'])
+        if hasattr(self,'sketch_detail'):_set('sketch_detail',data.get('sketch_detail') if data.get('sketch_detail') in ('Auto','Simple','Balanced','Detailed') else 'Auto')
+        value=data.get('contrast',1)
+        if isinstance(value,(float,int)) and math.isfinite(value) and .5<=value<=2:_set('contrast',value)
+        raw_brush=data.get('brush_px','Auto')
+        if isinstance(raw_brush,str) and raw_brush.strip().casefold()=='auto':
+            _set('brush_px','Auto')
+        elif type(raw_brush) is int and 1<=raw_brush<=50:
+            _set('brush_px',str(raw_brush))
+        elif isinstance(raw_brush,str) and raw_brush.isdecimal() and 1<=int(raw_brush)<=50:
+            _set('brush_px',str(int(raw_brush)))
+        opacity=data.get('gartic_opacity','Auto')
+        if hasattr(self,'gartic_opacity') and opacity in ('Auto','100%','90%','80%','70%','60%','50%','40%','30%','20%','10%'):
+            _set('gartic_opacity',opacity)
+        raw_limit=data.get('max_seconds')
+        if type(raw_limit) is int and 5<=raw_limit<=3600:_set('max_seconds',str(raw_limit))
+        elif isinstance(raw_limit,str) and raw_limit.isdecimal() and 5<=int(raw_limit)<=3600:_set('max_seconds',str(int(raw_limit)))
+        if hasattr(self,'paint_simple') and type(data.get('paint_simple')) is bool:_set('paint_simple',data['paint_simple'])
+        if hasattr(self,'paint_tool') and data.get('paint_tool') in ('Auto (recommended)','Use current tool','Brush','Pencil','Eraser'):
+            _set('paint_tool',data['paint_tool'])
+        if hasattr(self,'drop_mode'):
+            # Retire the old automatic-drop drawing mode safely.
+            _set('drop_mode','Show image')
+        corners=data.get('corners')
+        if isinstance(corners,list) and len(corners)==2 and all(isinstance(p,list) and len(p)==2 and all(type(n) is int for n in p) for p in corners):self.saved_area=corners
+        from ProfileIsolation import restore_extra
+        restore_extra(self,data)
+        anchors=data.get('canvas_anchor_detection')
+        if isinstance(anchors,dict):self.canvas_anchor_detection=anchors
 
     def save_settings(self):
-        if getattr(self,'profile_change_in_progress',False):return
+        if getattr(self,'profile_change_in_progress',False):return False
+        if getattr(self,'_settings_protected_path',None)==Path(self.settings_path):
+            if not self.closing:
+                self.status.set('These settings use an unsupported format. Reset this profile explicitly to replace them.')
+            return False
+        try:
+            data=DrawBotApp._settings_data(self)
+            atomic_write_text(self.settings_path,json.dumps(data,ensure_ascii=False,allow_nan=False))
+            return True
+        except (OSError,ValueError,TypeError,OverflowError,RuntimeError,tk.TclError) as error:
+            log_event(f'Settings save failed for {self.settings_path.name}: {error!r}')
+            if not self.closing:
+                self.status.set('Settings could not be saved. Check the values and make sure the folder is writable.')
+            return False
+
+    def _settings_data(self):
         data={'settings_schema':2,'quality':self.quality.get(),'speed':self.speed.get(),'precision':getattr(getattr(self,'precision',None),'get',lambda:'High')(),'mode':self.mode.get(),'shape_order':getattr(getattr(self,'shape_order',None),'get',lambda:'Fill first')(),'shape_model':getattr(getattr(self,'shape_model',None),'get',lambda:'Auto')(),'max_stroke_cap':getattr(getattr(self,'max_stroke_cap',None),'get',lambda:'Auto')(),'progressive_rendering':getattr(getattr(self,'progressive_rendering',None),'get',lambda:'Auto')(),'planning_watchdog':getattr(getattr(self,'planning_watchdog',None),'get',lambda:'Auto')(),'time_budget_mode':getattr(getattr(self,'time_budget_mode',None),'get',lambda:'Manual')(),'adaptive_deadline_renderer':bool(getattr(getattr(self,'adaptive_deadline_renderer',None),'get',lambda:True)()),'deadline_safety_reserve':getattr(getattr(self,'deadline_safety_reserve',None),'get',lambda:'Auto')(),'target_stroke_count':getattr(getattr(self,'target_stroke_count',None),'get',lambda:'Auto')(),'target_stroke_custom':getattr(getattr(self,'target_stroke_custom',None),'get',lambda:'2500')(),'drawing_style':getattr(getattr(self,'drawing_style',None),'get',lambda:'Auto')(),'render_style':getattr(getattr(self,'render_style',None),'get',lambda:'Auto')(),'draw_quality':getattr(getattr(self,'draw_quality',None),'get',lambda:'High likeness')(),'human_mode':'Off','gpu_mode':getattr(getattr(self,'gpu_mode',None),'get',lambda:'Auto')(),'gpu_vram':getattr(getattr(self,'gpu_vram',None),'get',lambda:'Auto')(),'gpu_performance':getattr(getattr(self,'gpu_performance',None),'get',lambda:'High throughput')(),'cpu_workers':getattr(getattr(self,'cpu_workers',None),'get',lambda:'Auto')(),'cpu_engine':getattr(getattr(self,'cpu_engine',None),'get',lambda:'Auto')(),'ram_budget':getattr(getattr(self,'ram_budget',None),'get',lambda:'Auto')(),'ram_custom_mb':getattr(getattr(self,'ram_custom_mb',None),'get',lambda:'4096')(),'planning_resolution':getattr(getattr(self,'planning_resolution',None),'get',lambda:'High')(),'resource_scheduler':getattr(getattr(self,'resource_scheduler',None),'get',lambda:'Auto')(),'profile_engine':getattr(getattr(self,'profile_engine',None),'get',lambda:'Auto')(),'edge_behavior':getattr(getattr(self,'edge_behavior',None),'get',lambda:'Auto')(),'background_fill':getattr(getattr(self,'background_fill',None),'get',lambda:'Balanced')(),'fill_engine':getattr(getattr(self,'fill_engine',None),'get',lambda:'Auto')(),'use_region_fill_engine':bool(getattr(getattr(self,'use_region_fill_engine',None),'get',lambda:True)()),'fill_aggressiveness':getattr(getattr(self,'fill_aggressiveness',None),'get',lambda:'Balanced')(),'background_simplification':getattr(getattr(self,'background_simplification',None),'get',lambda:'Balanced')(),'color_grouping':getattr(getattr(self,'color_grouping',None),'get',lambda:'Smart')(),'color_workflow':getattr(getattr(self,'color_workflow',None),'get',lambda:'Finish color first')(),'stroke_optimizer':getattr(getattr(self,'stroke_optimizer',None),'get',lambda:'Auto')(),'adaptive_detail':getattr(getattr(self,'adaptive_detail',None),'get',lambda:'Auto')(),'detail_zoom':getattr(getattr(self,'detail_zoom',None),'get',lambda:'Auto')(),'quick_sketch_style':getattr(getattr(self,'quick_sketch_style',None),'get',lambda:'Balanced')(),'quick_sketch_fill_preference':getattr(getattr(self,'quick_sketch_fill_preference',None),'get',lambda:'Safe Fill First')(),'hybrid_mode':getattr(getattr(self,'hybrid_mode',None),'get',lambda:'Auto Hybrid')(),'visual_verification':getattr(getattr(self,'visual_verification',None),'get',lambda:'Auto')(),'color_rendering':getattr(getattr(self,'color_rendering',None),'get',lambda:'Perceptual match')(),'color_fidelity':getattr(getattr(self,'color_fidelity',None),'get',lambda:'Faithful')(),'color_layers':getattr(getattr(self,'color_layers',None),'get',lambda:'Off')(),'custom_color_workflow':getattr(getattr(self,'custom_color_workflow',None),'get',lambda:'Calibrated palette')(),'exact_color_limit':getattr(getattr(self,'exact_color_limit',None),'get',lambda:'Auto')(),'preview_mode':getattr(getattr(self,'preview_mode',None),'get',lambda:'Manual')(),'preview_detail_level':getattr(getattr(self,'preview_detail_level',None),'get',lambda:'Detailed')(),'auto_clear_canvas':bool(getattr(getattr(self,'auto_clear_canvas',None),'get',lambda:False)()),'tool_strategy':getattr(getattr(self,'tool_strategy',None),'get',lambda:'Auto')(),'portrait_focus':getattr(getattr(self,'portrait_focus',None),'get',lambda:True)(),'skip_white':self.skip_white.get(),'contrast':self.contrast.get(),'corners':self.corners or self.saved_area,'outline':self.outline.get(),'brush_px':self.brush_px.get(),'max_seconds':self.max_seconds.get()}
         if getattr(self,'canvas_anchor_detection',None):data['canvas_anchor_detection']=self.canvas_anchor_detection
         if hasattr(self,'render_preset'):data['render_preset']=self.render_preset.get()
@@ -6605,13 +6750,8 @@ class DrawBotApp:
         if hasattr(self,'paint_tool'):data['paint_tool']=self.paint_tool.get()
         from ProfileIsolation import extra_settings
         data['profile_extras']=extra_settings(self)
-        # No automatic-drawing preference is persisted.
-        try:
-            atomic_write_text(self.settings_path,json.dumps(data,ensure_ascii=False))
-        except OSError as error:
-            log_event(f'Settings save failed for {self.settings_path.name}: {error!r}')
-            if not self.closing:
-                self.status.set('Settings could not be saved. Make sure the folder is writable.')
+        if hasattr(self,'gartic_opacity'):data['gartic_opacity']=self.gartic_opacity.get()
+        return data
 
     def options(self):
         if getattr(getattr(self,'render_preset',None),'get',lambda:'Manual')()=='Masterpiece':
@@ -7205,7 +7345,7 @@ class DrawBotApp:
             self.status.set('Load an image before upscaling.')
             return
         import customtkinter as ctk
-        from ImageUpscale import suggested_factor,upscale_size,upscale_image
+        from ImageUpscale import suggested_factor,upscale_size
         self.browser_one_click_pending=False
         self.browser_one_click_force=False
         DrawBotApp._cancel_after_attr(self,'browser_one_click_after')
@@ -7233,15 +7373,25 @@ class DrawBotApp:
         def apply():
             scale=int(factor.get()[0]);selected_method=method.get()
             dialog.destroy()
-            def work():
-                result=upscale_image(source,scale,selected_method,self.stop.is_set)
-                self.events.put(('upscaled',(result,source)))
-            self.begin_worker('upscale',work)
+            DrawBotApp._start_upscale(self,source,scale,selected_method)
         apply_button=ctk.CTkButton(dialog,text='Upscale image',command=apply)
         apply_button.pack(pady=(8,16))
         update()
         dialog.bind('<Escape>',lambda event:dialog.destroy())
         dialog.wait_visibility();dialog.grab_set()
+
+    def _start_upscale(self,source,scale,method):
+        if self.closing or self.activity or self.original is not source:
+            if not self.closing:self.status.set('Image or operation changed. Open Upscale again when ready.')
+            return False
+        from ImageUpscale import upscale_image
+        def work():
+            result=upscale_image(source,scale,method,self.stop.is_set)
+            if self.stop.is_set():
+                result.close()
+                raise InterruptedError()
+            self.events.put(('upscaled',(result,source)))
+        return bool(self.begin_worker('upscale',work))
 
     def undo_upscale(self):
         if self.activity or self.closing: return
@@ -8768,25 +8918,29 @@ class DrawBotApp:
                 if self.stop.is_set() or self.closing:
                     raise InterruptedError()
                 attempt_started=time.monotonic()
-                attempt_deadline=attempt_started+float(attempt.timeout_seconds)
+                attempt_deadline=(None if attempt.timeout_seconds is None else
+                                  attempt_started+float(attempt.timeout_seconds))
                 planning_done=threading.Event()
                 self.events.put(('status',f'Final planning attempt {attempt.index}/{attempt.total}: {attempt.name}. No mouse input is armed.'))
-                log_event(f"Final planning attempt {attempt.index}/{attempt.total} started: name={attempt.name!r} area={area[2:]} source={getattr(original, 'size', None)} test={test!r} timeout={attempt.timeout_seconds:.1f}s {_resource_log_text(attempt.options)}.")
+                timeout_label='disabled' if attempt.timeout_seconds is None else f'{attempt.timeout_seconds:.1f}s'
+                log_event(f"Final planning attempt {attempt.index}/{attempt.total} started: name={attempt.name!r} area={area[2:]} source={getattr(original, 'size', None)} test={test!r} timeout={timeout_label} {_resource_log_text(attempt.options)}.")
                 def heartbeat(attempt=attempt, attempt_started=attempt_started, attempt_deadline=attempt_deadline, planning_done=planning_done):
                     while not planning_done.wait(5.0):
                         if self.stop.is_set() or self.closing:
                             return
                         elapsed=time.monotonic()-attempt_started
-                        remaining=max(0.0,attempt_deadline-time.monotonic())
-                        self.events.put(('status',f'Final planning {attempt.index}/{attempt.total}: {elapsed:.0f}s elapsed, fallback in {remaining:.0f}s. No mouse input has been armed yet.'))
-                        log_event(f'Final planning watchdog heartbeat: attempt={attempt.index}/{attempt.total} name={attempt.name!r} elapsed={elapsed:.1f}s remaining={remaining:.1f}s mode={attempt.options.get("drawing_mode")} resolution={attempt.options.get("planning_resolution")} cpu={attempt.options.get("cpu_workers_resolved")} engine={attempt.options.get("cpu_engine")} target={attempt.options.get("target_stroke_count_resolved")}.')
+                        remaining=None if attempt_deadline is None else max(0.0,attempt_deadline-time.monotonic())
+                        timeout_note=('automatic timeout disabled' if remaining is None else
+                                      f'{"fallback" if attempt.index<attempt.total else "timeout"} in {remaining:.0f}s')
+                        self.events.put(('status',f'Final planning {attempt.index}/{attempt.total}: {elapsed:.0f}s elapsed, {timeout_note}. No mouse input has been armed yet.'))
+                        log_event(f'Final planning watchdog heartbeat: attempt={attempt.index}/{attempt.total} name={attempt.name!r} elapsed={elapsed:.1f}s remaining={remaining!r} mode={attempt.options.get("drawing_mode")} resolution={attempt.options.get("planning_resolution")} cpu={attempt.options.get("cpu_workers_resolved")} engine={attempt.options.get("cpu_engine")} target={attempt.options.get("target_stroke_count_resolved")}.')
                         if start_state and start_state.stalled(2.0):
                             _watch=start_state.watchdog_text(2.0)
                             log_event(f'Start Drawing watchdog: {_watch}')
                             self.events.put(('status',f'Start Drawing: {_watch}'))
                 threading.Thread(target=heartbeat,daemon=True,name=f'imagedrawbot-plan-watchdog-{attempt.index}').start()
                 def attempt_cancelled(deadline=attempt_deadline):
-                    return self.stop.is_set() or self.closing or time.monotonic() >= deadline
+                    return self.stop.is_set() or self.closing or (deadline is not None and time.monotonic() >= deadline)
                 try:
                     plan=make_test_plan(area[2:],attempt.options) if test else make_plan(original,area[2:],attempt.options,attempt_cancelled)
                     planning_done.set()
@@ -8799,7 +8953,7 @@ class DrawBotApp:
                     planning_done.set()
                     if self.stop.is_set() or self.closing:
                         raise
-                    if time.monotonic() >= attempt_deadline:
+                    if attempt_deadline is not None and time.monotonic() >= attempt_deadline:
                         last_timeout=attempt
                         log_event(f'Final planning attempt {attempt.index}/{attempt.total} timed out before mouse input was armed. name={attempt.name!r}.')
                         if attempt.index < attempt.total:
@@ -8807,9 +8961,8 @@ class DrawBotApp:
                             continue
                         raise ValueError('Planning watchdog stopped all attempts before mouse input. Try Planning resolution Standard, Target stroke count 1000–2500, CPU engine Threads, and Color layers Off.')
                     raise
-                except Exception:
+                finally:
                     planning_done.set()
-                    raise
             if plan is None:
                 label=last_timeout.name if last_timeout else 'no attempt'
                 log_event(f'Final planning failed before mouse input was armed. last={label!r}.')
@@ -9558,6 +9711,25 @@ class DrawBotApp:
     def help(self):
         self.show_welcome()
 
+    def _discard_worker_result(self,kind,value):
+        """Release rejected worker-owned images while retaining live UI owners."""
+        from PIL import Image
+        from AutoSketchBudget import _release_trial
+        retained={name:getattr(self,name,None) for name in
+                  ('original','upscale_original','background_removal_original')}
+        if kind=='planned':
+            _release_trial(value,retained['original'],retained,getattr(self,'plan',None))
+            return
+        candidate=None
+        if kind in ('loaded','upscaled') and isinstance(value,(list,tuple)) and value:
+            candidate=value[0]
+        elif kind=='recovery_loaded' and isinstance(value,(list,tuple)) and len(value)==2:
+            candidate=value[1]
+        elif kind=='background_removed':candidate=getattr(value,'image',None)
+        elif kind=='screen':candidate=value
+        if isinstance(candidate,Image.Image) and all(candidate is not image for image in retained.values()):
+            candidate.close()
+
     def _handle_event(self,kind,value):
         if getattr(self,'pending_clear_drawing',None) is not None:
             if kind=='done':
@@ -9565,16 +9737,20 @@ class DrawBotApp:
                 self.activity=None;self.worker=None
                 screen_window=getattr(self,'screen_task_window',None)
                 if screen_window is not None:screen_window.restore()
+            else:DrawBotApp._discard_worker_result(self,kind,value)
             return
         stop=getattr(self,'stop',None)
         if (stop is not None and stop.is_set() and kind in
-                ('loaded','planned','background_removed','screen','paint_auto_calibration_complete',
+                ('loaded','planned','background_removed','screen','recovery_loaded','paint_auto_calibration_complete',
                  'browser_one_click_setup_complete','browser_auto_calibration_complete',
                  'one_click_setup_verification_complete','picture_palette_complete')):
             log_event(f'Ignored cancelled worker result: {kind}.')
+            DrawBotApp._discard_worker_result(self,kind,value)
             return
         if kind=='status':
             self.status.set(str(value))
+        elif kind=='recovery_loaded':
+            self.recovery_loaded_pending=value
         elif kind=='paint_auto_calibration_complete':
             if self.game.get()!='Microsoft Paint':return
             meta,canvas=_validated_setup_payload(value,require_canvas=True);l,t,r,b=canvas
@@ -9888,10 +10064,15 @@ class DrawBotApp:
             except (TypeError,ValueError,tk.TclError,AttributeError):
                 pass
         elif kind=='upscaled':
+            if value[1] is not None and (self.stop.is_set() or self.original is not value[1]):
+                DrawBotApp._discard_worker_result(self,kind,value)
+                return
             self._suppress_recovery=False
-            if self.stop.is_set() and value[1] is not None: return
             self.original,previous=value
             self.upscale_original=previous
+            # Undo belongs to the most recent edit type. A background-removal
+            # snapshot from before this resize must not discard the resize.
+            self.background_removal_original=None;self.background_removal_meta=None
             self.color_session_cache.clear()
             DrawBotApp._clear_render_resume(self,'image resampled')
             from ImageFormatInfo import image_label
@@ -9917,6 +10098,7 @@ class DrawBotApp:
                 if self.background_removal_original is None:
                     self.background_removal_original=self.original.copy()
                 self.original=prepared;self.background_removal_meta=dict(meta);self.plan=None
+                self.upscale_original=None
                 DrawBotApp._clear_render_resume(self,'background removed')
                 self.file_label.set(image_label(self.original,'Background removed PNG'))
                 reduction=float(meta.get('estimated_work_reduction_percent',0) or 0)
@@ -9970,6 +10152,7 @@ class DrawBotApp:
                 raise ValueError('The preview worker returned an invalid plan.')
             if int(value.get('preview_generation',-1))!=int(getattr(self,'preview_generation',0)):
                 log_event(f"Ignored stale preview result generation={value.get('preview_generation')} current={getattr(self,'preview_generation',0)}.")
+                DrawBotApp._discard_worker_result(self,kind,value)
                 return
             self.plan=value
             self.preview_dirty_reason=''
@@ -10299,6 +10482,19 @@ class DrawBotApp:
                 if screen_window is not None:screen_window.restore()
                 self.set_busy(None)
                 self.worker=None
+                if finished=='recovery-load':
+                    pending=getattr(self,'recovery_loaded_pending',None)
+                    self.recovery_loaded_pending=None
+                    if pending is not None:
+                        if self.closing or self.stop.is_set():
+                            DrawBotApp._discard_worker_result(self,'recovery_loaded',pending)
+                        else:
+                            state,image=pending
+                            try:DrawBotApp._apply_recovery_snapshot(self,state,recovered_image=image)
+                            except Exception as error:
+                                DrawBotApp._discard_worker_result(self,'recovery_loaded',pending)
+                                log_event(f'Safe session recovery failed: {error!r}')
+                                self.status.set(f'The local session could not be fully restored: {error}')
                 if finished in ('draw','dry-run','mouse-test') and not self.closing:
                     try:self.root.deiconify()
                     except tk.TclError:pass

@@ -25,7 +25,9 @@ class ReviewRegressionTests(unittest.TestCase):
         mouse._send=fail
         with self.assertRaises(OSError):mouse.disarm_input()
         self.assertFalse(mouse.input_armed)
-        self.assertFalse(mouse.held)
+        # Failed LEFTUP still belongs to this backend. Keep cleanup ownership
+        # while denying any further input, so a later release can retry it.
+        self.assertTrue(mouse.held)
 
     def test_marker_pid_prefix_is_not_ownership(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -17,6 +17,7 @@ page/canvas zoom is never changed.
 from __future__ import annotations
 
 from typing import Any, Sequence
+import heapq
 import math
 
 QUICK_SKETCH_RENDER_STYLE = "Quick Sketch Fill + Contour"
@@ -169,19 +170,28 @@ def _stroke_length(stroke) -> int:
 def _trim_micro_texture(groups, cap: int):
     """Drop only bounded 1–2 px texture when a sketch contains too much noise."""
     work = [list(g) for g in (groups or ())]
+    cap = max(0, int(cap))
     micro = []
+    micro_count = 0
     long_count = 0
     for color, group in enumerate(work):
         for idx, stroke in enumerate(group):
             length = _stroke_length(stroke)
             if length <= 2:
-                micro.append((length, color, idx, stroke))
+                micro_count += 1
+                # The least valuable retained item is first. Prefer longer
+                # micro runs, then the earliest colour/local source index.
+                item = (length, -color, -idx)
+                if len(micro) < cap:
+                    heapq.heappush(micro, item)
+                elif cap and item > micro[0]:
+                    heapq.heapreplace(micro, item)
             else:
                 long_count += 1
-    if len(micro) <= cap:
-        return work, 0, len(micro), long_count
+    if micro_count <= cap:
+        return work, 0, micro_count, long_count
     # Prefer 2px segments over isolated dots, then stable source order.
-    keep_keys = {(c, i) for _l, c, i, _s in sorted(micro, key=lambda item: (-item[0], item[1], item[2]))[:cap]}
+    keep_keys = {(-c, -i) for _l, c, i in micro}
     pruned = 0
     result = []
     for color, group in enumerate(work):

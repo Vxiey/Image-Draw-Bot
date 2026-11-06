@@ -235,7 +235,7 @@ def one_click_setup(profile_name: str, profile_key: str, palette_path: Path, *, 
     if cancelled():raise InterruptedError('Browser setup cancelled.')
     if current_handle:
         handle=nonnegative_integer(current_handle,'Window handle',maximum=(1<<64)-1)
-        meta=probe_handle_isolated(handle)
+        meta=probe_handle_isolated(handle,cancelled=cancelled)
         client=screen_rect(meta['client_rect'])
         screenshot=ImageGrab.grab(bbox=client,all_screens=True)
     else:

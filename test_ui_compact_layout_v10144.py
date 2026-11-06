@@ -38,7 +38,8 @@ class CompactUILayoutTests(unittest.TestCase):
         self.assertIn('scope_visible(scope, key)', source)
         self.assertIn('widget.pack_forget()', source)
         self.assertIn('widget.pack(**options)', source)
-        self.assertNotIn('.destroy()', source)
+        self.assertNotIn('widget.destroy()', source)
+        self.assertIn('self.shell.destroy()', source)
         self.assertNotIn('.set(', source)
 
     def test_register_controls_still_supports_non_ui_test_apps(self):

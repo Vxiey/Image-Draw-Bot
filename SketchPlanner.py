@@ -9,6 +9,31 @@ def black_index(palette):
 
 SKETCH_DETAILS=('Simple','Balanced','Detailed')
 
+
+def _remove_small_components(keep, min_component, cancelled):
+    """Filter in place with storage bounded by the removable size floor."""
+    h,w=keep.shape;seen=np.zeros_like(keep)
+    for y in range(h):
+        if cancelled():raise InterruptedError()
+        for x in np.flatnonzero(keep[y]):
+            if seen[y,x]:continue
+            stack=[(y,int(x))];seen[y,x]=True;component=[];count=0
+            while stack:
+                cy,cx=stack.pop();count+=1
+                if count < min_component:
+                    component.append((cy,cx))
+                elif count == min_component:
+                    component.clear()
+                if count%1024==0 and cancelled():raise InterruptedError()
+                for dy,dx in ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)):
+                    ny,nx=cy+dy,cx+dx
+                    if 0<=ny<h and 0<=nx<w and keep[ny,nx] and not seen[ny,nx]:
+                        seen[ny,nx]=True;stack.append((ny,nx))
+            if count<min_component:
+                for cy,cx in component:keep[cy,cx]=False
+    if cancelled():raise InterruptedError()
+    return keep
+
 def contour_image(image,cancelled=lambda:False,detail='Detailed'):
     if detail not in SKETCH_DETAILS:raise ValueError('Choose Simple, Balanced or Detailed sketch detail.')
     radius,floor,percentile,factor,min_component={'Simple':(2.0,40,80,.85,12),'Balanced':(1.4,32,76,.8,7),'Detailed':(1.0,24,72,.75,4)}[detail]
@@ -31,18 +56,5 @@ def contour_image(image,cancelled=lambda:False,detail='Detailed'):
     keep&=mag>=threshold
     # Never turn the screenshot border into an artificial rectangular frame.
     keep[0,:]=False;keep[-1,:]=False;keep[:,0]=False;keep[:,-1]=False
-    h,w=keep.shape;seen=np.zeros_like(keep)
-    for y,x in np.argwhere(keep):
-        if seen[y,x]:continue
-        if cancelled():raise InterruptedError()
-        stack=[(int(y),int(x))];seen[y,x]=True;component=[]
-        while stack:
-            cy,cx=stack.pop();component.append((cy,cx))
-            if len(component)%1024==0 and cancelled():raise InterruptedError()
-            for dy,dx in ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)):
-                ny,nx=cy+dy,cx+dx
-                if 0<=ny<h and 0<=nx<w and keep[ny,nx] and not seen[ny,nx]:
-                    seen[ny,nx]=True;stack.append((ny,nx))
-        if len(component)<min_component:
-            for cy,cx in component:keep[cy,cx]=False
+    _remove_small_components(keep,min_component,cancelled)
     return Image.fromarray(np.where(keep,0,255).astype('uint8')).convert('RGBA')

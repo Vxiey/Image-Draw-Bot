@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image
 from DrawingStyleProfiles import apply_drawing_style
 from ExtraFastProfilePolicy import apply_extra_fast_profile_policy
+from ImageGeometry import thumbnail_size
 
 PRESETS=('Auto','Manual','Masterpiece','Extra fast')
 
@@ -11,17 +12,18 @@ def _image_statistics(image):
     rgba=flat=rgb=None
     try:
         if image.mode=='RGB' and 'transparency' not in image.info:
-            flat=image.copy()
+            size=thumbnail_size(image.size,(128,128))
+            flat=image if size==image.size else image.resize(size,Image.Resampling.BICUBIC,reducing_gap=2.0)
         else:
             rgba=image if image.mode=='RGBA' else image.convert('RGBA')
             flat=Image.new('RGBA',rgba.size,'white')
             flat.alpha_composite(rgba)
-        flat.thumbnail((128,128))
+        if flat is not image:flat.thumbnail((128,128))
         rgb=flat if flat.mode=='RGB' else flat.convert('RGB')
         a=np.asarray(rgb,dtype=np.int16)
     finally:
         if rgb is not None and rgb is not flat:rgb.close()
-        if flat is not None:flat.close()
+        if flat is not None and flat is not image:flat.close()
         if rgba is not None and rgba is not image:rgba.close()
     white=float(np.mean(np.min(a,axis=2)>235))
     chroma=float(np.mean(a.max(axis=2)-a.min(axis=2)>35))
@@ -30,7 +32,8 @@ def _image_statistics(image):
     dominant=float(np.sort(hist)[-12:].sum()/hist.sum())
     return white,chroma,dominant
 
-def resolve_drawing(image,options):
+def resolve_drawing(image,options,*,cancelled=lambda: False):
+    if cancelled():raise InterruptedError('Automatic image analysis cancelled.')
     raw=dict(options);preset=raw.get('render_preset','Manual')
     if preset not in PRESETS:raise ValueError('Choose Auto, Manual, Masterpiece or Extra fast.')
     # Manual means the caller owns every setting. Auto Drawing Style must not
@@ -38,6 +41,7 @@ def resolve_drawing(image,options):
     # explicitly selected a non-Auto drawing style.
     if preset=='Manual' and raw.get('drawing_style','Auto')=='Auto':return raw
     out=apply_drawing_style(image,raw);preset=out.get('render_preset','Manual')
+    if cancelled():raise InterruptedError('Automatic image analysis cancelled.')
     if out.get('drawing_style')!='Auto' and preset in ('Auto','Manual'):
         out['auto_engine_resolved']=True
         out['auto_drawing_meta']={'preset':preset,'image_kind':out.get('drawing_style_resolved'),
@@ -75,6 +79,7 @@ def resolve_drawing(image,options):
         return out
     # Quantized colour occupancy is a texture heuristic, not object recognition.
     white,chroma,dominant=_image_statistics(image)
+    if cancelled():raise InterruptedError('Automatic image analysis cancelled.')
     source_kind='line art' if white>.65 and chroma<.12 else 'flat illustration' if dominant>.90 else 'photo / texture'
     # Step 11: Auto is now an end-to-end quality/speed policy for full-colour
     # images. It composes the existing colour/deadline/calibration engines and
@@ -83,7 +88,7 @@ def resolve_drawing(image,options):
     if preset=='Auto' and source_kind!='line art' and not (out.get('paint_current_color') or out.get('outline') or out.get('erase_mode')):
         try:
             from EndToEndAutoTuner import tune_options
-            tuned=tune_options(image,out,source_kind_hint=source_kind)
+            tuned=tune_options(image,out,source_kind_hint=source_kind,cancelled=cancelled)
             meta=tuned.get('auto_tuner_meta') or {}
             if meta.get('active'):
                 engine='Shape paths' if tuned.get('drawing_mode')=='Shape paths' else 'Smart color paths'

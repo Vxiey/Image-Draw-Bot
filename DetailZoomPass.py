@@ -268,6 +268,31 @@ def _roi_boxes(cells: list[tuple[int, int, float]], width: int, height: int, fac
     return boxes
 
 
+def _base_color_sequence(execution_groups, options, cancelled):
+    """Retain the complete colour-batched base before a late detail pass."""
+    order = []
+    seen = set()
+    for raw in list(options.get('color_order') or ()) + list(range(len(execution_groups))):
+        try:
+            index = int(raw)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if 0 <= index < len(execution_groups) and index not in seen:
+            seen.add(index); order.append(index)
+    hints = getattr(execution_groups, 'phase_hints', None) or ()
+    sequence = []
+    for index in order:
+        phase_hints = hints[index] if index < len(hints) else ()
+        for local_index, path in enumerate(execution_groups[index]):
+            if cancelled():
+                raise InterruptedError()
+            if path:
+                phase = phase_hints[local_index] if local_index < len(phase_hints) else 'details'
+                sequence.append({'color_index': index, 'path': tuple(path), 'phase': phase or 'details',
+                                 'optional': False, 'detail_zoom_base': True})
+    return sequence
+
+
 def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Image,
                          palette_rgb: Sequence[Sequence[int]], groups, execution_groups,
                          execution_sequence, options: dict, *, cancelled=lambda: False):
@@ -360,6 +385,12 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
     new_exec = [list(g) for g in execution_groups]
     sequence_active = bool(execution_sequence)
     new_seq = [dict(e) for e in (execution_sequence or [])]
+    if not sequence_active:
+        # Appending details only to their original colour groups is insufficient:
+        # a later background colour can overwrite them. Materialize every base
+        # batch, then append the bounded detail pass after the entire base.
+        new_seq = _base_color_sequence(execution_groups, options, cancelled)
+    base_sequence_paths = len(new_seq)
     smallest_brush = _smallest_runtime_brush(options)
     phases = {str(e.get("phase") or "") for e in new_seq}
     deadline_mode = bool(phases.intersection({"major_coverage", "structure", "important_details", "accuracy", "correction"}))
@@ -368,6 +399,7 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
 
     appended = 0
     detail_pixels = 0
+    appended_colors = set()
     for color, path in detail_paths:
         if cancelled():
             raise InterruptedError()
@@ -396,8 +428,8 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
         }
         if deadline_mode:
             entry["deadline_phase"] = "important_details"
-        if sequence_active:
-            new_seq.append(entry)
+        new_seq.append(entry)
+        appended_colors.add(int(color))
         appended += 1
         detail_pixels += len(clean)
 
@@ -413,11 +445,17 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
         "roi_boxes": tuple(tuple(map(int, b)) for b in rois),
         "deadline_aware": bool(options.get("time_budget_active")),
         "path_cap": int(cap),
-        "sequence_appended": bool(sequence_active and appended),
-        "active_color_indices": tuple(sorted(int(i) for i in points_by_color if grouped.get(i))),
+        "sequence_appended": bool(appended),
+        "sequence_created_for_detail_pass": bool(not sequence_active and appended),
+        "sequence_base_paths": int(base_sequence_paths),
+        "active_color_indices": tuple(sorted(appended_colors)),
         "working_size": (int(w), int(h)),
         "reason": "zoomed source regions added as bounded high-value detail paths" if appended else "no useful detail paths",
     }
+    if cancelled():
+        raise InterruptedError()
+    if not appended:
+        return groups, execution_groups, execution_sequence, meta
     return new_groups, new_exec, new_seq, meta
 
 

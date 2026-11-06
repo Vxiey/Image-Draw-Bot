@@ -199,7 +199,7 @@ def discover_canvas_target(profile_key: str, *, preferred_handle: int | None = N
     if preferred_handle:
         try:
             from TargetCapture import probe_handle_isolated
-            meta = dict(probe_handle_isolated(int(preferred_handle)))
+            meta = dict(probe_handle_isolated(int(preferred_handle), cancelled=cancelled))
             meta.setdefault('handle', int(preferred_handle))
             candidate = _capture_candidate(key, meta, cancelled=cancelled)
             if cancelled():raise InterruptedError()

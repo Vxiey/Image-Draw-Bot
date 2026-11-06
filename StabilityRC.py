@@ -7,14 +7,22 @@ from __future__ import annotations
 SETTINGS_SCHEMA = 2
 
 
+class UnsupportedSettingsSchema(ValueError):
+    pass
+
+
 def migrate_settings(data):
     """Normalize settings from older beta builds without trusting unknown types."""
     if not isinstance(data,dict):return {}
     out=dict(data)
+    schema=out.get('settings_schema',0)
+    if type(schema) is not int or not 0<=schema<=SETTINGS_SCHEMA:
+        raise UnsupportedSettingsSchema('Unsupported settings schema; this build cannot rewrite it safely.')
     # Historical names accepted by older builds.
     aliases={'max_time':'max_seconds','brush_width':'brush_px','drawing_mode':'mode'}
     for old,new in aliases.items():
         if new not in out and old in out:out[new]=out[old]
+        out.pop(old,None)
     # Retired automatic drop flags must never restore input authorization.
     for key in ('draw_immediately','auto_draw','drop_action_pending','manual_drop_in_start','full_draw_armed'):
         out.pop(key,None)
