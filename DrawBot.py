@@ -4239,8 +4239,6 @@ class DrawBotApp:
         if self.closing or self.shutdown_complete:return
         self.recovery_image_pending=bool(getattr(self,'recovery_image_pending',False) or include_image)
         DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
-        for _after_name in ('browser_one_click_after','pending_drop_in_after','manual_drop_in_after','draw_arm_after','preview_after','preview_render_after','profile_change_after','paint_config_after','capture_job'):
-            DrawBotApp._cancel_after_attr(self,_after_name)
         def run():
             self.recovery_checkpoint_after=None
             with_image=bool(self.recovery_image_pending);self.recovery_image_pending=False
@@ -4278,7 +4276,7 @@ class DrawBotApp:
         self.preview_mode.set('Manual')
         area=state.get('saved_area') if isinstance(state,dict) else None
         self.saved_area=[tuple(map(int,p)) for p in area] if isinstance(area,list) and len(area)==2 else None
-        image=load_cached_image()
+        image=load_cached_image(expected_sha256=state.get('image_sha256')) if state.get('has_image') is True else None
         if image is not None:
             self.original=image;self.plan=None;self.file_label.set('Recovered local image')
         resume=state.get('render_resume') if isinstance(state,dict) else None
@@ -4329,7 +4327,15 @@ class DrawBotApp:
                     log_event(f'Safe session recovery failed: {error!r}')
                     messagebox.showerror('Recovery failed',f'The safe session could not be restored: {error}',parent=self.root)
             else:
-                clear_snapshot();log_event('User declined safe session recovery; local checkpoint cleared.')
+                try:
+                    clear_snapshot()
+                except Exception as error:
+                    log_event(f'Recovery declined; local checkpoint cleanup failed: {error!r}')
+                    self.status.set('Recovery declined. Local recovery data could not be fully cleared.')
+                    messagebox.showwarning('Recovery cleanup incomplete',
+                        f'The session was not restored, but some local recovery data may remain: {error}',parent=self.root)
+                    return
+                log_event('User declined safe session recovery; local checkpoint cleared.')
         if previous_run_unclean():
             self.status.set('Previous session ended unexpectedly. Recovery/logs remain local; no data is sent anywhere.')
 
@@ -7820,6 +7826,8 @@ class DrawBotApp:
                 state=server.start()
                 self._sync_mobile_preview()
                 log_event(f'Mobile Preview started locally on port {state.port}. No cloud service or telemetry is used.')
+            else:
+                server.refresh_addresses()
             urls=server.urls()
             url=urls[0] if urls else f'http://127.0.0.1:{server.port}/{server.token}/'
             self.mobile_preview_url.set(url)
@@ -8957,7 +8965,7 @@ class DrawBotApp:
         def work():
             from UpdateCenter import check_for_updates,download_installer
             try:
-                result=check_for_updates()
+                result=check_for_updates(cancelled=self.stop.is_set)
                 if result.get('update_available'):
                     asset=result.get('installer')
                     if asset:
@@ -10351,7 +10359,14 @@ def main():
 
 def self_test(gui=False):
     # Windows CI runs these modes without hooks, clicks, capture or network.
+    import os
     from PIL import Image
+    if os.name == 'nt':
+        # Exercise the native ABI in source, frozen and installed builds. A
+        # headless machine may have no hardware adapters; API failures must
+        # still fail this gate instead of being hidden by the CPU fallback.
+        from WindowsGpuDiscovery import enumerate_adapters
+        enumerate_adapters()
     plan=make_plan(Image.new('RGBA',(8,4),'black'),(80,40),
                    dict(detail=10,delay=.01,lines=True,skip_white=True,contrast=1,outline=False))
     assert plan['count']>0

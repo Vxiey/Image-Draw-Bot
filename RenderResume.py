@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 
 SCHEMA = 3
 SUPPORTED_SCHEMAS = (1, 2, 3)
+MAX_SEQUENCE_OPERATIONS = 25_000_000
 
 
 def _clean_rgb(value):
@@ -182,24 +183,35 @@ def _encode_bits(flags) -> str:
     return base64.b64encode(bytes(raw)).decode('ascii')
 
 
-def _decode_bits(text: str, total: int):
-    try:raw=base64.b64decode(str(text or '').encode('ascii'),validate=True)
+def _decode_packed_bits(text: str, total: int):
+    if type(total) is not int or not 0 <= total <= MAX_SEQUENCE_OPERATIONS or not isinstance(text, str):
+        return None
+    byte_count = (total + 7) // 8
+    if len(text) != 4 * ((byte_count + 2) // 3):
+        return None
+    try:raw=base64.b64decode(text.encode('ascii'),validate=True)
     except Exception:return None
-    if len(raw)!=(max(0,int(total))+7)//8:return None
-    flags=[bool(raw[i//8] & (1 << (i%8))) for i in range(max(0,int(total)))]
+    if len(raw) != byte_count:return None
     # Unused tail bits must stay zero so corrupted state cannot silently validate.
     if total%8 and raw:
         mask=~((1 << (total%8))-1) & 0xff
         if raw[-1] & mask:return None
-    return flags
+    return raw
+
+
+def _decode_bits(text: str, total: int):
+    """Compatibility helper; internal validation/counting stays packed."""
+    raw = _decode_packed_bits(text, total)
+    if raw is None:return None
+    return [bool(raw[i // 8] & (1 << (i % 8))) for i in range(total)]
 
 
 def _sequence_counts_from_bits(keys, bits):
-    flags=_decode_bits(bits,len(keys))
-    if flags is None:return None
+    raw=_decode_packed_bits(bits,len(keys))
+    if raw is None:return None
     out=Counter()
-    for key,done in zip(keys,flags):
-        if done:out[key]+=1
+    for index,key in enumerate(keys):
+        if raw[index // 8] & (1 << (index % 8)):out[key]+=1
     return dict(out)
 
 
@@ -221,6 +233,7 @@ def checkpoint_sequence_progress(plan, completed_counts, *, prelude_complete=Tru
     for key in keys:
         seen[key]+=1;flags.append(seen[key] <= requested.get(key,0))
     completed=sum(flags);total=len(keys)
+    last_color = (last_entry or {}).get('color_index')
     out=_base(plan,0,prelude_complete=prelude_complete)
     out.update({
         'schema':SCHEMA,'plan_fingerprint':sequence_context_fingerprint(plan),
@@ -229,7 +242,7 @@ def checkpoint_sequence_progress(plan, completed_counts, *, prelude_complete=Tru
         'sequence_coverage_percent':round((completed/max(1,total))*100.0,3),
         'sequence_remaining_count':max(0,total-completed),
         'sequence_last_phase':str((last_entry or {}).get('phase') or '')[:80],
-        'sequence_last_color_index':int((last_entry or {}).get('color_index',-1) or -1),
+        'sequence_last_color_index':int(last_color) if last_color is not None else -1,
         'sequence_last_brush_px':max(0,int((last_entry or {}).get('brush_px',0) or 0)),
         'path_level':False,
     })
@@ -255,6 +268,8 @@ def validate_progress(value):
     sequence_level = value.get('sequence_level', False) if schema >= 3 else False
     if type(prelude) is not bool or type(path_level) is not bool or type(sequence_level) is not bool:
         return None
+    if path_level and sequence_level:
+        return None
     out = dict(schema=schema, plan_fingerprint=fp, total_colors=total, completed_count=completed,
                completed_keys=list(keys), next_color=completed+1 if completed<total else 0,
                prelude_complete=prelude, active_color_number=0, active_color_index=None,
@@ -266,8 +281,8 @@ def validate_progress(value):
     if schema >= 3 and sequence_level:
         st=value.get('sequence_total');sc=value.get('sequence_completed_count');catalog=value.get('sequence_catalog_fingerprint');bits=value.get('sequence_completed_bits')
         if type(st) is not int or type(sc) is not int or not 0 <= sc <= st or not _hex(catalog,64):return None
-        flags=_decode_bits(bits,st)
-        if flags is None or sum(flags)!=sc:return None
+        packed=_decode_packed_bits(bits,st)
+        if packed is None or sum(byte.bit_count() for byte in packed)!=sc:return None
         try:last_color=int(value.get('sequence_last_color_index',-1));last_brush=max(0,int(value.get('sequence_last_brush_px',0) or 0))
         except (TypeError,ValueError,OverflowError):return None
         out.update(sequence_level=True,sequence_total=st,sequence_completed_count=sc,

@@ -13,7 +13,10 @@ from fnmatch import fnmatchcase
 import hashlib
 import json
 import os
+import shutil
+import stat
 import sys
+import tempfile
 import zipfile
 from typing import Iterable, Sequence
 
@@ -141,7 +144,7 @@ def sha256(path: Path) -> str:
 
 
 def _parts(rel: PurePosixPath) -> tuple[str, ...]:
-    return tuple(part for part in rel.parts if part not in ("", "."))
+    return tuple(part.casefold() for part in rel.parts if part not in ("", "."))
 
 
 def _is_runtime_file(parts: tuple[str, ...]) -> bool:
@@ -156,15 +159,15 @@ def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
     if any(part in EXCLUDED_DIR_NAMES for part in parts[:-1]):
         return True
     name = parts[-1] if parts else ""
-    if name in EXCLUDED_FILE_NAMES:
+    if name in {item.casefold() for item in EXCLUDED_FILE_NAMES}:
         return True
-    if any(name.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+    if any(name.startswith(prefix.casefold()) for prefix in EXCLUDED_PREFIXES):
         return True
     suffix = PurePosixPath(name).suffix
     if suffix in EXCLUDED_FILE_SUFFIXES:
         return True
     # Generated release/source archives should never be re-bundled into another release.
-    if name.startswith(("Image-Draw-Bot-", "ImageDrawBot-")) and suffix in {".zip", ".exe"}:
+    if name.startswith(("image-draw-bot-", "imagedrawbot-")) and suffix in {".zip", ".exe"}:
         return True
     # One-shot integration/packaging helpers are repository maintenance state,
     # never source-release contents.
@@ -183,7 +186,7 @@ def is_nonfatal_excluded_path(relative_path: str | PurePosixPath) -> bool:
     suffix=PurePosixPath(name).suffix.lower()
     if any(part in NON_FATAL_EXCLUDED_DIR_NAMES for part in parts):
         return True
-    if name.startswith(("Image-Draw-Bot-", "ImageDrawBot-")) and suffix in {'.zip','.exe'}:
+    if name.startswith(("image-draw-bot-", "imagedrawbot-")) and suffix in {'.zip','.exe'}:
         return True
     if name.lower().endswith('_once.py'):
         return True
@@ -192,16 +195,26 @@ def is_nonfatal_excluded_path(relative_path: str | PurePosixPath) -> bool:
     return False
 
 
+def _is_link(path: Path) -> bool:
+    # st_reparse_tag also covers junctions on Python 3.11, which predates
+    # Path.is_junction(). Ordinary cloud-file reparse points are not links.
+    metadata = path.lstat()
+    return stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)
+
+
 def iter_release_files(root: Path) -> Iterable[Path]:
     root = root.resolve()
     for current, dirs, files in os.walk(root):
         current_path = Path(current)
         rel_dir = current_path.relative_to(root).as_posix() if current_path != root else ""
-        dirs[:] = sorted(d for d in dirs if d not in EXCLUDED_DIR_NAMES)
+        dirs[:] = sorted(d for d in dirs if d.casefold() not in EXCLUDED_DIR_NAMES
+                         and not _is_link(current_path / d))
         for filename in sorted(files):
             path = current_path / filename
+            if _is_link(path) or not path.is_file():
+                continue
             rel = path.relative_to(root).as_posix()
-            if rel_dir and any(part in EXCLUDED_DIR_NAMES for part in PurePosixPath(rel).parts[:-1]):
+            if rel_dir and any(part.casefold() in EXCLUDED_DIR_NAMES for part in PurePosixPath(rel).parts[:-1]):
                 continue
             if is_forbidden_path(rel):
                 continue
@@ -221,15 +234,16 @@ def validate_release_tree(root: Path, *, allow_output_dirs: bool = False) -> Rel
         original_dirs = list(dirs)
         dirs[:] = [
             dirname for dirname in dirs
-            if dirname not in EXCLUDED_DIR_NAMES
-            or (allow_output_dirs and dirname in OUTPUT_DIR_NAMES)
+            if not _is_link(current_path / dirname)
+            and (dirname.casefold() not in EXCLUDED_DIR_NAMES
+                 or (allow_output_dirs and dirname.casefold() in OUTPUT_DIR_NAMES))
         ]
         for dirname in original_dirs:
             rel = PurePosixPath(rel_current, dirname).as_posix() if rel_current else dirname
-            if dirname in EXCLUDED_DIR_NAMES:
-                if dirname in NON_FATAL_EXCLUDED_DIR_NAMES:
+            if dirname.casefold() in EXCLUDED_DIR_NAMES:
+                if dirname.casefold() in NON_FATAL_EXCLUDED_DIR_NAMES:
                     continue
-                if allow_output_dirs and dirname in OUTPUT_DIR_NAMES:
+                if allow_output_dirs and dirname.casefold() in OUTPUT_DIR_NAMES:
                     continue
                 forbidden.append(rel + "/")
         for filename in files:
@@ -256,18 +270,31 @@ def validate_release_tree(root: Path, *, allow_output_dirs: bool = False) -> Rel
 
 def create_source_archive(root: Path, destination: Path) -> dict[str, object]:
     root = root.resolve()
-    destination = destination.resolve()
+    destination = destination.parent.resolve() / destination.name
     report = validate_release_tree(root)
     if not report.ok:
         raise ValueError("Release tree is not clean: " + json.dumps(report.to_dict(), indent=2))
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        destination.unlink()
-    files = tuple(iter_release_files(root))
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for path in files:
-            rel = path.relative_to(root).as_posix()
-            archive.write(path, PurePosixPath(ROOT_PREFIX, rel).as_posix())
+    files = tuple(path for path in iter_release_files(root) if path != destination)
+    descriptor, temporary = tempfile.mkstemp(prefix='.source-release-', suffix='.tmp', dir=destination.parent)
+    os.close(descriptor)
+    temporary = Path(temporary)
+    try:
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            for path in files:
+                rel = path.relative_to(root).as_posix()
+                # Source content, ordering, timestamp and permissions determine
+                # the ZIP, not the checkout's mtime/time zone or local umask.
+                info = zipfile.ZipInfo(PurePosixPath(ROOT_PREFIX, rel).as_posix(), (1980, 1, 1, 0, 0, 0))
+                info.create_system = 3
+                info.external_attr = 0o100644 << 16
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info._compresslevel = archive.compresslevel  # ZipInfo spelling supported by Python 3.11/3.12.
+                with path.open('rb') as source, archive.open(info, 'w', force_zip64=True) as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
     return {
         "name": destination.name,
         "path": str(destination),

@@ -13,6 +13,7 @@ import threading
 import time
 from typing import Any
 
+import numpy as np
 from PIL import Image
 
 from GpuHardware import best_nvidia_gpu
@@ -68,6 +69,7 @@ class GpuAnalysisSession:
 
 
 _BACKEND_CACHE: tuple[str, Any, str, int | None, int | None, str, int | None] | None | bool = False
+_BACKEND_DEVICE_ID: int | None = None
 _DISABLED_REASON = ""
 _KERNEL_CACHE: dict[str, Any] = {}
 
@@ -106,7 +108,8 @@ def _prop(props: Any, *names: str, default=None):
 
 
 def _load_cupy():
-    global _DISABLED_REASON
+    global _BACKEND_DEVICE_ID, _DISABLED_REASON
+    _BACKEND_DEVICE_ID = None
     hardware = best_nvidia_gpu(refresh=True)
     try:
         import cupy as cp
@@ -119,14 +122,21 @@ def _load_cupy():
         # whatever device happened to be current in the process. This matters on
         # systems with more than one NVIDIA adapter.
         best = None
+        failures = []
         for device_id in range(count):
-            with cp.cuda.Device(device_id):
-                props = cp.cuda.runtime.getDeviceProperties(device_id)
-                free_b, total_b = cp.cuda.runtime.memGetInfo()
-                candidate = (int(total_b), int(free_b), int(device_id), props)
-                if best is None or candidate[:2] > best[:2]:
-                    best = candidate
-        assert best is not None
+            try:
+                with cp.cuda.Device(device_id):
+                    props = cp.cuda.runtime.getDeviceProperties(device_id)
+                    free_b, total_b = cp.cuda.runtime.memGetInfo()
+                    candidate = (int(total_b), int(free_b), int(device_id), props)
+                    if best is None or candidate[:2] > best[:2]:
+                        best = candidate
+            except Exception as exc:
+                # A disconnected or unusable adapter must not hide another
+                # healthy CUDA device in the same machine.
+                failures.append(f"device {device_id}: {type(exc).__name__}: {exc}")
+        if best is None:
+            raise RuntimeError("No CUDA device could be initialized. " + "; ".join(failures))
         total_b, free_b, device_id, props = best
         cp.cuda.Device(device_id).use()
         device = _decode_name(_prop(props, "name"))
@@ -134,6 +144,7 @@ def _load_cupy():
         minor = int(_prop(props, "minor", default=0) or 0)
         capability = f"{major}.{minor}" if major else ""
         sms = int(_prop(props, "multiProcessorCount", "multi_processor_count", default=0) or 0) or None
+        _BACKEND_DEVICE_ID = device_id
         _DISABLED_REASON = ""
         return ("CuPy CUDA", (cp, cnd), device, int(total_b // _MIB), int(free_b // _MIB), capability, sms)
     except Exception as exc:
@@ -155,9 +166,21 @@ def _resolve_backend(mode: str):
     validate_acceleration_mode(mode)
     if mode == "CPU":
         return None
-    if _BACKEND_CACHE is False:
-        _BACKEND_CACHE = _load_cupy()
-    return _BACKEND_CACHE
+    with _GPU_LOCK:
+        if _BACKEND_CACHE is False:
+            _BACKEND_CACHE = _load_cupy()
+        backend = _BACKEND_CACHE
+        if backend is not None and _BACKEND_DEVICE_ID is not None:
+            cp, _ = backend[1]
+            try:
+                # CUDA's current device belongs to the calling thread. A
+                # successful probe on the UI thread does not select that device
+                # on later analysis/benchmark worker threads.
+                cp.cuda.Device(_BACKEND_DEVICE_ID).use()
+            except Exception as exc:
+                _disable_backend(exc)
+                return None
+        return backend
 
 
 def _fallback_info(mode: str, reason: str = "", performance: str = "Balanced") -> AccelerationInfo:
@@ -176,9 +199,11 @@ def _fallback_info(mode: str, reason: str = "", performance: str = "Balanced") -
 
 def reset_backend_cache() -> None:
     """Forget a previous failed/successful CUDA probe and detect again on next use."""
-    global _BACKEND_CACHE, _DISABLED_REASON
-    _BACKEND_CACHE = False
-    _DISABLED_REASON = ""
+    global _BACKEND_CACHE, _BACKEND_DEVICE_ID, _DISABLED_REASON
+    with _GPU_LOCK:
+        _BACKEND_CACHE = False
+        _BACKEND_DEVICE_ID = None
+        _DISABLED_REASON = ""
 
 
 def resolve_vram_budget_mb(setting: str, total_mb: int, free_mb: int) -> int:
@@ -595,9 +620,10 @@ def _enough_memory(info: AccelerationInfo, width: int, height: int, arrays: int 
 
 
 def _disable_backend(exc: Exception) -> None:
-    global _BACKEND_CACHE, _DISABLED_REASON
+    global _BACKEND_CACHE, _BACKEND_DEVICE_ID, _DISABLED_REASON
     _DISABLED_REASON = f"GPU runtime fallback: {type(exc).__name__}: {exc}"
     _BACKEND_CACHE = None
+    _BACKEND_DEVICE_ID = None
 
 
 def _launch_shape(pixel_count: int, performance: str) -> tuple[tuple[int], tuple[int]]:
@@ -720,15 +746,14 @@ def enhance_portrait(gray: Image.Image, strength: float, gamma: float,
                 blur = cnd.gaussian_filter(arr, sigma=1.35, mode="nearest")
                 out = cp.empty_like(arr)
                 grid, block = _launch_shape(arr.size, performance)
-                enhance_kernel(grid, block, (arr, blur, out, gray.width, gray.height,
-                                              float(strength), float(gamma), int(bool(subject_focus)), float(background_lift)))
+                enhance_kernel(grid, block, (arr, blur, out, np.int32(gray.width), np.int32(gray.height),
+                                              np.float32(strength), np.float32(gamma), np.int32(bool(subject_focus)), np.float32(background_lift)))
                 host_u8 = cp.asnumpy(cp.clip(cp.rint(out), 0, 255).astype(cp.uint8))
                 info = replace(_refresh_info(info, cp), tile_rows=gray.height, workspace_estimate_mb=plan["workspace_mb"])
                 session = GpuAnalysisSession(cp, cnd, out, info, gray.width, gray.height)
                 return Image.fromarray(host_u8), info, session
             # Low-VRAM path: process row tiles with overlap for Gaussian kernels.
             # The complete source/output never needs to reside in VRAM at once.
-            import numpy as np
             source=np.frombuffer(gray.tobytes(),dtype=np.uint8).reshape(gray.height,gray.width)
             host_u8=np.empty_like(source)
             for start,end,read0,read1,core0,core1 in _tile_ranges(gray.height,plan["tile_rows"],8):
@@ -740,7 +765,7 @@ def enhance_portrait(gray: Image.Image, strength: float, gamma: float,
                 # Kernel uses tile-local geometry. Subject-focus weighting is
                 # disabled per tile to avoid moving its visual centre; the CPU
                 # post-pass can still apply focus if needed.
-                enhance_kernel(grid,block,(arr,blur,out,tile.width,tile.height,float(strength),float(gamma),0,float(background_lift)))
+                enhance_kernel(grid,block,(arr,blur,out,np.int32(tile.width),np.int32(tile.height),np.float32(strength),np.float32(gamma),np.int32(0),np.float32(background_lift)))
                 tile_host=cp.asnumpy(cp.clip(cp.rint(out),0,255).astype(cp.uint8))
                 host_u8[start:end]=tile_host[core0:core1]
                 del arr,blur,out
@@ -775,9 +800,9 @@ def _session_analysis(session: GpuAnalysisSession, subject_focus: bool, profile:
     sal = cp.empty_like(arr); gx = cp.empty_like(arr); gy = cp.empty_like(arr)
     _, analysis_kernel = _kernels(cp)
     grid, block = _launch_shape(arr.size, performance)
-    analysis_kernel(grid, block, (arr, blur, sal, gx, gy, session.width, session.height,
-                                  int(bool(subject_focus)), float(profile["structure_weight"]),
-                                  float(profile["dark_weight"]), float(profile["centre_bias"])))
+    analysis_kernel(grid, block, (arr, blur, sal, gx, gy, np.int32(session.width), np.int32(session.height),
+                                  np.int32(bool(subject_focus)), np.float32(profile["structure_weight"]),
+                                  np.float32(profile["dark_weight"]), np.float32(profile["centre_bias"])))
     session.saliency_map, session.gx, session.gy = sal, gx, gy
 
 
@@ -818,7 +843,7 @@ def saliency(gray: Image.Image, subject_focus: bool, profile: dict, mode: str = 
                 tile=Image.fromarray(source[read0:read1]); arr=_upload_gray(cp,tile,performance)
                 blur=cnd.gaussian_filter(arr,sigma=1.2,mode="nearest"); sal=cp.empty_like(arr);gx=cp.empty_like(arr);gy=cp.empty_like(arr)
                 grid,block=_launch_shape(arr.size,performance)
-                analysis_kernel(grid,block,(arr,blur,sal,gx,gy,tile.width,tile.height,0,float(profile["structure_weight"]),float(profile["dark_weight"]),0.0))
+                analysis_kernel(grid,block,(arr,blur,sal,gx,gy,np.int32(tile.width),np.int32(tile.height),np.int32(0),np.float32(profile["structure_weight"]),np.float32(profile["dark_weight"]),np.float32(0.0)))
                 h=cp.asnumpy(sal).astype("float32",copy=False);host[start:end]=h[core0:core1]
                 del arr,blur,sal,gx,gy
             if subject_focus and float(profile.get("centre_bias",0)):

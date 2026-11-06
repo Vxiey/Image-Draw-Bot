@@ -1,5 +1,9 @@
 # Antivirus report review — 2026-11-05
 
+This document retains the original rc2 investigation below. The
+[rc3 follow-up and rc4 changes](#rc3-follow-up-reviewed-2026-11-06) record the
+later report separately; results for different hashes must not be combined.
+
 ## Artifact identified
 
 The report linked in [issue #32](https://github.com/Vxiey/Image-Draw-Bot/issues/32)
@@ -127,3 +131,86 @@ Trusted publisher verification also requires a provisioned code-signing
 certificate; metadata alone cannot supply it. See
 [Windows code signing](WINDOWS-CODE-SIGNING.md). Existing support for signing
 remains in place, and signing alone is not antivirus clearance.
+
+## RC3 follow-up — reviewed 2026-11-06
+
+The published rc3 installer is identified independently by its GitHub asset
+digest and the VirusTotal report:
+
+| Artifact | SHA-256 | Observed report |
+| --- | --- | --- |
+| `ImageDrawBot-1.0.146-rc3-Windows-x64-Setup.exe` | `cb16a40e3072881394698c3da6892d40c2780dbacd0d4777c39f394bdb3d6b2b` | [Installer report](https://www.virustotal.com/gui/file/cb16a40e3072881394698c3da6892d40c2780dbacd0d4777c39f394bdb3d6b2b): 1/68, DeepInstinct `MALICIOUS`; analysis 2026-11-05 22:02:36 UTC. |
+| `ImageDrawBot.exe`, identified in that report's dropped-file relations | `927efad3203460572702d364861bfad07d9d6bdb3f00d7f6e9d4a1b69f2e04d9` | [Application report](https://www.virustotal.com/gui/file/927efad3203460572702d364861bfad07d9d6bdb3f00d7f6e9d4a1b69f2e04d9): 3/70, Bkav Pro `W32.Malware.FE4DF838`, SecureAge `Malicious`, Skyhigh `BehavesLike.Win64.Backdoor.tc`; analysis 2026-11-05 22:10:51 UTC. |
+
+The inner application's relationship comes from VirusTotal's dropped-file
+metadata; this review did not independently extract and hash the reported
+installer. These counts are dated observations, not live verdicts or a safety
+certificate. The original reported binaries were not downloaded or executed
+locally for the investigation.
+
+### What can be attributed
+
+The PowerShell command visible in the installer behavior report matches rc3's
+fixed `Get-CimInstance Win32_VideoController` hardware query. The current upstream
+[non-interactive PowerShell Sigma rule](https://github.com/SigmaHQ/sigma/blob/52f81d60d5ea122e49a34b2289ea0c2a7bb0b113/rules/windows/process_creation/proc_creation_win_powershell_non_interactive_execution.yml)
+selects process identity and parent relationships; it does not require a harmful
+script. The rule acknowledges legitimate automation as a possible match.
+
+The upstream
+[Python image-load rule](https://github.com/SigmaHQ/sigma/blob/52f81d60d5ea122e49a34b2289ea0c2a7bb0b113/rules/windows/image_load/image_load_susp_python_image_load.yml)
+also acknowledges legitimately bundled Python applications. PyInstaller's
+[documented bootloader](https://pyinstaller.org/en/latest/advanced-topics.html)
+loads the Python dynamic library. That is expected for this application and
+does not by itself establish that the library was replaced. VirusTotal may use
+a different integrated rule revision.
+
+Some reported file operations target Inno Setup's temporary staging files and
+temporary installer process. Those exact events do not show encryption of user
+documents. They also do not explain the separate antivirus-engine verdicts.
+
+### What remains unresolved
+
+The public aggregate registry list did not expose the matching event behind the
+root/CA certificate-store rule. No explicit root-certificate installation or
+trust-store modification was found in the reviewed first-party runtime paths.
+That absence does not attribute the report's event or prove it a false positive.
+
+CAPE's reported WMI hook event uses `type: restored`. In the inspected
+[monitor implementation](https://github.com/kevoreilly/capemon/blob/ec765cd6de7854938e2937df78be53b6095dd6f1/unhook.c),
+that label is emitted when CAPE reapplies its own monitoring-hook bytes. It is
+not sufficient evidence that Image Draw Bot deliberately disabled monitoring.
+The report's exact monitor revision and the cause of the underlying byte change
+were not established.
+
+The application and installer are unsigned. The release pipeline has no
+provisioned trusted publisher identity. Signing establishes publisher/integrity
+information; it does not establish why a particular antivirus engine flagged
+this file or guarantee clearance. See [Windows code signing](WINDOWS-CODE-SIGNING.md).
+
+### RC4 changes supported by code and tests
+
+RC4 replaces the background GPU PowerShell query with native DXGI enumeration.
+This removes a PATH-based executable-selection dependency and the 32-bit WMI
+memory-field limitation. Microsoft's
+[DXGI adapter description](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc1)
+uses pointer-sized dedicated memory, whereas
+[Win32_VideoController.AdapterRAM](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-videocontroller)
+is an unsigned 32-bit field. NVIDIA utility enrichment uses OS-resolved trusted
+installation paths. Native interfaces are released after probing; release
+self-tests exercise the real Windows API in the packaged application.
+
+Windows system-library calls also use an explicit System32-only native load
+before wrapping the handle. This avoids PyInstaller's filename rewrite choosing
+an adjacent bundled file. The loader has a native Windows regression for a
+same-named non-executable bundle marker. It does not remove Python or required
+native extensions from the application.
+
+The existing Paint UI Automation feature still uses its readable, bounded
+PowerShell helper when requested. Its executable path now comes from the Windows
+system-directory API rather than an environment override. No execution-policy
+bypass, scanner exclusion, renamed process, changed install path, packing or
+obfuscation is added to suppress a detector.
+
+See [all 100 rc4 improvements](100-IMPROVEMENTS-v1.0.146-rc4.md) for the remaining
+changes and regression evidence. Only analysis of the exact new installer and
+application hashes can determine whether vendors still flag those artifacts.

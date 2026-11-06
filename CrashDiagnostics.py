@@ -11,11 +11,13 @@ import traceback
 from pathlib import Path
 
 from RuntimePaths import atomic_write_text, data_dir
+from LocalSanitization import sanitize_text
 
 _LOG_STREAM = None
 _INSTALLED = False
 _LOG_LOCK = threading.RLock()
 _MAX_LOG_BYTES = 2 * 1024 * 1024
+_MAX_RECORD_CHARS = 64 * 1024
 
 LOG_DIR = data_dir() / 'logs'
 CRASH_LOG = LOG_DIR / 'ImageDrawBot-crash.log'
@@ -36,10 +38,10 @@ def _stamp():
     return time.strftime('%Y-%m-%d %H:%M:%S')
 
 
-def _rotate_if_large(path: Path, limit: int = _MAX_LOG_BYTES) -> None:
+def _rotate_if_large(path: Path, limit: int = _MAX_LOG_BYTES, *, incoming_bytes: int = 0) -> None:
     """Keep logs bounded so a long-running beta cannot fill the user profile."""
     try:
-        if not path.exists() or path.stat().st_size <= limit:
+        if not path.exists() or path.stat().st_size + incoming_bytes <= limit:
             return
         backup = path.with_suffix(path.suffix + '.1')
         backup.unlink(missing_ok=True)
@@ -54,12 +56,27 @@ def _looks_like_error(message: str) -> bool:
     return any(marker in text for marker in _ERROR_MARKERS)
 
 
+def _record_text(message) -> str:
+    # Sanitize before shortening: a cut URL/header can otherwise leave a secret
+    # suffix whose original context is no longer recognizable.
+    text = sanitize_text(str(message))
+    if len(text) > _MAX_RECORD_CHARS:
+        marker = '\n[long log record truncated]\n'
+        keep = (_MAX_RECORD_CHARS - len(marker)) // 2
+        text = text[:keep] + marker + text[-keep:]
+    return text
+
+
 def _append_error(message, *, category='runtime'):
     try:
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-        _rotate_if_large(DEBUG_ERROR_LOG)
-        with DEBUG_ERROR_LOG.open('a', encoding='utf-8') as stream:
-            stream.write(f'[{_stamp()}] [{category}] {message}\n')
+        text = _record_text(message)
+        label = _record_text(category).replace('\r', ' ').replace('\n', ' ')[:80]
+        record = f'[{_stamp()}] [{label}] {text}\n'
+        with _LOG_LOCK:
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            _rotate_if_large(DEBUG_ERROR_LOG, incoming_bytes=len(record.encode('utf-8')))
+            with DEBUG_ERROR_LOG.open('a', encoding='utf-8') as stream:
+                stream.write(record)
     except Exception:
         # Debug logging is never allowed to break drawing.
         pass
@@ -83,12 +100,13 @@ def log_error(message, *, category='runtime', exc_info=None):
 
 def log_event(message, *, force_error=False, error_category='runtime'):
     try:
-        text=str(message)
+        text=_record_text(message)
+        record=f'[{_stamp()}] {text}\n'
         with _LOG_LOCK:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
-            _rotate_if_large(SESSION_LOG)
+            _rotate_if_large(SESSION_LOG, incoming_bytes=len(record.encode('utf-8')))
             with SESSION_LOG.open('a', encoding='utf-8') as stream:
-                stream.write(f'[{_stamp()}] {text}\n')
+                stream.write(record)
             if force_error or _looks_like_error(text):
                 _append_error(text, category=error_category)
     except Exception:
@@ -109,7 +127,7 @@ def install():
         _LOG_STREAM.write('\n' + '=' * 72 + '\n')
         _LOG_STREAM.write(f'[{_stamp()}] Image Draw Bot start\n')
         _LOG_STREAM.write(f'Python: {sys.version.replace(chr(10), " ")}\n')
-        _LOG_STREAM.write(f'Executable: {sys.executable}\n')
+        _LOG_STREAM.write(f'Executable: {_record_text(sys.executable)}\n')
         _LOG_STREAM.write(f'Platform: {platform.platform()}\n')
         _LOG_STREAM.write(f'PID: {os.getpid()}\n')
         _LOG_STREAM.flush()
@@ -121,12 +139,12 @@ def install():
 
     def exception_hook(exc_type, exc, tb):
         try:
-            rendered=''.join(traceback.format_exception(exc_type, exc, tb))
+            rendered=_record_text(''.join(traceback.format_exception(exc_type, exc, tb)))
             _append_error('Unhandled exception\n' + rendered, category='unhandled-main-thread')
             if _LOG_STREAM:
-                _LOG_STREAM.write(f'[{_stamp()}] Unhandled exception\n')
-                traceback.print_exception(exc_type, exc, tb, file=_LOG_STREAM)
-                _LOG_STREAM.flush()
+                with _LOG_LOCK:
+                    _LOG_STREAM.write(f'[{_stamp()}] Unhandled exception\n' + rendered)
+                    _LOG_STREAM.flush()
         except Exception:
             pass
         finally:
@@ -142,13 +160,13 @@ def install():
 
         def thread_hook(args):
             try:
-                name = getattr(getattr(args, 'thread', None), 'name', '<unknown>')
-                rendered=''.join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+                name = _record_text(getattr(getattr(args, 'thread', None), 'name', '<unknown>'))[:200]
+                rendered=_record_text(''.join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback)))
                 _append_error(f'Unhandled thread exception: {name}\n{rendered}', category='unhandled-worker-thread')
                 if _LOG_STREAM:
-                    _LOG_STREAM.write(f'[{_stamp()}] Unhandled thread exception: {name}\n')
-                    traceback.print_exception(args.exc_type, args.exc_value, args.exc_traceback, file=_LOG_STREAM)
-                    _LOG_STREAM.flush()
+                    with _LOG_LOCK:
+                        _LOG_STREAM.write(f'[{_stamp()}] Unhandled thread exception: {name}\n' + rendered)
+                        _LOG_STREAM.flush()
             except Exception:
                 pass
             finally:

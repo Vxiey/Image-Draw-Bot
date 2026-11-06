@@ -5,6 +5,14 @@ conservative planning defaults. Native locations are still calibrated explicitly
 """
 from __future__ import annotations
 
+import json
+import re
+import unicodedata
+import uuid
+
+MAX_CUSTOM_PROFILE_BYTES = 1024 * 1024
+MAX_CUSTOM_PROFILES = 1000
+
 PROFILES={
  'Microsoft Paint':('microsoft-paint','#087e8b','Desktop Paint profile. Keep the toolbar visible, use the final window size, calibrate tools/colors and select only the canvas.'),
  'Other drawing app':('generic','#087e8b','Generic calibrated drawing-app profile. Keep the palette and normal brush visible in a fixed layout.'),
@@ -129,26 +137,74 @@ def profile_defaults(name):
     return dict(PROFILE_DEFAULTS.get(name, PROFILE_DEFAULTS['Other drawing app']))
 
 
+def clean_profile_name(name):
+    if not isinstance(name, str):
+        raise ValueError('Choose a profile name containing 1–50 characters.')
+    if any(unicodedata.category(ch).startswith('C') for ch in name):
+        raise ValueError('Choose a profile name containing 1–50 printable characters.')
+    name = name.strip()
+    if not 1 <= len(name) <= 50:
+        raise ValueError('Choose a profile name containing 1–50 printable characters.')
+    return name
+
+
+def validate_custom_profile_name(name):
+    name = clean_profile_name(name)
+    if name.casefold() in {existing.casefold() for existing in PROFILES}:
+        raise ValueError('Choose a unique name containing 1–50 characters.')
+    return name
+
+
+def _register_custom_profile(name, key):
+    PROFILES[name] = (key, '#087e8b', 'Custom profile: select a normal brush, read the colors and select the drawing area.')
+    PROFILE_UI[name] = profile_ui('__custom__')
+
+
+def prepare_custom_profile(name):
+    """Build a registration without publishing files or in-memory UI state."""
+    name = validate_custom_profile_name(name)
+    data = {n: v[0] for n, v in PROFILES.items() if v[0].startswith('custom-')}
+    if len(data) >= MAX_CUSTOM_PROFILES:
+        raise ValueError('Too many custom profiles.')
+    key = 'custom-' + uuid.uuid4().hex
+    data[name] = key
+    return name, key, data
+
+
+def _unique_profile_object(pairs):
+    result = {}
+    for name, key in pairs:
+        if name in result:
+            raise ValueError('Duplicate profile registry entry.')
+        result[name] = key
+    return result
+
+
 def load_custom_profiles(path):
-    import json
-    import re
     try:
-        data=json.loads(path.read_text(encoding='utf-8'))
-        if not isinstance(data,dict):return
+        with path.open('rb') as stream:
+            raw = stream.read(MAX_CUSTOM_PROFILE_BYTES + 1)
+        if len(raw) > MAX_CUSTOM_PROFILE_BYTES:
+            return
+        data = json.loads(raw.decode('utf-8'), object_pairs_hook=_unique_profile_object)
+        if not isinstance(data, dict) or len(data) > MAX_CUSTOM_PROFILES:
+            return
+        owners = {v[0] for v in PROFILES.values()}
         for name,key in data.items():
-            if isinstance(name,str) and 1<=len(name)<=50 and isinstance(key,str) and re.fullmatch(r'custom-[a-f0-9]{32}',key) and name not in PROFILES:
-                PROFILES[name]=(key,'#087e8b','Custom profile: select a normal brush, read the colors and select the drawing area.')
-                PROFILE_UI[name]=profile_ui('__custom__')
-    except (OSError,ValueError):return
+            if not isinstance(key, str) or not re.fullmatch(r'custom-[a-f0-9]{32}', key) or key in owners:
+                continue
+            try:
+                name = validate_custom_profile_name(name)
+            except ValueError:
+                continue
+            _register_custom_profile(name, key)
+            owners.add(key)
+    except (OSError, ValueError, RecursionError):
+        return
 
 
 def add_custom_profile(name,path):
-    import json,uuid
     from RuntimePaths import atomic_write_text
-    name=name.strip()
-    if not name or len(name)>50 or name in PROFILES:raise ValueError('Choose a unique name containing 1–50 characters.')
-    key='custom-'+uuid.uuid4().hex
-    data={n:v[0] for n,v in PROFILES.items() if v[0].startswith('custom-')};data[name]=key
+    name, key, data = prepare_custom_profile(name)
     atomic_write_text(path,json.dumps(data,ensure_ascii=False))
-    PROFILES[name]=(key,'#087e8b','Custom profile: select a normal brush, read the colors and select the drawing area.')
-    PROFILE_UI[name]=profile_ui('__custom__')
+    _register_custom_profile(name, key)

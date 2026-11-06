@@ -55,8 +55,8 @@
 16. Create a tag matching the app version exactly:
 
    ```powershell
-   git tag v1.0.146-rc3
-   git push origin v1.0.146-rc3
+   git tag v1.0.146-rc4
+   git push origin v1.0.146-rc4
    ```
 
 17. Attach or verify:

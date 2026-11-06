@@ -10,6 +10,7 @@ import json,tempfile
 from pathlib import Path
 from CalibrationAnchors import validate_anchor,resolve_point
 from RuntimePaths import data_dir
+from ProfileStorage import safe_profile_key
 
 SCHEMA=2
 SUPPORTED_SCHEMAS=(1,2)
@@ -24,8 +25,7 @@ CUSTOM_FIELDS=BASE_FIELDS+RGB_FIELDS
 
 
 def file_for(profile_key):
-    safe=''.join(c if c.isalnum() or c in '-_' else '-' for c in str(profile_key).lower())[:80]
-    return data_dir()/f'exact-colors-{safe or "generic"}.json'
+    return data_dir()/f'exact-colors-{safe_profile_key(profile_key)}.json'
 
 
 def _point(v,name):

@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
+import tempfile
+import threading
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-from GameProfiles import PROFILES, add_custom_profile
+from GameProfiles import PROFILES, clean_profile_name, prepare_custom_profile, _register_custom_profile
 from ProfileIsolation import SETTING_NAMES
 from ProfileStorage import (
     profile_auto_tuner_feedback_file,
@@ -73,6 +76,7 @@ MACHINE_STATE_EXCLUDED = (
 
 _BUILTIN_KEYS = frozenset(value[0] for value in PROFILES.values() if not value[0].startswith("custom-"))
 _CUSTOM_KEY_RE = re.compile(r"custom-[a-f0-9]{32}\Z")
+_PROFILE_FILE_LOCK = threading.RLock()
 
 
 class ProfilePortabilityError(ValueError):
@@ -295,8 +299,10 @@ def validate_package(data: dict) -> dict:
         raise ProfilePortabilityError("Profile identity is missing.")
     name = profile.get("name")
     key = profile.get("key")
-    if not isinstance(name, str) or not (1 <= len(name.strip()) <= 50):
-        raise ProfilePortabilityError("Profile name must contain 1–50 characters.")
+    try:
+        name = clean_profile_name(name)
+    except ValueError as error:
+        raise ProfilePortabilityError(str(error)) from error
     if not isinstance(key, str):
         raise ProfilePortabilityError("Profile target key is missing.")
     _validate_source_key(key)
@@ -456,25 +462,88 @@ def _rewrite_calibration_owner(payload, destination_key: str):
     return clean
 
 
-def apply_package_to_paths(package: dict, destination_key: str, *, root: Path | None = None):
-    """Write one profile only.  This is the isolation boundary used by imports/tests."""
+def _package_file_changes(package, destination_key, root=None):
     package = validate_package(package)
     destination_key = safe_profile_key(destination_key)
     settings = flatten_settings(package["settings"], package.get("canvas"))
     settings["settings_schema"] = 2
     paths = portable_path_map(destination_key, root)
-    Path(paths["settings"]).parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(paths["settings"], json.dumps(settings, ensure_ascii=False, indent=2))
-
+    changes = {paths['settings']: json.dumps(settings, ensure_ascii=False, indent=2)}
     calibration = package.get("calibration") or {}
     for logical in ("palette", "tools", "exact_colors"):
         payload = calibration.get(logical)
         path = paths[logical]
         if payload is None:
-            Path(path).unlink(missing_ok=True)
+            changes[path] = None
             continue
         payload = _rewrite_calibration_owner(payload, destination_key)
-        atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2))
+        changes[path] = json.dumps(payload, ensure_ascii=False, indent=2)
+    return paths, changes
+
+
+def _replace_profile_files(changes):
+    """Stage all writes, then restore every original if any publish/delete fails.
+
+    Existing files are moved to unique backups in the same directory. Backups
+    are removed only after the entire operation succeeds; rollback failures
+    retain their backup paths for recovery rather than silently discarding data.
+    """
+    with _PROFILE_FILE_LOCK:
+        entries = []
+        rollback_failed = set()
+        try:
+            for path, text in changes.items():
+                path = Path(path)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if path.exists() and not path.is_file():
+                    raise OSError(f'Profile path is not a file: {path.name}')
+                entry = dict(path=path, staged=None, backup=None, moved=False, published=False)
+                entries.append(entry)
+                if text is not None:
+                    fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.import', dir=path.parent)
+                    os.close(fd)
+                    entry['staged'] = Path(name)
+                    atomic_write_text(entry['staged'], text)
+                if path.exists() or path.is_symlink():
+                    fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.backup', dir=path.parent)
+                    os.close(fd)
+                    entry['backup'] = Path(name)
+            for entry in entries:
+                if entry['backup'] is not None:
+                    os.replace(entry['path'], entry['backup'])
+                    entry['moved'] = True
+                if entry['staged'] is not None:
+                    os.replace(entry['staged'], entry['path'])
+                    entry['published'] = True
+        except Exception as error:
+            for entry in reversed(entries):
+                try:
+                    if entry['moved']:
+                        os.replace(entry['backup'], entry['path'])
+                    elif entry['published']:
+                        entry['path'].unlink(missing_ok=True)
+                except OSError:
+                    rollback_failed.add(entry['backup'] or entry['path'])
+            if rollback_failed:
+                names = ', '.join(str(path) for path in sorted(rollback_failed))
+                raise ProfilePortabilityError(f'Profile update failed and could not be fully rolled back. Retained recovery paths: {names}') from error
+            if isinstance(error, ProfilePortabilityError):
+                raise
+            raise ProfilePortabilityError(f'Profile update failed; previous files were restored: {error}') from error
+        finally:
+            for entry in entries:
+                for temporary in (entry['staged'], entry['backup']):
+                    if temporary is not None and temporary not in rollback_failed:
+                        try:
+                            temporary.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+
+
+def apply_package_to_paths(package: dict, destination_key: str, *, root: Path | None = None):
+    """Write one profile only, with rollback if one of its files cannot publish."""
+    paths, changes = _package_file_changes(package, destination_key, root)
+    _replace_profile_files(changes)
     return paths
 
 
@@ -543,19 +612,21 @@ def import_package_into_app(app, package: dict, *, action: str = "replace", copy
     except Exception as error:
         raise ProfilePortabilityError(f"Could not save the current profile before import: {error}") from error
 
-    if action == "replace":
-        if source_name not in PROFILES:
-            # A shared custom profile does not exist locally yet; create an isolated local key.
-            add_custom_profile(source_name, data_dir() / "profiles.json")
-        destination_name = source_name
+    destination_name = source_name if action == 'replace' else (copy_name or unique_copy_name(source_name))
+    registry = None
+    if action == 'copy' or destination_name not in PROFILES:
+        try:
+            destination_name, destination_key, registry = prepare_custom_profile(destination_name)
+        except ValueError as error:
+            raise ProfilePortabilityError(str(error)) from error
     else:
-        destination_name = (copy_name or unique_copy_name(source_name)).strip()
-        if not destination_name or len(destination_name) > 50 or destination_name in PROFILES:
-            raise ProfilePortabilityError("Import-as-copy needs a unique name of 1–50 characters.")
-        add_custom_profile(destination_name, data_dir() / "profiles.json")
-
-    destination_key = PROFILES[destination_name][0]
-    apply_package_to_paths(package, destination_key)
+        destination_key = PROFILES[destination_name][0]
+    _paths, changes = _package_file_changes(package, destination_key)
+    if registry is not None:
+        changes[data_dir() / 'profiles.json'] = json.dumps(registry, ensure_ascii=False)
+    _replace_profile_files(changes)
+    if registry is not None:
+        _register_custom_profile(destination_name, destination_key)
 
     # Imported geometry/calibration can be useful metadata, but never counts as
     # a completed safety test. _apply_profile_change clears locks, target handles,
@@ -576,11 +647,7 @@ def reset_profile(app):
         raise ProfilePortabilityError("Wait for the current Image Draw Bot task to finish before resetting a profile.")
     name, key = _profile_identity(str(app.game.get()))
     # Do not let the profile-change wrapper save the old values after deletion.
-    for path in profile_reset_paths(key):
-        try:
-            path.unlink(missing_ok=True)
-        except OSError as error:
-            raise ProfilePortabilityError(f"Could not reset {path.name}: {error}") from error
+    _replace_profile_files({path: None for path in profile_reset_paths(key)})
     _reload_profile(app, name)
     if hasattr(app, "status"):
         try: app.status.set(f"{name} restored to Image Draw Bot defaults. Calibration/setup must be verified again.")

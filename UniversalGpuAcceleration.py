@@ -565,7 +565,10 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
     the measured GPU crossover. The routing is still real: unusually large
     quantization candidate sets can use the measured GPU backend.
     """
-    arr=np.asarray([tuple(map(int,c[:3])) for c in colors],dtype=np.float32)
+    # This API receives palette RGB bytes, including palettes whose largest
+    # channel is only 1. Normalize by that contract rather than inferring the
+    # scale from the darkest/brightest color currently present.
+    arr=np.asarray([tuple(map(int,c[:3])) for c in colors],dtype=np.float32)/255.0
     n=len(arr);pixels=n*n;route=select_route("quantization",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     _cancel(cancelled)
     # Avoid making tiny matrices slower by forcing a GPU; select_route normally

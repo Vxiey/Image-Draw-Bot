@@ -4,8 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import re
+import time
 from typing import Iterable
-from urllib.parse import unquote, urljoin, urlparse
+from urllib.parse import quote, unquote, urljoin, urlparse
 
 from Version import APP_VERSION, BUILD_CHANNEL
 
@@ -17,12 +18,14 @@ _INSTALLER_HOSTS = frozenset({
 })
 _MAX_REDIRECTS = 5
 _MAX_RELEASE_RESPONSE_BYTES = 16 * 1024 * 1024
+_MAX_RELEASE_CHECK_SECONDS = 30
+_DOWNLOAD_SPACE_RESERVE = 8 * 1024 * 1024
 
 _STAGE_RANK = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "rc": 2, "stable": 3, "final": 3}
 _VERSION_RE = re.compile(
     r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
     r"(?:[-_.]?(?P<stage>alpha|a|beta|b|rc)(?:[-_.]?(?P<num>\d+))?)?$",
-    re.IGNORECASE,
+    re.IGNORECASE | re.ASCII,
 )
 
 
@@ -43,7 +46,8 @@ class ParsedVersion:
 
 
 def normalize_tag(tag: object) -> str:
-    return str(tag or "").strip().removeprefix("v")
+    text = str(tag or "").strip()
+    return text[1:] if text[:1].lower() == "v" else text
 
 
 def parse_version(value: object) -> ParsedVersion | None:
@@ -125,12 +129,27 @@ def _request_without_redirects(url, **options):
         return session.get(url, **options)
 
 
-def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, **options):
+def _check_transfer_budget(cancelled, deadline):
+    if cancelled():
+        raise InterruptedError("Update cancelled.")
+    if deadline is not None and time.monotonic() > deadline:
+        raise UpdateCheckError("Update request timed out. Check the connection and try again.")
+
+
+def _raise_rate_limit(response):
+    status = getattr(response, "status_code", 200)
+    headers = getattr(response, "headers", {})
+    if status == 429 or (status == 403 and headers.get("X-RateLimit-Remaining") == "0"):
+        retry = str(headers.get("Retry-After", ""))
+        detail = f" Retry in {int(retry)} seconds." if re.fullmatch(r"[0-9]{1,7}", retry) else " Try again later."
+        raise UpdateCheckError("GitHub's request limit was reached." + detail + " You can still open the Releases page.")
+
+
+def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, deadline=None, **options):
     """Follow only validated HTTPS redirects and close every discarded response."""
     for hop in range(_MAX_REDIRECTS + 1):
         _validate_https_url(url, hosts)
-        if cancelled():
-            raise InterruptedError("Update cancelled.")
+        _check_transfer_budget(cancelled, deadline)
         try:
             response = request_get(url, allow_redirects=False, **options)
         except ValueError as error:
@@ -140,6 +159,8 @@ def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, *
         accepted = False
         try:
             _validate_https_url(getattr(response, "url", url), hosts)
+            _check_transfer_budget(cancelled, deadline)
+            _raise_rate_limit(response)
             response.raise_for_status()
             status = getattr(response, "status_code", 200)
             if status == 200:
@@ -162,7 +183,7 @@ def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, *
                 response.close()
 
 
-def check_for_updates(*, request_get=None, timeout=(4, 8)) -> dict:
+def check_for_updates(*, request_get=None, timeout=(4, 8), cancelled=lambda: False) -> dict:
     """Check GitHub Releases after an explicit user action.
 
     ``request_get`` exists for deterministic unit tests. Production calls use
@@ -176,17 +197,23 @@ def check_for_updates(*, request_get=None, timeout=(4, 8)) -> dict:
         "X-GitHub-Api-Version": "2026-03-10",
     }
     response = None
+    deadline = time.monotonic() + _MAX_RELEASE_CHECK_SECONDS
     try:
         response = _get_trusted_response(
             GITHUB_RELEASES_API, request_get=request_get, hosts={"api.github.com"},
             headers=headers, timeout=timeout, stream=True,
+            cancelled=cancelled, deadline=deadline,
         )
         body = bytearray()
         for chunk in response.iter_content(chunk_size=64 * 1024):
+            _check_transfer_budget(cancelled, deadline)
             if len(body) + len(chunk) > _MAX_RELEASE_RESPONSE_BYTES:
                 raise UpdateCheckError("GitHub release metadata exceeds the allowed size.")
             body.extend(chunk)
+        _check_transfer_budget(cancelled, deadline)
         releases = json.loads(body)
+    except InterruptedError:
+        raise
     except Exception as error:
         raise UpdateCheckError(f"Could not check GitHub Releases: {error}") from error
     finally:
@@ -209,7 +236,10 @@ def check_for_updates(*, request_get=None, timeout=(4, 8)) -> dict:
 
     latest = normalize_tag(release.get("tag_name"))
     available = is_newer_version(latest, APP_VERSION)
-    url = str(release.get("html_url") or GITHUB_RELEASES_PAGE)
+    # The page is always in this repository, even if response metadata contains
+    # an unrelated/malformed html_url. The tag has already passed our parser.
+    tag = str(release.get("tag_name") or "").strip()
+    url = f"{GITHUB_RELEASES_PAGE}/tag/{quote(tag, safe='')}"
     name = str(release.get("name") or release.get("tag_name") or latest)[:160]
     message = f"Download version {latest}" if available else "You are on the latest version."
     return {
@@ -235,6 +265,7 @@ def installer_asset(release):
     hits=[]
     for asset in assets:
         if not isinstance(asset,dict) or asset.get('name')!=name:continue
+        if asset.get('state', 'uploaded') != 'uploaded':continue
         url=str(asset.get('browser_download_url') or '')
         try:parsed=urlparse(url)
         except ValueError:continue
@@ -267,7 +298,7 @@ def _validated_installer_metadata(asset):
 
 def download_installer(asset, *, directory=None, request_get=None, cancelled=lambda:False, progress=lambda done,total:None):
     """Stream to a unique staging file; publish only after size/hash validation."""
-    import hashlib,os,tempfile,time
+    import hashlib,os,shutil,tempfile
     from pathlib import Path
     asset=_validated_installer_metadata(asset)
     if request_get is None:
@@ -277,6 +308,9 @@ def download_installer(asset, *, directory=None, request_get=None, cancelled=lam
         directory=data_dir()/'updates'
     root=Path(directory);root.mkdir(parents=True,exist_ok=True)
     if cancelled():raise InterruptedError('Update cancelled.')
+    required=asset['size']+_DOWNLOAD_SPACE_RESERVE
+    if shutil.disk_usage(root).free < required:
+        raise UpdateCheckError(f'Not enough free space to download the update. Free at least {(required+1024**2-1)//1024**2} MiB and try again.')
     fd,temp=tempfile.mkstemp(prefix='download-',suffix='.part',dir=root)
     path=Path(temp);response=None
     try:
@@ -284,12 +318,17 @@ def download_installer(asset, *, directory=None, request_get=None, cancelled=lam
         with os.fdopen(fd,'wb') as output:
             response=_get_trusted_response(
                 asset['url'],request_get=request_get,hosts=_INSTALLER_HOSTS,
-                cancelled=cancelled,stream=True,timeout=(5,15),
-                headers={'User-Agent':f'ImageDrawBot/{APP_VERSION}'},
+                cancelled=cancelled,deadline=deadline,stream=True,timeout=(5,15),
+                headers={'User-Agent':f'ImageDrawBot/{APP_VERSION}', 'Accept-Encoding':'identity'},
             )
+            response_headers=getattr(response,'headers',{})
+            if str(response_headers.get('Content-Encoding','identity')).strip().lower() not in ('','identity'):
+                raise UpdateCheckError('Unexpected installer content encoding. Nothing was installed.')
+            declared=response_headers.get('Content-Length')
+            if declared is not None and (not re.fullmatch(r'[0-9]{1,20}',str(declared)) or int(declared)!=asset['size']):
+                raise UpdateCheckError('Installer response size differs from its published size.')
             for chunk in response.iter_content(chunk_size=256*1024):
-                if cancelled():raise InterruptedError('Update cancelled.')
-                if time.monotonic()>deadline:raise UpdateCheckError('Update download timed out.')
+                _check_transfer_budget(cancelled,deadline)
                 if not chunk:continue
                 total+=len(chunk)
                 if total>asset['size']:raise UpdateCheckError('Installer exceeds its published size.')
@@ -330,19 +369,59 @@ def installer_launch_args(path, *, executable=None):
 
 def launch_installer(path, asset, *, executable=None, launcher=None, cancelled=lambda:False):
     """Recheck staged bytes and launch the verified Windows updater."""
-    import hashlib,os,subprocess
+    import hashlib,os,stat,subprocess
     from pathlib import Path
     if os.name!='nt':raise UpdateCheckError('Automatic installation requires Windows.')
-    target=Path(path)
+    asset=_validated_installer_metadata(asset)
+    if cancelled():raise InterruptedError('Update cancelled.')
+    target=Path(path).resolve(strict=True)
     digest=hashlib.sha256()
-    with target.open('rb') as stream:
+    # Deny writes and deletion until CreateProcess has opened the verified EXE.
+    # Hashing an ordinary shared file and closing it before launch leaves a
+    # replace/modify window between verification and execution.
+    with _open_locked_installer(target) as stream:
+        info=os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_size!=asset['size']:
+            raise UpdateCheckError('Installer changed after download; check for updates again.')
         if stream.read(2)!=b'MZ':raise UpdateCheckError('Invalid installer.')
         stream.seek(0)
+        size=0
         for block in iter(lambda:stream.read(1024*1024),b''):
             if cancelled():raise InterruptedError('Update cancelled.')
+            size+=len(block)
+            if size>asset['size']:raise UpdateCheckError('Installer changed after download.')
             digest.update(block)
-    if target.stat().st_size!=asset['size'] or digest.hexdigest()!=asset['sha256']:
-        raise UpdateCheckError('Installer changed after download; check for updates again.')
-    args=installer_launch_args(target,executable=executable)
-    if cancelled():raise InterruptedError('Update cancelled.')
-    return (launcher or subprocess.Popen)(args)
+        if size!=asset['size'] or digest.hexdigest()!=asset['sha256']:
+            raise UpdateCheckError('Installer changed after download; check for updates again.')
+        args=installer_launch_args(target,executable=executable)
+        if cancelled():raise InterruptedError('Update cancelled.')
+        return (launcher or subprocess.Popen)(args)
+
+
+def _open_locked_installer(path):
+    """Return a Windows file stream whose handle denies writes and deletion."""
+    import ctypes
+    import msvcrt
+    import os
+    from WindowsSystem import load_system_library
+    kernel=load_system_library('kernel32.dll',use_last_error=True)
+    create=kernel.CreateFileW
+    create.argtypes=[ctypes.c_wchar_p,ctypes.c_uint32,ctypes.c_uint32,ctypes.c_void_p,
+                     ctypes.c_uint32,ctypes.c_uint32,ctypes.c_void_p]
+    create.restype=ctypes.c_void_p
+    handle=create(str(path),0x80000000,0x1,None,3,0x80,None)
+    if handle in (None,ctypes.c_void_p(-1).value):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        fd=msvcrt.open_osfhandle(handle,os.O_RDONLY|os.O_BINARY)
+    except BaseException:
+        close=kernel.CloseHandle
+        close.argtypes=[ctypes.c_void_p]
+        close.restype=ctypes.c_int
+        close(handle)
+        raise
+    try:
+        return os.fdopen(fd,'rb')
+    except BaseException:
+        os.close(fd)
+        raise

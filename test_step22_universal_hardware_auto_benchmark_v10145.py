@@ -6,6 +6,7 @@ from unittest import mock
 import GpuHardware as gh
 import UniversalHardwareBenchmark as uhb
 import AutoUniversalGpuSetup as aug
+from WindowsGpuDiscovery import WindowsGpuAdapter
 from PerformanceAutoTuner import build_recommendation
 
 
@@ -14,23 +15,25 @@ class Step22UniversalHardwareTests(unittest.TestCase):
         gh._CACHE = None
         gh._ALL_CACHE = None
 
-    def test_windows_cim_classifies_nvidia_amd_and_intel(self):
+    def test_windows_dxgi_classifies_nvidia_amd_and_intel(self):
         rows = [
-            {"Name": "NVIDIA GeForce RTX 5080", "AdapterCompatibility": "NVIDIA", "AdapterRAM": str(16 * 1024**3), "DriverVersion": "1", "PNPDeviceID": "PCI\\VEN_10DE&DEV_A"},
-            {"Name": "AMD Radeon RX 7900 XTX", "AdapterCompatibility": "Advanced Micro Devices", "AdapterRAM": str(24 * 1024**3), "DriverVersion": "2", "PNPDeviceID": "PCI\\VEN_1002&DEV_B"},
-            {"Name": "Intel(R) Arc(TM) Graphics", "AdapterCompatibility": "Intel Corporation", "AdapterRAM": str(8 * 1024**3), "DriverVersion": "3", "PNPDeviceID": "PCI\\VEN_8086&DEV_C"},
+            WindowsGpuAdapter(0, "NVIDIA GeForce RTX 5080", 0x10DE, 1, 16 * 1024**3, driver_version="1"),
+            WindowsGpuAdapter(1, "AMD Radeon RX 7900 XTX", 0x1002, 2, 24 * 1024**3, driver_version="2"),
+            WindowsGpuAdapter(2, "Intel(R) Arc(TM) A770 Graphics", 0x8086, 3, 8 * 1024**3, driver_version="3"),
         ]
-        with mock.patch.object(gh, "_powershell_video_controllers", return_value=rows):
-            devices = gh._detect_all_with_powershell()
+        with mock.patch.object(gh.os, "name", "nt"), \
+             mock.patch.object(gh, "_windows_adapters", return_value=rows):
+            devices = gh._detect_all_with_windows()
         self.assertEqual([d.vendor for d in devices], ["NVIDIA", "AMD", "Intel"])
         self.assertEqual(devices[1].memory_total_mb, 24576)
         self.assertEqual(devices[2].vendor_id, "8086")
+        self.assertFalse(devices[2].integrated)
 
     def test_nvidia_smi_data_merges_without_dropping_amd_intel(self):
         generic = [
-            gh.GpuDevice(0, "NVIDIA GeForce RTX 5080", 4096, "old", source="Windows CIM", vendor="NVIDIA"),
-            gh.GpuDevice(1, "AMD Radeon RX 7800 XT", 16384, "amd", source="Windows CIM", vendor="AMD"),
-            gh.GpuDevice(2, "Intel Arc A770", 16384, "intel", source="Windows CIM", vendor="Intel"),
+            gh.GpuDevice(0, "NVIDIA GeForce RTX 5080", 4096, "old", source="Windows DXGI", vendor="NVIDIA"),
+            gh.GpuDevice(1, "AMD Radeon RX 7800 XT", 16384, "amd", source="Windows DXGI", vendor="AMD"),
+            gh.GpuDevice(2, "Intel Arc A770", 16384, "intel", source="Windows DXGI", vendor="Intel"),
         ]
         merged = gh._merge_devices(generic, (gh.NvidiaGpu(0, "NVIDIA GeForce RTX 5080", 16303, "new", "01:00", "nvidia-smi"),))
         self.assertEqual({d.vendor for d in merged}, {"NVIDIA", "AMD", "Intel"})

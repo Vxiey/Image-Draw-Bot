@@ -1,6 +1,7 @@
 """Exercise readable Paint script transport without accessing Paint or desktop input."""
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -11,6 +12,13 @@ from PaintPreparation import _automation_script, _powershell_json_literal, _run_
 
 
 class PaintScriptTransportTests(unittest.TestCase):
+    def setUp(self):
+        # Portable process-transport tests inject the OS directory; the Windows
+        # integration class below exercises real GetSystemDirectoryW calls.
+        patcher=patch('PaintPreparation.system_directory',return_value=Path('/trusted/System32'))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def capture_process(self, process, captured):
         def launch(args, **kwargs):
             captured['args']=args

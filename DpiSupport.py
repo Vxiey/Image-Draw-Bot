@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import sys
+from WindowsSystem import load_system_library
 
 BASE_DPI = 96
 MIN_DPI = 48
@@ -51,7 +52,7 @@ def enable_per_monitor_v2() -> str:
         return 'non-windows'
     import ctypes
     try:
-        user32 = ctypes.WinDLL('user32', use_last_error=True)
+        user32 = load_system_library('user32', use_last_error=True)
     except OSError:
         return 'unavailable'
 
@@ -70,7 +71,7 @@ def enable_per_monitor_v2() -> str:
 
     # Windows 8.1 fallback: PROCESS_PER_MONITOR_DPI_AWARE = 2
     try:
-        shcore = ctypes.WinDLL('shcore', use_last_error=True)
+        shcore = load_system_library('shcore', use_last_error=True)
         fn = shcore.SetProcessDpiAwareness
         fn.argtypes = [ctypes.c_int]
         fn.restype = ctypes.c_long
@@ -134,7 +135,10 @@ def get_window_dpi_info(hwnd, *, user32=None, shcore=None, gdi32=None) -> DpiInf
     from ctypes import wintypes
 
     if user32 is None:
-        user32 = ctypes.WinDLL('user32', use_last_error=True)
+        try:
+            user32 = load_system_library('user32', use_last_error=True)
+        except OSError:
+            return DpiInfo(BASE_DPI, 'default-96', 1.0)
     monitor = None
     try:
         user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
@@ -157,7 +161,7 @@ def get_window_dpi_info(hwnd, *, user32=None, shcore=None, gdi32=None) -> DpiInf
     if monitor:
         try:
             if shcore is None:
-                shcore = ctypes.WinDLL('shcore', use_last_error=True)
+                shcore = load_system_library('shcore', use_last_error=True)
             fn = shcore.GetDpiForMonitor
             fn.argtypes = [wintypes.HMONITOR, ctypes.c_int,
                            ctypes.POINTER(wintypes.UINT), ctypes.POINTER(wintypes.UINT)]
@@ -175,7 +179,7 @@ def get_window_dpi_info(hwnd, *, user32=None, shcore=None, gdi32=None) -> DpiInf
     dc = None
     try:
         if gdi32 is None:
-            gdi32 = ctypes.WinDLL('gdi32', use_last_error=True)
+            gdi32 = load_system_library('gdi32', use_last_error=True)
         user32.GetDC.argtypes = [wintypes.HWND]
         user32.GetDC.restype = wintypes.HDC
         user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]

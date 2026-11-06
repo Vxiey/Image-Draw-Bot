@@ -4,6 +4,7 @@ import subprocess
 import sys
 import uuid
 from RuntimePaths import resource_path, is_frozen
+from WindowsSystem import load_system_library
 
 PROPERTY_IDS = (2, 3, 4, 5)  # RelaunchCommand, IconResource, DisplayName, ID
 
@@ -41,13 +42,15 @@ def _check(hr):
 class WindowProperties:
     """Short-lived IPropertyStore reference; values belong to the native window."""
     def __init__(self, hwnd):
-        shell = C.WinDLL('shell32')
+        shell = load_system_library('shell32')
         get_store = shell.SHGetPropertyStoreForWindow
         get_store.argtypes = [C.c_void_p, C.POINTER(GUID), C.POINTER(C.c_void_p)]
         get_store.restype = C.c_int32
         self.pointer = C.c_void_p()
         iid = GUID.parse('886d8eeb-8cf2-4446-8d02-cdba1dbdcf99')
         _check(get_store(hwnd, C.byref(iid), C.byref(self.pointer)))
+        if not self.pointer:
+            raise OSError('Windows returned no taskbar property store.')
         self.vtable = C.cast(self.pointer, C.POINTER(C.POINTER(C.c_void_p))).contents
 
     def _method(self, slot, result, *arguments):
@@ -67,14 +70,14 @@ class WindowProperties:
     def get(self, pid):
         key = PROPERTYKEY(GUID.parse('9f4c2855-9f79-4b39-a8d0-e1d42de1d5f3'), pid)
         value = PROPVARIANT()
-        _check(self._method(5, C.c_int32, C.POINTER(PROPERTYKEY), C.POINTER(PROPVARIANT))(
-            self.pointer, C.byref(key), C.byref(value)))
+        clear = load_system_library('ole32').PropVariantClear
+        clear.argtypes = [C.POINTER(PROPVARIANT)]
+        clear.restype = C.c_int32
         try:
-            return C.wstring_at(value.value.text) if value.vt == 31 else None
+            _check(self._method(5, C.c_int32, C.POINTER(PROPERTYKEY), C.POINTER(PROPVARIANT))(
+                self.pointer, C.byref(key), C.byref(value)))
+            return C.wstring_at(value.value.text) if value.vt == 31 and value.value.text else None
         finally:
-            clear = C.WinDLL('ole32').PropVariantClear
-            clear.argtypes = [C.POINTER(PROPVARIANT)]
-            clear.restype = C.c_int32
             _check(clear(C.byref(value)))
 
     def close(self):
@@ -90,7 +93,7 @@ class WindowProperties:
 
 
 def window_handle(window):
-    user = C.WinDLL('user32')
+    user = load_system_library('user32')
     user.GetAncestor.argtypes = [C.c_void_p, C.c_uint32]
     user.GetAncestor.restype = C.c_void_p
     return user.GetAncestor(window.winfo_id(), 2)  # GA_ROOT: Tk's native wrapper.
@@ -106,7 +109,7 @@ def relaunch_command():
 def clear_window_identity(window):
     hwnd = getattr(window, '_image_draw_bot_taskbar_hwnd', None)
     if hwnd:
-        user = C.WinDLL('user32')
+        user = load_system_library('user32')
         user.IsWindow.argtypes = [C.c_void_p]
         user.IsWindow.restype = C.c_int
         if user.IsWindow(hwnd):

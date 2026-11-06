@@ -20,6 +20,8 @@ import time
 from typing import Iterable
 
 from GpuHardware import best_nvidia_gpu
+from GpuSetupRuntime import (SetupEnvironmentError, process_failure, require_virtual_environment,
+                             running_in_virtual_environment)
 
 BASE = Path(__file__).resolve().parent
 GPU_REQUIREMENTS = BASE / "requirements-gpu-nvidia.txt"
@@ -79,6 +81,8 @@ def _state_path() -> Path:
 
 
 def _write_state(result: SetupResult) -> None:
+    if not running_in_virtual_environment():
+        return
     payload = result.as_dict()
     payload.update({
         "timestamp": int(time.time()),
@@ -94,11 +98,13 @@ def _write_state(result: SetupResult) -> None:
 def _read_pip_packages(python: str) -> set[str]:
     completed = _run([python, "-m", "pip", "list", "--format=json"], timeout=45.0)
     if completed.returncode != 0:
-        return set()
+        raise RuntimeError("pip could not inspect installed packages before GPU setup")
     try:
         rows = json.loads(completed.stdout or "[]")
-    except json.JSONDecodeError:
-        return set()
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("pip returned invalid installed-package information") from exc
+    if not isinstance(rows, list):
+        raise RuntimeError("pip returned invalid installed-package information")
     return {str(row.get("name") or "").lower() for row in rows if isinstance(row, dict)}
 
 
@@ -131,6 +137,7 @@ def _smoke_test(python: str) -> tuple[bool, str]:
 
 
 def _pip_install_backend(python: str, *, upgrade_pip: bool = True) -> tuple[bool, str]:
+    require_virtual_environment(python, _run)
     output: list[str] = []
     if upgrade_pip:
         completed = _run([
@@ -167,7 +174,14 @@ def ensure_gpu_backend(*, python: str | None = None, force: bool = False) -> Set
         _write_state(result)
         return result
 
-    ok, smoke = _smoke_test(python)
+    try:
+        ok, smoke = _smoke_test(python)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        detail = process_failure(exc)
+        result = SetupResult(False, "probe-failed", f"CUDA validation could not run: {detail}. CPU fallback remains available.",
+                             gpu.name, gpu.driver_version, False, detail)
+        _write_state(result)
+        return result
     if ok and not force:
         result = SetupResult(
             True, "ready", smoke or f"CUDA ready on {gpu.name}",
@@ -176,19 +190,30 @@ def ensure_gpu_backend(*, python: str | None = None, force: bool = False) -> Set
         _write_state(result)
         return result
 
-    install_ok, install_output = _pip_install_backend(python)
+    try:
+        install_ok, install_output = _pip_install_backend(python)
+    except SetupEnvironmentError as exc:
+        result = SetupResult(False, "environment-not-verified", f"{exc} CPU fallback remains available.",
+                             gpu.name, gpu.driver_version, False, str(exc))
+        _write_state(result)
+        return result
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        install_ok, install_output = False, process_failure(exc)
     if not install_ok:
         message = f"{gpu.name} detected, but automatic CUDA package installation failed. CPU fallback remains available."
         result = SetupResult(False, "install-failed", message, gpu.name, gpu.driver_version, True, install_output[-5000:])
         _write_state(result)
         return result
 
-    ok, smoke = _smoke_test(python)
+    try:
+        ok, smoke = _smoke_test(python)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        ok, smoke = False, process_failure(exc)
     if not ok:
         detail = smoke or "CUDA smoke test failed after package installation."
         result = SetupResult(
             False, "smoke-failed",
-            f"{gpu.name} detected and GPU packages were installed, but CUDA validation failed: {detail}",
+            f"{gpu.name} detected and GPU packages were installed, but CUDA validation failed: {detail} CPU fallback remains available.",
             gpu.name, gpu.driver_version, True, detail,
         )
         _write_state(result)
