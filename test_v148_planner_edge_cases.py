@@ -213,7 +213,7 @@ class PortraitLifecycleTests(unittest.TestCase):
 
     def test_preparation_session_cleanup_tracks_ownership_and_late_cancel(self):
         image = Image.new('RGB', (4, 4)); session = object(); stopped = False
-        def enhanced(gray, *args):
+        def enhanced(gray, *args, **kwargs):
             nonlocal stopped
             stopped = True
             return gray, self.info(), session

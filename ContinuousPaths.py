@@ -99,8 +99,8 @@ def _segment_path(stroke: Segment) -> Path:
     return ((x1, y1), (x2, y2))
 
 
-def _attach(state: _ActivePath, run: Segment) -> None:
-    """Attach an adjacent horizontal run using an overlap-safe connector."""
+def _attachment_points(state: _ActivePath, run: Segment) -> list[Point]:
+    """Return the bounded extension before committing to a path-length cap."""
     x1, y, x2, _ = run
     if x2 < x1:
         x1, x2 = x2, x1
@@ -117,22 +117,31 @@ def _attach(state: _ActivePath, run: Segment) -> None:
 
     # Move along the previous valid run to a shared x, then vertically by one
     # sample row.  Both pixels at this x belong to the same colour group.
-    _append(state.points, (connector, state.last_y))
-    _append(state.points, (connector, y))
+    points = [state.points[-1]]
+    _append(points, (connector, state.last_y))
+    _append(points, (connector, y))
 
     if x1 == x2:
         pass
     elif connector == x1:
-        _append(state.points, (x2, y))
+        _append(points, (x2, y))
     elif connector == x2:
-        _append(state.points, (x1, y))
+        _append(points, (x1, y))
     else:
         # The new run is wider than the overlap. Visit the nearest edge first,
         # then sweep to the far edge so the whole source run is still covered.
         if abs(connector-x1) <= abs(x2-connector):
-            _append(state.points, (x1, y)); _append(state.points, (x2, y))
+            _append(points, (x1, y)); _append(points, (x2, y))
         else:
-            _append(state.points, (x2, y)); _append(state.points, (x1, y))
+            _append(points, (x2, y)); _append(points, (x1, y))
+    return points[1:]
+
+
+def _attach(state: _ActivePath, run: Segment) -> None:
+    """Attach an adjacent horizontal run using an overlap-safe connector."""
+    state.points.extend(_attachment_points(state, run))
+    x1, y, x2, _ = run
+    x1, x2 = sorted((x1, x2))
 
     state.last_y = y
     state.x1, state.x2 = x1, x2
@@ -142,6 +151,8 @@ def _attach(state: _ActivePath, run: Segment) -> None:
 def _horizontal_paths(strokes: Sequence[Segment], cancelled=lambda: False,
                       max_rows_per_path: int = 72, max_points_per_path: int = 320) -> list[Path]:
     """Convert horizontal raster runs into continuous serpentine paths."""
+    if max_points_per_path < 2 or max_rows_per_path < 1:
+        raise ValueError("Path limits require at least two points and one row.")
     rows: dict[int, list[Segment]] = {}
     passthrough: list[Path] = []
     for stroke in strokes:
@@ -192,6 +203,8 @@ def _horizontal_paths(strokes: Sequence[Segment], cancelled=lambda: False,
                     continue
                 lo, hi = max(state.x1, x1), min(state.x2, x2)
                 if lo <= hi:
+                    if len(state.points) + len(_attachment_points(state, run)) > max_points_per_path:
+                        continue
                     end_x = state.points[-1][0]
                     connector = min(hi, max(lo, end_x))
                     # Prefer large overlap, then little retrace from current endpoint.

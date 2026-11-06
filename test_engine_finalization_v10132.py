@@ -85,10 +85,12 @@ class FinalEngineTests(unittest.TestCase):
         self.assertGreater(scaled.path_seconds(((0,0),(10,0))),base.path_seconds(((0,0),(10,0))))
 
     def test_sequence_estimate_includes_color_and_travel(self):
+        from ExecutionCostModel import build_cost_model as build_execution_cost_model
         im=Image.new('RGBA',(32,20),'white');d=ImageDraw.Draw(im)
         d.rectangle((2,2,6,6),fill='black');d.rectangle((22,12,28,18),fill='red')
         pm=build_pixel_map(im,PALETTE,gpu_mode='CPU')
-        opts={'profile_key':'engine-test'};model=build_cost_model(opts)
+        opts={'profile_key':'engine-test','_execution_cost_calibration_override':{}}
+        model=build_execution_cost_model(opts,im.size,im.size)
         plan=build_pixel_stroke_plan(pm,4,options=opts)
         total=0;cur=None;color=None
         for e in plan['execution_sequence']:

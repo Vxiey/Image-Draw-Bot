@@ -295,7 +295,7 @@ def _canvas(profile_key: str, image, palette_local_positions, cancelled=lambda:F
     w, h = image.size
     if profile_key == 'gartic-phone':
         from GarticEngineV2 import detect_gartic_canvas
-        result = detect_gartic_canvas(image)
+        result = detect_gartic_canvas(image,cancelled=cancelled)
         if result.found and result.box:
             # White connected components can include paper decoration. Apply the
             # execution edge check now, before planning, and only shrink.

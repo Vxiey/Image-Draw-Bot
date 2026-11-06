@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Sequence
 from ColorFidelity import color_metrics, palette_match_cost, validate_color_fidelity
-from AdaptivePaletteFidelity import select_adaptive_palette
+from AdaptivePaletteFidelity import select_adaptive_palette, _map_indices, palette_quality_metrics
 
 Segment = tuple[int, int, int, int]
 
@@ -116,20 +116,12 @@ def optimize_skribbl_groups(groups: Sequence[Sequence[Segment]], palette_rgb: Se
                 keep.remove(drop)
         keep.append(int(darkest))
         keep=list(dict.fromkeys(keep))
-        mapping={}
-        for index in active:
-            if index in keep:
-                mapping[index]=index
-                continue
-            mapping[index]=min(
-                keep,
-                key=lambda target:(
-                    palette_match_cost(palette[index],palette[target],
-                                       color_rendering='Perceptual match',fidelity=color_fidelity),
-                    -weights[target],target),
-            )
-        mapping[darkest]=darkest
-        palette_quality=dict(palette_quality or {})
+        mapping, errors = _map_indices(active, keep, palette, weights, color_fidelity)
+        palette_quality = {**palette_quality, **palette_quality_metrics(
+            active, keep, palette, weights, mapping, errors,
+            fidelity=color_fidelity, max_colors=max_colors)}
+        palette_quality['region_detail_anchors_kept'] = tuple(
+            i for i in palette_quality.get('region_detail_anchor_indexes', ()) if i in keep)
         palette_quality['forced_dark_structure']=True
 
     result: list[list[Segment]] = [[] for _ in work]

@@ -8,9 +8,11 @@ performed here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import ExitStack, closing
 from typing import Any
 
 from PIL import Image, ImageFilter, ImageStat
+from ColorMatchingEngine import visible_rgb_image
 
 
 @dataclass(frozen=True)
@@ -43,12 +45,19 @@ def _target_size(image: Image.Image, target_size=None) -> tuple[int,int]:
 
 
 def _metrics(image: Image.Image) -> tuple[float,float]:
-    rgb=image.convert('RGB')
-    w=max(24,min(144,rgb.width));h=max(24,min(144,rgb.height))
-    sample=rgb.resize((w,h),Image.Resampling.BILINEAR)
-    edge=float(ImageStat.Stat(sample.convert('L').filter(ImageFilter.FIND_EDGES)).mean[0])/255.0
-    palette=rgb.resize((w,h),Image.Resampling.NEAREST).quantize(colors=32,method=Image.Quantize.MEDIANCUT)
-    used=sum(1 for value in palette.histogram() if value)
+    with ExitStack() as owned:
+        # RGB input is already suitable for both samples; a full-sized copy is
+        # unnecessary. Other modes must be composited before filtering so that
+        # hidden RGB and palette/key transparency cannot influence the brush.
+        rgb = image if image.mode == 'RGB' and 'transparency' not in image.info else owned.enter_context(closing(visible_rgb_image(image)))
+        w=max(24,min(144,rgb.width));h=max(24,min(144,rgb.height))
+        sample=owned.enter_context(closing(rgb.resize((w,h),Image.Resampling.BILINEAR)))
+        gray=owned.enter_context(closing(sample.convert('L')))
+        edges=owned.enter_context(closing(gray.filter(ImageFilter.FIND_EDGES)))
+        edge=float(ImageStat.Stat(edges).mean[0])/255.0
+        nearest=owned.enter_context(closing(rgb.resize((w,h),Image.Resampling.NEAREST)))
+        palette=owned.enter_context(closing(nearest.quantize(colors=32,method=Image.Quantize.MEDIANCUT)))
+        used=sum(1 for value in palette.histogram() if value)
     colors=min(1.0,used/32.0)
     return max(0.0,min(1.0,edge)),max(0.0,min(1.0,colors))
 

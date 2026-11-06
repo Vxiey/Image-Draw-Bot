@@ -82,11 +82,11 @@ class GpuAccelerationV106Tests(unittest.TestCase):
         fake_info=ga.AccelerationInfo('Auto','Fake CUDA',True,'Test GPU',8192,7000,
                                       vram_budget_mb=4096,compute_capability='9.0',multiprocessors=80,
                                       performance_mode='High throughput')
-        def fake_enhance(gray,strength,gamma,focus,lift,mode,vram,performance):
+        def fake_enhance(gray,strength,gamma,focus,lift,mode,vram,performance,**kwargs):
             return gray.copy(),fake_info,None
-        def fake_saliency(gray,focus,profile,mode,vram,performance,session):
+        def fake_saliency(gray,focus,profile,mode,vram,performance,session,**kwargs):
             return [1.5]*(gray.width*gray.height),fake_info
-        def fake_sobel(gray,mode,vram,performance,session,focus,profile):
+        def fake_sobel(gray,mode,vram,performance,session,focus,profile,**kwargs):
             zeros=[0.0]*(gray.width*gray.height)
             return (zeros,zeros),fake_info
         meta={}

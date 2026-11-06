@@ -15,8 +15,22 @@ class PreviewDeck(ctk.CTkFrame):
         if not isinstance(name,str) or not name.strip() or name in self.pages:
             raise ValueError('A preview page needs a unique non-empty name.')
         page=ctk.CTkFrame(self.host,fg_color='transparent')
-        self.pages[name]=page;self.selector.configure(values=list(self.pages))
-        if len(self.pages)==1:self.set(name)
+        previous=self._visible_name
+        previous_value=self.current.get()
+        self.pages[name]=page
+        try:
+            self.selector.configure(values=list(self.pages))
+            if len(self.pages)==1:self.set(name)
+        except Exception:
+            self.pages.pop(name,None)
+            self._visible_name=previous
+            try:self.selector.configure(values=list(self.pages) or ['Original'])
+            except Exception:pass
+            try:self.current.set(previous_value)
+            except Exception:pass
+            try:page.destroy()
+            except Exception:pass
+            raise
         return page
     def set(self,name):
         if name not in self.pages:raise ValueError(name)
@@ -24,8 +38,16 @@ class PreviewDeck(ctk.CTkFrame):
         # so visible-page identity must be tracked separately from that value.
         if name != self._visible_name:
             previous=self.pages.get(self._visible_name)
-            if previous is not None:previous.pack_forget()
-            self.pages[name].pack(fill='both',expand=True)
+            try:
+                self.pages[name].pack(fill='both',expand=True)
+            except Exception:
+                if self._visible_name is not None:
+                    try:self.current.set(self._visible_name)
+                    except tk.TclError:pass
+                raise
+            if previous is not None:
+                try:previous.pack_forget()
+                except tk.TclError:pass
             self._visible_name=name
         self.current.set(name)
     def get(self):return self.current.get()

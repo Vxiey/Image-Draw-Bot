@@ -292,8 +292,11 @@ def _resource_benchmark_worker(task: tuple[int, int]) -> int:
 
 def benchmark_allocation(cpu_workers: str = "Auto", cpu_engine: str = "Auto",
                          ram_budget: str = "Auto", custom_ram_mb: str | int | None = None,
-                         *, loops_per_worker: int = 220_000) -> dict:
+                         *, loops_per_worker: int = 220_000,
+                         cancelled: Callable[[], bool] | None = None) -> dict:
     """Run a short deterministic CPU scheduling test for the selected allocation."""
+    if cancelled is not None and cancelled():
+        raise InterruptedError('Resource benchmark cancelled.')
     allocation = resolve_allocation(cpu_workers, cpu_engine, ram_budget, custom_ram_mb)
     workers = max(1, int(allocation["cpu_workers_resolved"]))
     backend = choose_parallel_backend(allocation["cpu_engine"], width=900, height=900,
@@ -301,11 +304,14 @@ def benchmark_allocation(cpu_workers: str = "Auto", cpu_engine: str = "Auto",
                                       preview=False)
     started = __import__("time").perf_counter()
     tasks = [(i, loops_per_worker) for i in range(workers)]
-    results = parallel_map(_resource_benchmark_worker, tasks, backend=backend, workers=workers)
+    results = parallel_map(_resource_benchmark_worker, tasks, backend=backend, workers=workers,
+                           cancelled=cancelled)
     elapsed = max(__import__("time").perf_counter() - started, 1e-9)
     checksum = 0
     for value in results:
         checksum ^= int(value)
+    if cancelled is not None and cancelled():
+        raise InterruptedError('Resource benchmark cancelled.')
     return {**allocation, "benchmark_backend": backend, "benchmark_elapsed_ms": round(elapsed * 1000, 1),
             "benchmark_tasks": len(tasks), "benchmark_score": round((loops_per_worker * len(tasks)) / elapsed / 1_000_000, 2),
             "benchmark_checksum": checksum}

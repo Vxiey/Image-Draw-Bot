@@ -245,8 +245,8 @@ __kernel void ds_pairwise_lab(__global const float4 *lab, __global float *out, c
 __kernel void ds_edge_kernel(__global const float *src, __global float *dst, const int w, const int h) {
     int i=get_global_id(0); int n=w*h; if(i>=n)return; int x=i%w; int y=i/w;
     int xl=max(0,x-1),xr=min(w-1,x+1),yu=max(0,y-1),yd=min(h-1,y+1);
-    float gx=(x>0 && x<w-1)?fabs(src[y*w+xr]-src[y*w+xl])*0.5f:0.0f;
-    float gy=(y>0 && y<h-1)?fabs(src[yd*w+x]-src[yu*w+x])*0.5f:0.0f;
+    float gx=(w>1)?(src[y*w+xr]-src[y*w+xl])/(float)(xr-xl):0.0f;
+    float gy=(h>1)?(src[yd*w+x]-src[yu*w+x])/(float)(yd-yu):0.0f;
     dst[i]=sqrt(gx*gx+gy*gy);
 }
 __kernel void ds_absdiff_kernel(__global const float4 *a, __global const float4 *b,
@@ -451,16 +451,18 @@ def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: di
     _cancel(cancelled)
     lum=np.asarray(luminance,dtype=np.float32)
     if lum.ndim!=2: raise ValueError("edge_magnitude requires a 2D luminance array")
+    if not np.all(np.isfinite(lum)): raise ValueError("luminance must be finite")
+    from ImageGradients import luminance_edges
     h,w=lum.shape;pixels=int(h*w);route=select_route("edge_map",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     def cpu():
-        gx=np.zeros_like(lum);gy=np.zeros_like(lum);gx[:,1:-1]=np.abs(lum[:,2:]-lum[:,:-2])*.5;gy[1:-1,:]=np.abs(lum[2:,:]-lum[:-2,:])*.5
-        return np.sqrt(gx*gx+gy*gy,dtype=np.float32)
+        return luminance_edges(lum)
+    if not pixels:return cpu(),_cpu_route("edge_map",0,"Empty luminance grid").as_dict()
     if not route.accelerated:return cpu(),route.as_dict()
     try:
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
             with cp.cuda.Device(_cuda_device_id(route.backend_id)):
-                x=cp.asarray(lum,dtype=cp.float32);gx=cp.zeros_like(x);gy=cp.zeros_like(x);gx[:,1:-1]=cp.abs(x[:,2:]-x[:,:-2])*.5;gy[1:-1,:]=cp.abs(x[2:,:]-x[:-2,:])*.5;out=cp.sqrt(gx*gx+gy*gy);cp.cuda.Stream.null.synchronize();host=cp.asnumpy(out).astype(np.float32,copy=False)
+                x=cp.asarray(lum,dtype=cp.float32);out=luminance_edges(x,xp=cp);cp.cuda.Stream.null.synchronize();host=cp.asnumpy(out).astype(np.float32,copy=False)
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
             cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags
@@ -531,6 +533,19 @@ def _palette_cost_cpu(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
     return dist.astype(np.float32,copy=False)
 
 
+def _rgba_visible_rgb(raw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Composite once into one owned RGB buffer, retaining the exact cost input."""
+    alpha = raw[..., 3]
+    rgb = raw[..., :3].astype(np.float32)
+    visible = alpha > 0
+    if not np.all(alpha == 255):
+        opacity = alpha.astype(np.float32)
+        rgb *= opacity[..., None]
+        rgb += (255.0 * (255.0 - opacity))[..., None]
+        rgb /= 255.0
+    return rgb, visible
+
+
 @_check_completed
 def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indices: Sequence[int], custom_flags: Sequence[bool], *,
                          color_rendering: str="Perceptual match", custom_mode: str="Calibrated palette",
@@ -543,17 +558,18 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
     """
     from PIL import Image
     _cancel(cancelled)
-    if not len(palette):
-        raise ValueError("palette must contain at least one color")
-    if len(palette) > 32768:
-        raise ValueError("palette exceeds the int16 index range")
+    from PixelMapValidation import validate_palette_count, validate_color_index
+    count = validate_palette_count(len(palette))
     rgba=image.convert("RGBA") if isinstance(image,Image.Image) else Image.fromarray(np.asarray(image,dtype=np.uint8),"RGBA")
-    raw=np.asarray(rgba,dtype=np.uint8);h,w=raw.shape[:2];pixels=h*w
-    candidates=[int(i) for i in candidate_indices if 0<=int(i)<len(palette)] or list(range(len(palette)))
+    try:
+        raw=np.asarray(rgba,dtype=np.uint8)
+    finally:
+        rgba.close()
+    h,w=raw.shape[:2];pixels=h*w
+    candidates=list(dict.fromkeys(validate_color_index(i,palette_count=count) for i in candidate_indices)) or list(range(count))
     pal=np.asarray([tuple(map(int,palette[i][:3])) for i in candidates],dtype=np.float32)
     ids=np.asarray(candidates,dtype=np.int16);custom=np.asarray([bool(custom_flags[i]) if i<len(custom_flags) else False for i in candidates],dtype=np.uint8)
-    alpha=raw[...,3].astype(np.float32);rgb=np.where(alpha[...,None]>=255.0,raw[...,:3].astype(np.float32),(raw[...,:3].astype(np.float32)*alpha[...,None]+255.0*(255.0-alpha[...,None]))/255.0)
-    visible=alpha>0.0
+    rgb,visible=_rgba_visible_rgb(raw)
     if skip_white:visible&=np.min(rgb,axis=2)<245.0
     route=select_route("palette_match",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     perceptual=color_rendering!="RGB nearest"; fidelity=2 if color_fidelity=="Faithful" else (1 if color_fidelity=="Balanced" else 0); custom_first=custom_mode=="Custom colors first" and bool(np.any(custom))
@@ -642,6 +658,21 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
         fallback=_mark_failed(route,exc);result=cpu();return result,fallback.as_dict()
 
 
+def _pairwise_lab_distance(lab, *, xp=np, cancelled=lambda: False):
+    """Keep scratch space bounded independently of the required N×N output."""
+    count = len(lab)
+    output = np.empty((count, count), dtype=np.float32)
+    rows = max(1, min(256, 1_048_576 // max(1, count)))
+    for start in range(0, count, rows):
+        _cancel(cancelled)
+        end = min(count, start + rows)
+        distance = _squared_color_distances(lab[start:end], lab)
+        distance = xp.sqrt(distance) * 100.0
+        output[start:end] = distance if xp is np else xp.asnumpy(distance)
+    _cancel(cancelled)
+    return output
+
+
 @_check_completed
 def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="Auto", profile: dict[str,Any] | None=None,
                             cancelled: Callable[[],bool]=lambda:False) -> tuple[np.ndarray,dict[str,Any]]:
@@ -663,12 +694,13 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
     # Avoid making tiny matrices slower by forcing a GPU; select_route normally
     # already returns CPU below the measured crossover.
     if not route.accelerated:
-        lab=_oklab_cpu(arr);d=lab[:,None,:]-lab[None,:,:];return (np.sqrt(np.sum(d*d,axis=2,dtype=np.float32))*100.0).astype(np.float32,copy=False),route.as_dict()
+        return _pairwise_lab_distance(_oklab_cpu(arr),cancelled=cancelled),route.as_dict()
     try:
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
             with cp.cuda.Device(_cuda_device_id(route.backend_id)):
-                c=cp.asarray(_rgb01(arr),dtype=cp.float32);lin=cp.where(c<=0.04045,c/12.92,cp.power((c+0.055)/1.055,2.4));r,g,b=lin[:,0],lin[:,1],lin[:,2];l=cp.cbrt(.4122214708*r+.5363325363*g+.0514459929*b);m=cp.cbrt(.2119034982*r+.6806995451*g+.1073969566*b);ss=cp.cbrt(.0883024619*r+.2817188376*g+.6299787005*b);lab=cp.stack((.2104542553*l+.7936177850*m-.0040720468*ss,1.9779984951*l-2.4285922050*m+.4505937099*ss,.0259040371*l+.7827717662*m-.8086757660*ss),axis=1);d=lab[:,None,:]-lab[None,:,:];out=cp.sqrt(cp.sum(d*d,axis=2,dtype=cp.float32))*100.0;cp.cuda.Stream.null.synchronize();host=cp.asnumpy(out).astype(np.float32,copy=False)
+                c=cp.asarray(_rgb01(arr),dtype=cp.float32);lin=cp.where(c<=0.04045,c/12.92,cp.power((c+0.055)/1.055,2.4));r,g,b=lin[:,0],lin[:,1],lin[:,2];l=cp.cbrt(.4122214708*r+.5363325363*g+.0514459929*b);m=cp.cbrt(.2119034982*r+.6806995451*g+.1073969566*b);ss=cp.cbrt(.0883024619*r+.2817188376*g+.6299787005*b);lab=cp.stack((.2104542553*l+.7936177850*m-.0040720468*ss,1.9779984951*l-2.4285922050*m+.4505937099*ss,.0259040371*l+.7827717662*m-.8086757660*ss),axis=1)
+                host=_pairwise_lab_distance(lab,xp=cp,cancelled=cancelled)
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
             cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags;host4=_float4_host(arr);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4);lab=cl.Buffer(ctx,mf.READ_WRITE,host4.nbytes);outb=cl.Buffer(ctx,mf.WRITE_ONLY,n*n*4);program.ds_oklab_kernel(queue,(n,),None,src,lab,np.int32(n));program.ds_pairwise_lab(queue,(n*n,),None,lab,outb,np.int32(n));sink=np.empty((n*n,),dtype=np.float32);cl.enqueue_copy(queue,sink,outb);queue.finish();return sink.reshape(n,n),route.as_dict()
@@ -676,4 +708,4 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
     except InterruptedError:
         raise
     except Exception as exc:
-        fallback=_mark_failed(route,exc);lab=_oklab_cpu(arr);d=lab[:,None,:]-lab[None,:,:];return (np.sqrt(np.sum(d*d,axis=2,dtype=np.float32))*100.0).astype(np.float32,copy=False),fallback.as_dict()
+        fallback=_mark_failed(route,exc);return _pairwise_lab_distance(_oklab_cpu(arr),cancelled=cancelled),fallback.as_dict()

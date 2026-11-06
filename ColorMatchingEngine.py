@@ -112,7 +112,7 @@ def measure_color_pixels(pixels: np.ndarray, *, alpha_values: np.ndarray | None=
     return ColorSample(tuple(map(int,robust)),mean,median,dominant,float(dominant_fraction),spread,len(px),alpha_mean,alpha_median)
 
 
-def measure_quantized_regions(source: Image.Image, labels: Image.Image) -> Dict[int,ColorSample]:
+def measure_quantized_regions(source: Image.Image, labels: Image.Image, *, drawable_mask=None) -> Dict[int,ColorSample]:
     """Measure the real RGB pixels assigned to every quantizer label."""
     if source.size!=labels.size:
         raise ValueError('Source image and color labels must have the same size.')
@@ -127,7 +127,14 @@ def measure_quantized_regions(source: Image.Image, labels: Image.Image) -> Dict[
     # Stable grouping preserves each region's source order, including the
     # bounded representative sampler, without rescanning the image per label.
     flat = lab.reshape(-1)
-    order = np.argsort(flat, kind='stable')
+    if drawable_mask is None:
+        order = np.argsort(flat, kind='stable')
+    else:
+        mask = np.asarray(drawable_mask)
+        if mask.shape != lab.shape or mask.dtype != np.bool_:
+            raise ValueError('Drawable color mask must be Boolean and match the label image.')
+        active = np.flatnonzero(mask.ravel())
+        order = active[np.argsort(flat[active], kind='stable')]
     sorted_labels = flat[order]
     boundaries = np.flatnonzero(sorted_labels[1:] != sorted_labels[:-1]) + 1
     visible = visible.reshape(-1,3)

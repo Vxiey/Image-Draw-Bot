@@ -18,7 +18,6 @@ import os
 import platform
 import statistics
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -27,10 +26,11 @@ import numpy as np
 
 from GpuHardware import GpuDevice, detect_gpus
 from ResourceAllocation import available_ram_mb, logical_cpu_count
-from RuntimePaths import data_dir
+from RuntimePaths import atomic_binary_writer, data_dir, is_finite_number, read_json
+from ImageGradients import luminance_edges
 from WindowsSystem import load_system_library
 
-PROFILE_VERSION = 1
+PROFILE_VERSION = 2
 PROFILE_FILE = data_dir() / "hardware-performance-profile-v1.json"
 WORKLOADS = ("oklab", "palette_match", "edge_map", "bulk_matrix")
 GPU_SPEEDUP_MARGIN = 1.12
@@ -192,24 +192,50 @@ def _synthetic_rgb(size: int) -> np.ndarray:
     return np.stack((r, g, b), axis=-1)
 
 
-def _time_best(function: Callable[[], Any], repeats: int) -> float:
+def _cancel(cancelled):
+    if cancelled():
+        raise InterruptedError()
+
+
+def _benchmark_parameters(size, repeats):
+    from numbers import Integral
+    if (isinstance(size, bool) or not isinstance(size, Integral)
+            or isinstance(repeats, bool) or not isinstance(repeats, Integral)):
+        raise ValueError("Benchmark size and repetitions must be integers")
+    return max(32, min(1024, int(size))), max(1, min(5, int(repeats)))
+
+
+def _verify_output(workload, value, expected):
+    actual = np.asarray(value)
+    if actual.shape != expected.shape or not np.all(np.isfinite(actual)):
+        raise RuntimeError(f"{workload} returned invalid benchmark output")
+    correct = (np.array_equal(actual, expected) if workload == "palette_match"
+               else np.allclose(actual, expected, rtol=2e-4, atol=2e-5))
+    if not correct:
+        raise RuntimeError(f"{workload} failed the CPU-reference validation")
+
+
+def _time_best(function: Callable[[], Any], repeats: int, *, cancelled=lambda: False,
+               expected=None, workload="") -> float:
     timings: list[float] = []
     for _ in range(max(1, int(repeats))):
+        _cancel(cancelled)
         started = time.perf_counter()
         value = function()
         # Touch a scalar so lazy views are not benchmarked accidentally.
         if isinstance(value, np.ndarray) and value.size:
             float(value.reshape(-1)[-1])
         timings.append(max(time.perf_counter() - started, 1e-9))
+        _cancel(cancelled)
+        if expected is not None:
+            _verify_output(workload, value, expected)
     return min(timings)
 
 
-def benchmark_cpu(*, size: int = 512, repeats: int = 2) -> list[BackendScore]:
-    rgb = _synthetic_rgb(size)
+def _cpu_workloads(rgb):
     flat = rgb.reshape(-1, 3)
     palette = _synthetic_rgb(4).reshape(-1, 3)[:16]
     gray = (rgb[..., 0] * 0.2126 + rgb[..., 1] * 0.7152 + rgb[..., 2] * 0.0722).astype(np.float32)
-    pixels = int(size * size)
 
     def oklab():
         return _srgb_to_oklab_np(rgb)
@@ -226,24 +252,28 @@ def benchmark_cpu(*, size: int = 512, repeats: int = 2) -> list[BackendScore]:
         return indices
 
     def edge_map():
-        gx = np.empty_like(gray)
-        gy = np.empty_like(gray)
-        gx[:, 1:-1] = gray[:, 2:] - gray[:, :-2]
-        gx[:, 0] = gx[:, 1]; gx[:, -1] = gx[:, -2]
-        gy[1:-1, :] = gray[2:, :] - gray[:-2, :]
-        gy[0, :] = gy[1, :]; gy[-1, :] = gy[-2, :]
-        return np.sqrt(gx * gx + gy * gy, dtype=np.float32)
+        return luminance_edges(gray)
 
     def bulk_matrix():
         x = rgb
         return ((x * 0.731 + 0.117) * (1.0 - x * 0.213) + np.sqrt(x + 0.001)).astype(np.float32)
 
-    functions = {"oklab": oklab, "palette_match": palette_match, "edge_map": edge_map, "bulk_matrix": bulk_matrix}
+    return {"oklab": oklab, "palette_match": palette_match, "edge_map": edge_map, "bulk_matrix": bulk_matrix}
+
+
+def benchmark_cpu(*, size: int = 512, repeats: int = 2, cancelled=lambda: False) -> list[BackendScore]:
+    _cancel(cancelled)
+    size,repeats=_benchmark_parameters(size,repeats)
+    functions=_cpu_workloads(_synthetic_rgb(size))
+    pixels=size*size
+    device=cpu_name()
     results: list[BackendScore] = []
     for workload, function in functions.items():
-        elapsed = _time_best(function, repeats)
+        _cancel(cancelled)
+        function()  # Warm allocator/library paths outside the measured repeats.
+        elapsed = _time_best(function, repeats, cancelled=cancelled)
         results.append(BackendScore(
-            "cpu:numpy", "CPU/NumPy", "CPU", cpu_name(), workload, size, pixels,
+            "cpu:numpy", "CPU/NumPy", "CPU", device, workload, size, pixels,
             round(elapsed * 1000.0, 3), round((pixels / 1_000_000.0) / elapsed, 3),
             runtime=f"NumPy {np.__version__}",
         ))
@@ -263,32 +293,45 @@ def _cupy_props(cp, device_id: int) -> tuple[str, int | None, int | None, int | 
         return name, int(total_b // (1024 * 1024)), int(free_b // (1024 * 1024)), int(sms or 0) or None
 
 
-def benchmark_cuda(*, size: int = 512, repeats: int = 2) -> list[BackendScore]:
+def _release_workload_frames(error: BaseException) -> None:
+    """A retained driver/cancellation traceback must not retain device buffers."""
+    import traceback
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        traceback.clear_frames(error.__traceback__)
+        error = error.__cause__ or error.__context__
+
+
+def benchmark_cuda(*, size: int = 512, repeats: int = 2, cancelled=lambda: False) -> list[BackendScore]:
+    _cancel(cancelled)
+    size,repeats=_benchmark_parameters(size,repeats)
     try:
         import cupy as cp
         count = int(cp.cuda.runtime.getDeviceCount())
+    except InterruptedError:
+        raise
     except Exception:
         return []
     host_rgb = _synthetic_rgb(size)
     host_palette = _synthetic_rgb(4).reshape(-1, 3)[:16]
+    host_gray = (host_rgb[..., 0] * .2126 + host_rgb[..., 1] * .7152 + host_rgb[..., 2] * .0722).astype(np.float32)
+    references = _cpu_workloads(host_rgb)
     pixels = int(size * size)
     all_results: list[BackendScore] = []
 
     for device_id in range(max(0, count)):
+        _cancel(cancelled)
         try:
             name, total_mb, free_mb, sms = _cupy_props(cp, device_id)
             with cp.cuda.Device(device_id):
-                rgb = cp.asarray(host_rgb)
-                flat = rgb.reshape(-1, 3)
-                palette = cp.asarray(host_palette)
-                gray = (rgb[..., 0] * 0.2126 + rgb[..., 1] * 0.7152 + rgb[..., 2] * 0.0722).astype(cp.float32)
-
                 def sync(value):
-                    cp.cuda.Stream.null.synchronize()
-                    if getattr(value, "size", 0):
-                        float(cp.asnumpy(value.reshape(-1)[-1:])[0])
+                    # Blocking whole-result download measures usable host output
+                    # on the current stream, rather than a single scalar sample.
+                    return cp.asnumpy(value)
 
                 def oklab():
+                    rgb = cp.asarray(host_rgb)
                     linear = cp.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
                     r, g, b = linear[..., 0], linear[..., 1], linear[..., 2]
                     l = cp.cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
@@ -297,55 +340,59 @@ def benchmark_cuda(*, size: int = 512, repeats: int = 2) -> list[BackendScore]:
                     out = cp.stack((0.2104542553*l + 0.7936177850*m - 0.0040720468*s,
                                     1.9779984951*l - 2.4285922050*m + 0.4505937099*s,
                                     0.0259040371*l + 0.7827717662*m - 0.8086757660*s), axis=-1)
-                    sync(out); return out
+                    return sync(out)
 
                 def palette_match():
+                    flat = cp.asarray(host_rgb).reshape(-1, 3)
+                    palette = cp.asarray(host_palette)
                     best = cp.full((flat.shape[0],), cp.inf, dtype=cp.float32)
                     indices = cp.zeros((flat.shape[0],), dtype=cp.int16)
                     for idx in range(int(palette.shape[0])):
+                        _cancel(cancelled)
                         delta = flat - palette[idx]
                         dist = cp.sum(delta * delta, axis=1)
                         mask = dist < best
                         best = cp.where(mask, dist, best)
                         indices = cp.where(mask, idx, indices)
-                    sync(indices); return indices
+                    return sync(indices)
 
                 def edge_map():
-                    gx = cp.empty_like(gray); gy = cp.empty_like(gray)
-                    gx[:, 1:-1] = gray[:, 2:] - gray[:, :-2]
-                    gx[:, 0] = gx[:, 1]; gx[:, -1] = gx[:, -2]
-                    gy[1:-1, :] = gray[2:, :] - gray[:-2, :]
-                    gy[0, :] = gy[1, :]; gy[-1, :] = gy[-2, :]
-                    out = cp.sqrt(gx * gx + gy * gy)
-                    sync(out); return out
+                    gray = cp.asarray(host_gray)
+                    return sync(luminance_edges(gray,xp=cp))
 
                 def bulk_matrix():
+                    rgb = cp.asarray(host_rgb)
                     out = ((rgb * 0.731 + 0.117) * (1.0 - rgb * 0.213) + cp.sqrt(rgb + 0.001)).astype(cp.float32)
-                    sync(out); return out
+                    return sync(out)
 
                 functions = {"oklab": oklab, "palette_match": palette_match, "edge_map": edge_map, "bulk_matrix": bulk_matrix}
-                # Warm the CUDA context outside the timed loops.
-                warm = cp.asarray(np.arange(1024, dtype=np.float32)); warm = warm * 1.001 + 0.5
-                cp.cuda.Stream.null.synchronize()
                 for workload, function in functions.items():
-                    timings = []
-                    for _ in range(max(1, repeats)):
-                        started = time.perf_counter(); function(); timings.append(max(time.perf_counter() - started, 1e-9))
-                    elapsed = min(timings)
+                    _cancel(cancelled)
+                    expected = references[workload]()
+                    _verify_output(workload,function(),expected)
+                    elapsed = _time_best(function,repeats,cancelled=cancelled,expected=expected,workload=workload)
                     all_results.append(BackendScore(
                         f"cuda:{device_id}", "CUDA/CuPy", "NVIDIA", name, workload, size, pixels,
                         round(elapsed * 1000.0, 3), round((pixels / 1_000_000.0) / elapsed, 3),
                         total_mb, free_mb, False, sms, f"CuPy {getattr(cp, '__version__', 'unknown')}",
                     ))
-                try:
-                    cp.get_default_memory_pool().free_all_blocks()
-                except Exception:
-                    pass
+        except InterruptedError as exc:
+            _release_workload_frames(exc)
+            raise
         except Exception as exc:
+            _release_workload_frames(exc)
             all_results.append(BackendScore(
                 f"cuda:{device_id}", "CUDA/CuPy", "NVIDIA", f"CUDA device {device_id}", "probe", size, pixels,
                 0.0, 0.0, error=f"{type(exc).__name__}: {exc}",
             ))
+        finally:
+            # Completed frames, including ones retained by a propagated error,
+            # no longer keep their arrays live when the pool is trimmed.
+            try:
+                with cp.cuda.Device(device_id):
+                    cp.get_default_memory_pool().free_all_blocks()
+            except Exception:
+                pass
     return all_results
 
 
@@ -373,7 +420,8 @@ __kernel void imagedrawbot_palette(__global const float4 *src, __global const fl
 __kernel void imagedrawbot_edge(__global const float *src, __global float *dst, const int w, const int h) {
     int i=get_global_id(0); int n=w*h; if(i>=n) return; int x=i%w; int y=i/w;
     int xl=max(0,x-1), xr=min(w-1,x+1), yu=max(0,y-1), yd=min(h-1,y+1);
-    float gx=src[y*w+xr]-src[y*w+xl]; float gy=src[yd*w+x]-src[yu*w+x]; dst[i]=sqrt(gx*gx+gy*gy);
+    float gx=(w>1)?(src[y*w+xr]-src[y*w+xl])/(float)(xr-xl):0.0f;
+    float gy=(h>1)?(src[yd*w+x]-src[yu*w+x])/(float)(yd-yu):0.0f; dst[i]=sqrt(gx*gx+gy*gy);
 }
 __kernel void imagedrawbot_bulk(__global const float4 *src, __global float4 *dst, const int n) {
     int i=get_global_id(0); if(i>=n) return; float4 x=src[i];
@@ -393,9 +441,13 @@ def _opencl_vendor(value: str) -> str:
     return "Unknown"
 
 
-def benchmark_opencl(*, size: int = 512, repeats: int = 2) -> list[BackendScore]:
+def benchmark_opencl(*, size: int = 512, repeats: int = 2, cancelled=lambda: False) -> list[BackendScore]:
+    _cancel(cancelled)
+    size,repeats=_benchmark_parameters(size,repeats)
     try:
         import pyopencl as cl
+    except InterruptedError:
+        raise
     except Exception:
         return []
     host_rgb3 = _synthetic_rgb(size).astype(np.float32)
@@ -405,69 +457,86 @@ def benchmark_opencl(*, size: int = 512, repeats: int = 2) -> list[BackendScore]
     host_palette4[:, :3] = _synthetic_rgb(4).reshape(-1, 3)[:16]
     host_gray = (host_rgb3[..., 0] * 0.2126 + host_rgb3[..., 1] * 0.7152 + host_rgb3[..., 2] * 0.0722).astype(np.float32).reshape(-1)
     pixels = int(size * size)
+    references = _cpu_workloads(host_rgb3)
     results: list[BackendScore] = []
     try:
         platforms = list(cl.get_platforms())
+    except InterruptedError:
+        raise
     except Exception:
         return []
     for pidx, cl_platform in enumerate(platforms):
+        _cancel(cancelled)
         try:
             devices = list(cl_platform.get_devices(device_type=cl.device_type.GPU))
+        except InterruptedError:
+            raise
         except Exception:
             continue
         for didx, device in enumerate(devices):
-            vendor = _opencl_vendor(f"{getattr(device, 'vendor', '')} {getattr(device, 'name', '')}")
-            name = str(getattr(device, "name", f"OpenCL GPU {didx}")).strip()
+            _cancel(cancelled)
             backend_id = f"opencl:{pidx}:{didx}"
-            total_mb = int(getattr(device, "global_mem_size", 0) or 0) // (1024 * 1024) or None
-            compute_units = int(getattr(device, "max_compute_units", 0) or 0) or None
-            integrated = bool(getattr(device, "host_unified_memory", False))
-            runtime = f"OpenCL {getattr(device, 'version', '')} · {getattr(device, 'driver_version', '')}".strip(" ·")
+            name=f"OpenCL GPU {didx}";vendor="Unknown";total_mb=compute_units=None;integrated=False;runtime=""
+            ctx=queue=program=src4=dst4=pal=idx_out=gray=edge_out=specs=execute=None
             try:
+                vendor = _opencl_vendor(f"{getattr(device, 'vendor', '')} {getattr(device, 'name', '')}")
+                name = str(getattr(device, "name", name)).strip()
+                total_mb = int(getattr(device, "global_mem_size", 0) or 0) // (1024 * 1024) or None
+                compute_units = int(getattr(device, "max_compute_units", 0) or 0) or None
+                integrated = bool(getattr(device, "host_unified_memory", False))
+                runtime = f"OpenCL {getattr(device, 'version', '')} · {getattr(device, 'driver_version', '')}".strip(" ·")
                 ctx = cl.Context(devices=[device])
                 queue = cl.CommandQueue(ctx)
                 program = cl.Program(ctx, _OPENCL_SOURCE).build(options=[])
                 mf = cl.mem_flags
-                src4 = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=host_rgb4)
+                src4 = cl.Buffer(ctx, mf.READ_ONLY, host_rgb4.nbytes)
                 dst4 = cl.Buffer(ctx, mf.WRITE_ONLY, host_rgb4.nbytes)
-                pal = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=host_palette4)
+                pal = cl.Buffer(ctx, mf.READ_ONLY, host_palette4.nbytes)
                 idx_out = cl.Buffer(ctx, mf.WRITE_ONLY, pixels * np.dtype(np.uint16).itemsize)
-                gray = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=host_gray)
+                gray = cl.Buffer(ctx, mf.READ_ONLY, host_gray.nbytes)
                 edge_out = cl.Buffer(ctx, mf.WRITE_ONLY, host_gray.nbytes)
                 sink4 = np.empty_like(host_rgb4)
                 sink_idx = np.empty((pixels,), dtype=np.uint16)
                 sink_gray = np.empty_like(host_gray)
 
-                def timed(kernel, output_buffer, sink, *args) -> float:
-                    timings=[]
-                    for _ in range(max(1, int(repeats))):
-                        started=time.perf_counter()
-                        kernel(queue, (pixels,), None, *args)
-                        cl.enqueue_copy(queue, sink, output_buffer)
-                        queue.finish()
-                        timings.append(max(time.perf_counter()-started,1e-9))
-                    return min(timings)
-
-                funcs = {
-                    "oklab": lambda: timed(program.imagedrawbot_oklabish, dst4, sink4, src4, dst4, np.int32(pixels)),
-                    "palette_match": lambda: timed(program.imagedrawbot_palette, idx_out, sink_idx, src4, pal, idx_out, np.int32(pixels), np.int32(16)),
-                    "edge_map": lambda: timed(program.imagedrawbot_edge, edge_out, sink_gray, gray, edge_out, np.int32(size), np.int32(size)),
-                    "bulk_matrix": lambda: timed(program.imagedrawbot_bulk, dst4, sink4, src4, dst4, np.int32(pixels)),
+                specs = {
+                    "oklab": (program.imagedrawbot_oklabish,dst4,sink4,(src4,dst4,np.int32(pixels)),((src4,host_rgb4),)),
+                    "palette_match": (program.imagedrawbot_palette,idx_out,sink_idx,(src4,pal,idx_out,np.int32(pixels),np.int32(16)),((src4,host_rgb4),(pal,host_palette4))),
+                    "edge_map": (program.imagedrawbot_edge,edge_out,sink_gray,(gray,edge_out,np.int32(size),np.int32(size)),((gray,host_gray),)),
+                    "bulk_matrix": (program.imagedrawbot_bulk,dst4,sink4,(src4,dst4,np.int32(pixels)),((src4,host_rgb4),)),
                 }
-                # Warm context/build/device path.
-                funcs["bulk_matrix"]()
                 for workload in WORKLOADS:
-                    elapsed = funcs[workload]()
+                    _cancel(cancelled)
+                    expected=references[workload]()
+                    kernel,output_buffer,sink,args,uploads=specs[workload]
+                    def execute():
+                        for buffer,host in uploads:
+                            cl.enqueue_copy(queue,buffer,host,is_blocking=False)
+                        kernel(queue,(pixels,),None,*args)
+                        cl.enqueue_copy(queue,sink,output_buffer)
+                        queue.finish()
+                        values=sink[:,:3] if sink.ndim==2 else sink
+                        return values.reshape(expected.shape)
+                    _verify_output(workload,execute(),expected)
+                    elapsed=_time_best(execute,repeats,cancelled=cancelled,expected=expected,workload=workload)
                     results.append(BackendScore(
                         backend_id, "OpenCL", vendor, name, workload, size, pixels,
                         round(elapsed*1000.0,3), round((pixels/1_000_000.0)/elapsed,3),
                         total_mb, None, integrated, compute_units, runtime,
                     ))
+            except InterruptedError as exc:
+                _release_workload_frames(exc)
+                raise
             except Exception as exc:
+                _release_workload_frames(exc)
                 results.append(BackendScore(
                     backend_id, "OpenCL", vendor, name, "probe", size, pixels, 0.0, 0.0,
                     total_mb, None, integrated, compute_units, runtime, f"{type(exc).__name__}: {exc}",
                 ))
+            finally:
+                # Release every device's own buffers before probing another.
+                ctx=queue=program=src4=dst4=pal=idx_out=gray=edge_out=specs=execute=None
+                kernel=output_buffer=args=uploads=None
     return results
 
 
@@ -604,22 +673,26 @@ def _detected_backend_notes(snapshot: dict[str, Any], scores: list[BackendScore]
 
 def run_universal_hardware_benchmark(*, save: bool = True, path: Path | None = None,
                                      small_size: int = 128, large_size: int = 512,
-                                     repeats: int = 2, refresh_hardware: bool = True) -> dict[str, Any]:
+                                     repeats: int = 2, refresh_hardware: bool = True,
+                                     cancelled=lambda: False) -> dict[str, Any]:
     """Run bounded CPU + usable GPU microbenchmarks and save a per-machine profile."""
     started=time.perf_counter()
-    small_size=max(64,min(256,int(small_size)))
-    large_size=max(256,min(1024,int(large_size)))
-    repeats=max(1,min(5,int(repeats)))
+    _cancel(cancelled)
+    small_size,repeats=_benchmark_parameters(small_size,repeats)
+    large_size,_=_benchmark_parameters(large_size,repeats)
+    small_size=max(64,min(256,small_size))
+    large_size=max(256,large_size)
     snapshot=hardware_snapshot(refresh=refresh_hardware)
 
-    small_scores=benchmark_cpu(size=small_size,repeats=repeats)
-    large_scores=benchmark_cpu(size=large_size,repeats=repeats)
+    small_scores=benchmark_cpu(size=small_size,repeats=repeats,cancelled=cancelled)
+    large_scores=benchmark_cpu(size=large_size,repeats=repeats,cancelled=cancelled)
     # CUDA and OpenCL are independent. On NVIDIA systems both may be available;
     # the profile keeps the faster backend per workload instead of assuming one.
-    small_scores.extend(benchmark_cuda(size=small_size,repeats=repeats))
-    large_scores.extend(benchmark_cuda(size=large_size,repeats=repeats))
-    small_scores.extend(benchmark_opencl(size=small_size,repeats=repeats))
-    large_scores.extend(benchmark_opencl(size=large_size,repeats=repeats))
+    small_scores.extend(benchmark_cuda(size=small_size,repeats=repeats,cancelled=cancelled))
+    large_scores.extend(benchmark_cuda(size=large_size,repeats=repeats,cancelled=cancelled))
+    small_scores.extend(benchmark_opencl(size=small_size,repeats=repeats,cancelled=cancelled))
+    large_scores.extend(benchmark_opencl(size=large_size,repeats=repeats,cancelled=cancelled))
+    _cancel(cancelled)
 
     preferences=build_preferences(small_scores=small_scores,large_scores=large_scores)
     primary=dict(preferences.get("primary_backend") or {})
@@ -642,27 +715,35 @@ def run_universal_hardware_benchmark(*, save: bool = True, path: Path | None = N
         "privacy":{"network":False,"screen_capture":False,"mouse_input":False,"image_storage":False,"synthetic_arrays_only":True},
     }
     if save:
-        save_hardware_profile(result,path=path)
+        save_hardware_profile(result,path=path,cancelled=cancelled)
     return result
 
 
-def save_hardware_profile(result: dict[str, Any], *, path: Path | None = None) -> Path:
-    target=Path(path or PROFILE_FILE); target.parent.mkdir(parents=True,exist_ok=True)
+def save_hardware_profile(result: dict[str, Any], *, path: Path | None = None,
+                           cancelled=lambda: False) -> Path:
+    target=Path(path or PROFILE_FILE)
     payload=dict(result)
     payload["version"]=PROFILE_VERSION
-    with tempfile.NamedTemporaryFile("w",encoding="utf-8",delete=False,dir=target.parent,suffix=".tmp") as handle:
-        tmp=Path(handle.name); json.dump(payload,handle,ensure_ascii=False,indent=2); handle.flush()
-    tmp.replace(target); return target
+    if not _profile_structure_valid(payload):
+        raise ValueError("Invalid hardware performance profile")
+    encoded=json.dumps(payload,ensure_ascii=False,indent=2,allow_nan=False).encode("utf-8")
+    if len(encoded)>4*1024*1024:
+        raise ValueError("Hardware performance profile exceeds its read limit")
+    with atomic_binary_writer(target,cancelled=cancelled) as stream:
+        stream.write(encoded)
+    return target
 
 
 def load_hardware_profile(*, path: Path | None = None, validate_current: bool = True) -> dict[str, Any] | None:
     target=Path(path or PROFILE_FILE)
     payload = _read_profile(target)
-    if not _current_profile_version(payload):
+    if not _current_profile_version(payload) or not _profile_structure_valid(payload):
         return None
     if validate_current:
         try:
             current=hardware_snapshot(refresh=False).get("hardware_signature")
+        except InterruptedError:
+            raise
         except Exception:
             return None
         if not current or str(payload.get("hardware_signature") or "")!=str(current):
@@ -675,9 +756,14 @@ def profile_needs_benchmark(*, path: Path | None = None) -> tuple[bool,str]:
     raw = _read_profile(target)
     if raw is None:
         return True,"no saved hardware profile"
-    if not _current_profile_version(raw):
+    if not _current_profile_version(raw) or not _profile_structure_valid(raw):
         return True,"hardware profile version changed"
-    current=hardware_snapshot(refresh=True).get("hardware_signature")
+    try:
+        current=hardware_snapshot(refresh=True).get("hardware_signature")
+    except InterruptedError:
+        raise
+    except Exception:
+        return True,"current hardware could not be verified"
     if str(raw.get("hardware_signature") or "")!=str(current or ""):
         return True,"CPU/GPU/RAM/driver/compute-runtime signature changed"
     return False,"saved hardware profile matches this machine"
@@ -685,8 +771,8 @@ def profile_needs_benchmark(*, path: Path | None = None) -> tuple[bool,str]:
 
 def _read_profile(path: Path) -> dict[str, Any] | None:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+        payload = read_json(path)
+    except (OSError, TypeError, ValueError):
         return None
     return payload if isinstance(payload, dict) else None
 
@@ -694,6 +780,35 @@ def _read_profile(path: Path) -> dict[str, Any] | None:
 def _current_profile_version(payload: dict[str, Any] | None) -> bool:
     value = payload.get("version") if payload else None
     return type(value) is int and value == PROFILE_VERSION
+
+
+def _profile_structure_valid(payload) -> bool:
+    if not isinstance(payload,dict):return False
+    pending=[(payload,0)];count=0
+    while pending:
+        value,depth=pending.pop();count+=1
+        if depth>32 or count>100000:return False
+        if isinstance(value,dict):
+            if not all(isinstance(key,str) for key in value):return False
+            children=value.values()
+        elif isinstance(value,list):children=value
+        elif value is None or type(value) in (str,bool):continue
+        elif is_finite_number(value):continue
+        else:return False
+        if len(pending)+count+len(children)>100000:return False
+        pending.extend((child,depth+1) for child in children)
+    for key in ("hardware","primary_backend","workload_preferences"):
+        if key in payload and not isinstance(payload[key],dict):return False
+    for key in ("scores_small","scores_large","detected_gpus"):
+        if key in payload and (not isinstance(payload[key],list)
+                               or not all(isinstance(item,dict) for item in payload[key])):return False
+    for key in ("elapsed_ms","created_at","cpu_composite_mp_s"):
+        if key in payload and (not is_finite_number(payload[key]) or payload[key]<0):return False
+    primary=payload.get("primary_backend",{})
+    for key in ("safe_memory_budget_mb","total_memory_mb","tile_size","compute_units"):
+        value=primary.get(key)
+        if value is not None and (type(value) is not int or not is_finite_number(value) or value<0):return False
+    return True
 
 
 def preferred_backend(workload: str, *, pixels: int, profile: dict[str,Any] | None = None) -> dict[str,Any]:
@@ -724,9 +839,10 @@ def preferred_backend(workload: str, *, pixels: int, profile: dict[str,Any] | No
 
 
 def format_hardware_summary(result: dict[str, Any]) -> str:
-    hardware=dict(result.get("hardware") or {})
-    gpus=list(result.get("detected_gpus") or [])
-    primary=dict(result.get("primary_backend") or {})
+    result=result if isinstance(result,dict) else {}
+    hardware=result.get("hardware") if isinstance(result.get("hardware"),dict) else {}
+    gpus=result.get("detected_gpus") if isinstance(result.get("detected_gpus"),list) else []
+    primary=result.get("primary_backend") if isinstance(result.get("primary_backend"),dict) else {}
     gpu_text="No GPU compute backend"
     if gpus:
         names=[]
@@ -737,9 +853,11 @@ def format_hardware_summary(result: dict[str, Any]) -> str:
         gpu_text="; ".join(names[:3])
     primary_text=f"{primary.get('backend','CPU/NumPy')} · {primary.get('device',cpu_name())}"
     safe=primary.get("safe_memory_budget_mb")
-    memory=f" · safe GPU memory {int(safe):,} MB" if isinstance(safe,(int,float)) and safe else ""
+    memory=f" · safe GPU memory {int(safe):,} MB" if is_finite_number(safe) and safe>0 else ""
+    elapsed=result.get("elapsed_ms",0)
+    elapsed=elapsed if is_finite_number(elapsed) and elapsed>=0 else 0
     return (
         f"CPU {hardware.get('logical_cpus',logical_cpu_count())} logical · RAM {hardware.get('total_ram_mb') or '?'} MB · "
         f"GPUs: {gpu_text} · preferred compute: {primary_text}{memory} · "
-        f"{float(result.get('elapsed_ms',0.0) or 0.0):.0f} ms"
+        f"{elapsed:.0f} ms"
     )

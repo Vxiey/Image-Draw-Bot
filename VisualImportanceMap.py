@@ -25,10 +25,8 @@ def _normalize(a):
 def _cpu_map(rgb: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
     f = rgb.astype(np.float32) / 255.0
     lum = f[..., 0] * .2126 + f[..., 1] * .7152 + f[..., 2] * .0722
-    gx = np.zeros_like(lum); gy = np.zeros_like(lum)
-    gx[:, 1:-1] = np.abs(lum[:, 2:] - lum[:, :-2]) * .5
-    gy[1:-1, :] = np.abs(lum[2:, :] - lum[:-2, :]) * .5
-    edge = np.hypot(gx, gy)
+    from ImageGradients import luminance_edges
+    edge = luminance_edges(lum)
 
     # Cheap local contrast using four-neighbour differences.  This catches eyes,
     # mouth lines and isolated dark details without semantic/AI detection.
@@ -44,25 +42,50 @@ def _cpu_map(rgb: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
     # segmentation oracle; it merely stops flat backgrounds consuming budget.
     border = np.concatenate((f[0], f[-1], f[:, 0], f[:, -1]), axis=0)
     border_rgb = np.median(border, axis=0)
-    fg = np.sqrt(np.sum((f - border_rgb[None, None, :]) ** 2, axis=2))
+    # Accumulate three channels without an extra full RGB difference cube.
+    fg = (f[..., 0] - border_rgb[0]) ** 2
+    fg += (f[..., 1] - border_rgb[1]) ** 2
+    fg += (f[..., 2] - border_rgb[2]) ** 2
+    np.sqrt(fg, out=fg)
+    del f, border
 
     dark_micro = np.clip((.48 - lum) * 2.0, 0.0, 1.0) * np.clip(local * 6.0, 0.0, 1.0)
     edge_n = _normalize(edge)
+    del edge
     contrast_n = _normalize(local)
+    del local
     fg_n = _normalize(fg)
+    del fg
 
-    imp = .48 * edge_n + .22 * contrast_n + .20 * fg_n + .10 * dark_micro
+    edge_mean = float(edge_n.mean())
+    contrast_mean = float(contrast_n.mean())
+    foreground_mean = float(fg_n.mean())
+    imp = edge_n
+    imp *= .48
+    imp += .22 * contrast_n
+    del contrast_n
+    imp += .20 * fg_n
+    del fg_n
+    imp += .10 * dark_micro
+    del dark_micro
     # Center weighting is deliberately mild.  It helps portraits while not
     # deleting important edge objects in landscape/game images.
     h, w = lum.shape
+    del lum
     yy, xx = np.ogrid[:h, :w]
     nx = (xx - (w - 1) * .5) / max(1.0, w * .5)
     ny = (yy - (h - 1) * .5) / max(1.0, h * .5)
-    center = np.clip(1.0 - np.sqrt(nx * nx + ny * ny), 0.0, 1.0)
-    imp = np.clip(imp + center.astype(np.float32) * .05, 0.0, 1.0)
+    center = np.sqrt(nx * nx + ny * ny)
+    np.subtract(1.0, center, out=center)
+    np.clip(center, 0.0, 1.0, out=center)
+    center32 = center.astype(np.float32)
+    del center
+    center32 *= .05
+    imp += center32
+    np.clip(imp, 0.0, 1.0, out=imp)
     return imp.astype(np.float32, copy=False), {
-        "backend": "cpu-numpy", "edge_mean": float(edge_n.mean()),
-        "contrast_mean": float(contrast_n.mean()), "foreground_mean": float(fg_n.mean()),
+        "backend": "cpu-numpy", "edge_mean": edge_mean,
+        "contrast_mean": contrast_mean, "foreground_mean": foreground_mean,
         "protected_percent": float((imp >= .62).mean() * 100.0),
         "border_rgb": tuple(int(round(v * 255)) for v in border_rgb),
     }
@@ -72,10 +95,8 @@ def _gpu_map(rgb: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
     import cupy as cp
     x = cp.asarray(rgb, dtype=cp.float32) / 255.0
     lum = x[..., 0] * .2126 + x[..., 1] * .7152 + x[..., 2] * .0722
-    gx = cp.zeros_like(lum); gy = cp.zeros_like(lum)
-    gx[:, 1:-1] = cp.abs(lum[:, 2:] - lum[:, :-2]) * .5
-    gy[1:-1, :] = cp.abs(lum[2:, :] - lum[:-2, :]) * .5
-    edge = cp.sqrt(gx * gx + gy * gy)
+    from ImageGradients import luminance_edges
+    edge = luminance_edges(lum, xp=cp)
     local = cp.zeros_like(lum)
     local[1:-1, 1:-1] = (
         cp.abs(lum[1:-1, 1:-1] - lum[:-2, 1:-1]) +

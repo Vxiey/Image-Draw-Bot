@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 498,
+  "implemented": 614,
   "release_published": false,
-  "validation": "Batch 02: 2,557 local tests passed (22 platform/hardware skips), source gate passed with 5,000 soak cycles, source hygiene passed, eight exact-raster engine fixtures passed; native Windows checkpoint CI pending.",
+  "validation": "Batch 03: final frozen-source discovery passed 2,800 tests in 70.634 seconds (22 platform/hardware skips), with unchanged source hashes. All four independent area reviews closed. Source gate passed 5,000 cycles; source-package hygiene passed for 860 files; eight exact-raster engine fixtures passed with zero mismatched pixels. New checkpoint Windows CI pending.",
   "improvements": [
     {
       "id": 1,
@@ -3888,6 +3888,934 @@
       "local_id": "RT56",
       "description": "Enforce preview pixel/dimension caps after scaling, including near-equal sizes and extremely thin images.",
       "ledger": "v148-batch02-ui-input.md"
+    },
+    {
+      "id": 499,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ01",
+      "description": "Hex channel parsing accepted signs through `int(..., 16)`, producing negative RGB or values above 255; malformed prefixed values could become named colors. `Colors` and `NamedColorIntelligence` require ASCII hexadecimal digits in explicit hex literals, preserving legacy AARRGGBB and supported underscore separators.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 500,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ02",
+      "description": "`rgb (17,34,51)` and whitespace variants were diverted to the bare comma-list parser despite being supported by the functional parser. `Colors.normalize_rgb` dispatches RGB/RGBA/ARGB syntax with whitespace before the opening parenthesis.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 501,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ03",
+      "description": "An otherwise correct preview with an extra unrelated contour could retain 100% edge accuracy because only source edges were scored. `AccuracyEvaluator` scores the union of source and preview edge locations, penalizing missing and unexpected contours.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 502,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ04",
+      "description": "Combining disjoint 3% regions still reported approximately 3% coverage, incorrectly protecting merged large regions as tiny details. `RegionAwareQuantization._weighted_stats` adds disjoint quantizer coverage while preserving weighted averages for other properties.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 503,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ05",
+      "description": "Skipped white source pixels consumed the quantizer/color budget, could contaminate retained colors and inflated mapped-pixel diagnostics; merged RGB could also turn drawable pixels into skipped white. `DynamicColors` determines the source drawable mask before quantization, quantizes only that mass and uses it for region measurements, adjacency, coverage and runs. White skipping is independent of merged/rendered RGB.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 504,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ06",
+      "description": "Horizontal-run construction executed a Python state machine for every pixel, including background. `DynamicColors._groups_from_labels` uses row-sized lookup/difference arrays and visits only run boundaries; dot output remains supported.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 505,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ07",
+      "description": "Stop requested during read-only source-color analysis could still allow later region statistics, adaptive-count search or final named-color diagnostics to publish success. `DynamicColors`, `RegionAwareQuantization` and `AdaptiveColorCount` check Stop after costly stages and before results, and pass it into their bounded search work.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 506,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ08",
+      "description": "Floor-step/prefix sampling excluded late source pixels and the high end of sorted candidate RGB values, even when an exact desired source color existed. `ExactColorEngine._nearest_actual` checks exact matches in bounded strips and spreads approximate sampling across the entire source/candidate range.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 507,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ09",
+      "description": "Cost-only palette/shadow decisions also computed CIEDE2000 diagnostics for every candidate. `ExactColorEngine.candidate_cost` shares the same scoring components without computing unused diagnostics; `DynamicColors` and `ShadowToneMapper` consume it. Full diagnostic scoring remains available.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 508,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ10",
+      "description": "Every previously unseen named-color query repeatedly normalized and compared each static vocabulary entry in Python. `NamedColorIntelligence` caches an immutable numeric vocabulary and computes the distance vector once, preserving deterministic row/tie order and exact extended aliases.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 509,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ11",
+      "description": "An empty mapping with zero measured pixels was labeled “Excellent.” `ColorFidelity.finalize_mapping_stats` marks no-evidence results “Unavailable” with `evaluated=False`; valid evaluated results retain their metrics.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 510,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ12",
+      "description": "Different source clusters mapped to the same identical palette action produced repeated selection phases and separately split adjacent runs. `DynamicColors` coalesces only actions with the same rendered RGB, selection kind/index and exact/fallback contract; coverage is combined while source-cluster diagnostics remain separate.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 511,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ13",
+      "description": "Picture palette preparation constructed complete stroke geometry it never used and evaluated edge additions even when the custom-color budget was already full. `build_dynamic_color_palette` returns the same colors/selectors/metadata without groups; `PictureCustomPaletteLegacy` also skips unusable edge augmentation.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 512,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ14",
+      "description": "CPU visual importance retained a full RGB difference cube and several redundant full-size weighted planes. `VisualImportanceMap._cpu_map` accumulates channel differences into a 2D plane, reuses normalized edge storage and releases intermediate planes before later work.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 513,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ15",
+      "description": "Edge-color sampling materialized every image RGB tuple, every edge value and all candidate RGB tuples before imposing its 24,000-sample limit. `PictureCustomPaletteLegacy._edge_detail_colors` uses a compact edge mask/index list and materializes RGB only for the bounded row-major sample.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 514,
+      "area": "colour-quality",
+      "batch": 3,
+      "local_id": "CQ16",
+      "description": "Regional palette anchors and Smart Color retained a record and two coordinate-list entries per stroke. `ColorSpatialSummary` streams bounds and cell accumulation in two passes, shared by `AdaptivePaletteFidelity`, `RegionAwareQuantization` and `SmartColorEngine`. Both passes use the same representable geometry records. One-shot iterators retain compatibility through a one-time materialization.",
+      "ledger": "v148-batch03-colour-quality.md"
+    },
+    {
+      "id": 515,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP01",
+      "description": "`DeadlineScheduler` recognized only the generic `stroke` operation as drawing. Actual `AdaptiveDeadlineRenderer` plans emit `dot`, `short_stroke`, `long_stroke` and `outline`; the runtime scheduler consequently treated those drawing operations as barriers and could not move important structure ahead of low-value detail under pressure. Use the same set of drawing operation types in replanning blocks, transition counts and neighboring phase checks. UI operations remain barriers and the existing global color-transition bound remains in force.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 516,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP02",
+      "description": "`ExecutionCostModel.path_cost` estimated move counts from the raw speed step and source distance, ignoring precision caps and rounded screen coordinates. A 100 px Gartic path was estimated at 9 moves even though High precision delivers 25 and Ultra delivers 50 in the test fixture. Apply the effective precision step and count the same rounded screen-coordinate samples as delivery, including downscaled vertices that collapse to one screen location. The cost model version is updated as part of this estimate correction.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 517,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP03",
+      "description": "The fast Gartic palette limiter could insert a forced dark anchor after computing its color map. If that evicted a swatch, some source colors still mapped to the removed swatch and their paths disappeared. The fixture with 1 black, 20 red and 20 blue pixels retained only 21 of 41 pixels at a two-color cap. Skribbl remapped its paths but retained diagnostics from the earlier palette. Recompute the source-to-final-palette mapping and palette quality diagnostics after the forced anchor is inserted. Region anchor metadata is derived from the final palette too. This is one final-palette consistency group across both fast renderers.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 518,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP04",
+      "description": "Continuous and pixel serpentine builders checked the current point count before attaching another run, without including the connector and run endpoint. A three-point cap could yield a five-point path. Compute the exact proposed attachment first and attach only if the complete resulting path meets the cap. Preserve attachment priority and pixel coverage; reject point/row caps that cannot describe a path.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 519,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP05",
+      "description": "`detect_fill_regions_from_groups(..., mode='Off')` proceeded into the mode-to-floor lookup and raised `KeyError('Off')`; it could touch groups and geometry even though fill detection was disabled. Return the compatible empty result before reading source groups or geometry when the mode is Off.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 520,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP06",
+      "description": "Fill detection clipped one endpoint without first ordering and intersecting an interval. An entirely off-canvas horizontal run could create edge pixels or expand the label list, and an outside vertical run could raise `IndexError`. Diagonal groups contributed only their first pixel. Sort axis endpoints, intersect with the canvas, discard empty intersections, and rasterize the complete visible diagonal lattice. This restores the categorical image that fill components are supposed to describe.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 521,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP07",
+      "description": "Auto brush analysis used hidden RGB values from transparent pixels. A fully transparent noisy image could be classified as detail-heavy and assigned a narrow brush even though its visible content was flat white. Analyze the visible image using the shared white-background conversion for RGBA, keyed RGB and palette transparency.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 522,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP08",
+      "description": "Auto brush metrics copied an entire already opaque RGB source before making small samples and did not explicitly close all owned sample buffers on failure. Borrow an opaque RGB input, preserve the original resize filters, and close every owned resize, gray, edge and quantized sample through an ownership stack.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 523,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP09",
+      "description": "Several categorical-map consumers narrowed integer data to signed 16-bit storage before checking it, accepted coercible colors, or constructed a negative sentinel in unsigned arrays. Oversized palettes and bad backend indices could wrap into another color or background. Introduce `PixelMapValidation` for strict integral palette counts 1–32,768 and color indices 0–32,767. Validate active indices and shape before narrowing, use a safe signed row for background sentinels, and validate simulator background/path colors before backend work. Invalid backend map output triggers the existing safe CPU fallback. Inactive map cells need not contain valid active-color values.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 524,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP10",
+      "description": "A learned UI-switch average equal to the default value was indistinguishable from a missing learned value. With a global calibration ratio of 2, a measured default-duration switch was multiplied a second time. Detect an absent learned measurement separately from its numeric value. A positive measured switch duration is used directly; unmeasured operations still receive the global calibration.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 525,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP11",
+      "description": "Simulators and diagonal compilers could iterate every point of a line whose endpoints were enormously outside the canvas. Restarting a line at a clipped endpoint would be faster but would change its discrete raster phase. Add `RasterGeometry.clipped_bresenham`, which restricts work to visible major-axis samples while retaining the original integer line phase, including brush extents. Add a separate bounded rounded-interpolation iterator for the hybrid engine's existing raster model. CPU simulators, fill reconstruction and the GPU rectangle compiler use the appropriate shared helper.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 526,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP12",
+      "description": "CPU pixel simulation allocated the full canvas before checking cancellation and could process a long diagonal without a stop check. Its GPU-scoring wrapper treated `InterruptedError` as a reason to start CPU fallback. Check before allocation, during paths/diagonal samples and before returning. Pass cancellation to GPU scoring and propagate an interruption instead of restarting the work on CPU.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 527,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP13",
+      "description": "Correction-run extraction checked cancellation between rows. One very wide row, especially one long uniform correction run, could consume substantial work without another check. Check both the outer x scan and the inner same-color run at bounded intervals.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 528,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP14",
+      "description": "Regional accuracy scoring constructed full-canvas masks separately for each connected component. A checkerboard creates one component per pixel, magnifying the repeated work; the scorer also requested unused vertical-run lists. Accumulate coverage/color/edge/protected statistics with bounded chunked `bincount` passes and omit vertical-run extraction only for this caller. Keep score rounding, ordering and the worst-region selection unchanged.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 529,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP15",
+      "description": "PixelMap creation could continue through palette mapping, CPU fallback, edge analysis and protected-feature analysis after Stop. Hybrid group reconstruction could similarly swallow an interrupted source-edge backend. Carry one optional cancellation callback through exact palette mapping, bounded CPU tiles, edge and feature stages, and hybrid PixelMap reconstruction. The picture-palette and DrawBot callers forward it; shadow analysis forwards it between its own stages.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 530,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP16",
+      "description": "Hybrid PixelMap source-edge analysis converted transparent images directly to RGB. Hidden noise then became edge/protected-feature evidence even though it was not visible on the canvas. Build luminance from the same visible-white image used elsewhere and close the owned visible-image buffer.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 531,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP17",
+      "description": "Hybrid simulation allocated and cleared a full-canvas Boolean mask for every path, then scanned that mask again to paint one color. Paint the existing categorical canvas directly with the same clipped square brush footprints. Preserve overpainting order and the hybrid rounded-interpolation model.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 532,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP18",
+      "description": "When a target had no edge pixels or protected pixels, hybrid scoring assigned zero to those missing feature categories. A perfect flat-image plan therefore received 65 rather than 100. Use target color accuracy as the denominator fallback for an absent feature category, consistent with the regional scorer. Existing feature categories still use their own measured pixels.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 533,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP19",
+      "description": "Hybrid simulation had no cancellation API, including while painting fill spans and long diagonal strokes or computing final statistics. Accept an optional callback, check it before allocation and throughout painting and score stages, and forward it from adaptive execution.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 534,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP20",
+      "description": "The hybrid scheduler could spend time repeatedly sorting, pricing, trimming and refilling candidate paths without checking Stop. Forward cancellation into the scheduler and check its color/order, selection, sequence and exact-cost loops.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 535,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP21",
+      "description": "An unlimited hybrid plan exported positive infinity as `usable_path_seconds`. The result could not be serialized with strict JSON (`allow_nan=False`). Report an absent limit as `null` while keeping the internal unlimited arithmetic unchanged.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 536,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP22",
+      "description": "A hybrid plan with no accepted fill reconstructed the same full PixelMap twice, including edge and feature analysis. Reuse the already reconstructed reference PixelMap for execution when no fill changes it. Plans with fill still construct the necessary post-fill map.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 537,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP23",
+      "description": "`HybridRenderer3.analyze_source` converted and copied the full image into RGBA before reducing it to a bounded analysis thumbnail. Apply the existing nearest-neighbor thumbnail reduction first, then convert and copy only the thumbnail. Explicitly close owned intermediate images and retain the caller's image.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 538,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP24",
+      "description": "Deadline interpretation recognized only some unlimited aliases. `Unlimited / Accuracy` could fall through to a finite deadline, and nonfinite numeric fields could interfere with the fallback. Auto Sketch could trim an explicitly unlimited mode when the separate Boolean flag was absent. Interpret the supported unlimited/off aliases consistently, reject nonfinite/overflowed deadline evidence before trying fallback fields, and preserve unlimited Auto Sketch behavior.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 539,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP25",
+      "description": "Selecting explicit Pixel Art could retain a stale outline flag and a low resolved stroke cap from a previous mode, changing the requested rendering behavior. Clear the incompatible outline and resolved-cap values in the derived Pixel Art policy while retaining independent safety settings and leaving the caller's options unchanged.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 540,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP26",
+      "description": "Auto Sketch retained image buffers from rejected planner/finisher trials and could publish a trial after late cancellation. Closing every object recursively would be unsafe because plans can borrow the caller's source or share a preview with the next trial. Release only explicitly owned plan-image fields, preserve caller/input-option images and assets retained by the next or returned plan, and release discarded/aborted trials on every exit path. Check cancellation after planners/finishers and during reduction.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 541,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP27",
+      "description": "Auto Sketch accepted negative estimates as fitting and could let NaN/Infinity/coercible estimates corrupt its trial selection and trimming arithmetic. Require finite nonnegative real estimates from both planner and finisher, including unlimited mode. Invalid estimates fail while the discarded owned image buffers are released.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 542,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP28",
+      "description": "`AdaptiveDeadlineRenderer` initially charged each used palette color once. Progressive phases can revisit a color several times, and ordered cursor travel was not fully reflected in the accepted final budget. Custom-color dialogs and verification associated with those revisits were also undercounted. After phase and local ordering, price every actual color transition, its applicable custom-color and verification costs, and screen-coordinate travel. If the ordered plan does not fit, remove complete low-value paths with neighboring transition/travel deltas, preserving the retained geometry and order. Report the actual transition counts and ordered-delivery costs.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 543,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP29",
+      "description": "Each candidate path separately resolved delivery policy, delays, speed and precision in the adaptive deadline cost loop. This repeated the same configuration work thousands of times for one plan. Resolve one timing context per planning operation and pass it to individual path-cost calculations. The standalone helper still resolves its own context when no context is supplied.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 544,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP30",
+      "description": "Cancellation after the initial deadline geometry scan could be ignored during importance analysis, selection, local batching and final budget fitting. An interrupted fill estimate could also be swallowed by a general fallback. Check cancellation between and within these late stages, propagate interrupted fill estimates, and check before publishing the final plan.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 545,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP31",
+      "description": "Region fill safety arithmetic accepted NaN evidence. A fixture with NaN safety/density was assigned risk 0.035, confidence 0.965 and a safe verdict. Coercible or invalid area/perimeter evidence could enter the same calculations. Validate finite safety/density values in [0,1] and positive integral area/perimeter evidence before computing risk or pricing a candidate. Invalid evidence keeps the region on the stroke fallback and cannot approve fill.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 546,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP32",
+      "description": "Invalid cached fill execution costs, including NaN, could be treated as a zero-cost fill or otherwise corrupt estimates. Accept only finite valid stored core/total/batchable costs; recompute an invalid cache entry from geometry and the execution model.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 547,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP33",
+      "description": "Region fill evaluation repeatedly constructed calibration/cost models per region and seal, sometimes computing the same seal cost twice. One operation could therefore also mix calibration snapshots. Lazily acquire one execution-cost model per candidate/estimate operation and reuse it throughout region, seal and batchable calculations. Use that model's metadata and retain the existing conservative fallback if construction fails; propagate cancellation.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 548,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP34",
+      "description": "Gartic canvas detection selected the highest-scoring candidate before checking whether it met the applicable evidence thresholds. A high-scoring unqualified frame candidate could hide a lower-scoring eligible white canvas and return no detection. Rank eligible candidates separately from the best overall diagnostic candidate. Keep all existing confidence/frame/white evidence thresholds.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 549,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP35",
+      "description": "`min_canvas_area_ratio` affected one candidate search floor but was absent from the final acceptance gate, which always used 0.055. Asking for a minimum ratio of 0.5 could still return a smaller canvas. Validate a finite requested ratio in [0,1] and apply the stronger of it and the existing minimum to final acceptance.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 550,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP36",
+      "description": "Every Gartic frame and white-evidence sample converted the whole screenshot to RGB, even when it already was RGB. Candidate scoring multiplied those full-screen copies. Borrow an existing RGB screenshot for sampling and the detector; convert non-RGB input once with explicit ownership.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 551,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP37",
+      "description": "Canvas analysis could not be stopped while constructing masks, flood-filling a large connected region or scoring candidates. Add cancellation before analysis and at bounded row/flood/scoring intervals. Root's browser calibration and detection worker forward their existing callbacks and preserve `InterruptedError`.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 552,
+      "area": "rendering-planning",
+      "batch": 3,
+      "local_id": "RP38",
+      "description": "Hybrid/sketch previews used drawing endpoints that made a one-pixel dot cover 2×2 pixels and gave fill spans an extra row/column. Preview scaling did not consistently match nearest-neighbor scaling of source pixels, and sketch preview ignored an entry's brush override. Share exact source brush rectangles with simulation and project each inclusive pixel interval to its nearest-neighbor destination interval. Honor each entry's brush and phase filter. Draw directly into the bounded preview rather than allocating a source-sized raster. Forward cancellation through phase previews and root finalization; close already generated owned layers when a later layer fails or Stop arrives.",
+      "ledger": "v148-batch03-rendering-planning.md"
+    },
+    {
+      "id": 553,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP01",
+      "description": "Optional GPU setup could upgrade pip/remove an existing CuPy distribution before discovering that its shipped requirements were missing or empty. `GpuSetupRuntime.checked_requirements` validates a bounded, nonempty UTF-8 requirements document before any package mutation. `AutoGpuSetup` also requires the supported CuPy distribution to be present before conflict removal; both installers use the preflight.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 554,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP02",
+      "description": "CUDA setup accepted one correct value from a 32-element test, and runtime status downloaded a sample without verifying the arithmetic. `GpuHardware.cupy_smoke_test` verifies the complete expected output; `GpuBackendStatus._cuda_probe` checks all 256 finite arithmetic results before reporting a working backend. A partially working or wrong kernel does not establish readiness.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 555,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP03",
+      "description": "An explicit CUDA status could reuse indefinitely cached free-memory, availability and driver-health information. `GpuBackendStatus` refreshes the current CUDA context/metadata on every explicit-CUDA status call, reusing only a successful arithmetic probe for 30 seconds and the same actual runtime ordinal. An unreadable identity disables probe reuse. The cache is locked, bounded to 32 records and returns independent data.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 556,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP04",
+      "description": "Runtime budget floors could increase a small or zero free-memory allowance, pool limits ignored live allocations and simulation batches assumed at least 128 MiB. `GpuAcceleration.available_vram_mb` accounts for pool-live and reusable bytes once. Runtime pool/tile/score planning and `PixelAccuracyGpu._plan` respect the remaining capacity without artificial minimum budgets. A zero pool limit is rejected because CuPy interprets zero as unlimited; work unable to fit one row plus its halo takes the controlled memory-failure path.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 557,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP05",
+      "description": "One temporary allocation failure permanently disabled the legacy CUDA backend for later, smaller work. `GpuAcceleration._disable_backend` leaves the working backend available after a recognized allocation/OOM failure while still quarantining a genuine driver/runtime failure.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 558,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP06",
+      "description": "A failed score tile's exception traceback retained device arrays while the retry attempted to trim the pool, so the memory needed for recovery was still live. `PixelAccuracyGpu` isolates score-tile work and clears failed frames, including chained exceptions, before pool trim/retry. Simulation retry uses the same release boundary. The existing completed-tile accounting remains intact.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 559,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP07",
+      "description": "A failure during the final CUDA score synchronization was ignored and could return an apparently verified score. `PixelAccuracyGpu.score_cuda_host` requires final synchronization to succeed before publishing the score; a late native failure returns the existing CPU-fallback signal.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 560,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP08",
+      "description": "Private ordinary/pinned host arrays could go out of scope after `cupy.asarray` queued an asynchronous host-to-device copy. `GpuAcceleration._upload_gray` requests a blocking transfer before releasing its private host owner. This is a source-buffer lifetime guarantee; it does not change device selection or hide GPU execution.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 561,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP09",
+      "description": "Centered-gradient code returned zero at every outer boundary and on an entire two-pixel-wide/high axis, losing real thin-image edges. `ImageGradients.luminance_edges` uses centered interior and one-sided boundary differences, with zero only for singleton axes. `UniversalGpuAcceleration` CPU/CUDA/OpenCL formulas and the coordinated accuracy/planner/shadow/importance fallbacks agree. Nonfinite luminance is rejected before backend dispatch.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 562,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP10",
+      "description": "RGBA-to-visible-RGB conversion materialized several full float RGB arrays, including unnecessary compositing for opaque input. `UniversalGpuAcceleration._rgba_visible_rgb` uses one owned RGB output, preserves the exact previous arithmetic order for alpha and takes an opaque fast path.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 563,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP11",
+      "description": "Pairwise OKLab distance allocated an `N×N×3` difference cube and its squared copy in addition to the required result matrix. `UniversalGpuAcceleration._pairwise_lab_distance` computes row chunks with two-dimensional squared-distance scratch storage on CPU/CUDA. The full `N×N` result is still required. Typical chunks use at most 256 rows and 1,048,576 distance cells.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 564,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP12",
+      "description": "A requested portrait limit below 80 was silently increased; dot mode ignored the caller's stroke cap. `PortraitPlanner` honors strict nonnegative integral limits, including zero, in line and dot paths. Dot generation stops after the requested visible prefix.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 565,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP13",
+      "description": "CPU portrait contrast performed Python rounding/clamping and list storage for every pixel. `PortraitPlanner._enhance_local_contrast` uses bounded vector chunks with float64 arithmetic and banker rounding, preserving the prior byte result.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 566,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP14",
+      "description": "Selecting a small portrait stroke budget scored and retained/sorted every candidate, then built a second full remaining-candidate list. `PortraitPlanner._select_tone_candidates` keeps only the best candidates for a small cap and streams evenly spaced coverage. When the requested priority set is large, it uses a full sort to avoid the heap's measured near-full-selection penalty. Tie order and coverage positions are preserved.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 567,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP15",
+      "description": "A real `TclError` during root destruction permanently marked the root destroyed, so a later close attempt did nothing while the window could remain alive. `AppBranding._install_destroy_guard` marks successful destruction only after a successful/known-already-destroyed teardown and always releases the reentrancy flag. A real failure remains visible and retryable.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 568,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP16",
+      "description": "Universal GPU benchmarks omitted source upload, downloaded only a sample and included compilation/startup asymmetrically. The legacy CUDA benchmark also computed huge throughput from a CPU/no-op fallback. `UniversalHardwareBenchmark` warms each workload, times complete input-transfer/kernel/output-transfer work and validates after timing. CPU uses the same workload boundaries. `GpuAcceleration.benchmark` reports zero GPU throughput when the complete GPU pipeline did not run. Profile format 2 invalidates the old incomparable measurements.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 569,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP17",
+      "description": "Wrong GPU arithmetic could still produce an accepted performance score because only execution/transfer success was checked. `UniversalHardwareBenchmark` validates every warm/timed output against the CPU workload reference: exact categorical palette output, finite shapes and bounded numeric tolerance for float workloads. Bad results remain failed probes.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 570,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP18",
+      "description": "Direct benchmark calls could report the requested size even though stimulus creation silently used a larger floor, and repeats/size were not consistently bounded. `UniversalHardwareBenchmark._benchmark_parameters` normalizes a strict integral size to 32–1,024 and repeats to 1–5 before stimulus creation and metadata calculation. Top-level small/large benchmark policy remains bounded.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 571,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP19",
+      "description": "Reading one disconnected OpenCL adapter's metadata before the per-device error boundary aborted discovery of otherwise usable later adapters. `UniversalHardwareBenchmark.benchmark_opencl` reads metadata inside each device's guarded attempt and continues to the next adapter on failure, releasing the completed attempt's resources.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 572,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP20",
+      "description": "Long hardware/resource benchmark work had no caller Stop callback, and CPU/GPU work could continue through many further phases before the UI regained control. Optional callbacks now reach `UniversalHardwareBenchmark`, `GpuAcceleration` preprocessing/benchmark, `ResourceAllocation.benchmark_allocation`, `ResourceScheduler.benchmark_scheduler` and `PerformanceAutoTuner.run_auto_tune`. They check between workloads/repeats/devices/tiles, within CPU scheduler blocks and before publishing results. Existing `parallel_map` provides queue cancellation. Failed workload frames are released before device cleanup even when the error is retained. Root integrates the UI callbacks.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 573,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP21",
+      "description": "Tuning saved scheduler/hardware profiles during intermediate phases, so a later failure or cancellation could leave a mixed set of old and new recommendations. `PerformanceAutoTuner.run_auto_tune` computes each phase with `save=False`, validates the final documents and publishes the tuner/scheduler/current hardware profiles through the existing rollback-capable `replace_text_files`. Invalid optional mocked/legacy payloads are not published as auxiliary profiles.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 574,
+      "area": "gpu-platform",
+      "batch": 3,
+      "local_id": "GP22",
+      "description": "Building the legacy GPU benchmark stimulus allocated a Python integer list for every pixel and spent substantial CPU time outside the measured GPU work. `GpuAcceleration._benchmark_image` generates identical stimulus pixels in 64-row vector chunks, retaining cancellation points and avoiding that Python list.",
+      "ledger": "v148-batch03-gpu-platform.md"
+    },
+    {
+      "id": 575,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW01",
+      "description": "Enforce background-analysis dimension/pixel caps even for nearly matching sizes, and keep one-pixel axes rather than distorting them to two pixels.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 576,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW02",
+      "description": "Accumulate minimum background-cluster distances instead of retaining and stacking every full distance plane.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 577,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW03",
+      "description": "Skip scalar neighbour-distance work for already definite background candidates or rejected edges.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 578,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW04",
+      "description": "Find connected-component seeds one row at a time instead of materializing two full-image coordinate arrays.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 579,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW05",
+      "description": "Estimate the removable background from visible pixels composited on white, so invisible RGB values cannot change segmentation.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 580,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW06",
+      "description": "Count alpha visibility using 256-bin histograms rather than exporting and iterating all alpha bytes in Python.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 581,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW07",
+      "description": "Bound alpha-combination scratch buffers by rows and use byte-sized feather classification arrays.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 582,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW08",
+      "description": "Close owned image buffers on success, cancellation and partial failure across image editing, import, exports and subject dialogs, while preserving caller-owned and successfully returned images.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 583,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW09",
+      "description": "Reject invalid/oversized background-removal sources and nonfinite feather settings before allocating an oriented image.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 584,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW10",
+      "description": "Reduce the background-analysis proxy before expanding it to RGB, avoiding a full-source RGB intermediate.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 585,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW11",
+      "description": "Observe Stop between orientation, large upscale/resampling and final conversion rather than continuing expensive work after a request to stop.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 586,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW12",
+      "description": "Describe premultiplied alpha and palette-embedded alpha correctly, considering only palette entries actually used by the image.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 587,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW13",
+      "description": "Inspect image transparency without a full-image alpha/RGBA conversion: extrema for alpha, 256 palette entries for indexed images and bounded strips for colour keys.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 588,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW14",
+      "description": "Classify drawing styles from the visible composited image, ignoring hidden colour under transparent pixels.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 589,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW15",
+      "description": "Sample drawing-style metrics directly into a bounded image and count colour properties with bounded arrays instead of copying the full source and building Python pixel tuples.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 590,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW16",
+      "description": "Honor Stop during PNG image/preview encoding, flush and publication-lock waits before replacing the destination; an interrupted export cannot publish a late file or leave an incomplete stage.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 591,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW17",
+      "description": "Encode preview PNGs in a tracked worker using a snapshot, keeping encoding off the UI thread and preventing later preview changes from altering the exported frame.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 592,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW18",
+      "description": "Create background-removal Undo state only after successfully adopting a result, rather than when scheduling work that may fail.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 593,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW19",
+      "description": "A no-op background-removal result retains the current image, valid plan and Undo state instead of invalidating the session.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 594,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW20",
+      "description": "Reject image edit/Undo/export actions during shutdown before opening dialogs or taking image snapshots.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 595,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW21",
+      "description": "Validate UI transaction counters and retry limits before mutation or input, so malformed metadata cannot partially change state.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 596,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW22",
+      "description": "Bound UI transaction history and detail strings while reporting dropped event count and still delivering every observer call.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 597,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW23",
+      "description": "Record terminal operation/recovery failures as FAILED and preserve the original exception when failure reporting itself fails.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 598,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW24",
+      "description": "Reject automatic subject detection on fully transparent images rather than interpreting invisible RGB as a real subject.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 599,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW25",
+      "description": "For partially transparent images without fully empty pixels, estimate the subject from its visible white composite, including indexed-palette transparency.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 600,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW26",
+      "description": "Sample ordinary opaque subject images before channel expansion and decode alpha in bounded strips, avoiding full-size RGBA/RGB analysis intermediates.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 601,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW27",
+      "description": "Validate subject-mask dimensions, a 64-megapixel allocation limit and finite normalized rectangles before allocating the mask.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 602,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW28",
+      "description": "Observe subject-selection Stop during alpha scanning and after explicit ROI allocation or full-size mask expansion.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 603,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW29",
+      "description": "Show transparent subject-selection and mask previews against their visible white background rather than exposing hidden RGB.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 604,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW30",
+      "description": "Downsample compatible subject-preview sources before EXIF rotation/conversion, retaining correct rotated bounds and caller EXIF.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 605,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW31",
+      "description": "Roll back partially built subject dialogs and keep their selection state closed after Apply/Cancel, preventing duplicate callback delivery.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 606,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW32",
+      "description": "Bind a subject-selection result to its original image and idle operation; late callbacks cannot apply a rectangle to a replacement image or ongoing drawing.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 607,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW33",
+      "description": "Roll back failed preview-page registration/layout while retaining the previous page, selector state and original error.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 608,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW34",
+      "description": "Fit initial main/dialog geometry and minimum sizes to the current screen and CustomTkinter window scaling, avoiding oversized mandatory dimensions on smaller/high-DPI displays.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 609,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW35",
+      "description": "Decode local imports from a private bounded snapshot of the same regular-file handle whose size was checked; actual file growth cannot bypass the byte budget and later path replacement cannot change the decoded snapshot.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 610,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW36",
+      "description": "Stream encoded image input into a memory-bounded spool and decode base64 in bounded blocks, avoiding full bytearray/BytesIO/encoded-substring duplicates. Reject impossible encoded lengths and invalid budgets before allocation.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 611,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW37",
+      "description": "Accept the URL-safe base64 alphabet already supported by the drop parser while rejecting invalid padding or hidden trailing encoded content.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 612,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW38",
+      "description": "Carry cancellation through every import source and after decoding; consume available HTTP body data with read1 so Stop/deadline checks do not wait for a full chunk, and preserve interruption if response cleanup fails.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 613,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW39",
+      "description": "Validate HTTP Content-Length and verify identity-encoded body length before decoding, while keeping compressed wire length separate from decoded-byte limits.",
+      "ledger": "v148-batch03-image-workflow.md"
+    },
+    {
+      "id": 614,
+      "area": "image-workflow",
+      "batch": 3,
+      "local_id": "IW40",
+      "description": "Run manual/automatic hardware, GPU and resource tests through the shared tracked worker lifecycle; prevent concurrent drawing/tests, snapshot Tk settings before dispatch and reject cancelled late recommendations.",
+      "ledger": "v148-batch03-image-workflow.md"
     }
   ]
 }

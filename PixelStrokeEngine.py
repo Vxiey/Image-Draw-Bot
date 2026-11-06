@@ -17,7 +17,7 @@ from typing import Sequence
 import numpy as np
 
 from ContinuousPaths import order_paths
-from PixelAccuratePlanner import PixelMap, groups_from_pixel_map
+from PixelAccuratePlanner import PixelMap, groups_from_pixel_map, validated_pixel_indices
 
 Point = tuple[int, int]
 Segment = tuple[int, int, int, int]
@@ -127,8 +127,7 @@ class _UnionFind:
 
 
 def _row_runs(pixel_map: PixelMap, cancelled=lambda: False) -> tuple[list[_Run], list[list[int]], _UnionFind]:
-    idx = pixel_map.palette_index
-    mask = pixel_map.drawable_mask
+    idx, mask = validated_pixel_indices(pixel_map, cancelled=cancelled)
     h, w = idx.shape
     uf = _UnionFind()
     runs: list[_Run] = []
@@ -140,7 +139,8 @@ def _row_runs(pixel_map: PixelMap, cancelled=lambda: False) -> tuple[list[_Run],
             raise InterruptedError()
         row_ids: list[int] = []
         current_by_color: dict[int, list[int]] = {}
-        values = np.where(mask[y], idx[y], -1)
+        values = np.full(w, -1, dtype=np.int16)
+        values[mask[y]] = idx[y][mask[y]]
         boundaries = np.r_[0, np.flatnonzero(values[1:] != values[:-1]) + 1, w]
         for start, end in zip(boundaries[:-1], boundaries[1:]):
             color = int(values[start]) if start < w else -1
@@ -186,7 +186,8 @@ def _vertical_run_chunk(component_map: np.ndarray, x0: int, x1: int, cancelled=l
     return out
 
 
-def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, cancelled=lambda: False) -> tuple[list[Component], np.ndarray, dict]:
+def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, include_vertical_runs: bool = True,
+                         cancelled=lambda: False) -> tuple[list[Component], np.ndarray, dict]:
     """Label lossless same-palette 4-connected regions using run union-find."""
     runs, rows, uf = _row_runs(pixel_map, cancelled)
     h, w = pixel_map.height, pixel_map.width
@@ -241,7 +242,9 @@ def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, cancelled
     vertical_lists: list[list[Segment]] = [[] for _ in components]
     workers=max(1,int(cpu_workers or 1))
     vertical_backend="cpu-serial-columns"
-    if workers>1 and w>=64:
+    if not include_vertical_runs:
+        vertical_backend="not-requested"
+    elif workers>1 and w>=64:
         chunk=max(16,math.ceil(w/min(workers,16)))
         ranges=[(x,min(w,x+chunk)) for x in range(0,w,chunk)]
         with ThreadPoolExecutor(max_workers=min(workers,len(ranges))) as pool:
@@ -301,7 +304,7 @@ def _append_point(points: list[Point], point: Point) -> None:
         points.append(point)
 
 
-def _attach_lossless(state: _ActiveRasterPath, run: Segment) -> None:
+def _lossless_attachment_points(state: _ActiveRasterPath, run: Segment) -> list[Point]:
     x0,y,x1,_=run
     if x1<x0:x0,x1=x1,x0
     lo,hi=max(state.x0,x0),min(state.x1,x1)
@@ -309,24 +312,34 @@ def _attach_lossless(state: _ActiveRasterPath, run: Segment) -> None:
         raise ValueError('Runs are not safely adjacent.')
     end_x=state.points[-1][0]
     connector=min(hi,max(lo,end_x))
-    _append_point(state.points,(connector,state.last_y))
-    _append_point(state.points,(connector,y))
+    points=[state.points[-1]]
+    _append_point(points,(connector,state.last_y))
+    _append_point(points,(connector,y))
     # Sweep the complete new run.  Crucially, do not collinear-compress a
     # backtrack such as 0->2->1: the turning point represents real source pixels.
     if x0!=x1:
         if connector==x0:
-            _append_point(state.points,(x1,y))
+            _append_point(points,(x1,y))
         elif connector==x1:
-            _append_point(state.points,(x0,y))
+            _append_point(points,(x0,y))
         elif abs(connector-x0)<=abs(x1-connector):
-            _append_point(state.points,(x0,y));_append_point(state.points,(x1,y))
+            _append_point(points,(x0,y));_append_point(points,(x1,y))
         else:
-            _append_point(state.points,(x1,y));_append_point(state.points,(x0,y))
+            _append_point(points,(x1,y));_append_point(points,(x0,y))
+    return points[1:]
+
+
+def _attach_lossless(state: _ActiveRasterPath, run: Segment) -> None:
+    state.points.extend(_lossless_attachment_points(state,run))
+    x0,y,x1,_=run
+    x0,x1=sorted((x0,x1))
     state.last_y=y;state.x0=x0;state.x1=x1;state.rows+=1
 
 
 def _merge_horizontal_runs_lossless(runs: Sequence[Segment], *, cancelled=lambda: False,
                                     max_rows_per_path: int = 96, max_points_per_path: int = 480) -> list[Path]:
+    if max_points_per_path < 2 or max_rows_per_path < 1:
+        raise ValueError("Path limits require at least two points and one row.")
     rows: dict[int,list[Segment]]={}
     passthrough: list[Path]=[]
     for stroke in runs:
@@ -354,6 +367,7 @@ def _merge_horizontal_runs_lossless(runs: Sequence[Segment], *, cancelled=lambda
                 if i in used or st.rows>=max_rows_per_path or len(st.points)>=max_points_per_path:continue
                 lo,hi=max(st.x0,x0),min(st.x1,x1)
                 if lo<=hi:
+                    if len(st.points)+len(_lossless_attachment_points(st,run))>max_points_per_path:continue
                     connector=min(hi,max(lo,st.points[-1][0]))
                     candidates.append((-(hi-lo+1),abs(connector-st.points[-1][0]),i,st))
             if candidates:

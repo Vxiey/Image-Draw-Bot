@@ -285,7 +285,7 @@ def resolve_resource_schedule(allocation: dict[str, Any], *, mode: str = "Auto",
     }
 
 
-def _bench_once(workers: int, loops: int) -> float:
+def _bench_once(workers: int, loops: int, *, cancelled=lambda: False) -> float:
     state=0x12345678 ^ workers
     total=0
     loops=max(1000,int(loops))
@@ -295,6 +295,8 @@ def _bench_once(workers: int, loops: int) -> float:
     for w in range(max(1,int(workers))):
         local=(state + w*2654435761) & 0xffffffff
         for i in range(loops):
+            if i % 1024 == 0 and cancelled():
+                raise InterruptedError('Scheduler benchmark cancelled.')
             local=(1664525*local + 1013904223 + i) & 0xffffffff
             total ^= ((local >> 7) * 2246822519) & 0xffffffff
     elapsed=max(time.perf_counter()-started,1e-9)
@@ -302,7 +304,9 @@ def _bench_once(workers: int, loops: int) -> float:
 
 
 def benchmark_scheduler(allocation: dict[str, Any], *, loops_per_worker: int = 28_000, save: bool = True,
-                        path: Path | None = None) -> dict[str, Any]:
+                        path: Path | None = None, cancelled=lambda: False) -> dict[str, Any]:
+    if cancelled():
+        raise InterruptedError('Scheduler benchmark cancelled.')
     logical=max(1,int(allocation.get("logical_cpus",os.cpu_count() or 1) or 1))
     cap=_safe_cap(logical)
     candidates=[]
@@ -313,7 +317,10 @@ def benchmark_scheduler(allocation: dict[str, Any], *, loops_per_worker: int = 2
         candidates=[1]
     scores=[]
     for workers in candidates:
-        score=_bench_once(workers, max(1000, int(loops_per_worker)//max(1,workers)))
+        if cancelled():
+            raise InterruptedError('Scheduler benchmark cancelled.')
+        score=_bench_once(workers, max(1000, int(loops_per_worker)//max(1,workers)),
+                          cancelled=cancelled)
         # Penalize very high worker counts slightly to represent GUI/input headroom.
         headroom_penalty = 1.0 - min(0.18, max(0, workers - 8) * 0.012)
         adjusted = score * headroom_penalty
@@ -329,6 +336,8 @@ def benchmark_scheduler(allocation: dict[str, Any], *, loops_per_worker: int = 2
         "best_score": float(best["adjusted_score"]),
         "scores": scores,
     }
+    if cancelled():
+        raise InterruptedError('Scheduler benchmark cancelled.')
     if save:
         save_recommendation(result,path=path)
     return result

@@ -7,6 +7,10 @@ while target-specific safety/CanvasGuard remains authoritative.
 from __future__ import annotations
 
 from typing import Any
+from contextlib import ExitStack, closing
+from ImageGeometry import thumbnail_size
+
+import numpy as np
 from PIL import Image, ImageFilter, ImageStat
 
 DRAWING_STYLES=(
@@ -28,22 +32,28 @@ def validate_drawing_style(value: Any) -> str:
 
 
 def _metrics(image: Image.Image | None) -> dict[str,float]:
-    if not isinstance(image,Image.Image):
+    if not isinstance(image,Image.Image) or min(image.size)<1:
         return {'unique':1.0,'edge':.5,'white':0.0,'chroma':.5,'alpha_empty':0.0}
-    # Nearest-neighbor selection commutes with pixelwise mode conversion. Keep
-    # the full source in its original mode and only convert the bounded sample.
-    sample=image.copy();sample.thumbnail((160,160),Image.Resampling.NEAREST)
-    sample=sample.convert('RGBA')
-    rgb=sample.convert('RGB');gray=rgb.convert('L')
-    colors=rgb.quantize(colors=64,method=Image.Quantize.MEDIANCUT).histogram()
-    used=sum(1 for v in colors if v)
-    edge=float(ImageStat.Stat(gray.filter(ImageFilter.FIND_EDGES)).mean[0])/255.0
-    px=list(rgb.getdata());count=max(1,len(px))
-    white=sum(1 for p in px if min(p)>=235)/count
-    chroma=sum(1 for p in px if max(p)-min(p)>=30)/count
-    alpha=list(sample.getchannel('A').getdata())
-    alpha_empty=sum(1 for a in alpha if a<=8)/max(1,len(alpha))
-    return {'unique':min(1.0,used/64.0),'edge':edge,'white':white,'chroma':chroma,'alpha_empty':alpha_empty}
+    target=thumbnail_size(image.size,(160,160))
+    with ExitStack() as temporary:
+        own=lambda value:temporary.enter_context(closing(value))
+        # Resize directly from the caller source; only the bounded sample is copied.
+        sampled=own(image.resize(target,Image.Resampling.NEAREST))
+        sample=sampled if sampled.mode=='RGBA' else own(sampled.convert('RGBA'))
+        flat=own(Image.new('RGBA',sample.size,'white'));flat.alpha_composite(sample)
+        rgb=own(flat.convert('RGB'));gray=own(rgb.convert('L'))
+        quantized=own(rgb.quantize(colors=64,method=Image.Quantize.MEDIANCUT))
+        used=sum(1 for v in quantized.histogram() if v)
+        edges=own(gray.filter(ImageFilter.FIND_EDGES))
+        edge=float(ImageStat.Stat(edges).mean[0])/255.0
+        pixels=np.asarray(rgb);count=max(1,rgb.width*rgb.height)
+        low=pixels.min(axis=2);high=pixels.max(axis=2)
+        white=float(np.count_nonzero(low>=235))/count
+        chroma=float(np.count_nonzero(high-low>=30))/count
+        alpha=own(sample.getchannel('A'))
+        alpha_empty=sum(alpha.histogram()[:9])/count
+        return {'unique':min(1.0,used/64.0),'edge':edge,'white':white,
+                'chroma':chroma,'alpha_empty':alpha_empty}
 
 
 def classify_drawing_style(image: Image.Image | None) -> tuple[str,dict[str,float]]:

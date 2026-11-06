@@ -97,27 +97,8 @@ def _spatial_anchor_candidates(groups: Sequence[Sequence[Segment]], active: Sequ
     This is a cheap regional palette allocation: an important background/side
     object can keep a colour even if another large object dominates globally.
     """
-    coords: list[tuple[float, float, float, int]] = []
-    xs: list[float] = []; ys: list[float] = []
-    for i in active:
-        for s in groups[i]:
-            try:
-                x1, y1, x2, y2 = map(float, s)
-            except Exception:
-                continue
-            w = max(1.0, hypot(x2-x1, y2-y1))
-            cx = (x1+x2)*0.5; cy=(y1+y2)*0.5
-            coords.append((cx,cy,w,i)); xs.append(cx); ys.append(cy)
-    if not coords:
-        return []
-    xmin,xmax=min(xs),max(xs); ymin,ymax=min(ys),max(ys)
-    dx=max(1.0,xmax-xmin); dy=max(1.0,ymax-ymin)
-    cells: dict[tuple[int,int],dict[int,float]] = {}
-    for x,y,w,i in coords:
-        cx=min(2,max(0,int((x-xmin)/dx*3.0)))
-        cy=min(2,max(0,int((y-ymin)/dy*3.0)))
-        bucket=cells.setdefault((cx,cy),{})
-        bucket[i]=bucket.get(i,0.0)+w
+    from ColorSpatialSummary import midpoint_color_cells
+    cells = midpoint_color_cells(groups, active, 3)
     out=[]
     for cell in sorted(cells):
         by_color=cells[cell]

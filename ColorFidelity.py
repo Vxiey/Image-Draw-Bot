@@ -261,7 +261,8 @@ def finalize_mapping_stats(stats: dict) -> dict:
             "average_mapped_lightness": 0.0, "lightness_drift": 0.0,
             "luminance_drift_percent": 0.0, "saturation_drift": 0.0,
             "average_delta_e76": 0.0, "max_delta_e76": 0.0, "average_delta_e2000": 0.0, "max_delta_e2000": 0.0,
-            "average_delta_e_oklab": 0.0, "max_delta_e_oklab": 0.0, "hue_drift": 0.0, "color_fidelity_rating": "Excellent",
+            "average_delta_e_oklab": 0.0, "max_delta_e_oklab": 0.0, "hue_drift": 0.0, "color_fidelity_rating": "Unavailable",
+            "evaluated": False,
             "dark_bias_detected": False,
         }
     srcL = float(stats.get("source_lightness_sum", 0.0)) / count
@@ -284,6 +285,7 @@ def finalize_mapping_stats(stats: dict) -> dict:
         rating="Good"
     return {
         "mapped_pixels": count,
+        "evaluated": True,
         "average_source_lightness": round(srcL, 2),
         "average_mapped_lightness": round(dstL, 2),
         "lightness_drift": round(light_drift, 2),

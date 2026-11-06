@@ -13,7 +13,7 @@ from typing import Sequence
 from ContinuousPaths import build_execution_paths
 from GarticEngineV2 import stroke_graph_order
 from ColorFidelity import palette_match_cost, color_metrics, validate_color_fidelity
-from AdaptivePaletteFidelity import select_adaptive_palette
+from AdaptivePaletteFidelity import select_adaptive_palette, _map_indices, palette_quality_metrics
 
 Segment = tuple[int, int, int, int]
 Path = tuple[tuple[int, int], ...]
@@ -177,8 +177,14 @@ def optimize_gartic_phone_groups(groups: Sequence[Sequence[Segment]],
         keep=list(dict.fromkeys([int(darkest), *[int(k) for k in keep if int(k) != int(darkest)]]))
         while len(keep) > max_colors:
             keep.pop()
-        mapping=dict(mapping)
-        mapping[int(darkest)] = int(darkest)
+        # Inserting the structural anchor can evict a previously retained
+        # swatch. Rebuild every target so no group points at an omitted colour.
+        mapping, errors = _map_indices(active, keep, palette, weights, color_fidelity)
+        palette_quality = {**palette_quality, **palette_quality_metrics(
+            active, keep, palette, weights, mapping, errors,
+            fidelity=color_fidelity, max_colors=max_colors)}
+        palette_quality['region_detail_anchors_kept'] = tuple(
+            i for i in palette_quality.get('region_detail_anchor_indexes', ()) if i in keep)
     mapped: list[list[Segment]] = [[] for _ in work]
     remapped = 0
     for index in active:

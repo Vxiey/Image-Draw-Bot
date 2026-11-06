@@ -14,7 +14,7 @@ import re
 from typing import Sequence
 
 from NamedColorData import CSS4_COLORS, X11_TK_COLORS
-from ColorFidelity import delta_e_oklab, oklab_metrics
+from ColorFidelity import delta_e_oklab, oklab_metrics, rgb_to_oklab
 
 
 def normalize_color_name(name: str) -> str:
@@ -191,15 +191,24 @@ def _nearest_cached(rgb: tuple[int, int, int], extended: bool) -> tuple[str, tup
     # default nearest scan otherwise uses only the compact CSS4 vocabulary.
     if rgb in _EXTENDED_CANONICAL:
         return _EXTENDED_CANONICAL[rgb], rgb, 0.0
-    rows = _EXTENDED_NEAREST_ROWS if extended else _CSS_NEAREST_ROWS
-    best_name = ""
-    best_rgb = (0, 0, 0)
-    best_delta = float("inf")
-    for candidate_rgb, candidate_name in rows:
-        delta = float(delta_e_oklab(rgb, candidate_rgb))
-        if delta < best_delta:
-            best_name, best_rgb, best_delta = candidate_name, candidate_rgb, delta
-    return best_name, best_rgb, best_delta
+    import numpy as np
+    from math import sqrt
+    rows,labs=_nearest_reference(extended)
+    delta=labs-np.asarray(rgb_to_oklab(rgb),dtype=np.float64)
+    squared=np.sum(delta*delta,axis=1)
+    index=int(np.argmin(squared))
+    best_rgb,best_name=rows[index]
+    return best_name,best_rgb,sqrt(float(squared[index]))*100.0
+
+
+@lru_cache(maxsize=2)
+def _nearest_reference(extended):
+    """Immutable numeric vocabulary shared by every previously unseen color."""
+    import numpy as np
+    rows=_EXTENDED_NEAREST_ROWS if extended else _CSS_NEAREST_ROWS
+    labs=np.asarray([rgb_to_oklab(rgb) for rgb,_name in rows],dtype=np.float64)
+    labs.setflags(write=False)
+    return rows,labs
 
 
 def nearest_named_color(rgb: Sequence[int], *, extended: bool = False) -> dict:
@@ -290,6 +299,7 @@ def parse_named_color_text(text: str, *, background=(255, 255, 255)) -> tuple[in
             if len(channels) == 3:
                 return tuple(channels)
             return composite_rgba(channels[0], channels[1], channels[2], channels[3], background)
+        raise ValueError('Short hex colors must use #RGB or #RGBA hexadecimal digits.')
 
     return resolve_named_color(raw)
 

@@ -494,6 +494,12 @@ def detect_fill_regions_from_groups(groups, palette_rgb, image_size, mode="Balan
     """
     validate_background_fill(mode); validate_fill_engine(engine)
     normalized=_normalize_fill_mode(mode);resolved=resolve_fill_engine(engine,mode)
+    if normalized == "Off":
+        meta={"engine":resolved,"accepted_regions":0,"contour_regions":0,"rectangle_regions":0,
+              "fallback_scanline_regions":0,"estimated_saved_strokes":0,"rejected":{},
+              "total_components":0,"interior_components":0,"candidate_regions":0,
+              "source":"quantized execution groups","dynamic_palette_indexes":True}
+        return ([],meta) if return_meta else []
     w,h=max(1,int(image_size[0])),max(1,int(image_size[1]))
     safe_margin=max(0,int(round(float(safe_margin_px or 0))))
     labels=[-1]*(w*h)
@@ -503,15 +509,18 @@ def detect_fill_regions_from_groups(groups, palette_rgb, image_size, mode="Balan
             try:x0,y0,x1,y1=map(int,raw)
             except Exception:continue
             if y0==y1 and 0<=y0<h:
-                lo,hi=sorted((max(0,x0),min(w-1,x1)))
+                lo,hi=sorted((x0,x1));lo=max(0,lo);hi=min(w-1,hi)
                 if lo<=hi:
                     base=y0*w
                     labels[base+lo:base+hi+1]=[color]*(hi-lo+1)
             elif x0==x1 and 0<=x0<w:
-                lo,hi=sorted((max(0,y0),min(h-1,y1)))
+                lo,hi=sorted((y0,y1));lo=max(0,lo);hi=min(h-1,hi)
                 for y in range(lo,hi+1):labels[y*w+x0]=color
-            elif 0<=x0<w and 0<=y0<h:
-                labels[y0*w+x0]=color
+            elif x0!=x1 and y0!=y1:
+                from RasterGeometry import clipped_bresenham
+                for point_number,(x,y) in enumerate(clipped_bresenham((x0,y0),(x1,y1),w,h)):
+                    if point_number%256==0 and cancelled():raise InterruptedError()
+                    labels[y*w+x]=color
     seen=bytearray(w*h);candidates=[];rejected=Counter();fallback=0;total_components=0;interior_components=0
     floor={"Conservative":70,"Balanced":36,"Aggressive":20}[normalized]
     for start,color in enumerate(labels):

@@ -1,6 +1,7 @@
 """Bounded non-AI resampling; does not invent missing image detail."""
 from PIL import Image, ImageOps
 from numbers import Integral, Real
+from contextlib import ExitStack, closing
 MAX_PIXELS = 25_000_000
 
 def _dimensions(size):
@@ -39,15 +40,29 @@ def upscale_image(image,factor=2,method='Smooth',cancelled=lambda:False):
     target=upscale_size(image.size,factor)
     if method not in ('Smooth','Pixel art'): raise ValueError('Unknown upscale method.')
     if cancelled(): raise InterruptedError()
-    source=ImageOps.exif_transpose(image).convert('RGBA')
-    # Recompute after EXIF rotation; preserve orientation and alpha correctly.
-    target=upscale_size(source.size,factor)
-    if method=='Pixel art':
-        result=source.resize(target,Image.Resampling.NEAREST)
-    else:
-        # Premultiply alpha so hidden RGB cannot create dark/coloured fringes.
-        result=source.convert('RGBa').resize(target,Image.Resampling.LANCZOS).convert('RGBA')
-    if cancelled(): raise InterruptedError()
-    result.info.update(source.info)
-    result.info['draw_studio_upscale']=dict(factor=factor,method=method,source_size=source.size)
-    return result
+    result=None
+    try:
+        with ExitStack() as temporary:
+            own=lambda value:temporary.enter_context(closing(value))
+            source=own(ImageOps.exif_transpose(image))
+            if cancelled(): raise InterruptedError()
+            if source.mode!='RGBA': source=own(source.convert('RGBA'))
+            # Recompute after EXIF rotation; preserve orientation and alpha correctly.
+            target=upscale_size(source.size,factor)
+            if method=='Pixel art':
+                if cancelled(): raise InterruptedError()
+                result=source.resize(target,Image.Resampling.NEAREST)
+            else:
+                # Premultiply alpha so hidden RGB cannot create dark/coloured fringes.
+                premultiplied=own(source.convert('RGBa'))
+                if cancelled(): raise InterruptedError()
+                resized=own(premultiplied.resize(target,Image.Resampling.LANCZOS))
+                if cancelled(): raise InterruptedError()
+                result=resized.convert('RGBA')
+            if cancelled(): raise InterruptedError()
+            result.info.update(source.info)
+            result.info['draw_studio_upscale']=dict(factor=factor,method=method,source_size=source.size)
+            return result
+    except BaseException:
+        if result is not None: result.close()
+        raise

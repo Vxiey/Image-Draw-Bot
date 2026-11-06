@@ -110,11 +110,8 @@ def build_ui(a, quality, speed):
     root = a.root
     ctk.set_appearance_mode('dark')
     root.configure(bg=BG)
-    screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
-    width = min(1560, max(1120, screen_w - 70))
-    height = min(960, max(720, screen_h - 90))
-    root.geometry(f'{width}x{height}')
-    root.minsize(1080, 700)
+    from WorkspaceLayout import fit_window
+    width,height=fit_window(root,preferred=(1560,960),minimum=(1080,700),margin=(70,90))
 
     style = ttk.Style(root)
     for name in ('TFrame', 'TLabel', 'TLabelframe', 'TLabelframe.Label'):

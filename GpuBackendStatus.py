@@ -8,9 +8,62 @@ execute kernels.
 from __future__ import annotations
 
 import time
+import copy
+import threading
+from numbers import Integral
 from typing import Any
 
 _CACHE: dict[tuple, dict[str, Any]] = {}
+_CACHE_LOCK = threading.RLock()
+_PROBE_TTL = 30.0
+_CACHE_LIMIT = 32
+
+
+def _cached(key, *, ttl=None):
+    with _CACHE_LOCK:
+        entry = _CACHE.get(key)
+        if entry is not None and (ttl is None or time.monotonic() - entry["timestamp"] < ttl):
+            return copy.deepcopy(entry["value"])
+        _CACHE.pop(key, None)
+        return None
+
+
+def _remember(key, value):
+    with _CACHE_LOCK:
+        _CACHE.pop(key, None)
+        while len(_CACHE) >= _CACHE_LIMIT:
+            _CACHE.pop(next(iter(_CACHE)))
+        _CACHE[key] = {"timestamp": time.monotonic(), "value": copy.deepcopy(value)}
+
+
+def _cuda_probe(cp, info):
+    # Display names are not unique: two installed cards can share a model name
+    # while only one executes arithmetic correctly. Reuse evidence only when
+    # the current runtime ordinal is known, in addition to this module/context.
+    try:
+        ordinal = cp.cuda.runtime.getDevice()
+    except InterruptedError:
+        raise
+    except Exception:
+        ordinal = None
+    key = (("probe", id(cp), int(ordinal), info.device)
+           if isinstance(ordinal, Integral) and not isinstance(ordinal, bool) and ordinal >= 0 else None)
+    result = _cached(key, ttl=_PROBE_TTL) if key is not None else None
+    if result is not None:
+        return result
+    import numpy as np
+    started = time.perf_counter()
+    arr = cp.arange(256, dtype=cp.float32)
+    out = arr * 1.0001 + 0.25
+    actual = cp.asnumpy(out)
+    expected = np.arange(256, dtype=np.float32) * np.float32(1.0001) + np.float32(0.25)
+    cp.cuda.Stream.null.synchronize()
+    if actual.shape != expected.shape or not np.allclose(actual, expected, rtol=1e-6, atol=1e-6):
+        raise RuntimeError("CUDA arithmetic validation returned incorrect output")
+    result = {"cuda_probe_ms": round((time.perf_counter() - started) * 1000.0, 3), "elements": 256}
+    if key is not None:
+        _remember(key, result)
+    return result
 
 
 def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performance: str = "Balanced",
@@ -30,9 +83,13 @@ def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performan
     # Auto has measured, per-workload crossovers and runtime quarantine state.
     # Re-resolve those inexpensive routes for the actual pixel count; the fixed
     # legacy CUDA threshold is not a valid cache bucket for them.
-    cacheable=requested!="Auto"
-    if cacheable and key in _CACHE:
-        return dict(_CACHE[key])
+    # CPU policy is static. CUDA device health and free memory must be refreshed
+    # even when a recent arithmetic probe can be reused.
+    cacheable=requested=="CPU"
+    if cacheable:
+        cached = _cached(key)
+        if cached is not None:
+            return cached
     # Step 23: Auto is vendor-neutral. Report the same measured per-workload
     # routing that real image analysis will use instead of equating GPU with CUDA.
     if requested == "Auto":
@@ -62,6 +119,8 @@ def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performan
                 "universal_routes":routes,
             }
             return result
+        except InterruptedError:
+            raise
         except Exception:
             # Legacy CUDA verifier below remains a safe fallback if the hardware
             # performance profile is unavailable/corrupt.
@@ -96,20 +155,14 @@ def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performan
                 result["fallback_reason"] = "CUDA context unavailable after verification"
             else:
                 cp,_ctx_info=ctx
-                # Tiny one-time sanity/performance probe. This is deliberately
-                # small: it verifies kernel execution, not a synthetic score war.
-                started=time.perf_counter()
-                arr=cp.arange(262144,dtype=cp.float32)
-                out=arr*1.0001+0.25
-                float(cp.asnumpy(out[-1:])[0])
-                cp.cuda.Stream.null.synchronize()
-                gpu_ms=(time.perf_counter()-started)*1000.0
-                result["benchmark"]={"cuda_probe_ms":round(gpu_ms,3),"elements":262144}
+                result["benchmark"]=_cuda_probe(cp, _ctx_info)
                 result["gpu_analysis_active"]=True
                 result["selected_backend"]="GPU"
                 result["fallback_reason"]=""
-        if cacheable:_CACHE[key]=dict(result)
+        if cacheable:_remember(key, result)
         return result
+    except InterruptedError:
+        raise
     except Exception as error:
         result={
             "requested_mode":requested,"gpu_detected":False,"cupy_available":False,
@@ -117,5 +170,5 @@ def verified_gpu_status(mode: str = "Auto", vram_budget: str = "Auto", performan
             "fallback_reason":f"GPU verification failed: {type(error).__name__}: {error}",
             "benchmark":"failed",
         }
-        if cacheable:_CACHE[key]=dict(result)
+        if cacheable:_remember(key, result)
         return result

@@ -1,6 +1,25 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 498 distinct runtime improvements: the original 100-change baseline, 162 changes in batch 01 and 236 changes in batch 02. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 614 distinct runtime improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02 and 116 changes in batch 03. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 03: visible image fidelity, bounded work and responsive operations
+
+- Preserve every source pixel when a forced dark palette anchor displaces another retained colour. Price actual native precision and every colour revisit in progressive drawing budgets.
+- Make hybrid and sketch previews depict the exact simulated brush footprint, including single pixels, even brush widths and Pillow's nearest-neighbour sampling phase.
+- Score unexpected contours, skip source white before palette estimation, merge identical colour actions and reduce repeated colour-name/distance work.
+- Reduce background-removal temporary arrays and unnecessary neighbour comparisons. Analyse visible alpha-composited pixels and preserve valid image/Undo/plan state for failed or no-op edits.
+- Stream imports into bounded snapshots, verify byte limits and declared HTTP sizes, and carry Stop through image decoding and export publication. Preview encoding runs off the UI thread.
+- Keep subject previews and ROI callbacks tied to the current image; fit window geometry to display scaling and recover safely from failed preview-page changes.
+- Verify complete CUDA smoke-test outputs, respect actual available GPU memory, and compare CPU/CUDA/OpenCL benchmark workloads with matching transfers and numerical reference checks.
+- Track hardware/resource tests as cancellable operations, preserve previous recommendations until successful complete publication and prevent parallel drawing from competing with those tests.
+
+The batch includes independent reviews, corrected adversarial edge cases and
+paired output-checked CPU measurements. Several changes trade CPU time for lower
+temporary allocation; the area ledgers report both outcomes. Final frozen-source
+discovery passed 2,800 tests in 70.634 seconds with 22 platform/hardware skips and
+unchanged source hashes. All four independent area reviews are closed. The
+5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures
+also passed. Windows checkpoint verification remains pending.
 
 ## Batch 02: calibration, execution and application reliability
 
@@ -31,7 +50,7 @@ The batch includes reproducible CPU microbenchmarks for calibration scans, check
 - Keep native paste in text controls, restore UI state after startup failures, yield long event queues and avoid redundant preview layouts.
 - Save recordings through unique atomic staging files, preserve existing recordings on failure and release owned capture buffers.
 
-Batch 01 passed 2,202 local unittest tests with 19 platform/hardware skips. Batch 02 passed 2,557 local tests with 22 platform/hardware skips, its 5,000-cycle source gate and eight exact-raster engine fixtures. The new Windows build and native GUI checks remain pending. Area ledgers contain reproducible CPU measurements and exact-output comparisons; Windows packaging, physical GPU behavior and real drawing remain separate verification scopes.
+Batch 01 passed 2,202 local unittest tests with 19 platform/hardware skips. Batch 02 passed 2,557 local tests with 22 platform/hardware skips, its 5,000-cycle source gate and eight exact-raster engine fixtures; its published checkpoint passed Windows/Linux and packaged GUI/native drag-and-drop CI. The batch 03 Windows checks remain pending. Area ledgers contain reproducible CPU measurements and exact-output comparisons; physical GPU behavior and real drawing remain separate verification scopes.
 
 ## Original 100-change baseline
 

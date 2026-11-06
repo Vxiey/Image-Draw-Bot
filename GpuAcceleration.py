@@ -8,6 +8,7 @@ controls how much VRAM Image Draw Bot may retain. CPU remains a safe fallback.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from functools import wraps
 import math
 import threading
 import time
@@ -24,6 +25,33 @@ GPU_PERFORMANCE_MODES = ("Balanced", "High throughput", "Maximum")
 MIN_GPU_PIXELS = 16_384
 _MIB = 1024 * 1024
 _GPU_LOCK = threading.RLock()
+
+
+def _cancel(cancelled):
+    if cancelled():raise InterruptedError()
+
+
+def _cancellable(function):
+    @wraps(function)
+    def checked(*args, **kwargs):
+        cancelled=kwargs.get("cancelled",lambda:False)
+        _cancel(cancelled)
+        result=None
+        try:
+            result=function(*args,**kwargs)
+            _cancel(cancelled)
+            return result
+        except InterruptedError as error:
+            # A late Stop must release a just-created image/session rather than
+            # leaving it reachable from the cancellation traceback.
+            for item in result if isinstance(result,tuple) else ():
+                if isinstance(item,Image.Image):item.close()
+                elif isinstance(item,GpuAnalysisSession):release_analysis_session(item)
+            result=None
+            import traceback
+            traceback.clear_frames(error.__traceback__)
+            raise
+    return checked
 
 
 @dataclass(frozen=True)
@@ -131,6 +159,8 @@ def _load_cupy():
                     candidate = (int(total_b), int(free_b), int(device_id), props)
                     if best is None or candidate[:2] > best[:2]:
                         best = candidate
+            except InterruptedError:
+                raise
             except Exception as exc:
                 # A disconnected or unusable adapter must not hide another
                 # healthy CUDA device in the same machine.
@@ -147,6 +177,8 @@ def _load_cupy():
         _BACKEND_DEVICE_ID = device_id
         _DISABLED_REASON = ""
         return ("CuPy CUDA", (cp, cnd), device, int(total_b // _MIB), int(free_b // _MIB), capability, sms)
+    except InterruptedError:
+        raise
     except Exception as exc:
         if hardware is not None:
             _DISABLED_REASON = (
@@ -177,6 +209,8 @@ def _resolve_backend(mode: str):
                 # successful probe on the UI thread does not select that device
                 # on later analysis/benchmark worker threads.
                 cp.cuda.Device(_BACKEND_DEVICE_ID).use()
+            except InterruptedError:
+                raise
             except Exception as exc:
                 _disable_backend(exc)
                 return None
@@ -208,17 +242,17 @@ def reset_backend_cache() -> None:
 
 def resolve_vram_budget_mb(setting: str, total_mb: int, free_mb: int) -> int:
     validate_vram_budget(setting)
-    total_mb = max(256, int(total_mb))
+    total_mb = max(0, int(total_mb))
     free_mb = max(0, min(total_mb, int(free_mb)))
-    reserve = max(512, min(2048, round(total_mb * .08)))
-    safe_free = max(128, free_mb - reserve)
+    reserve = min(max(32, min(2048, round(total_mb * .08))), math.ceil(free_mb * .20))
+    safe_free = max(0, free_mb - reserve)
     if setting == "Auto":
         requested = round(total_mb * .70)
     elif setting.endswith("%"):
         requested = round(total_mb * (int(setting[:-1]) / 100.0))
     else:
         requested = int(setting.split()[0]) * 1024
-    return max(128, min(requested, safe_free))
+    return max(0, min(requested, safe_free))
 
 
 def _pool_stats(cp) -> tuple[int, int]:
@@ -230,11 +264,14 @@ def _pool_stats(cp) -> tuple[int, int]:
 
 
 def _configure_memory_pool(cp, budget_mb: int) -> None:
+    if int(budget_mb) <= 0:
+        # CuPy interprets a zero limit as unlimited, not as an empty budget.
+        raise MemoryError("No CUDA memory budget remains")
     pool = cp.get_default_memory_pool()
     try:
-        pool.set_limit(size=max(128, int(budget_mb)) * _MIB)
+        pool.set_limit(size=int(budget_mb) * _MIB)
     except TypeError:
-        pool.set_limit(max(128, int(budget_mb)) * _MIB)
+        pool.set_limit(int(budget_mb) * _MIB)
 
 
 def cuda_context(mode: str = "Auto", vram_budget: str = "Auto", performance: str = "Balanced"):
@@ -266,10 +303,17 @@ def acceleration_info(mode: str = "Auto", vram_budget: str = "Auto", performance
     try:
         free_b, total_b = cp.cuda.runtime.memGetInfo()
         total_mb, free_mb = int(total_b // _MIB), int(free_b // _MIB)
-        budget_mb = resolve_vram_budget_mb(vram_budget, total_mb, free_mb)
+        used, cached = _pool_stats(cp)
+        # memGetInfo excludes this process's retained pool. The configured limit
+        # covers both its live arrays and reusable blocks, not only new driver
+        # allocations; account for those bytes once.
+        budget_mb = resolve_vram_budget_mb(vram_budget, total_mb, min(total_mb, free_mb + cached))
+        if budget_mb <= used:
+            raise MemoryError("No CUDA workspace remains after live allocations")
         with _GPU_LOCK:
             _configure_memory_pool(cp, budget_mb)
-        used, cached = _pool_stats(cp)
+    except InterruptedError:
+        raise
     except Exception as exc:
         return _fallback_info(mode, f"Could not configure the CUDA memory pool: {type(exc).__name__}: {exc}", performance)
     hardware = best_nvidia_gpu()
@@ -287,6 +331,18 @@ def estimate_workspace_mb(width: int, height: int, arrays: int = 10, safety: flo
     return max(1, int(math.ceil(pixels*4*max(1,int(arrays))*float(safety)/_MIB)))
 
 
+def available_vram_mb(info: AccelerationInfo) -> int:
+    """Additional usable pool space, preserving explicit zero/free constraints."""
+    used = max(0, int(getattr(info, "pool_used_mb", None) or 0))
+    cached = max(used, int(getattr(info, "pool_cached_mb", None) or 0))
+    free = None if info.free_vram_mb is None else max(0, int(info.free_vram_mb))
+    budget = info.vram_budget_mb
+    if budget is None:
+        return 0 if free is None else free + cached - used
+    remaining = max(0, int(budget) - used)
+    return remaining if free is None else min(remaining, free + cached - used)
+
+
 def plan_vram_allocation(info: AccelerationInfo, width: int, height: int, arrays: int = 10,
                          overlap: int = 8) -> dict:
     """Choose full-frame or row-tiled CUDA processing within the selected pool budget.
@@ -296,16 +352,17 @@ def plan_vram_allocation(info: AccelerationInfo, width: int, height: int, arrays
     target drawing app may allocate VRAM while Image Draw Bot is analysing.
     """
     full_mb=estimate_workspace_mb(width,height,arrays)
-    budget=max(96,int(info.vram_budget_mb or info.free_vram_mb or 0))
-    usable=max(64,int(budget*.76))
+    budget=available_vram_mb(info)
+    usable=budget*.76
     if full_mb <= usable:
         return {"mode":"full","tile_rows":int(height),"workspace_mb":full_mb,"budget_mb":budget}
     # Bytes/row for the live arrays + safety.  Keep tiles large enough for CUDA
     # efficiency but small enough to leave transient-kernel allocation room.
     bytes_per_row=max(1,int(width))*4*max(1,int(arrays))*1.35
-    rows=max(32,int((usable*_MIB)/max(1,bytes_per_row)))
-    rows=max(32,min(int(height),rows))
-    core=max(16,rows-2*max(0,int(overlap)))
+    rows=min(int(height),int((usable*_MIB)//max(1,bytes_per_row)))
+    core=rows-2*max(0,int(overlap))
+    if core < 1:
+        raise MemoryError("CUDA budget cannot fit one working row and its overlap")
     return {"mode":"tiled","tile_rows":core,"workspace_mb":full_mb,"budget_mb":budget}
 
 
@@ -370,9 +427,11 @@ def gpu_memory_recovery_steps(tile_rows: int, batch_size: int, *, max_retries: i
 def gpu_score_tile_rows(info: AccelerationInfo, width: int, height: int, *, bytes_per_pixel: int=64, share: float=.42) -> int:
     """Bound accuracy-score tiles to a conservative fraction of current free/budget VRAM."""
     width=max(1,int(width));height=max(1,int(height));bpp=max(8,int(bytes_per_pixel))
-    budget=max(32,int(info.vram_budget_mb or info.free_vram_mb or 128))
-    free=max(32,int(info.free_vram_mb or budget));usable=max(16,int(min(budget,free)*max(.10,min(.70,float(share)))))
-    rows=max(8,int((usable*_MIB)//max(1,width*bpp)))
+    budget=available_vram_mb(info)
+    usable=budget*max(.10,min(.70,float(share)))
+    rows=int((usable*_MIB)//max(1,width*bpp))
+    if rows < 1:
+        raise MemoryError("CUDA budget cannot fit one accuracy-scoring row")
     return max(1,min(height,1024,rows))
 
 
@@ -385,8 +444,10 @@ def _tile_ranges(height: int, core_rows: int, overlap: int):
         start=end
 
 
+@_cancellable
 def resize_gray_advanced(gray: Image.Image, size: tuple[int,int], mode: str="Auto",
-                         vram_budget: str="Auto", performance: str="Balanced") -> tuple[Image.Image, AccelerationInfo]:
+                         vram_budget: str="Auto", performance: str="Balanced", *,
+                         cancelled=lambda:False) -> tuple[Image.Image, AccelerationInfo]:
     """High-quality scaler with CUDA cubic resampling and safe CPU fallback.
 
     CUDA mode uses cubic spline resampling plus a restrained post-resize unsharp
@@ -437,6 +498,8 @@ def resize_gray_advanced(gray: Image.Image, size: tuple[int,int], mode: str="Aut
             info=replace(_refresh_info(info,cp),scaler="CUDA cubic + adaptive unsharp",tile_rows=target[1],workspace_estimate_mb=plan["workspace_mb"])
             del arr,out,blur,sharpened
         return Image.fromarray(host),info
+    except InterruptedError:
+        raise
     except Exception as exc:
         # Resizing is never allowed to disable the entire drawing workflow.
         return gray.resize(target,Image.Resampling.LANCZOS),replace(_fallback_info(mode,f"CUDA scaler fallback: {type(exc).__name__}: {exc}",performance),scaler="CPU Lanczos fallback")
@@ -605,25 +668,33 @@ def _upload_gray(cp, gray: Image.Image, performance: str):
             pinned = cp.cuda.alloc_pinned_memory(raw.nbytes)
             pinned_view = np.frombuffer(pinned, dtype=np.uint8, count=raw.size).reshape(raw.shape)
             pinned_view[...] = raw
-            return cp.asarray(pinned_view, dtype=cp.float32)
+            return cp.asarray(pinned_view, dtype=cp.float32, blocking=True)
+        except InterruptedError:
+            raise
         except Exception:
             pass
-    return cp.asarray(raw, dtype=cp.float32)
+    return cp.asarray(raw, dtype=cp.float32, blocking=True)
 
 
 def _enough_memory(info: AccelerationInfo, width: int, height: int, arrays: int = 12) -> bool:
     if not info.accelerated:
         return False
     required_mb = width * height * 4 * max(1, arrays) * 1.40 / _MIB
-    budget = float(info.vram_budget_mb or info.free_vram_mb or 0)
-    return required_mb < max(96.0, budget * .82)
+    return required_mb < available_vram_mb(info) * .82
 
 
 def _disable_backend(exc: Exception) -> None:
     global _BACKEND_CACHE, _BACKEND_DEVICE_ID, _DISABLED_REASON
-    _DISABLED_REASON = f"GPU runtime fallback: {type(exc).__name__}: {exc}"
-    _BACKEND_CACHE = None
-    _BACKEND_DEVICE_ID = None
+    if isinstance(exc, InterruptedError):
+        raise exc
+    # An oversized task or temporary allocation pressure says nothing about a
+    # smaller later task's ability to use this otherwise working driver.
+    if is_gpu_memory_error(exc):
+        return
+    with _GPU_LOCK:
+        _DISABLED_REASON = f"GPU runtime fallback: {type(exc).__name__}: {exc}"
+        _BACKEND_CACHE = None
+        _BACKEND_DEVICE_ID = None
 
 
 def _launch_shape(pixel_count: int, performance: str) -> tuple[tuple[int], tuple[int]]:
@@ -715,14 +786,17 @@ def _refresh_info(info: AccelerationInfo, cp) -> AccelerationInfo:
         used, cached = _pool_stats(cp)
         return replace(info, total_vram_mb=int(total_b//_MIB), free_vram_mb=int(free_b//_MIB),
                        pool_used_mb=used, pool_cached_mb=cached)
+    except InterruptedError:
+        raise
     except Exception:
         return info
 
 
+@_cancellable
 def enhance_portrait(gray: Image.Image, strength: float, gamma: float,
                      subject_focus: bool, background_lift: float,
                      mode: str = "Auto", vram_budget: str = "Auto",
-                     performance: str = "Balanced") -> tuple[Image.Image | None, AccelerationInfo, GpuAnalysisSession | None]:
+                     performance: str = "Balanced", *, cancelled=lambda:False) -> tuple[Image.Image | None, AccelerationInfo, GpuAnalysisSession | None]:
     validate_acceleration_mode(mode); validate_vram_budget(vram_budget); validate_gpu_performance(performance)
     if mode == "CPU":
         return None, _fallback_info(mode, performance=performance), None
@@ -757,6 +831,7 @@ def enhance_portrait(gray: Image.Image, strength: float, gamma: float,
             source=np.frombuffer(gray.tobytes(),dtype=np.uint8).reshape(gray.height,gray.width)
             host_u8=np.empty_like(source)
             for start,end,read0,read1,core0,core1 in _tile_ranges(gray.height,plan["tile_rows"],8):
+                _cancel(cancelled)
                 tile=Image.fromarray(source[read0:read1])
                 arr=_upload_gray(cp,tile,performance)
                 blur=cnd.gaussian_filter(arr,sigma=1.35,mode="nearest")
@@ -806,9 +881,10 @@ def _session_analysis(session: GpuAnalysisSession, subject_focus: bool, profile:
     session.saliency_map, session.gx, session.gy = sal, gx, gy
 
 
+@_cancellable
 def saliency(gray: Image.Image, subject_focus: bool, profile: dict, mode: str = "Auto",
              vram_budget: str = "Auto", performance: str = "Balanced",
-             session: GpuAnalysisSession | None = None) -> tuple[Any | None, AccelerationInfo]:
+             session: GpuAnalysisSession | None = None, *, cancelled=lambda:False) -> tuple[Any | None, AccelerationInfo]:
     validate_acceleration_mode(mode); validate_vram_budget(vram_budget); validate_gpu_performance(performance)
     if mode == "CPU":
         return None, _fallback_info(mode, performance=performance)
@@ -840,6 +916,7 @@ def saliency(gray: Image.Image, subject_focus: bool, profile: dict, mode: str = 
             host=np.empty((gray.height,gray.width),dtype=np.float32)
             _,analysis_kernel=_kernels(cp)
             for start,end,read0,read1,core0,core1 in _tile_ranges(gray.height,plan["tile_rows"],4):
+                _cancel(cancelled)
                 tile=Image.fromarray(source[read0:read1]); arr=_upload_gray(cp,tile,performance)
                 blur=cnd.gaussian_filter(arr,sigma=1.2,mode="nearest"); sal=cp.empty_like(arr);gx=cp.empty_like(arr);gy=cp.empty_like(arr)
                 grid,block=_launch_shape(arr.size,performance)
@@ -858,9 +935,11 @@ def saliency(gray: Image.Image, subject_focus: bool, profile: dict, mode: str = 
         return None, _fallback_info(mode, f"{name} failed during fused saliency/Sobel analysis: {type(exc).__name__}: {exc}", performance)
 
 
+@_cancellable
 def sobel(gray: Image.Image, mode: str = "Auto", vram_budget: str = "Auto",
           performance: str = "Balanced", session: GpuAnalysisSession | None = None,
-          subject_focus: bool = False, profile: dict | None = None) -> tuple[tuple[Any, Any] | None, AccelerationInfo]:
+          subject_focus: bool = False, profile: dict | None = None, *,
+          cancelled=lambda:False) -> tuple[tuple[Any, Any] | None, AccelerationInfo]:
     validate_acceleration_mode(mode); validate_vram_budget(vram_budget); validate_gpu_performance(performance)
     if mode == "CPU":
         return None, _fallback_info(mode, performance=performance)
@@ -881,6 +960,7 @@ def sobel(gray: Image.Image, mode: str = "Auto", vram_budget: str = "Auto",
                 source=np.frombuffer(gray.tobytes(),dtype=np.uint8).reshape(gray.height,gray.width)
                 gx_host=np.empty((gray.height,gray.width),dtype=np.float32);gy_host=np.empty_like(gx_host)
                 for start,end,read0,read1,core0,core1 in _tile_ranges(gray.height,plan["tile_rows"],2):
+                    _cancel(cancelled)
                     tile=Image.fromarray(source[read0:read1]);arr=_upload_gray(cp,tile,performance)
                     gx=cnd.sobel(arr,axis=1,mode="nearest");gy=cnd.sobel(arr,axis=0,mode="nearest")
                     gx_host[start:end]=cp.asnumpy(gx).astype("float32",copy=False)[core0:core1]
@@ -926,33 +1006,60 @@ def release_analysis_session(session: GpuAnalysisSession | None, trim_cache: boo
             except Exception:pass
 
 
+def _benchmark_image(size: int, *, cancelled=lambda: False) -> Image.Image:
+    """Generate the deterministic stimulus in bounded vectorized row chunks."""
+    pixels = np.empty((size, size), dtype=np.uint8)
+    x = np.arange(size, dtype=np.uint32)[None, :]
+    for start in range(0, size, 64):
+        _cancel(cancelled)
+        y = np.arange(start, min(size, start + 64), dtype=np.uint32)[:, None]
+        pixels[start:start + 64] = (x * 17 + y * 31 + (x ^ y)) % 256
+    _cancel(cancelled)
+    return Image.fromarray(pixels)
+
+
+@_cancellable
 def benchmark(mode: str = "Auto", size: int = 1024, vram_budget: str = "Auto",
-              performance: str = "High throughput") -> dict:
+              performance: str = "High throughput", *, cancelled=lambda: False) -> dict:
     validate_acceleration_mode(mode); validate_vram_budget(vram_budget); validate_gpu_performance(performance)
     if mode != "CPU":
         reset_backend_cache()
     size = max(256, min(4096, int(size)))
-    image = Image.new("L", (size, size))
-    image.putdata([(x * 17 + y * 31 + (x ^ y)) % 256 for y in range(size) for x in range(size)])
+    started = time.perf_counter()
+    info = acceleration_info(mode, vram_budget, performance)
+    _cancel(cancelled)
+    if not info.accelerated:
+        return {**info.as_dict(), "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+                "size": size, "used_gpu": False, "throughput_mp_s": 0.0,
+                "fused_kernels": False}
+    image = _benchmark_image(size, cancelled=cancelled)
     profile = {"structure_weight": .92, "dark_weight": .25, "centre_bias": .40}
     start = time.perf_counter()
-    enhanced, info, session = enhance_portrait(image, .42, .97, True, 54, mode, vram_budget, performance)
-    used_gpu = bool(enhanced is not None and info.accelerated)
-    if used_gpu:
-        try:
-            sal, info2 = saliency(enhanced, True, profile, mode, vram_budget, performance, session)
-            edges, info3 = sobel(enhanced, mode, vram_budget, performance, session, True, profile)
+    enhanced = session = None
+    used_gpu = False
+    try:
+        enhanced, info, session = enhance_portrait(image, .42, .97, True, 54,
+                                                   mode, vram_budget, performance,
+                                                   cancelled=cancelled)
+        if enhanced is not None and info.accelerated:
+            sal, info2 = saliency(enhanced, True, profile, mode, vram_budget,
+                                  performance, session, cancelled=cancelled)
+            edges, info3 = sobel(enhanced, mode, vram_budget, performance, session,
+                                 True, profile, cancelled=cancelled)
             info = info3 if info3.accelerated else info2
-            used_gpu = sal is not None and edges is not None
-            try:
-                session.cp.cuda.Stream.null.synchronize()
-            except Exception:
-                pass
-        finally:
-            release_analysis_session(session, trim_cache=False)
-    elapsed = (time.perf_counter() - start) * 1000.0
+            # Each analysis function already downloads its full output before
+            # returning. No successful score is inferred from a no-op fallback.
+            used_gpu = bool(sal is not None and edges is not None
+                            and info2.accelerated and info3.accelerated)
+        _cancel(cancelled)
+        elapsed = (time.perf_counter() - start) * 1000.0
+    finally:
+        release_analysis_session(session, trim_cache=False)
+        if enhanced is not None and enhanced is not image:
+            enhanced.close()
+        image.close()
     megapixels = (size * size) / 1_000_000.0
-    throughput = megapixels / max(elapsed / 1000.0, 1e-9)
+    throughput = megapixels / max(elapsed / 1000.0, 1e-9) if used_gpu else 0.0
     return {**info.as_dict(), "elapsed_ms": round(elapsed, 2), "size": size,
             "used_gpu": bool(used_gpu), "throughput_mp_s": round(throughput, 2),
             "fused_kernels": bool(used_gpu)}

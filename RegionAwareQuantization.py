@@ -100,7 +100,7 @@ def _local_importance(rgb: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
 
 def build_region_context(source: Image.Image, labels: Image.Image, entries: Sequence[dict], *,
                          protected_mask: Image.Image | None=None, grid_size: int=6,
-                         cancelled=lambda:False) -> dict:
+                         cancelled=lambda:False, drawable_mask=None) -> dict:
     """Analyse spatial adjacency, local structure and relative tone roles.
 
     ``labels`` is the temporary quantizer label image.  The analysis is O(pixels)
@@ -114,7 +114,14 @@ def build_region_context(source: Image.Image, labels: Image.Image, entries: Sequ
     lab=np.asarray(labels,dtype=np.int32)
     if src.shape[:2] != lab.shape[:2]:
         raise ValueError('Region-aware quantization requires source and label images at the same resolution.')
-    h,w=lab.shape; pixels=max(1,h*w)
+    if cancelled():raise InterruptedError()
+    if lab.ndim != 2:
+        raise ValueError('Region color labels must be a single-channel image.')
+    h,w=lab.shape
+    draw=np.ones((h,w),dtype=bool) if drawable_mask is None else np.asarray(drawable_mask)
+    if draw.shape!=lab.shape or draw.dtype!=np.bool_:
+        raise ValueError('Drawable region mask must be Boolean and match the label image.')
+    pixels=max(1,int(np.count_nonzero(draw)))
     grid=max(2,min(12,int(grid_size)))
     qindexes=sorted({int(e['qindex']) for e in entries})
     if not qindexes:
@@ -122,6 +129,7 @@ def build_region_context(source: Image.Image, labels: Image.Image, entries: Sequ
     max_label=max(max(qindexes),int(lab.max(initial=0)))+1
 
     local_importance,edge=_local_importance(src)
+    if cancelled():raise InterruptedError()
     protected=np.zeros((h,w),dtype=np.float32)
     if protected_mask is not None:
         try:
@@ -134,27 +142,29 @@ def build_region_context(source: Image.Image, labels: Image.Image, entries: Sequ
         except Exception:
             protected=np.zeros((h,w),dtype=np.float32)
 
-    flat_labels=lab.ravel()
+    flat_labels=lab[draw]
     counts=np.bincount(flat_labels,minlength=max_label).astype(np.float64)
-    imp_sum=np.bincount(flat_labels,weights=local_importance.ravel(),minlength=max_label)
-    edge_sum=np.bincount(flat_labels,weights=edge.ravel(),minlength=max_label)
-    prot_sum=np.bincount(flat_labels,weights=protected.ravel(),minlength=max_label)
+    imp_sum=np.bincount(flat_labels,weights=local_importance[draw],minlength=max_label)
+    edge_sum=np.bincount(flat_labels,weights=edge[draw],minlength=max_label)
+    prot_sum=np.bincount(flat_labels,weights=protected[draw],minlength=max_label)
 
     # Build tile ids from 1-D axes rather than np.indices().  This keeps the
     # region-analysis scratch memory bounded on full-resolution canvases.
     tx=np.minimum(grid-1,(np.arange(w,dtype=np.int32)*grid)//max(1,w))
     ty=np.minimum(grid-1,(np.arange(h,dtype=np.int32)*grid)//max(1,h))
-    tile=(ty[:,None]*grid+tx[None,:]).ravel()
+    tile=(ty[:,None]*grid+tx[None,:])[draw]
     combo=flat_labels*(grid*grid)+tile
     tile_counts=np.bincount(combo,minlength=max_label*grid*grid).reshape(max_label,grid*grid).astype(np.float64)
+    if cancelled():raise InterruptedError()
 
     # Boundary adjacency counts between temporary quantizer labels.  Repeated
     # contact is strong evidence that two close same-hue colours are texture or
     # shading inside one object rather than unrelated global swatches.
     adjacency_counts: dict[tuple[int,int],float] = {}
     boundary=np.zeros(max_label,dtype=np.float64)
-    def add_pairs(a: np.ndarray,b: np.ndarray):
-        mask=a!=b
+    def add_pairs(a: np.ndarray,b: np.ndarray,valid: np.ndarray):
+        if cancelled():raise InterruptedError()
+        mask=(a!=b)&valid
         if not np.any(mask):
             return
         aa=a[mask].astype(np.int64,copy=False); bb=b[mask].astype(np.int64,copy=False)
@@ -164,15 +174,17 @@ def build_region_context(source: Image.Image, labels: Image.Image, entries: Sequ
         packed=lo*max_label+hi
         vals,nums=np.unique(packed,return_counts=True)
         for val,num in zip(vals,nums):
+            if cancelled():raise InterruptedError()
             i=int(val//max_label); j=int(val%max_label)
             adjacency_counts[(i,j)]=adjacency_counts.get((i,j),0.0)+float(num)
-    if w>1: add_pairs(lab[:,:-1].ravel(),lab[:,1:].ravel())
-    if h>1: add_pairs(lab[:-1,:].ravel(),lab[1:,:].ravel())
+    if w>1: add_pairs(lab[:,:-1].ravel(),lab[:,1:].ravel(),(draw[:,:-1]&draw[:,1:]).ravel())
+    if h>1: add_pairs(lab[:-1,:].ravel(),lab[1:,:].ravel(),(draw[:-1,:]&draw[1:,:]).ravel())
 
     roles=_tone_roles(entries)
     entry_rgb={int(e['qindex']):_as_rgb(e['rgb']) for e in entries}
     stats: dict[int,RegionColorStats] = {}
     for q in qindexes:
+        if cancelled():raise InterruptedError()
         n=max(1.0,float(counts[q] if q<len(counts) else 0.0))
         tiles=tile_counts[q] if q<len(tile_counts) else np.zeros(grid*grid,dtype=np.float64)
         norm=tiles/n
@@ -192,6 +204,7 @@ def build_region_context(source: Image.Image, labels: Image.Image, entries: Sequ
 
     protected_details=sum(1 for s in stats.values() if s.coverage<=.035 and (s.importance>=.30 or s.protected_fraction>=.22))
     texture_buckets=sum(1 for s in stats.values() if s.edge_fraction<.18 and s.importance<.28)
+    if cancelled():raise InterruptedError()
     return {
         'stats':stats,'adjacency':adjacency,'grid_size':grid,
         'diagnostics':{
@@ -225,7 +238,9 @@ def _weighted_stats(items: Sequence[dict], context: dict) -> dict:
     total=sum(w for _s,w in rows) or 1.0
     tiles=sum((np.asarray(s.tile_weights,dtype=np.float64)*w for s,w in rows),np.zeros(len(rows[0][0].tile_weights),dtype=np.float64))/total
     return {
-        'coverage':sum(s.coverage*w for s,w in rows)/total,
+        # Coverage is the union mass of disjoint quantizer buckets. Averaging
+        # it made any number of merged 3% buckets still look like a 3% detail.
+        'coverage':sum(s.coverage for s,_w in rows),
         'lightness':sum(s.lightness*w for s,w in rows)/total,
         'importance':sum(s.importance*w for s,w in rows)/total,
         'protected':sum(s.protected_fraction*w for s,w in rows)/total,
@@ -308,22 +323,8 @@ def region_detail_anchor_candidates(groups, palette: Sequence[Sequence[int]], ac
         return []
     # 4x4 midpoint occupancy is intentionally cheap because this path can be
     # called several times while evaluating adaptive palette quality.
-    coords=[]; xs=[]; ys=[]
-    for i in active:
-        for seg in groups[i]:
-            try:
-                x1,y1,x2,y2=map(float,seg); cx=(x1+x2)*.5; cy=(y1+y2)*.5
-                mass=max(1.0,sqrt((x2-x1)**2+(y2-y1)**2))
-            except Exception:
-                continue
-            coords.append((cx,cy,mass,i));xs.append(cx);ys.append(cy)
-    if not coords:
-        return []
-    xmin,xmax=min(xs),max(xs);ymin,ymax=min(ys),max(ys);dx=max(1.0,xmax-xmin);dy=max(1.0,ymax-ymin)
-    cells: dict[tuple[int,int],dict[int,float]]={}
-    for x,y,m,i in coords:
-        cell=(min(3,max(0,int((x-xmin)/dx*4.0))),min(3,max(0,int((y-ymin)/dy*4.0))))
-        row=cells.setdefault(cell,{});row[i]=row.get(i,0.0)+m
+    from ColorSpatialSummary import midpoint_color_cells
+    cells=midpoint_color_cells(groups,active,4,legacy_sqrt_mass=True)
     scores: dict[int,float]={}
     for row in cells.values():
         if len(row)<2:

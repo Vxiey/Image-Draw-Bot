@@ -148,27 +148,28 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
     return finish_plan(color_plan['image'],color_plan['fitted'],groups,outer,cancelled)
 
 
-def render_sequence_preview(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, phases=None):
-    w,h=map(int,source_size);pw,ph=map(int,preview_size)
-    out=Image.new('RGB',(max(1,pw),max(1,ph)),'white');draw=ImageDraw.Draw(out)
-    sx=pw/max(1,w);sy=ph/max(1,h);width=max(1,int(round(float(brush_px))))
+def render_sequence_preview(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, phases=None,cancelled=lambda:False):
+    from AdaptiveRegionHybrid import render_adaptive_preview
     allowed=set(phases) if phases is not None else None
-    for entry in sequence or ():
-        if allowed is not None and str(entry.get('phase')) not in allowed:continue
-        try:color=tuple(palette_rgb[int(entry['color_index'])])
-        except (KeyError,IndexError,TypeError,ValueError):continue
-        pts=[(float(x)*sx,float(y)*sy) for x,y in entry.get('path') or ()]
-        if not pts:continue
-        if len(pts)==1:
-            x,y=pts[0];r=max(.5,width/2);draw.ellipse((x-r,y-r,x+r,y+r),fill=color)
-        else:
-            draw.line(pts,fill=color,width=width,joint='curve')
-    return out
+    def selected():
+        for raw in sequence or ():
+            if cancelled():raise InterruptedError()
+            if allowed is not None and str(raw.get('phase')) not in allowed:continue
+            entry=dict(raw);entry.setdefault('brush_px',max(1,int(round(float(brush_px)))))
+            yield entry
+    return render_adaptive_preview(source_size,preview_size,selected(),palette_rgb,cancelled=cancelled)
 
 
-def build_phase_previews(source_size, preview_size, sequence, palette_rgb, brush_px=1):
-    return {
-        'sketch2':render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px,phases=('sketch',)),
-        'sketch_fill':render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px,phases=('sketch','color_fill')),
-        'sketch_fill_final':render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px),
-    }
+def build_phase_previews(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, cancelled=lambda:False):
+    previews={}
+    try:
+        for key,phases in (('sketch2',('sketch',)),('sketch_fill',('sketch','color_fill')),
+                           ('sketch_fill_final',None)):
+            if cancelled():raise InterruptedError()
+            previews[key]=render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px,
+                                                   phases=phases,cancelled=cancelled)
+        if cancelled():raise InterruptedError()
+        return previews
+    except BaseException:
+        for preview in previews.values():preview.close()
+        raise

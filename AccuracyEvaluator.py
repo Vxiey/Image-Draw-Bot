@@ -69,12 +69,8 @@ def _srgb_to_oklab(rgb: np.ndarray) -> np.ndarray:
 
 
 def _edge_from_luminance(lum: np.ndarray) -> np.ndarray:
-    lum = np.asarray(lum, dtype=np.float32)
-    gx = np.zeros_like(lum)
-    gy = np.zeros_like(lum)
-    gx[:, 1:-1] = np.abs(lum[:, 2:] - lum[:, :-2]) * 0.5
-    gy[1:-1, :] = np.abs(lum[2:, :] - lum[:-2, :]) * 0.5
-    return np.sqrt(gx * gx + gy * gy, dtype=np.float32)
+    from ImageGradients import luminance_edges
+    return luminance_edges(np.asarray(lum, dtype=np.float32))
 
 
 def _importance_weights(importance, size: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
@@ -247,7 +243,10 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
     edge_error = np.clip(np.abs(src_edge - dst_edge) / edge_denom, 0.0, 1.0).astype(np.float32, copy=False)
     edge_similarity = 1.0 - edge_error
     edge_threshold = max(0.02, float(np.percentile(src_edge, 70.0))) if src_edge.size else 0.02
-    edge_mask = src_edge >= edge_threshold
+    # Missing source contours and spurious new contours are both errors.
+    # Restricting the mask to source edges alone gave a perfect score to a
+    # drawing that preserved those edges but added unrelated shapes elsewhere.
+    edge_mask = np.maximum(src_edge, dst_edge) >= edge_threshold
     edge_accuracy = float(np.mean(edge_similarity[edge_mask], dtype=np.float64)) if np.any(edge_mask) else float(np.mean(edge_similarity, dtype=np.float64))
 
     imp, weights = _importance_weights(importance, size)

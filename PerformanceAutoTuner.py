@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import inspect
 import math
 import time
 from pathlib import Path
 from typing import Any, Callable
 
-from RuntimePaths import atomic_write_text, data_dir, is_finite_number, read_json
+from RuntimePaths import atomic_write_text, data_dir, is_finite_number, read_json, replace_text_files
 from ResourceAllocation import available_ram_mb, logical_cpu_count, resolve_allocation
 from ResourceScheduler import benchmark_scheduler
 from UniversalHardwareBenchmark import (run_universal_hardware_benchmark, load_hardware_profile,
@@ -194,23 +195,39 @@ def build_recommendation(*, scheduler_result: dict[str, Any], available_mb: int 
 
 def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
                   save: bool = True, path: Path | None = None,
-                  scheduler_loops: int = 56_000, gpu_size: int = 768) -> dict[str, Any]:
+                  scheduler_loops: int = 56_000, gpu_size: int = 768,
+                  cancelled=lambda: False) -> dict[str, Any]:
     """Benchmark the machine and return a safe planning recommendation.
 
     gpu_benchmark is injected by DrawBot to keep this module testable on systems
     without CUDA/CuPy.
     """
+    def check_cancelled():
+        if cancelled():raise InterruptedError()
+    def benchmark(function, *args, **kwargs):
+        check_cancelled()
+        # Preserve older injected benchmark callbacks while forwarding Stop to
+        # implementations that explicitly accept the new optional keyword.
+        try:
+            inspect.signature(function).bind(*args,**kwargs,cancelled=cancelled)
+        except (TypeError,ValueError):
+            value=function(*args,**kwargs)
+        else:
+            value=function(*args,**kwargs,cancelled=cancelled)
+        check_cancelled()
+        return value
+    check_cancelled()
     started = time.perf_counter()
     logical = logical_cpu_count()
     available = available_ram_mb()
     allocation = resolve_allocation("Auto", "Threads", "Auto", "4096")
-    scheduler = benchmark_scheduler(allocation, loops_per_worker=max(8_000, int(scheduler_loops)), save=save)
+    scheduler = benchmark(benchmark_scheduler,allocation,loops_per_worker=max(8_000,int(scheduler_loops)),save=False)
 
     gpu_result: dict[str, Any] = {}
     gpu_error = ""
     if gpu_benchmark is not None:
         try:
-            gpu_result = _benchmark_payload(gpu_benchmark("Auto", max(256, int(gpu_size)), "Auto", "High throughput") or {})
+            gpu_result = _benchmark_payload(benchmark(gpu_benchmark,"Auto",max(256,int(gpu_size)),"Auto","High throughput") or {})
         except InterruptedError:
             raise
         except Exception as exc:  # CUDA is optional; fail safely to CPU.
@@ -219,9 +236,11 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
 
     hardware_result: dict[str, Any] = {}
     hardware_error = ""
+    hardware_completed = False
     try:
-        hardware_result = _benchmark_payload(run_universal_hardware_benchmark(
-            save=save, small_size=128, large_size=max(256, min(768, int(gpu_size))), repeats=2, refresh_hardware=True))
+        hardware_result = _benchmark_payload(benchmark(run_universal_hardware_benchmark,
+            save=False,small_size=128,large_size=max(256,min(768,int(gpu_size))),repeats=2,refresh_hardware=True))
+        hardware_completed = True
     except InterruptedError:
         raise
     except Exception as exc:
@@ -235,6 +254,7 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
         except Exception:
             hardware_result = {}
 
+    check_cancelled()
     recommendation = build_recommendation(
         scheduler_result=scheduler,
         available_mb=available,
@@ -253,7 +273,22 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
         "hardware_error": hardware_error,
     }
     if save:
-        save_tune_result(result, path=path)
+        from ResourceScheduler import SCHEDULER_FILE, _valid_recommendation
+        from UniversalHardwareBenchmark import PROFILE_FILE, PROFILE_VERSION, _profile_structure_valid
+        target=Path(path or TUNER_FILE)
+        documents={target:result}
+        if _valid_recommendation(scheduler):
+            documents[Path(SCHEDULER_FILE)]=dict(scheduler,created_at=int(time.time()))
+        if hardware_completed and hardware_result.get("version")==PROFILE_VERSION and _profile_structure_valid(hardware_result):
+            documents[Path(PROFILE_FILE)]=hardware_result
+        if documents.get(target) is not result:
+            raise ValueError("The tuner output path conflicts with another performance profile")
+        changes={destination:json.dumps(payload,ensure_ascii=False,indent=2,allow_nan=False)
+                 for destination,payload in documents.items()}
+        if any(len(text.encode("utf-8"))>4*1024*1024 for text in changes.values()):
+            raise ValueError("Performance profile exceeds its supported read limit")
+        check_cancelled()
+        replace_text_files(changes)
     return result
 
 

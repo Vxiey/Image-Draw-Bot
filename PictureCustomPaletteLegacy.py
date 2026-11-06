@@ -211,25 +211,28 @@ def _edge_detail_colors(image, count: int, *, cancelled=lambda: False) -> list[t
         raise InterruptedError('Picture custom palette cancelled.')
     if count <= 0:
         return []
+    from contextlib import closing
+    import numpy as np
     from PIL import Image, ImageFilter
-    source = _analysis_image(image)
-    gray = source.convert("L")
-    edge = gray.filter(ImageFilter.FIND_EDGES)
-    pixels = list(source.getdata())
-    weights = list(edge.getdata())
-    candidates = [rgb for rgb, strength in zip(pixels, weights) if int(strength) >= 52]
-    if not candidates:
-        return []
-    step = max(1, math.ceil(len(candidates) / MAX_EDGE_SAMPLES))
-    candidates = candidates[::step][:MAX_EDGE_SAMPLES]
+    with closing(_analysis_image(image)) as source:
+        with closing(source.convert("L")) as gray:
+            with closing(gray.filter(ImageFilter.FIND_EDGES)) as edge:
+                indices = np.flatnonzero(np.asarray(edge, dtype=np.uint8).ravel() >= 52)
+        if not len(indices):
+            return []
+        step = max(1, math.ceil(len(indices) / MAX_EDGE_SAMPLES))
+        indices = indices[::step][:MAX_EDGE_SAMPLES]
+        # Materialize RGB triples only for the bounded sample, in exactly the
+        # same row-major order as the scalar pixel/edge zip used previously.
+        pixels = np.asarray(source, dtype=np.uint8).reshape(-1, 3)[indices]
     if cancelled():
         raise InterruptedError('Picture custom palette cancelled.')
-    sample = Image.new("RGB", (max(1, len(candidates)), 1))
-    sample.putdata(candidates)
-    q = sample.quantize(colors=max(1, min(int(count), 16)), method=Image.Quantize.MEDIANCUT,
-                        dither=Image.Dither.NONE)
-    pal = q.getpalette() or []
-    ranked = sorted((q.getcolors() or []), reverse=True)
+    with closing(Image.fromarray(pixels.reshape(1, -1, 3))) as sample:
+        with closing(sample.quantize(colors=max(1, min(int(count), 16)),
+                                     method=Image.Quantize.MEDIANCUT,
+                                     dither=Image.Dither.NONE)) as quantized:
+            pal = quantized.getpalette() or []
+            ranked = sorted((quantized.getcolors() or []), reverse=True)
     result = []
     for _n, index in ranked:
         base = int(index) * 3
@@ -243,7 +246,7 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
                           cancelled=lambda: False) -> PicturePalette:
     """Build a bounded picture-specific palette using the production color planner."""
     from ColorFidelity import delta_e2000
-    from DynamicColors import build_dynamic_color_strokes
+    from DynamicColors import build_dynamic_color_palette
 
     if cancelled():
         raise InterruptedError('Picture custom palette cancelled.')
@@ -262,12 +265,12 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
     fallback = tuple(_rgb(c) for c in palette_rgb)
     if not fallback:
         raise ValueError("No Paint palette colors are available. Read/calibrate the Paint palette first.")
-    groups, planned, selectors, meta = build_dynamic_color_strokes(
+    planned, selectors, meta = build_dynamic_color_palette(
         analysis, fallback, max_colors=max_colors, skip_white=False, lines=True,
         exact_available=True, color_fidelity=fidelity, profile_name="Microsoft Paint", source_palette=True,
         cancelled=cancelled,
     )
-    if groups is None:
+    if planned is None:
         raise InterruptedError("Picture custom palette cancelled.")
     planned = tuple(_rgb(c) for c in (planned or ()))
     selectors = tuple(selectors or ())
@@ -279,8 +282,6 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
     for index, selector in enumerate(selectors):
         if cancelled():
             raise InterruptedError("Picture custom palette cancelled.")
-        if index >= len(groups) or not groups[index]:
-            continue
         coverage = float(coverages[index]) if index < len(coverages) else 0.0
         if selector.get("kind") == "custom":
             rgb = _rgb(selector.get("rgb", planned[index] if index < len(planned) else (0, 0, 0)))
@@ -295,7 +296,9 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
     # materially different from the normal Paint palette.  This protects eyes,
     # thin contours and small isolated color fields without exploding color count.
     detail_budget = min(6, max(2, max_colors // 4))
-    for rgb in _edge_detail_colors(analysis, detail_budget, cancelled=cancelled):
+    details=(_edge_detail_colors(analysis,detail_budget,cancelled=cancelled)
+             if len(custom)<max_colors else ())
+    for rgb in details:
         if len(custom) >= max_colors:
             break
         nearest = min(float(delta_e2000(rgb, p)) for p in fallback)
@@ -332,72 +335,13 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
 
 def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
                               colors: Iterable[Sequence[int]], *, cancelled=lambda: False,
-                              wait=time.sleep, progress=None, dialog_ready=None, dialog_closed=None, color_ready=None) -> int:
-    """Type a bounded RGB sequence into Paint's calibrated Edit colors dialog."""
-    required = ("OpenCustomColor", "RedField", "GreenField", "BlueField", "ConfirmColor")
-    missing = [name for name in required if name not in controls]
-    if missing:
-        raise ValueError("Numeric Paint RGB controls are not calibrated: " + ", ".join(missing))
-    controls = dict(controls)
-    values = tuple(_rgb(c) for c in colors)
-    dialog_open = False
-    completed = 0
-
-    def click(name: str, delay: float = 0.04) -> None:
-        point = tuple(map(int, controls[name]))
-        mouse.move(*point)
-        wait(0.015)
-        mouse.click()
-        wait(delay)
-
-    if not values:
-        return 0
-    mouse.arm_input()
-    try:
-        if cancelled():
-            raise InterruptedError("Picture custom palette cancelled.")
-        click("OpenCustomColor", 0.16)
-        dialog_open = True
-        if dialog_ready is not None:
-            controls.update(dialog_ready())
-        if "AddCustomColor" not in controls:
-            raise ValueError("Paint + / Add to custom colors is not calibrated; no RGB input was sent.")
-        for index, rgb in enumerate(values, 1):
-            if cancelled():
-                raise InterruptedError("Picture custom palette cancelled.")
-            for name, value in zip(("RedField", "GreenField", "BlueField"), rgb):
-                if cancelled():
-                    raise InterruptedError("Picture custom palette cancelled.")
-                click(name, 0.025)
-                keyboard_backend.press_and_release("ctrl+a")
-                keyboard_backend.write(str(int(value)), delay=0.01)
-                wait(0.025)
-            # OK only selects the current color. The + button is what adds it
-            # to Paint's Custom colors slots. Keep the dialog open for the batch.
-            if color_ready is not None:
-                controls.update(color_ready(rgb))
-            if cancelled():
-                raise InterruptedError("Picture custom palette cancelled.")
-            click("AddCustomColor", 0.25)
-            wait(0.50)
-            if cancelled():
-                raise InterruptedError("Picture custom palette cancelled.")
-            completed += 1
-            if progress is not None:
-                progress(index, len(values), rgb)
-        click("ConfirmColor", 0.12)
-        if dialog_closed is not None:
-            dialog_closed()
-        dialog_open = False
-    finally:
-        if dialog_open:
-            try:
-                keyboard_backend.press_and_release("esc")
-                wait(0.04)
-            except Exception:
-                pass
-        mouse.disarm_input()
-    return completed
+                              wait=time.sleep, progress=None, dialog_ready=None, dialog_closed=None,
+                              color_ready=None, input_guard=None) -> int:
+    """Keep direct legacy callers on the same bounded, guarded transaction."""
+    from PictureCustomPalette import apply_custom_rgb_sequence as transaction
+    return transaction(mouse,keyboard_backend,controls,colors,cancelled=cancelled,
+                       wait=wait,progress=progress,dialog_ready=dialog_ready,
+                       dialog_closed=dialog_closed,color_ready=color_ready,input_guard=input_guard)
 
 
 def _resolve_max_colors(app) -> int:
@@ -479,14 +423,11 @@ def start_picture_custom_palette(app) -> bool:
             meta = probe_handle_isolated(handle)
             save_exact_colors(PROFILE_KEY, exact_controls, anchor=make_anchor(tuple(meta["client_rect"])))
         controls = resolved_controls(PROFILE_KEY, tuple(meta["client_rect"]))
-        try:
-            from ProfileStorage import calibration_context_fingerprint
-            calibration_fp = calibration_context_fingerprint(
-                PROFILE_KEY, workflow="picture-custom-palette", palette_path=palette_path,
-                extras=(f"colors:{max_colors}", f"fidelity:{fidelity}"),
-            )
-        except Exception:
-            calibration_fp = ""
+        from ProfileStorage import calibration_context_fingerprint
+        calibration_fp = calibration_context_fingerprint(
+            PROFILE_KEY, workflow="picture-custom-palette", palette_path=palette_path,
+            extras=(f"colors:{max_colors}", f"fidelity:{fidelity}"),
+        )
         from Colors import allColors
         fallback = tuple(tuple(c.RGB) for c in allColors)
         palette = build_picture_palette(
@@ -548,10 +489,16 @@ def start_picture_custom_palette(app) -> bool:
         def progress(index, total, rgb):
             app.events.put(("status", f"Custom color palette for picture: RGB {rgb} · {index}/{total}"))
 
+        def input_guard(point, *, modal=False):
+            if app.stop.is_set():raise InterruptedError('Picture custom palette cancelled.')
+            if modal:monitor.verify_modal(target,point)
+            else:monitor.verify(target,point)
+
         completed = apply_custom_rgb_sequence(
             mouse, keyboard_backend, controls, custom,
             cancelled=app.stop.is_set, wait=app.stop.wait, progress=progress,
             dialog_ready=dialog_ready, dialog_closed=dialog_closed, color_ready=color_ready,
+            input_guard=input_guard,
         )
         # Hard postcondition for the preparation action: never leave Edit colors
         # over the document when control returns to Image Draw Bot.

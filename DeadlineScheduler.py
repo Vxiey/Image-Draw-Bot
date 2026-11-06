@@ -29,6 +29,7 @@ from typing import Any
 NORMAL = "NORMAL"
 CATCH_UP = "CATCH_UP"
 PANIC = "PANIC"
+DRAWING_OPERATIONS = frozenset(("stroke", "dot", "short_stroke", "long_stroke", "outline"))
 
 # Centralized thresholds.  Keeping these in one place makes future profile
 # tuning/test coverage straightforward and prevents magic numbers in DrawBot.
@@ -135,6 +136,10 @@ class DeadlineScheduler:
     @staticmethod
     def _op_type(entry: dict[str, Any]) -> str:
         return str(entry.get("operation_type") or "stroke")
+
+    @classmethod
+    def _is_drawing(cls, entry: dict[str, Any]) -> bool:
+        return cls._op_type(entry) in DRAWING_OPERATIONS
 
     @staticmethod
     def _phase(entry):
@@ -381,7 +386,7 @@ class DeadlineScheduler:
         transitions=0;last_color=object();last_brush=object();started=False
         for raw in entries or ():
             entry=dict(raw)
-            if str(entry.get("operation_type") or "stroke") != "stroke":
+            if not DeadlineScheduler._is_drawing(entry):
                 continue
             color=entry.get("color_index");brush=entry.get("brush_px")
             if started and (color!=last_color or brush!=last_brush):transitions+=1
@@ -421,19 +426,19 @@ class DeadlineScheduler:
         output=[];moved=0;rejected=0;start=0
         while start<len(rows):
             first=rows[start];op=self._op_type(first);phase=self._phase(first)
-            if op!='stroke':
+            if not self._is_drawing(first):
                 output.append(first);start+=1;continue
             end=start+1
-            while end<len(rows) and self._op_type(rows[end])=='stroke' and self._phase(rows[end])==phase:
+            while end<len(rows) and self._is_drawing(rows[end]) and self._phase(rows[end])==phase:
                 end+=1
             block=rows[start:end]
             indexed=list(enumerate(block))
             ranked=sorted(indexed,key=lambda pair:self._replan_priority(pair[1],pair[0]))
             candidate=[entry for _idx,entry in ranked]
             if [idx for idx,_entry in ranked] != list(range(len(block))):
-                previous = next((entry for entry in reversed(output) if self._op_type(entry) == 'stroke'), None)
+                previous = next((entry for entry in reversed(output) if self._is_drawing(entry)), None)
                 following = next((rows[index] for index in range(end, len(rows))
-                                  if self._op_type(rows[index]) == 'stroke'), None)
+                                  if self._is_drawing(rows[index])), None)
                 prefix = [previous] if previous is not None else []
                 suffix = [following] if following is not None else []
                 if self._transition_count(prefix + candidate + suffix) <= self._transition_count(prefix + block + suffix):

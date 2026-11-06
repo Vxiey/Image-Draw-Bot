@@ -6,9 +6,11 @@ visible improvement over the nearest calibrated palette swatch.
 """
 from __future__ import annotations
 from math import sqrt, ceil
+from itertools import chain
+import numpy as np
 from ColorMatchingEngine import visible_rgb_image, measure_quantized_regions
 from ColorFidelity import delta_e2000, delta_e_oklab, mapping_pair_metrics, finalize_mapping_stats
-from ExactColorEngine import score_candidate
+from ExactColorEngine import candidate_cost
 from DominantHuePreservation import dominant_hue_family, protected_hue_families, summarize_hue_families
 from RegionAwareQuantization import build_region_context, cluster_region_relation, merge_threshold_multiplier
 
@@ -69,7 +71,7 @@ def _perceptual_distance2(a,b):
 
 
 def _closest_palette_index(rgb,palette,fidelity='Faithful'):
-    scored=[(score_candidate(rgb,p,fidelity=fidelity).total_cost,i) for i,p in enumerate(palette)]
+    scored=[(candidate_cost(rgb,p,fidelity=fidelity),i) for i,p in enumerate(palette)]
     return min(scored,key=lambda item:(item[0],item[1]))
 
 
@@ -228,6 +230,75 @@ def _add_run(groups,index,start,y,end_x):
     groups[index].append((int(start),int(y),int(end_x),int(y)))
 
 
+def _drawable_source(image, visible, skip_white):
+    """Keep source skip decisions independent of quantizer/merged colors."""
+    pixels=np.asarray(visible,dtype=np.uint8)
+    drawable=np.ones(pixels.shape[:2],dtype=bool)
+    if any(band in ('A','a') for band in image.getbands()) or 'transparency' in image.info:
+        from contextlib import closing
+        with closing(image.convert('RGBA')) as rgba:
+            with closing(rgba.getchannel('A')) as alpha:
+                drawable=np.asarray(alpha,dtype=np.uint8)>0
+    white=np.all(pixels>=245,axis=2)&drawable if skip_white else np.zeros_like(drawable)
+    drawable &= ~white
+    return pixels,drawable,int(np.count_nonzero(white))
+
+
+def _quantize_drawable(source,pixels,drawable,temp_colors):
+    """Train only on drawable colors; ignored white cannot consume the budget."""
+    from PIL import Image
+    if np.all(drawable):
+        quantized=source.quantize(colors=temp_colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)
+        return quantized,{int(index):int(count) for count,index in (quantized.getcolors() or [])}
+    from contextlib import closing
+    # The compact one-row image contains no padded/background samples. Its
+    # labels are put back into the source geometry after quantization.
+    with closing(Image.fromarray(pixels[drawable].reshape(1,-1,3))) as samples:
+        with closing(samples.quantize(colors=temp_colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)) as quantized:
+            counts={int(index):int(count) for count,index in (quantized.getcolors() or [])}
+            labels=np.zeros(drawable.shape,dtype=np.uint8)
+            labels[drawable]=np.asarray(quantized,dtype=np.uint8).reshape(-1)
+    return Image.fromarray(labels),counts
+
+
+def _groups_from_labels(labels,drawable,group_by_label,group_count,lines,cancelled):
+    """Build deterministic horizontal runs without a Python visit per pixel."""
+    groups=[[] for _ in range(group_count)]
+    lookup=np.full(256,-1,dtype=np.int32)
+    for label,index in group_by_label.items():lookup[int(label)]=int(index)
+    labels=np.asarray(labels,dtype=np.uint8)
+    for y in range(labels.shape[0]):
+        if cancelled():return None
+        row=lookup[labels[y]]
+        row[~drawable[y]]=-1
+        if not lines:
+            for x in np.flatnonzero(row>=0):
+                groups[int(row[x])].append((int(x),y,int(x),y))
+            continue
+        boundaries=np.flatnonzero(row[1:]!=row[:-1])+1
+        start=0
+        for end in chain(boundaries,(len(row),)):
+            index=int(row[start])
+            if index>=0:groups[index].append((start,y,int(end)-1,y))
+            start=int(end)
+    return groups
+
+
+def _coalesce_color_actions(rendered,selectors,coverages):
+    """Share one phase when source clusters resolve to the same runtime action."""
+    colors=[];actions=[];mass=[];remap={};seen={}
+    for index,(rgb,selector,coverage) in enumerate(zip(rendered,selectors,coverages)):
+        kind=selector['kind']
+        key=(kind,tuple(rgb),selector.get('palette_index'),selector.get('fallback_palette_index'),
+             bool(selector.get('require_exact')),bool(selector.get('prefer_numeric')))
+        target=seen.get(key)
+        if target is None:
+            target=len(colors);seen[key]=target
+            colors.append(tuple(rgb));actions.append(selector);mass.append(0.0)
+        mass[target]+=coverage;remap[index]=target
+    return colors,actions,mass,remap
+
+
 def _custom_color_policy(max_colors, color_fidelity='Faithful', profile_name='', exact_threshold=2.5):
     """Return bounded exact-RGB policy for the current profile/fidelity.
 
@@ -251,7 +322,8 @@ def _custom_color_policy(max_colors, color_fidelity='Faithful', profile_name='',
 
 def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white=True,
                                 lines=True, exact_available=False, exact_threshold=2.5, color_fidelity='Faithful',
-                                profile_name='', protected_mask=None, cancelled=lambda:False, source_palette=False):
+                                profile_name='', protected_mask=None, cancelled=lambda:False, source_palette=False,
+                                _palette_only=False):
     """Return groups, rendered colors, selectors and metadata.
 
     selectors are dictionaries of either:
@@ -268,7 +340,6 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
     - uses exact custom colours only when the nearest calibrated palette would
       be visibly worse.
     """
-    from PIL import Image
     palette=tuple(tuple(map(int,c[:3])) for c in palette_rgb)
     if not palette:
         raise ValueError('No calibrated palette colors are available for fallback.')
@@ -278,14 +349,22 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
     # instead of trusting only the quantizer's generated palette RGB.
     src=visible_rgb_image(image)
     max_colors=max(1,int(max_colors))
+    source_pixels,drawable,skipped_white=_drawable_source(image,src,skip_white)
+    if cancelled():
+        return None,None,None,None
+    if not np.any(drawable):
+        return [],(),(),{'mode':'dynamic-exact-v4','requested_colors':max_colors,'active_colors':0,
+                         'custom_exact_colors':0,'palette_fallback_colors':0,'white_skipped':skipped_white,
+                         'exact_available':bool(exact_available),
+                         'color_fidelity_diagnostics':finalize_mapping_stats({'mapped_pixels':0})}
     # Slightly higher temporary palette gives the reducer something to merge.
     temp_colors=max(8,min(64,max_colors*3))
-    q=src.quantize(colors=temp_colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)
-    counts={int(index): int(count) for count,index in (q.getcolors() or [])}
-    qpix=q.load()
+    q,counts=_quantize_drawable(src,source_pixels,drawable,temp_colors)
+    del source_pixels
+    if cancelled():return None,None,None,None
     # Measure all original pixels belonging to every quantized region.  This
     # provides mean/median/dominant RGB plus a robust source-backed target RGB.
-    source_stats=measure_quantized_regions(image,q)
+    source_stats=measure_quantized_regions(image,q,drawable_mask=drawable)
     entries=[]
     for qindex,count in counts.items():
         if cancelled():
@@ -307,7 +386,7 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
     # Step 4: build one compact spatial/structural analysis from the temporary
     # quantizer labels. The AdaptiveDetail protected mask is reused when present;
     # no second semantic/renderer pass is introduced.
-    region_context=build_region_context(src,q,entries,protected_mask=protected_mask,cancelled=cancelled)
+    region_context=build_region_context(src,q,entries,protected_mask=protected_mask,cancelled=cancelled,drawable_mask=drawable)
     region_quant_meta={}
     clusters,source_to_cluster=_merge_quantized(
         entries,max_colors,cancelled=cancelled,region_context=region_context,diagnostics=region_quant_meta)
@@ -319,6 +398,7 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
     selected=[]
     total_pixels=sum(c['count'] for c in clusters) or 1
     for old in order:
+        if cancelled():return None,None,None,None
         c=clusters[old]
         pal_d2,pal_idx=_closest_palette_index(c['rgb'],palette,color_fidelity)
         # Preserve source measurements for diagnostics and exact RGB entry.
@@ -370,6 +450,7 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
             if item['palette_distance'] >= needed and len(use_custom) < custom_budget:
                 use_custom.add(i)
     for i,item in enumerate(selected):
+        if cancelled():return None,None,None,None
         fallback=int(item['fallback_palette_index'])
         if exact_available and i in use_custom:
             selectors[i]={'kind':'custom','rgb':tuple(item['rgb']),'fallback_palette_index':fallback,
@@ -382,32 +463,13 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
         else:
             selectors[i]={'kind':'palette','palette_index':fallback,'rgb':tuple(palette[fallback])}
             rendered[i]=tuple(palette[fallback])
-    # Scan the quantized source once and build line/dot groups.
-    w,h=q.size
-    pix=q.load()
-    skipped_white=0
-    final_group_by_q={}
-    for src_index,old_cluster in source_to_cluster.items():
-        new=old_to_new[old_cluster]
-        if skip_white and _visible_white(selected[new]['rgb']):
-            final_group_by_q[int(src_index)]=None
-        else:
-            final_group_by_q[int(src_index)]=new
-    for y in range(h):
-        previous=None; start=None
-        for x in range(w+1):
-            group=None
-            if x<w:
-                qidx=int(pix[x,y]); group=final_group_by_q.get(qidx)
-                if group is None:
-                    skipped_white+=1
-            if not lines:
-                if group is not None:
-                    groups[group].append((x,y,x,y))
-            elif group!=previous:
-                _add_run(groups,previous,start,y,x-1)
-                previous,start=group,(x if group is not None else None)
-    active=sum(bool(g) for g in groups)
+    source_rendered=tuple(rendered)
+    rendered,selectors,coverage_priority,action_indexes=_coalesce_color_actions(
+        rendered,selectors,[item['coverage'] for item in selected])
+    final_group_by_q={int(src_index):action_indexes[old_to_new[old_cluster]] for src_index,old_cluster in source_to_cluster.items()}
+    groups=None if _palette_only else _groups_from_labels(q,drawable,final_group_by_q,len(rendered),lines,cancelled)
+    if not _palette_only and groups is None:return None,None,None,None
+    active=len(rendered)
     fidelity_stats={
         'mapped_pixels':0,'source_lightness_sum':0.0,'mapped_lightness_sum':0.0,
         'source_saturation_sum':0.0,'mapped_saturation_sum':0.0,
@@ -415,7 +477,8 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
         'delta_e_sum':0.0,'delta_e_max':0.0,'delta_e2000_sum':0.0,'delta_e2000_max':0.0,
         'delta_e_oklab_sum':0.0,'delta_e_oklab_max':0.0,'hue_error_sum':0.0,
     }
-    for item,mapped in zip(selected,rendered):
+    for item,mapped in zip(selected,source_rendered):
+        if cancelled():return None,None,None,None
         n=max(0,int(item.get('count',0)));pair=mapping_pair_metrics(item['rgb'],mapped)
         fidelity_stats['mapped_pixels']+=n
         fidelity_stats['source_lightness_sum']+=pair['source_lightness']*n;fidelity_stats['mapped_lightness_sum']+=pair['mapped_lightness']*n
@@ -432,9 +495,10 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
         from NamedColorIntelligence import describe_color_mapping
         named_color_mappings=tuple(
             dict(describe_color_mapping(item['rgb'],mapped),coverage=round(float(item.get('coverage',0.0)),4))
-            for item,mapped in list(zip(selected,rendered))[:12])
+            for item,mapped in list(zip(selected,source_rendered))[:12])
     except Exception:
         named_color_mappings=()
+    if cancelled():return None,None,None,None
     return groups,tuple(rendered),tuple(selectors),{
         'mode':'dynamic-exact-v4',
         'color_rendering':'Perceptual match',
@@ -444,16 +508,18 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
         'named_color_mappings':named_color_mappings,
         'requested_colors':max_colors,
         'intermediate_quantized_colors':len(entries),
-        'reduced_colors':len(selected),
+        'reduced_colors':len(rendered),
+        'source_reduced_colors':len(selected),
+        'color_actions_coalesced':len(selected)-len(rendered),
         'active_colors':active,
-        'custom_exact_colors':sum(1 for s,g in zip(selectors,groups) if g and s['kind']=='custom'),
-        'palette_fallback_colors':sum(1 for s,g in zip(selectors,groups) if g and s['kind']=='palette'),
+        'custom_exact_colors':sum(s['kind']=='custom' for s in selectors),
+        'palette_fallback_colors':sum(s['kind']=='palette' for s in selectors),
         'white_skipped':skipped_white,
         'exact_available':bool(exact_available),
         'custom_dialog_budget':custom_budget,
         'custom_color_threshold_deltae2000':round(float(custom_threshold),3),
         'custom_color_profile_policy':'paint-faithful-expanded' if str(profile_name or '')=='Microsoft Paint' and str(color_fidelity) in ('Faithful','Exact') else 'bounded-default',
-        'coverage_priority':tuple(round(item['coverage'],4) for item in selected[:8]),
+        'coverage_priority':tuple(round(value,4) for value in coverage_priority),
         'dominant_hue_preservation':bool(_source_hue_summaries),
         'dominant_hue_families':tuple(s.family for s in _source_hue_summaries),
         'dominant_hue_coverage':{s.family:round(float(s.coverage),5) for s in _source_hue_summaries},
@@ -468,3 +534,10 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
             'spread':round(float(item['spread']),2),'coverage':round(float(item['coverage']),4)
         } for item in selected[:12]),
     }
+
+
+def build_dynamic_color_palette(image,palette_rgb,**options):
+    """Use the same source analysis without allocating unused drawing strokes."""
+    _groups,colors,selectors,metadata=build_dynamic_color_strokes(
+        image,palette_rgb,**options,_palette_only=True)
+    return colors,selectors,metadata

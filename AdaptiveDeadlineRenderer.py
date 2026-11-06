@@ -77,7 +77,7 @@ def _operation_type(path, span: float, closed: float, length: float) -> str:
     return "long_stroke"
 
 
-def _path_cost(path, transform: CanvasTransform, options: dict[str, Any]) -> float:
+def _path_timing(options: dict[str, Any]):
     delivery = resolve_stroke_delivery(options, dry_run=False)
     speed = normalize_speed(options.get("speed", "Balanced"))
     delay = float(options.get("delay", 0.0) or 0.0)
@@ -85,6 +85,11 @@ def _path_cost(path, transform: CanvasTransform, options: dict[str, Any]) -> flo
     travel_wait = max(.0005, float(phase_delay(delay, speed, "travel")))
     boundary_wait = max(.0005, float(phase_delay(delay, speed, "boundary")))
     precision = str(options.get("precision") or "High")
+    return delivery, path_wait, travel_wait, boundary_wait, precision
+
+
+def _path_cost(path, transform: CanvasTransform, options: dict[str, Any], *, timing=None) -> float:
+    delivery, path_wait, travel_wait, boundary_wait, precision = timing or _path_timing(options)
     if len(path) <= 1:
         return travel_wait + .015 + delivery.press_settle + delivery.release_settle + .0015
     moves = 0
@@ -108,6 +113,8 @@ def _fixed_overhead(options: dict[str, Any], groups, image_size, fitted) -> tupl
         try:
             from RegionFillEngine import estimate_fill_execution_seconds
             fill = float(estimate_fill_execution_seconds(regions, image_size, fitted, options).get("total_seconds", 0.0) or 0.0)
+        except InterruptedError:
+            raise
         except Exception:
             fill = len(regions) * max(.12, delivery.ui_control_delay + .04)
     bg = options.get("background_fill_plan") or {}
@@ -181,13 +188,14 @@ def _calibration_guard(options: dict[str, Any], budget_seconds: float) -> tuple[
                          "confidence_stage": stage}
 
 
-def _local_batch(entries: list[DeadlineEntry], window: int = 18) -> list[DeadlineEntry]:
+def _local_batch(entries: list[DeadlineEntry], window: int = 18, *, cancelled=lambda: False) -> list[DeadlineEntry]:
     """Small-window colour/spatial batching without destroying progressive order."""
     out: list[DeadlineEntry] = []
     previous = None
     for start in range(0, len(entries), window):
         chunk = list(entries[start:start+window])
         while chunk:
+            if cancelled():raise InterruptedError()
             if previous is None:
                 chosen_i = max(range(len(chunk)), key=lambda i: chunk[i].value_score)
             else:
@@ -201,6 +209,59 @@ def _local_batch(entries: list[DeadlineEntry], window: int = 18) -> list[Deadlin
             e = chunk.pop(chosen_i)
             out.append(e); previous = (e.center[0], e.center[1], e.color_index)
     return out
+
+
+def _fit_ordered_delivery(entries, transform, *, palette_seconds, multiplier, fixed_seconds,
+                          reserve_seconds, budget_seconds, color_extras=None, cancelled=lambda: False):
+    """Fit the actual progressive order, including every colour revisit.
+
+    Linked neighbour indices make removal updates constant-time. Only whole
+    existing paths are removed; geometry and the retained order stay unchanged.
+    """
+    count=len(entries)
+    starts=[];ends=[]
+    for entry in entries:
+        if cancelled():raise InterruptedError()
+        starts.append(transform.point(*entry.path[0]))
+        ends.append(transform.point(*entry.path[-1]))
+    previous=[i-1 if i else None for i in range(count)]
+    following=[i+1 if i+1<count else None for i in range(count)]
+    kept=[True]*count
+    color_extras=color_extras or {}
+    def boundary(left,right):
+        if right is None:return 0.0,0.0,0.0,0.0
+        changed=left is None or entries[left].color_index!=entries[right].color_index
+        palette=palette_seconds if changed else 0.0
+        custom,verification=color_extras.get(entries[right].color_index,(0.0,0.0)) if changed else (0.0,0.0)
+        travel=0.0 if left is None else min(.10,math.dist(ends[left],starts[right])*.000045)*multiplier
+        return palette,travel,custom,verification
+    total=fixed_seconds+sum(e.estimated_cost_seconds for e in entries)
+    total+=sum(sum(boundary(previous[i],i)) for i in range(count))
+    priority=sorted(range(count),key=lambda i:(-PHASES.index(entries[i].phase),
+                    entries[i].value_score/max(.001,entries[i].estimated_cost_seconds),-entries[i].source_index))
+    trimmed=0
+    for index in priority:
+        if cancelled():raise InterruptedError()
+        if total+reserve_seconds<=budget_seconds+1e-9:break
+        left,right=previous[index],following[index]
+        total-=entries[index].estimated_cost_seconds+sum(boundary(left,index))+sum(boundary(index,right))
+        total+=sum(boundary(left,right))
+        kept[index]=False;trimmed+=1
+        if left is not None:following[left]=right
+        if right is not None:previous[right]=left
+    retained=[];palette_total=travel_total=custom_total=verification_total=0.0;palette_changes=0
+    for index,entry in enumerate(entries):
+        if not kept[index]:continue
+        palette,travel,custom,verification=boundary(previous[index],index)
+        # Runtime scheduling must see these same costs instead of learning an
+        # artificial slowdown whenever a colour is revisited by a later pass.
+        entry.estimated_cost_seconds+=palette+travel+custom+verification
+        retained.append(entry);palette_total+=palette;travel_total+=travel
+        custom_total+=custom;verification_total+=verification
+        palette_changes+=int(palette>0)
+    return retained,{'trimmed_for_delivery_cost':trimmed,'ordered_palette_changes':palette_changes,
+                     'ordered_palette_seconds':palette_total,'ordered_cursor_travel_seconds':travel_total,
+                     'ordered_custom_color_seconds':custom_total,'ordered_verification_seconds':verification_total}
 
 
 def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, options: dict[str, Any], *, cancelled=lambda: False):
@@ -217,7 +278,9 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
         raise InterruptedError()
 
     importance, importance_meta = build_importance_map(image, options, cancelled)
+    if cancelled():raise InterruptedError()
     transform = CanvasTransform(image.width, image.height, fitted)
+    timing = _path_timing(options)
     entries: list[DeadlineEntry] = []
     serial = 0
     for color_index, paths in enumerate(execution_groups):
@@ -231,7 +294,7 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
             structural = min(1.0, span * 1.55 + closed * .25 + min(1.0, length) * .20)
             phase = _phase_for(imp, span, closed, length)
             value = max(.01, imp * .62 + structural * .30 + min(1.0, length) * .08)
-            cost = _path_cost(path, transform, options)
+            cost = _path_cost(path, transform, options, timing=timing)
             entries.append(DeadlineEntry(color_index, path, serial, cost, imp, structural, value,
                                          phase, phase in ("accuracy", "correction"), center,
                                          _operation_type(path, span, closed, length)))
@@ -242,6 +305,7 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
     uncertainty, cal_meta = _calibration_guard(options, render_budget)
     cost_multiplier=max(.55,min(4.0,float(cal_meta.get("cost_multiplier") or cal_meta.get("ratio") or 1.0)))
     for e in entries:
+        if cancelled():raise InterruptedError()
         e.estimated_cost_seconds *= cost_multiplier
     fixed *= cost_multiplier
     fixed_meta={k:(float(v)*cost_multiplier if isinstance(v,(int,float)) else v) for k,v in fixed_meta.items()}
@@ -255,6 +319,7 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
     w, h = image.size
     cell_best: dict[tuple[int,int], DeadlineEntry] = {}
     for e in entries:
+        if cancelled():raise InterruptedError()
         if e.phase not in ("major_coverage", "structure"):
             continue
         cx = min(3, max(0, int(e.center[0] / max(1, w) * 4)))
@@ -273,6 +338,7 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
     candidates = [e for e in entries if e.source_index not in chosen_ids]
     candidates.sort(key=lambda e: (PHASES.index(e.phase), -(e.value_score * phase_weight[e.phase] / max(.001, e.estimated_cost_seconds)), e.source_index))
     for e in candidates:
+        if cancelled():raise InterruptedError()
         if used + e.estimated_cost_seconds <= path_budget:
             selected.append(e); chosen_ids.add(e.source_index); used += e.estimated_cost_seconds
 
@@ -281,7 +347,30 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
     for phase in PHASES:
         block = [e for e in selected if e.phase == phase]
         block.sort(key=lambda e: (-e.value_score, e.source_index))
-        ordered.extend(_local_batch(block))
+        ordered.extend(_local_batch(block,cancelled=cancelled))
+
+    # Unique-colour overhead is insufficient for progressive phases that visit
+    # a swatch again. Account for the actual ordered UI/travel boundaries, then
+    # trim whole low-priority paths if those costs consume the remaining margin.
+    fixed-=fixed_meta['palette_seconds']
+    fixed_meta['palette_seconds']=0.0
+    color_extras={}
+    if not options.get('paint_current_color'):
+        selectors=options.get('color_selectors') or ()
+        verification=((timing[0].palette_click_delay+.14) if options.get('adaptive_color_verification') else 0.0)
+        if options.get('visual_verification_enabled'):verification+=.08
+        for color_index in {e.color_index for e in ordered}:
+            selector=selectors[color_index] if color_index<len(selectors) else None
+            custom=.78 if options.get('exact_color_available') and isinstance(selector,dict) and selector.get('kind')=='custom' else 0.0
+            color_extras[color_index]=(custom*cost_multiplier,verification*cost_multiplier)
+        for key in ('custom_color_seconds','verification_seconds'):
+            fixed-=fixed_meta[key];fixed_meta[key]=0.0
+    ordered,delivery_meta=_fit_ordered_delivery(
+        ordered,transform,palette_seconds=0.0 if options.get('paint_current_color') else timing[0].palette_click_delay*cost_multiplier,
+        multiplier=cost_multiplier,fixed_seconds=fixed,reserve_seconds=uncertainty,
+        budget_seconds=render_budget,color_extras=color_extras,cancelled=cancelled)
+    chosen_ids={e.source_index for e in ordered}
+    selected=[e for e in selected if e.source_index in chosen_ids]
 
     filtered = [[] for _ in execution_groups]
     for e in selected:
@@ -298,10 +387,10 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
         operation_counts[e.operation_type]=operation_counts.get(e.operation_type,0)+1
     active_colors=len({e.color_index for e in selected})
     operation_counts.update({
-        "palette_change":active_colors if not options.get("paint_current_color") else 0,
+        "palette_change":delivery_meta['ordered_palette_changes'],
         "tool_change":len(options.get("tool_actions") or ()),
         "fill":len(options.get("fill_regions") or ()) + (1 if (options.get("background_fill_plan") or {}).get("enabled") else 0),
-        "verification":active_colors if options.get("adaptive_color_verification") else 0,
+        "verification":delivery_meta['ordered_palette_changes'] if options.get("adaptive_color_verification") else 0,
         "focus_change":0 if options.get("paint_profile") else 1,
     })
     meta = {
@@ -324,8 +413,10 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
         "calibration": cal_meta,
         "importance": importance_meta,
         "fixed_overhead": fixed_meta,
+        "ordered_delivery":delivery_meta,
         "average_dropped_importance": round(sum(dropped_importance)/len(dropped_importance), 5) if dropped_importance else 0.0,
         "quality_retained_percent": round(100.0 * sum(e.value_score for e in selected) / max(.001, sum(e.value_score for e in entries)), 2) if entries else 100.0,
         "progressive_phase_order": "major coverage -> structure -> important details -> accuracy -> correction",
     }
+    if cancelled():raise InterruptedError()
     return filtered, sequence, meta, importance

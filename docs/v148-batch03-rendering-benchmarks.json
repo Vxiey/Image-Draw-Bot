@@ -1,0 +1,443 @@
+{
+  "baseline": "2fb7abf470a4ef498df9c53f42cddda62d8b652b",
+  "python": "3.12.14",
+  "platform": "linux",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One parity/warm call, alternating before/after elapsed samples, separate traced peaks after garbage collection.",
+  "scope": "Synthetic CPU work only. Baseline changed modules import current shared dependencies. Python tracing does not capture all native Pillow memory.",
+  "after_source_sha256": {
+    "AutoBrushWidth": "97b572ca93b1c423cba238f59d70b6995446a0bb2488d8a3544340d28d6f23cb",
+    "PixelAccuracyEngine": "d851174742b4e86993edb40123bc9d22370ec8a0a33847fa2680c32b7ca87c9e",
+    "AdaptiveRegionHybrid": "c98d0ef3352301785263194eab5603f5a8f4ad291c34daca93a4028239cd5bc9",
+    "HybridRenderer3": "764626b7fa4fb05406f9345f404537e78042fd403fefd7d62fc1f262a0d4f14c",
+    "AdaptiveDeadlineRenderer": "92b1c72437db3fdd87480d9d8b13e2e8060c738c305330e758f743e8c4ed0a90",
+    "RegionFillEngine": "8d09910106c66baef54d1c52bf846504204fe9b7f774748bf3f3f4cfa3cbd902",
+    "GarticEngineV2": "85c1c87eae8ac846a97231ac3e9637c4f39f8e77cb8b0646bd554dc18463c763"
+  },
+  "measurements": {
+    "auto_brush_4096_rgb": {
+      "before_samples_ms": [
+        72.674040999118,
+        79.97334800165845,
+        71.52886599942576,
+        73.0352149985265,
+        75.22736700047972
+      ],
+      "after_samples_ms": [
+        50.40599100175314,
+        52.58934099765611,
+        51.82611199779785,
+        51.824819998728344,
+        52.924040999641875
+      ],
+      "before_median_ms": 73.0352149985265,
+      "after_median_ms": 51.82611199779785,
+      "before_peak_python_bytes": 6232,
+      "after_peak_python_bytes": 7949,
+      "exact_output_parity": true,
+      "output_sha256": "d832cb53585da9a3b9740d8cd5accafa05498cc0a7c947295f57acb97dd2e541",
+      "parameters": {
+        "source_size": [
+          4096,
+          4096
+        ],
+        "seed": 14803,
+        "source": "64x64 uniform random RGB tile enlarged with NEAREST"
+      }
+    },
+    "hybrid_analysis_4096_rgb": {
+      "before_samples_ms": [
+        59.26414399800706,
+        67.24401800238411,
+        64.79187099830597,
+        58.55359399720328,
+        57.0481260001543
+      ],
+      "after_samples_ms": [
+        2.9943289991933852,
+        3.2294970005750656,
+        4.168745999777457,
+        2.9079419982736,
+        3.3999100014625583
+      ],
+      "before_median_ms": 59.26414399800706,
+      "after_median_ms": 3.2294970005750656,
+      "before_peak_python_bytes": 2130311,
+      "after_peak_python_bytes": 2130509,
+      "exact_output_parity": true,
+      "output_sha256": "612b5f94d21e78999a60e7460a2d849f4a80a2ea011b12fe304335f5ca1aeeef",
+      "parameters": {
+        "source_size": [
+          4096,
+          4096
+        ],
+        "seed": 14803,
+        "source": "64x64 uniform random RGB tile enlarged with NEAREST"
+      }
+    },
+    "gartic_candidate_sampling_20_boxes_4096_rgb": {
+      "before_samples_ms": [
+        898.7988189983298,
+        924.8481940012425,
+        931.1943770007929,
+        907.3828760010656,
+        885.2241730019159
+      ],
+      "after_samples_ms": [
+        49.83940000238363,
+        47.63164499672712,
+        46.69731400281307,
+        45.6924389982305,
+        53.01729400162003
+      ],
+      "before_median_ms": 907.3828760010656,
+      "after_median_ms": 47.63164499672712,
+      "before_peak_python_bytes": 95180,
+      "after_peak_python_bytes": 94728,
+      "exact_output_parity": true,
+      "output_sha256": "bf3f7aa0f11b2f3cd94a68f1ea8bb84056ae0e2dbce1bbdf7e9ce80b2696fc7b",
+      "parameters": {
+        "source_size": [
+          4096,
+          4096
+        ],
+        "seed": 14803,
+        "boxes": [
+          [
+            100,
+            100,
+            500,
+            300
+          ],
+          [
+            120,
+            100,
+            520,
+            300
+          ],
+          [
+            140,
+            100,
+            540,
+            300
+          ],
+          [
+            160,
+            100,
+            560,
+            300
+          ],
+          [
+            180,
+            100,
+            580,
+            300
+          ],
+          [
+            200,
+            100,
+            600,
+            300
+          ],
+          [
+            220,
+            100,
+            620,
+            300
+          ],
+          [
+            240,
+            100,
+            640,
+            300
+          ],
+          [
+            260,
+            100,
+            660,
+            300
+          ],
+          [
+            280,
+            100,
+            680,
+            300
+          ],
+          [
+            300,
+            100,
+            700,
+            300
+          ],
+          [
+            320,
+            100,
+            720,
+            300
+          ],
+          [
+            340,
+            100,
+            740,
+            300
+          ],
+          [
+            360,
+            100,
+            760,
+            300
+          ],
+          [
+            380,
+            100,
+            780,
+            300
+          ],
+          [
+            400,
+            100,
+            800,
+            300
+          ],
+          [
+            420,
+            100,
+            820,
+            300
+          ],
+          [
+            440,
+            100,
+            840,
+            300
+          ],
+          [
+            460,
+            100,
+            860,
+            300
+          ],
+          [
+            480,
+            100,
+            880,
+            300
+          ]
+        ]
+      },
+      "scope": "Frame/white evidence sampling after candidate discovery, not the full detector."
+    },
+    "region_scores_128_checkerboard": {
+      "before_samples_ms": [
+        831.3098629987508,
+        822.4784599988197,
+        791.2750389987195,
+        684.8305329986033,
+        817.9904489988985
+      ],
+      "after_samples_ms": [
+        394.27777899982175,
+        320.6466690025991,
+        390.91970400113496,
+        440.9987289982382,
+        381.8127380000078
+      ],
+      "before_median_ms": 817.9904489988985,
+      "after_median_ms": 390.91970400113496,
+      "before_peak_python_bytes": 26223200,
+      "after_peak_python_bytes": 25405592,
+      "exact_output_parity": true,
+      "output_sha256": "d31ccd42c1345362b168c35ee551132eb1d66c2f6330f59e3d93a391fa9b51cb",
+      "parameters": {
+        "size": [
+          128,
+          128
+        ],
+        "target": "(x+y)%2",
+        "wrong_color": "x%3==y%3==0",
+        "uncovered": "x%5==y%5==0",
+        "edge_and_protected": "all pixels",
+        "max_regions": 64
+      }
+    },
+    "hybrid_simulation_1000_paths_512": {
+      "before_samples_ms": [
+        46.375122998142615,
+        46.700450002390426,
+        62.52500800110283,
+        62.26513300134684,
+        62.33633900046698
+      ],
+      "after_samples_ms": [
+        6.901215001562377,
+        9.618257001420716,
+        9.09264800066012,
+        9.308208002039464,
+        9.170112996798707
+      ],
+      "before_median_ms": 62.26513300134684,
+      "after_median_ms": 9.170112996798707,
+      "before_peak_python_bytes": 2890096,
+      "after_peak_python_bytes": 2623824,
+      "exact_output_parity": true,
+      "output_sha256": "cc4e813ae2ff5ef2e5c1ffdfbcea865348b95771880c252bf680d69a0a5ac129",
+      "parameters": {
+        "size": [
+          512,
+          512
+        ],
+        "paths": 1000,
+        "path": "((i%500,(i*13)%500),(i%500+8,(i*13)%500))",
+        "brush": "i%3+1",
+        "color": "i%2",
+        "edge_and_protected": "all pixels"
+      }
+    },
+    "deadline_path_costs_6000_cached_context": {
+      "before_samples_ms": [
+        43.191700999159366,
+        42.73014800128294,
+        43.23644699979923,
+        45.12598499786691,
+        82.26648900017608
+      ],
+      "after_samples_ms": [
+        20.924431999446824,
+        21.210925999184838,
+        21.465252997586504,
+        20.662793998781126,
+        21.97378499840852
+      ],
+      "before_median_ms": 43.23644699979923,
+      "after_median_ms": 21.210925999184838,
+      "before_peak_python_bytes": 213645,
+      "after_peak_python_bytes": 213725,
+      "exact_output_parity": true,
+      "output_sha256": "5fc1b4601c96927d5c613a014f6ca2ef3d91effabf553384938dd4d982411428",
+      "parameters": {
+        "paths": 6000,
+        "path": "((i%299,(i*13)%300),(i%299+1,(i*13)%300))",
+        "source_size": [
+          300,
+          300
+        ],
+        "fitted_size": [
+          600,
+          600
+        ],
+        "options": {
+          "profile_key": "gartic-phone",
+          "speed": "Balanced",
+          "delay": 0.003,
+          "precision": "High"
+        }
+      },
+      "scope": "The candidate-cost loop used by adapt_execution_plan; one timing context per batch."
+    },
+    "fill_candidate_costs_100_model_snapshot": {
+      "before_samples_ms": [
+        16.386514998885104,
+        16.953274000115925,
+        16.97497600252973,
+        16.802120000647847,
+        16.79695299753803
+      ],
+      "after_samples_ms": [
+        14.21492000008584,
+        14.740800001163734,
+        14.923828999599209,
+        14.62135299880174,
+        14.669664000393823
+      ],
+      "before_median_ms": 16.802120000647847,
+      "after_median_ms": 14.669664000393823,
+      "before_peak_python_bytes": 180952,
+      "after_peak_python_bytes": 181640,
+      "exact_output_parity": true,
+      "output_sha256": "03f4c24ddccb16e7831d828c6391a227863b2b2d49764d3324514826664d1bae",
+      "parameters": {
+        "regions": 100,
+        "region": {
+          "color_index": 1,
+          "row_spans": [
+            [
+              0,
+              2,
+              10
+            ],
+            [
+              1,
+              2,
+              10
+            ],
+            [
+              2,
+              2,
+              10
+            ],
+            [
+              3,
+              2,
+              10
+            ],
+            [
+              4,
+              2,
+              10
+            ],
+            [
+              5,
+              2,
+              10
+            ]
+          ],
+          "contour": [
+            [
+              2,
+              0
+            ],
+            [
+              10,
+              0
+            ],
+            [
+              10,
+              5
+            ],
+            [
+              2,
+              5
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "seed_pixel": [
+            5,
+            2
+          ],
+          "area_pixels": 54,
+          "perimeter_pixels": 28,
+          "safety_score": 0.99,
+          "bbox_density": 1.0
+        },
+        "image_size": [
+          20,
+          20
+        ],
+        "fitted_size": [
+          200,
+          200
+        ],
+        "options": {
+          "brush_px": 1,
+          "_execution_cost_calibration_override": {}
+        }
+      },
+      "scope": "Includes real cost-model construction with a deterministic empty calibration override; excludes disk latency."
+    }
+  }
+}

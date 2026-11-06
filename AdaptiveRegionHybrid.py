@@ -15,6 +15,7 @@ so a recognisable whole appears before optional detail.
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from contextlib import closing
 import time
 import math
 from typing import Any, Callable, Sequence
@@ -24,7 +25,10 @@ from PIL import Image, ImageDraw
 
 from AdaptiveBrushEngine import verified_brush_sizes
 from ExecutionCostModel import build_cost_model
-from PixelAccuratePlanner import PixelMap
+from PixelAccuratePlanner import PixelMap, validated_pixel_indices
+from PixelMapValidation import validate_color_index, validate_palette_count
+from RasterGeometry import clipped_bresenham, clipped_interpolated_line, nearest_axis_samples, project_pixel_interval
+from ColorMatchingEngine import visible_rgb_image
 from PixelStrokeEngine import connected_components
 from StatefulFillSimulation import filter_stateful_fill_regions
 
@@ -67,7 +71,7 @@ def _cancel(cancelled):
     if cancelled():raise InterruptedError()
 
 
-def _raster_line(index: np.ndarray, color: int, stroke) -> None:
+def _raster_line(index: np.ndarray, color: int, stroke, *, cancelled=lambda: False) -> None:
     h,w=index.shape
     try:x0,y0,x1,y1=map(int,stroke)
     except Exception:return
@@ -81,33 +85,28 @@ def _raster_line(index: np.ndarray, color: int, stroke) -> None:
             a,b=sorted((y0,y1));a=max(0,a);b=min(h-1,b)
             if a<=b:index[a:b+1,x0]=color
         return
-    dx=abs(x1-x0);sx=1 if x0<x1 else -1;dy=-abs(y1-y0);sy=1 if y0<y1 else -1;err=dx+dy
-    x,y=x0,y0
-    while True:
-        if 0<=x<w and 0<=y<h:index[y,x]=color
-        if x==x1 and y==y1:break
-        e2=2*err
-        if e2>=dy:err+=dy;x+=sx
-        if e2<=dx:err+=dx;y+=sy
+    for point_number,(x,y) in enumerate(clipped_bresenham((x0,y0),(x1,y1),w,h)):
+        if point_number%256==0:_cancel(cancelled)
+        index[y,x]=color
 
 
 def pixel_map_from_groups(image: Image.Image, groups, palette_rgb: Sequence[Sequence[int]], *,
                           cancelled=lambda: False) -> PixelMap:
     """Reconstruct the exact quantized target raster from already-built groups."""
+    _cancel(cancelled)
+    palette_count=validate_palette_count(len(palette_rgb))
     w,h=map(int,image.size)
     index=np.full((h,w),-1,dtype=np.int16)
     for ci,strokes in enumerate(groups or ()):
+        if strokes:validate_color_index(ci,palette_count=palette_count)
         for n,stroke in enumerate(strokes or ()):
             if n%512==0:_cancel(cancelled)
-            _raster_line(index,ci,stroke)
+            _raster_line(index,ci,stroke,cancelled=cancelled)
     drawable=index>=0
     palette=np.asarray([tuple(map(int,c[:3])) for c in palette_rgb],dtype=np.uint8)
     rgb=np.full((h,w,3),255,dtype=np.uint8)
     if len(palette):
-        yy,xx=np.nonzero(drawable)
-        if len(yy):
-            safe=np.clip(index[yy,xx],0,len(palette)-1)
-            rgb[yy,xx]=palette[safe]
+        rgb[drawable]=palette[index[drawable]]
 
     edge=np.zeros((h,w),dtype=np.float32)
     if w>1:
@@ -123,15 +122,19 @@ def pixel_map_from_groups(image: Image.Image, groups, palette_rgb: Sequence[Sequ
     route_meta={}
     try:
         from UniversalGpuAcceleration import edge_magnitude
-        visible=np.asarray(image.convert("RGB"),dtype=np.float32)
+        with closing(visible_rgb_image(image)) as source_rgb:
+            visible=np.asarray(source_rgb,dtype=np.float32)
         lum=(visible[...,0]*.2126+visible[...,1]*.7152+visible[...,2]*.0722)/255.0
         source_edge,route=edge_magnitude(lum,gpu_mode="Auto",cancelled=cancelled)
         source_edge=np.asarray(source_edge,dtype=np.float32)
         if source_edge.shape!=edge.shape:source_edge=np.zeros_like(edge)
         source_edge=np.clip(source_edge/max(.001,float(np.percentile(source_edge,95)) if source_edge.size else 1.0),0,1)
         route_meta=route if isinstance(route,dict) else getattr(route,"as_dict",lambda:{})()
+    except InterruptedError:
+        raise
     except Exception:
         pass
+    _cancel(cancelled)
     edge=np.maximum(edge,source_edge*.72).astype(np.float32,copy=False)
 
     neighbours=np.zeros((h,w),dtype=np.uint8)
@@ -205,23 +208,35 @@ def _entry_sequence(color_index:int, paths, *, phase:str, comp, brush_px:int, me
     return out
 
 
-def _paint_path(mask:np.ndarray,path,brush_px:int):
-    h,w=mask.shape;b=max(1,int(brush_px));lo=(b-1)//2;hi=b//2
+def _path_rectangles(path,brush_px,width,height,*,cancelled=lambda:False):
+    _cancel(cancelled)
+    h,w=height,width;b=max(1,int(brush_px));lo=(b-1)//2;hi=b//2
     def rect(x0,y0,x1,y1):
         xa=max(0,min(x0,x1)-lo);xb=min(w-1,max(x0,x1)+hi)
         ya=max(0,min(y0,y1)-lo);yb=min(h-1,max(y0,y1)+hi)
-        if xa<=xb and ya<=yb:mask[ya:yb+1,xa:xb+1]=True
-    pts=list(path or ())
+        return (xa,ya,xb,yb) if xa<=xb and ya<=yb else None
+    pts=path or ()
     if not pts:return
     if len(pts)==1:
-        x,y=map(int,pts[0]);rect(x,y,x,y);return
-    for a,bp in zip(pts,pts[1:]):
+        x,y=map(int,pts[0]);bounds=rect(x,y,x,y)
+        if bounds is not None:yield bounds
+        return
+    for segment_number,(a,bp) in enumerate(zip(pts,pts[1:])):
+        if segment_number%128==0:_cancel(cancelled)
         x0,y0=map(int,a);x1,y1=map(int,bp)
-        if x0==x1 or y0==y1:rect(x0,y0,x1,y1)
+        if x0==x1 or y0==y1:
+            bounds=rect(x0,y0,x1,y1)
+            if bounds is not None:yield bounds
         else:
-            steps=max(abs(x1-x0),abs(y1-y0),1)
-            for i in range(steps+1):
-                t=i/steps;x=round(x0+(x1-x0)*t);y=round(y0+(y1-y0)*t);rect(x,y,x,y)
+            for i,(x,y) in enumerate(clipped_interpolated_line((x0,y0),(x1,y1),w,h,before=lo,after=hi)):
+                if i%256==0:_cancel(cancelled)
+                bounds=rect(x,y,x,y)
+                if bounds is not None:yield bounds
+
+
+def _paint_path(mask:np.ndarray,path,brush_px:int,*,value=True,cancelled=lambda:False):
+    for x0,y0,x1,y1 in _path_rectangles(path,brush_px,mask.shape[1],mask.shape[0],cancelled=cancelled):
+        mask[y0:y1+1,x0:x1+1]=value
 
 
 def _eroded_centers(target:np.ndarray,brush_px:int) -> np.ndarray:
@@ -568,7 +583,8 @@ def _budget_seconds(options,model,choices,fill_regions,image_size,fitted):
     },reserve,total
 
 
-def _schedule(choices, sequences_by_component, size, model,options,fill_regions,*,fitted=None):
+def _schedule(choices, sequences_by_component, size, model,options,fill_regions,*,fitted=None,cancelled=lambda:False):
+    _cancel(cancelled)
     budget_fitted=tuple(fitted) if fitted is not None else tuple(size)
     active,usable,fixed_meta,reserve,limit=_budget_seconds(
         options,model,choices,fill_regions,size,budget_fitted)
@@ -608,12 +624,14 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
 
     ordering_stats={"greedy_batches":0,"serpentine_batches":0,"components_ordered":0}
     def order_rows(ids):
+        _cancel(cancelled)
         selected_rows=[by_id[i] for i in ids if i in by_id]
         cursor=None;current_color=None;current_brush=initial_brush;ordered=[]
         for phase in PHASES:
             phase_rows=[c for c in selected_rows if c.phase==phase]
             colors={int(c.color_index) for c in phase_rows}
             while colors:
+                _cancel(cancelled)
                 if current_color in colors:
                     ci=int(current_color)
                 else:
@@ -628,6 +646,7 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
                     ordering_stats["greedy_batches"]+=1
                     remaining=list(batch)
                     while remaining:
+                        _cancel(cancelled)
                         pick=min(remaining,key=lambda c:(transition_seconds(c,cursor,current_color,current_brush),
                                                          -c.gain_per_ms,-c.visual_gain,c.component_id))
                         remaining.remove(pick);ordered.append(pick)
@@ -643,6 +662,7 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
                         brush_penalty=0 if int(first_brush)==int(current_brush or first_brush) else 1
                         return (band,x_key,brush_penalty,-c.gain_per_ms,c.component_id)
                     for pick in sorted(batch,key=snake_key):
+                        _cancel(cancelled)
                         ordered.append(pick);_start,cursor,_first,current_brush=geometry(pick);current_color=pick.color_index
                 colors.remove(ci)
         ordering_stats["components_ordered"]+=len(ordered)
@@ -651,12 +671,16 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
     def build_sequence(ids):
         sequence=[];serial=0
         for c in order_rows(ids):
-            for raw in sequences_by_component[c.component_id]:
+            _cancel(cancelled)
+            for local_index,raw in enumerate(sequences_by_component[c.component_id]):
+                if local_index%256==0:_cancel(cancelled)
                 e=dict(raw);e["serial"]=serial;serial+=1;sequence.append(e)
         return sequence
 
     def exact_cost(sequence):
+        _cancel(cancelled)
         raw=model.sequence_cost(sequence,initial_brush=initial_brush)
+        _cancel(cancelled)
         risk=(model.risk_adjusted_seconds(raw.total_seconds)
               if active and hasattr(model,"risk_adjusted_seconds") else raw.total_seconds)
         return raw,float(risk)
@@ -685,6 +709,7 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
 
         cell_best={}
         for c in choices:
+            _cancel(cancelled)
             if c.component_id in selected:continue
             seq=sequences_by_component[c.component_id]
             pts=[p for e in seq for p in (e.get("path") or ())[:1]]
@@ -700,6 +725,7 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
         rest=[c for c in choices if c.component_id not in selected]
         rest.sort(key=lambda c:(-(c.gain_per_ms*weights[c.phase]),-c.visual_gain,c.component_id))
         for c in rest:
+            _cancel(cancelled)
             if used+c.estimated_seconds<=usable:
                 selected.add(c.component_id);used+=c.estimated_seconds
 
@@ -755,7 +781,7 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
     utilization=(risk_cost/usable*100.0) if active and usable>0 else 0.0
     nominal_utilization=(seq_cost.total_seconds/usable*100.0) if active and usable>0 else 0.0
     return groups,sequence,{
-        "deadline_active":active,"deadline_seconds":round(limit,4),"usable_path_seconds":round(usable,4),
+        "deadline_active":active,"deadline_seconds":round(limit,4),"usable_path_seconds":round(usable,4) if active else None,
         "fixed_overhead":fixed_meta,"safety_reserve_seconds":round(reserve,4),
         "selected_components":len(selected),"total_components":len(choices),
         "dropped_components":len(choices)-len(selected),
@@ -774,13 +800,16 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
         "ordering_stats":dict(ordering_stats),
     }
 
-def simulate_quantized_plan(pixel_map:PixelMap,sequence,fill_regions=()):
+def simulate_quantized_plan(pixel_map:PixelMap,sequence,fill_regions=(),*,cancelled=lambda:False):
+    _cancel(cancelled)
+    validated_pixel_indices(pixel_map,cancelled=cancelled)
     h,w=pixel_map.height,pixel_map.width
     canvas=np.full((h,w),-1,dtype=np.int16)
     for region in fill_regions or ():
-        try:ci=int(region.get("color_index"))
-        except Exception:continue
-        for raw in region.get("row_spans") or ():
+        _cancel(cancelled)
+        ci=validate_color_index(region.get("color_index"))
+        for span_number,raw in enumerate(region.get("row_spans") or ()):
+            if span_number%256==0:_cancel(cancelled)
             try:y,x0,x1=map(int,raw)
             except Exception:continue
             if 0<=y<h:
@@ -788,11 +817,10 @@ def simulate_quantized_plan(pixel_map:PixelMap,sequence,fill_regions=()):
                 x0=max(0,x0);x1=min(w-1,x1)
                 if x0<=x1:canvas[y,x0:x1+1]=ci
     for e in sequence or ():
-        try:ci=int(e["color_index"]);brush=max(1,int(e.get("brush_px") or 1))
-        except Exception:continue
-        mask=np.zeros((h,w),dtype=np.bool_)
-        _paint_path(mask,e.get("path") or (),brush)
-        canvas[mask]=ci
+        _cancel(cancelled)
+        if not e.get("path"):continue
+        ci=validate_color_index(e["color_index"]);brush=max(1,int(e.get("brush_px") or 1))
+        _paint_path(canvas,e.get("path") or (),brush,value=ci,cancelled=cancelled)
     target=pixel_map.palette_index;drawable=pixel_map.drawable_mask
     intended=max(1,int(np.count_nonzero(drawable)))
     painted=canvas>=0
@@ -802,13 +830,14 @@ def simulate_quantized_plan(pixel_map:PixelMap,sequence,fill_regions=()):
     spill=(~drawable)&painted
     edge_target=drawable & (pixel_map.edge_map>=.5)
     protected=drawable & pixel_map.protected_mask
-    def pct(n,d):return float(n)/max(1,int(d))*100.0
+    def pct(n,d,fallback=0.0):return float(n)/int(d)*100.0 if int(d)>0 else float(fallback)
     coverage=pct(np.count_nonzero(covered),intended)
     color=pct(np.count_nonzero(correct),intended)
-    edge=pct(np.count_nonzero(correct & edge_target),np.count_nonzero(edge_target))
-    detail=pct(np.count_nonzero(correct & protected),np.count_nonzero(protected))
+    edge=pct(np.count_nonzero(correct & edge_target),np.count_nonzero(edge_target),color)
+    detail=pct(np.count_nonzero(correct & protected),np.count_nonzero(protected),color)
     spill_acc=max(0.0,100.0-pct(np.count_nonzero(spill),max(1,np.count_nonzero(painted))))
     score=.35*color+.25*coverage+.20*edge+.15*detail+.05*spill_acc
+    _cancel(cancelled)
     return {
         "coverage_percent":round(coverage,4),"color_accuracy_percent":round(color,4),
         "edge_preservation_percent":round(edge,4),"protected_detail_percent":round(detail,4),
@@ -847,9 +876,10 @@ def build_adaptive_execution(pixel_map:PixelMap,palette_rgb,options:dict[str,Any
     candidate_seconds=time.perf_counter()-t1
     t2=time.perf_counter()
     groups,sequence,schedule_meta=_schedule(
-        choices,seqs,(pixel_map.width,pixel_map.height),model,options,fill_regions,fitted=fitted)
+        choices,seqs,(pixel_map.width,pixel_map.height),model,options,fill_regions,fitted=fitted,cancelled=cancelled)
     reference=reference_pixel_map if reference_pixel_map is not None else pixel_map
-    metrics,canvas=simulate_quantized_plan(reference,sequence,fill_regions)
+    metrics,canvas=simulate_quantized_plan(reference,sequence,fill_regions,cancelled=cancelled)
+    _cancel(cancelled)
     coverage_preview,error_preview=diagnostic_previews(reference,canvas)
     simulation_seconds=time.perf_counter()-t2
     methods={}
@@ -991,7 +1021,8 @@ def build_adaptive_hybrid_plan(original:Image.Image,area,options:dict[str,Any],m
         if fill_regions:
             from FillOptimizer import remove_filled_region_strokes
             work_groups=remove_filled_region_strokes(work_groups,fill_regions)
-        pixel_map=pixel_map_from_groups(base["image"],work_groups,palette,cancelled=cancelled)
+        pixel_map=(pixel_map_from_groups(base["image"],work_groups,palette,cancelled=cancelled)
+                   if fill_regions else reference_pixel_map)
         result=build_adaptive_execution(pixel_map,palette,outer,base["fitted"],fill_regions=fill_regions,
                                         reference_pixel_map=reference_pixel_map,cancelled=cancelled)
         outer.update({
@@ -1020,24 +1051,38 @@ def build_adaptive_hybrid_plan(original:Image.Image,area,options:dict[str,Any],m
         return base
 
 
-def render_adaptive_preview(source_size,preview_size,sequence,palette_rgb,fill_regions=()):
+def render_adaptive_preview(source_size,preview_size,sequence,palette_rgb,fill_regions=(),*,cancelled=lambda:False):
+    _cancel(cancelled)
     w,h=map(int,source_size);pw,ph=map(int,preview_size)
-    out=Image.new("RGB",(max(1,pw),max(1,ph)),"white");draw=ImageDraw.Draw(out)
-    sx=pw/max(1,w);sy=ph/max(1,h)
-    for region in fill_regions or ():
-        try:color=tuple(map(int,palette_rgb[int(region["color_index"])]))
-        except Exception:continue
-        for raw in region.get("row_spans") or ():
-            try:y,x0,x1=map(int,raw)
-            except Exception:continue
-            draw.rectangle((x0*sx,y*sy,(x1+1)*sx,max((y+1)*sy,y*sy+1)),fill=color)
-    for entry in sequence or ():
-        try:color=tuple(map(int,palette_rgb[int(entry["color_index"])]));brush=max(1,int(entry.get("brush_px") or 1))
-        except Exception:continue
-        pts=[(float(x)*sx,float(y)*sy) for x,y in (entry.get("path") or ())]
-        if not pts:continue
-        width=max(1,int(round(brush*(sx+sy)*.5)))
-        if len(pts)==1:
-            x,y=pts[0];r=max(.5,width/2);draw.rectangle((x-r,y-r,x+r,y+r),fill=color)
-        else:draw.line(pts,fill=color,width=width,joint="curve")
-    return out
+    if min(w,h,pw,ph)<=0:raise ValueError('Preview dimensions must be positive.')
+    count=len(palette_rgb)
+    if count:validate_palette_count(count)
+    x_samples=nearest_axis_samples(w,pw,cancelled=cancelled)
+    y_samples=nearest_axis_samples(h,ph,cancelled=cancelled)
+    out=Image.new("RGB",(pw,ph),"white");draw=ImageDraw.Draw(out)
+    def rectangle(bounds,color):
+        x0,y0,x1,y1=bounds
+        left,right=project_pixel_interval(x0,x1,w,pw,samples=x_samples)
+        top,bottom=project_pixel_interval(y0,y1,h,ph,samples=y_samples)
+        if left<=right and top<=bottom:draw.rectangle((left,top,right,bottom),fill=color)
+    try:
+        for region in fill_regions or ():
+            _cancel(cancelled)
+            color=tuple(map(int,palette_rgb[validate_color_index(region['color_index'],palette_count=count)]))
+            for index,raw in enumerate(region.get('row_spans') or ()):
+                if index%256==0:_cancel(cancelled)
+                y,x0,x1=map(int,raw);x0,x1=sorted((x0,x1))
+                if 0<=y<h and x1>=0 and x0<w:
+                    rectangle((max(0,x0),y,min(w-1,x1),y),color)
+        for entry in sequence or ():
+            _cancel(cancelled)
+            if not entry.get('path'):continue
+            color=tuple(map(int,palette_rgb[validate_color_index(entry['color_index'],palette_count=count)]))
+            brush=max(1,int(entry.get('brush_px') or 1))
+            for bounds in _path_rectangles(entry['path'],brush,w,h,cancelled=cancelled):
+                rectangle(bounds,color)
+        _cancel(cancelled)
+        return out
+    except BaseException:
+        out.close()
+        raise

@@ -24,10 +24,8 @@ def _box_blur(values: np.ndarray, radius: int) -> np.ndarray:
 
 def _gradient(values: np.ndarray) -> np.ndarray:
     f = np.asarray(values, dtype=np.float32)
-    gx = np.zeros_like(f); gy = np.zeros_like(f)
-    gx[:, 1:-1] = (f[:, 2:] - f[:, :-2]) * 0.5
-    gy[1:-1, :] = (f[2:, :] - f[:-2, :]) * 0.5
-    mag = np.hypot(gx, gy)
+    from ImageGradients import luminance_edges
+    mag = luminance_edges(f)
     scale = max(1e-4, float(np.percentile(mag, 99.0)))
     return np.clip(mag / scale, 0.0, 1.0).astype(np.float32)
 
@@ -50,13 +48,16 @@ def _palette_boundaries(index_map: np.ndarray, drawable: np.ndarray) -> np.ndarr
 
 
 def analyze_shadow_contours(rgb: np.ndarray, palette_index: np.ndarray,
-                            drawable: np.ndarray, edges: np.ndarray) -> dict:
+                            drawable: np.ndarray, edges: np.ndarray, *, cancelled=lambda:False) -> dict:
     """Return lossless guidance maps for contours, shadows and post-processing."""
+    if cancelled():raise InterruptedError()
     draw = np.asarray(drawable, dtype=bool)
     luma = _luma(rgb)
+    if cancelled():raise InterruptedError()
     h, w = luma.shape
     radius = max(2, min(18, int(round(min(h, w) / 48.0))))
     local_tone = _box_blur(luma, radius)
+    if cancelled():raise InterruptedError()
 
     # A shadow is primarily a pixel that is darker than its local surroundings.
     relative = np.maximum(local_tone - luma, 0.0)
@@ -74,6 +75,7 @@ def analyze_shadow_contours(rgb: np.ndarray, palette_index: np.ndarray,
     contour *= draw.astype(np.float32)
 
     shadow_gradient = _gradient(shadow)
+    if cancelled():raise InterruptedError()
     fine_shadow = np.clip(shadow * (0.30 + 0.70 * contour) + shadow_gradient * 0.56, 0.0, 1.0)
     fine_shadow *= draw.astype(np.float32)
 
@@ -101,6 +103,7 @@ def analyze_shadow_contours(rgb: np.ndarray, palette_index: np.ndarray,
         "shadow_detail_threshold": round(float(shadow_threshold), 4),
         "post_processing": "contour + shadow-detail cleanup priority",
     }
+    if cancelled():raise InterruptedError()
     return {
         "luma_map": luma.astype(np.float32),
         "local_tone_map": local_tone.astype(np.float32),

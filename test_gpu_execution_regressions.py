@@ -56,7 +56,7 @@ class FakeCupy(ModuleType):
             total_bytes=lambda: 0,
         )
         self.get_default_memory_pool = lambda: self.pool
-        self.asarray = np.asarray
+        self.asarray = lambda value, dtype=None, *, blocking=False: np.array(value, dtype=dtype, copy=True)
         self.asnumpy = np.asarray
         self.empty_like = np.empty_like
         self.clip = np.clip

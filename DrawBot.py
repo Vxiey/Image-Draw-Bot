@@ -294,89 +294,9 @@ def FindClosestRGB(rgb):
 
 
 def load_image(source, cancelled=lambda: False):
-    from PIL import Image, ImageOps, UnidentifiedImageError
-    raw_source = str(source).strip()
-    if not raw_source:
-        raise ValueError('Choose an image first.')
-    source_obj = raw_source
-    if raw_source.lower().startswith('data:image/'):
-        import base64, binascii
-        try:
-            header, encoded = raw_source.split(',', 1)
-        except ValueError as error:
-            raise ValueError('The dropped browser image data is malformed.') from error
-        if ';base64' not in header.lower():
-            raise ValueError('Only base64 browser image drops are supported.')
-        if len(encoded) > MAX_DOWNLOAD_BYTES * 2:
-            raise ValueError('The dropped browser image is too large. Choose a smaller image.')
-        try:
-            data = base64.b64decode(encoded, validate=True)
-        except (binascii.Error, ValueError) as error:
-            raise ValueError('The dropped browser image could not be decoded.') from error
-        if len(data) > MAX_DOWNLOAD_BYTES:
-            raise ValueError('The dropped browser image is larger than 20 MB. Choose a smaller image.')
-        source_obj = BytesIO(data)
-    elif raw_source.lower().startswith(('http://', 'https://')):
-        import requests
-        data = bytearray()
-        started = time.monotonic()
-        try:
-            request_headers={
-                'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36',
-                'Accept':'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-            }
-            with requests.get(raw_source, timeout=(10, 15), stream=True, headers=request_headers) as response:
-                response.raise_for_status()
-                content_type = response.headers.get('Content-Type', '').lower()
-                if 'text/html' in content_type:
-                    raise ValueError('The link points to a web page. Right-click the image and choose Copy image address.')
-                content_length = response.headers.get('Content-Length')
-                if content_length:
-                    try:
-                        if int(content_length) > MAX_DOWNLOAD_BYTES:
-                            raise ValueError('The image download is larger than 20 MB. Choose a smaller image.')
-                    except (TypeError, ValueError) as error:
-                        if isinstance(error, ValueError) and str(error).startswith('The image download'):
-                            raise
-                for chunk in response.iter_content(65536):
-                    if cancelled():
-                        raise InterruptedError()
-                    if time.monotonic() - started > 45:
-                        raise ValueError('The download took too long. Save the image to your computer and select it locally.')
-                    if not chunk:
-                        continue
-                    data.extend(chunk)
-                    if len(data) > MAX_DOWNLOAD_BYTES:
-                        raise ValueError('The image is larger than 20 MB. Choose a smaller image.')
-        except requests.RequestException as error:
-            raise ValueError(f'Could not download the image: {error}') from error
-        source_obj = BytesIO(data)
-    elif '://' in raw_source:
-        raise ValueError('The image URL must start with https:// or http://.')
-    else:
-        path = Path(raw_source)
-        try:
-            if not path.is_file():
-                raise ValueError('The selected image file no longer exists.')
-            if path.stat().st_size > MAX_SOURCE_BYTES:
-                raise ValueError('The image file is larger than 50 MB. Choose a smaller image.')
-        except OSError as error:
-            raise ValueError(f'Could not access the selected image: {error}') from error
-        source_obj = path
-    try:
-        with Image.open(source_obj) as image:
-            if image.width <= 0 or image.height <= 0:
-                raise ValueError('The image has invalid dimensions.')
-            if image.width * image.height > MAX_SOURCE_PIXELS:
-                raise ValueError('The image is larger than 25 megapixels. Resize it first.')
-            detected_format = image.format or 'Unknown'
-            result = ImageOps.exif_transpose(image).convert('RGBA')
-            result.info['draw_studio_format'] = detected_format
-            return result
-    except UnidentifiedImageError as error:
-        raise ValueError('Could not read the image. Choose PNG, JPG, WEBP or BMP, or use a direct image URL.') from error
-    except OSError as error:
-        raise ValueError(f'Could not decode the image: {error}') from error
+    from ImageImport import read_image
+    return read_image(source,cancelled,max_download_bytes=MAX_DOWNLOAD_BYTES,
+                      max_source_bytes=MAX_SOURCE_BYTES,max_source_pixels=MAX_SOURCE_PIXELS)
 
 
 def grab_area(area):
@@ -1049,7 +969,8 @@ def make_plan(original, area, options, cancelled=lambda: False):
             skip_white=bool(options.get('skip_white',True)),
             gpu_mode=options.get('gpu_mode','Auto'),
             gpu_vram=options.get('gpu_vram','Auto'),
-            gpu_performance=options.get('gpu_performance','High throughput'))
+            gpu_performance=options.get('gpu_performance','High throughput'),
+            cancelled=cancelled)
         options["_hybrid_scale_x"]=float(fitted[0])/max(1,pixel_map.width)
         options["_hybrid_scale_y"]=float(fitted[1])/max(1,pixel_map.height)
         from SubjectFocus import focused_stroke_plan
@@ -2037,13 +1958,17 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     if options.get('sketch_fill_active') and execution_sequence:
         try:
             from SketchFillRenderer import render_sequence_preview
-            preview=render_sequence_preview(image.size,size,execution_sequence,palette_rgb,brush)
+            preview=render_sequence_preview(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled)
+        except InterruptedError:
+            raise
         except Exception as _sf_preview_error:
             log_event(f'Sketch Fill sequence preview fallback: {_sf_preview_error!r}')
     if options.get('adaptive_hybrid_active') and execution_sequence:
         try:
             from AdaptiveRegionHybrid import render_adaptive_preview
-            preview=render_adaptive_preview(image.size,size,execution_sequence,palette_rgb,options.get('fill_regions') or ())
+            preview=render_adaptive_preview(image.size,size,execution_sequence,palette_rgb,options.get('fill_regions') or (),cancelled=cancelled)
+        except InterruptedError:
+            raise
         except Exception as _ah_preview_error:
             log_event(f'Adaptive Region simulated-final preview fallback: {_ah_preview_error!r}')
     profiler_stop(options, 'preview_rendering', _prof_preview)
@@ -2133,7 +2058,9 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     if options.get('sketch_fill_active') and execution_sequence:
         try:
             from SketchFillRenderer import build_phase_previews
-            ui_previews.update(build_phase_previews(image.size,size,execution_sequence,palette_rgb,brush))
+            ui_previews.update(build_phase_previews(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled))
+        except InterruptedError:
+            raise
         except Exception as _sf_layers_error:
             log_event(f'Sketch Fill phase previews skipped safely: {_sf_layers_error!r}')
     try:
@@ -4049,8 +3976,6 @@ class DrawBotApp:
         # server is not created/bound until the user explicitly starts it.
         self.mobile_preview_server = None
         root.title('Image Draw Bot')
-        root.geometry('1040x740')
-        root.minsize(900, 660)
         try:
             import customtkinter as ctk
             if isinstance(root,ctk.CTk):root.configure(fg_color='#edf2f5')
@@ -7205,6 +7130,7 @@ class DrawBotApp:
             self.load_source(path,Path(path).name,action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
 
     def remove_image_background(self):
+        if self.closing:return False
         if self.activity:
             self.status.set('Finish or stop the current operation before removing the background.')
             return False
@@ -7212,19 +7138,25 @@ class DrawBotApp:
             self.status.set('Load an image before removing its background.')
             return False
         source=self.original.copy()
-        if self.background_removal_original is None:
-            self.background_removal_original=source.copy()
         self.status.set('Removing border-connected background…')
         log_event(f'Background removal requested: size={source.size}.')
         def work():
             from BackgroundRemoval import remove_background
-            result=remove_background(source,mode='Auto',strength='Balanced',cancelled=self.stop.is_set)
-            if self.stop.is_set():raise InterruptedError()
+            with closing(source):
+                result=remove_background(source,mode='Auto',strength='Balanced',cancelled=self.stop.is_set)
+            if self.stop.is_set():
+                result.image.close()
+                raise InterruptedError()
             self.events.put(('background_removed',result))
-        return bool(self.begin_worker('background-remove',work))
+        started=False
+        try:
+            started=bool(self.begin_worker('background-remove',work))
+            return started
+        finally:
+            if not started:source.close()
 
     def undo_background_removal(self):
-        if self.activity:return False
+        if self.activity or self.closing:return False
         from ImageFormatInfo import image_label
         previous=self.background_removal_original
         if previous is None:
@@ -7240,6 +7172,7 @@ class DrawBotApp:
         return True
 
     def save_png_copy(self):
+        if self.closing:return False
         if self.activity:
             self.status.set('Finish or stop the current operation before exporting PNG.')
             return False
@@ -7252,10 +7185,19 @@ class DrawBotApp:
         snapshot=self.original.copy();self.status.set('Saving PNG…')
         def work():
             from BackgroundRemoval import png_export_ready
-            png_export_ready(snapshot).save(path,format='PNG',optimize=True)
-            if self.stop.is_set():raise InterruptedError()
+            from RuntimePaths import atomic_binary_writer
+            with closing(snapshot):
+                if self.stop.is_set():raise InterruptedError()
+                with closing(png_export_ready(snapshot)) as ready:
+                    with atomic_binary_writer(Path(path),cancelled=self.stop.is_set) as stream:
+                        ready.save(stream,format='PNG',optimize=True)
             self.events.put(('png_saved',path))
-        return bool(self.begin_worker('png-export',work))
+        started=False
+        try:
+            started=bool(self.begin_worker('png-export',work))
+            return started
+        finally:
+            if not started:snapshot.close()
 
     def upscale_dialog(self):
         if self.activity or self.closing: return
@@ -7600,7 +7542,12 @@ class DrawBotApp:
             self.status.set('Load an image first, then click Mark subject.')
             return
         from SubjectSelector import select_subject
+        source=self.original
         def selected(region):
+            if self.closing:return
+            if self.activity or self.original is not source:
+                self.status.set('Subject selection discarded because the image or operation changed. Mark the current image again.')
+                return
             self.subject_region=region
             self.subject_hint.set('Marked rectangle: everything inside is included. Build preview to check.')
             if self.subject_focus.get()=='Off': self.subject_focus.set('Subject first')
@@ -7955,7 +7902,8 @@ class DrawBotApp:
         import customtkinter as ctk
         window=ctk.CTkToplevel(self.root)
         window.title('Mobile Preview')
-        window.geometry('620x610');window.minsize(560,520);window.transient(self.root)
+        from WorkspaceLayout import fit_window
+        fit_window(window,preferred=(620,610),minimum=(560,520));window.transient(self.root)
         window.configure(fg_color='#101319')
         card=ctk.CTkFrame(window,fg_color='#1a202b',corner_radius=18);card.pack(fill='both',expand=True,padx=18,pady=18)
         ctk.CTkLabel(card,text='Mobile Preview',font=('Segoe UI',24,'bold'),text_color='#f0f4fb').pack(anchor='w',padx=22,pady=(20,3))
@@ -7989,11 +7937,23 @@ class DrawBotApp:
         self.status.set('Mobile Preview is live. Open the local address on a phone connected to the same network.')
 
     def export_preview(self):
-        if not self.plan:self.status.set('Select an image first.');return
+        if self.activity or self.closing:return False
+        if not self.plan:self.status.set('Build a preview first.');return False
         path=filedialog.asksaveasfilename(defaultextension='.png',filetypes=[('PNG image','*.png')],initialfile='ImageDrawBot-preview.png')
-        if path:
-            try:self.plan['preview'].save(path);self.status.set('Preview saved.')
-            except OSError as error:self.status.set(f'Could not save: {error}')
+        if not path:return False
+        snapshot=self.plan['preview'].copy()
+        def work():
+            from RuntimePaths import atomic_binary_writer
+            with closing(snapshot):
+                with atomic_binary_writer(Path(path),cancelled=self.stop.is_set) as stream:
+                    snapshot.save(stream,format='PNG')
+            self.events.put(('status','Preview saved.'))
+        started=False
+        try:
+            started=bool(self.begin_worker('preview-export',work))
+            return started
+        finally:
+            if not started:snapshot.close()
 
     def reuse_area(self):
         if self.saved_area:
@@ -8046,13 +8006,15 @@ class DrawBotApp:
                     from GarticPhoneLayout import assess_canvas_size
                     from GarticEngineV2 import detect_gartic_canvas
                     gartic_layout=assess_canvas_size(width,height)
-                    detected_canvas=detect_gartic_canvas(image)
+                    detected_canvas=detect_gartic_canvas(image,cancelled=self.stop.is_set)
                     if gartic_layout['likely']:
                         area_suffix += f" · Gartic canvas ✓ {gartic_layout['aspect']:.2f}:1"
                         log_event(f"Gartic Phone Engine v2 canvas geometry matched reference: aspect={gartic_layout['aspect']:.3f} confidence={gartic_layout['confidence']:.3f} detector={detected_canvas.confidence:.3f}.")
                     else:
                         area_suffix += f" · check Gartic canvas ({gartic_layout['aspect']:.2f}:1)"
                         log_event(f"Gartic Phone Engine v2 canvas geometry warning: selected aspect={gartic_layout['aspect']:.3f}, reference={gartic_layout['reference_aspect']:.3f}, detector={detected_canvas.confidence:.3f}.")
+                except InterruptedError:
+                    raise
                 except Exception as layout_error:
                     log_event(f'Gartic Phone layout check skipped: {layout_error!r}')
             self.area_text.set(f'✓ {width} × {height} px · {area_suffix}')
@@ -9193,6 +9155,7 @@ class DrawBotApp:
             self.auto_tune_detail.set(str(error))
 
     def run_performance_auto_tuner(self, apply=False, automatic=False):
+        if self.closing or (automatic and self.stop.is_set()):return False
         if self.activity:
             self.status.set('Stop the current operation before running the Universal Hardware Auto Benchmark.')
             return
@@ -9205,11 +9168,19 @@ class DrawBotApp:
         self.auto_tune_detail.set('Testing safe worker counts, RAM headroom, CUDA and OpenCL where the installed GPU driver supports them.')
         def work():
             try:
-                result=run_auto_tune(gpu_benchmark=gpu_benchmark, save=True)
+                result=run_auto_tune(gpu_benchmark=gpu_benchmark, save=True,cancelled=self.stop.is_set)
+                if self.stop.is_set():raise InterruptedError()
                 self.events.put(('performance_auto_tune_complete',{'result':result,'apply':bool(apply),'automatic':bool(automatic)}))
+            except InterruptedError:
+                self.events.put(('performance_auto_tune_complete',{'cancelled':True}))
             except Exception as error:
                 self.events.put(('performance_auto_tune_complete',{'error':f'{type(error).__name__}: {error}','apply':False}))
-        threading.Thread(target=work,daemon=True,name='performance-auto-tuner').start()
+        started=False
+        try:
+            started=bool(self.begin_worker('performance-auto-tuner',work))
+            return started
+        finally:
+            if not started:self.hardware_benchmark_running=False
 
     def apply_performance_tune(self, result=None):
         payload=result or load_tune_result()
@@ -9239,6 +9210,7 @@ class DrawBotApp:
             return False
 
     def test_gpu_acceleration(self):
+        if self.closing:return False
         if self.activity:
             self.status.set('Stop the current operation before testing GPU acceleration.')
             return
@@ -9247,7 +9219,7 @@ class DrawBotApp:
         def work():
             try:
                 if requested == 'NVIDIA CUDA':
-                    result=gpu_benchmark(requested,1024,vram,performance)
+                    result=gpu_benchmark(requested,1024,vram,performance,cancelled=self.stop.is_set)
                     if result.get('used_gpu'):
                         cc=f" · CC {result.get('compute_capability')}" if result.get('compute_capability') else ''
                         sms=f" · {result.get('multiprocessors')} SMs" if result.get('multiprocessors') else ''
@@ -9263,11 +9235,11 @@ class DrawBotApp:
                     yy,xx=_np.mgrid[0:n,0:n]
                     rgb=_np.stack(((xx*13+yy*3)%256,(xx*5+yy*17)%256,(xx*23+yy*7)%256),axis=-1).astype(_np.uint8)
                     src=rgb.astype(_np.float32)/255.0; dst=_np.roll(src,1,axis=1)
-                    _sl,_dl,_de,de_route=perceptual_pair(src,dst,gpu_mode=requested)
-                    _edge,edge_route=edge_magnitude(src[...,1],gpu_mode=requested)
-                    rgba=_Image.fromarray(_np.dstack((rgb,_np.full((n,n),255,dtype=_np.uint8))),'RGBA')
+                    _sl,_dl,_de,de_route=perceptual_pair(src,dst,gpu_mode=requested,cancelled=self.stop.is_set)
+                    _edge,edge_route=edge_magnitude(src[...,1],gpu_mode=requested,cancelled=self.stop.is_set)
                     palette=((0,0,0),(255,255,255),(255,0,0),(0,255,0),(0,0,255),(255,255,0))
-                    (_idx,_mask),pal_route=palette_indices_rgba(rgba,palette,range(len(palette)),[False]*len(palette),gpu_mode=requested)
+                    with closing(_Image.fromarray(_np.dstack((rgb,_np.full((n,n),255,dtype=_np.uint8))))) as rgba:
+                        (_idx,_mask),pal_route=palette_indices_rgba(rgba,palette,range(len(palette)),[False]*len(palette),gpu_mode=requested,cancelled=self.stop.is_set)
                     routes=[de_route,edge_route,pal_route]
                     names=[]
                     for route in routes:
@@ -9275,17 +9247,22 @@ class DrawBotApp:
                         if label not in names:names.append(label)
                     message=('Step 23 compute test ready: '+ ' | '.join(names) +
                              '. OKLab/ΔE, edge and palette workloads all completed; each retains CPU fallback.')
+                if self.stop.is_set():raise InterruptedError('Compute test cancelled.')
                 self.events.put(('status',message))
+            except InterruptedError:
+                raise
             except Exception as error:
                 self.events.put(('status',f'Compute test failed safely; CPU fallback remains available: {error}'))
-        threading.Thread(target=work,daemon=True,name='gpu-benchmark').start()
+        return self.begin_worker('gpu-benchmark',work)
 
     def test_resource_allocation(self):
+        if self.closing:return False
         if self.activity:
             self.status.set('Stop the current operation before testing resource allocation.')
             return
         try:
-            allocation=resolve_allocation(self.cpu_workers.get(),self.cpu_engine.get(),self.ram_budget.get(),self.ram_custom_mb.get())
+            requested=(self.cpu_workers.get(),self.cpu_engine.get(),self.ram_budget.get(),self.ram_custom_mb.get())
+            allocation=resolve_allocation(*requested)
             available=allocation.get('available_ram_mb')
             available_text=f" · available RAM ~{available:,} MB" if isinstance(available,int) else ""
             self.status.set(
@@ -9298,16 +9275,19 @@ class DrawBotApp:
             return
         def work():
             try:
-                result=benchmark_allocation(self.cpu_workers.get(),self.cpu_engine.get(),self.ram_budget.get(),self.ram_custom_mb.get())
-                schedule=benchmark_scheduler(result)
+                result=benchmark_allocation(*requested,cancelled=self.stop.is_set)
+                schedule=benchmark_scheduler(result,cancelled=self.stop.is_set)
+                if self.stop.is_set():raise InterruptedError('CPU/RAM test cancelled.')
                 self.events.put(('status',
                     f"CPU/RAM test complete: {result['benchmark_tasks']} task(s) on {result['benchmark_backend']} · "
                     f"{result['benchmark_score']} Mloops/s · {result['benchmark_elapsed_ms']} ms · "
                     f"Resource Scheduler saved recommendation: {schedule['recommended_workers']} worker(s) · "
                     f"RAM budget {result['ram_budget_mb']:,} MB. Use Universal Hardware Auto Benchmark to compare NVIDIA/AMD/Intel compute backends."))
+            except InterruptedError:
+                raise
             except Exception as error:
                 self.events.put(('status',f'CPU/RAM benchmark failed safely: {error}'))
-        threading.Thread(target=work,daemon=True,name='resource-benchmark').start()
+        return self.begin_worker('resource-benchmark',work)
 
     def run_performance_benchmark(self):
         """Benchmark the current planning pipeline without arming mouse input."""
@@ -9454,7 +9434,8 @@ class DrawBotApp:
         import customtkinter as ctk
         window=ctk.CTkToplevel(self.root)
         window.title('Image Draw Bot version history')
-        window.geometry('850x680');window.minsize(720,520);window.transient(self.root)
+        from WorkspaceLayout import fit_window
+        fit_window(window,preferred=(850,680),minimum=(720,520));window.transient(self.root)
         window.configure(fg_color='#101319')
         card=ctk.CTkFrame(window,fg_color='#1a202b',corner_radius=18)
         card.pack(fill='both',expand=True,padx=18,pady=18)
@@ -9472,7 +9453,8 @@ class DrawBotApp:
         from RuntimePaths import is_frozen
         window=ctk.CTkToplevel(self.root)
         window.title('About Image Draw Bot')
-        window.geometry('610x500');window.resizable(False,False);window.transient(self.root)
+        from WorkspaceLayout import fit_window
+        fit_window(window,preferred=(610,500),minimum=(480,400));window.transient(self.root)
         window.configure(fg_color='#101319')
         card=ctk.CTkFrame(window,fg_color='#1a202b',corner_radius=18)
         card.pack(fill='both',expand=True,padx=22,pady=22)
@@ -9554,7 +9536,8 @@ class DrawBotApp:
         text=format_wizard_dialog(steps,profile_warnings=profile_release_warnings(self.game.get(),cal_state))
         window=ctk.CTkToplevel(self.root)
         window.title('Beginner setup wizard')
-        window.geometry('760x680');window.minsize(640,520);window.transient(self.root)
+        from WorkspaceLayout import fit_window
+        fit_window(window,preferred=(760,680),minimum=(640,520));window.transient(self.root)
         window.configure(fg_color='#101319')
         card=ctk.CTkFrame(window,fg_color='#1a202b',corner_radius=18)
         card.pack(fill='both',expand=True,padx=18,pady=18)
@@ -9578,6 +9561,7 @@ class DrawBotApp:
     def _handle_event(self,kind,value):
         if getattr(self,'pending_clear_drawing',None) is not None:
             if kind=='done':
+                if value=='performance-auto-tuner':self.hardware_benchmark_running=False
                 self.activity=None;self.worker=None
                 screen_window=getattr(self,'screen_task_window',None)
                 if screen_window is not None:screen_window.restore()
@@ -9586,7 +9570,7 @@ class DrawBotApp:
         if (stop is not None and stop.is_set() and kind in
                 ('loaded','planned','background_removed','screen','paint_auto_calibration_complete',
                  'browser_one_click_setup_complete','browser_auto_calibration_complete',
-                 'one_click_setup_verification_complete')):
+                 'one_click_setup_verification_complete','picture_palette_complete')):
             log_event(f'Ignored cancelled worker result: {kind}.')
             return
         if kind=='status':
@@ -9652,6 +9636,11 @@ class DrawBotApp:
         elif kind=='performance_auto_tune_complete':
             self.hardware_benchmark_running = False
             payload=value if isinstance(value,dict) else {}
+            if self.stop.is_set() or payload.get('cancelled'):
+                self.auto_tune_summary.set('Universal Hardware Auto Benchmark cancelled.')
+                self.auto_tune_detail.set('No new recommendation was applied.')
+                self.status.set('Hardware benchmark cancelled.')
+                return
             error=str(payload.get('error') or '')
             if error:
                 self.auto_tune_summary.set('Universal Hardware Auto Benchmark failed safely.')
@@ -9918,16 +9907,21 @@ class DrawBotApp:
             if image is None:
                 self.status.set('Background removal returned no image. Original preserved.')
             else:
-                self.original=image.convert('RGBA');self.background_removal_meta=dict(meta);self.plan=None
+                reason=meta.get('no_op_reason')
+                if reason:
+                    self.background_removal_meta=dict(meta)
+                    if image is not self.original:image.close()
+                    self.status.set(f'Background remover kept the original: {reason}.')
+                    return
+                prepared=image if image.mode=='RGBA' else image.convert('RGBA')
+                if self.background_removal_original is None:
+                    self.background_removal_original=self.original.copy()
+                self.original=prepared;self.background_removal_meta=dict(meta);self.plan=None
                 DrawBotApp._clear_render_resume(self,'background removed')
                 self.file_label.set(image_label(self.original,'Background removed PNG'))
                 reduction=float(meta.get('estimated_work_reduction_percent',0) or 0)
                 removed=float(meta.get('removed_percent',0) or 0)
-                reason=meta.get('no_op_reason')
-                if reason:
-                    self.status.set(f'Background remover kept the original: {reason}.')
-                else:
-                    self.status.set(f'Background removed: {removed:.1f}% of image area transparent; drawable pixel work reduced about {reduction:.1f}%. Build preview for real ETA.')
+                self.status.set(f'Background removed: {removed:.1f}% of image area transparent; drawable pixel work reduced about {reduction:.1f}%. Build preview for real ETA.')
                 log_event(f"Background removal complete: removed={removed:.2f}% work_reduction={reduction:.2f}% ref={meta.get('reference_rgb')} threshold={meta.get('threshold')} bbox={meta.get('foreground_bbox')}.")
                 self._mark_plan_stale('Background changed. Build preview to recalculate strokes and ETA.')
                 self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40)
@@ -10296,6 +10290,11 @@ class DrawBotApp:
             from StabilityRC import current_completion
             if current_completion(self.activity,value):
                 finished=self.activity
+                if finished=='performance-auto-tuner':
+                    self.hardware_benchmark_running=False
+                    if self.stop.is_set():
+                        self.auto_tune_summary.set('Universal Hardware Auto Benchmark cancelled.')
+                        self.auto_tune_detail.set('No new recommendation was applied.')
                 screen_window=getattr(self,'screen_task_window',None)
                 if screen_window is not None:screen_window.restore()
                 self.set_busy(None)

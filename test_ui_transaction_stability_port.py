@@ -89,6 +89,7 @@ class PaintPaletteRetryTests(unittest.TestCase):
             pcp.apply_custom_rgb_sequence(
                 mouse,keyboard,CONTROLS,[(1,2,3)],retry_limit=3,
                 wait=lambda _s:None,color_ready=rejected,
+                input_guard=lambda _point,**_kwargs:None,  # owned fake modal permits cleanup
             )
         self.assertEqual(mouse.actions.count(('move',60,60)),0)
         self.assertFalse(mouse.armed)

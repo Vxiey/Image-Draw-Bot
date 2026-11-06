@@ -167,10 +167,8 @@ def show_guide(app):
     window = ctk.CTkToplevel(app.root)
     app._getting_started_window = window
     window.title('Get started - Image Draw Bot')
-    width = min(840, max(480, window.winfo_screenwidth() - 80))
-    height = min(760, max(420, window.winfo_screenheight() - 100))
-    window.geometry(f'{width}x{height}')
-    window.minsize(min(480, width), min(420, height))
+    from WorkspaceLayout import fit_window
+    width,height=fit_window(window,preferred=(840,760),minimum=(480,420),margin=(80,100))
     window.configure(fg_color='#101319')
     window.transient(app.root)
     # Non-modal so instructions can be followed in the main app.

@@ -73,7 +73,7 @@ class PictureCustomPaletteTests(unittest.TestCase):
         self.assertEqual(waits.count(.50),2)
         self.assertEqual(waits.count(.25),2)
 
-    def test_rgb_sequence_cancel_always_disarms_and_escapes_open_dialog(self):
+    def test_rgb_sequence_cancel_always_disarms_without_more_keyboard_input(self):
         mouse=Mouse();keyboard=Keyboard();controls={'OpenCustomColor':(10,10),'RedField':(20,20),'GreenField':(30,30),'BlueField':(40,40),'ConfirmColor':(50,50),'AddCustomColor':(60,60)}
         calls={'n':0}
         def cancelled():
@@ -82,7 +82,7 @@ class PictureCustomPaletteTests(unittest.TestCase):
         with self.assertRaises(InterruptedError):
             pcp.apply_custom_rgb_sequence(mouse,keyboard,controls,[(12,34,56)],cancelled=cancelled,wait=lambda _s:None)
         self.assertFalse(mouse.armed);self.assertEqual(mouse.actions[-1],('disarm',))
-        self.assertIn(('press','esc'),keyboard.actions)
+        self.assertNotIn(('press','esc'),keyboard.actions)
 
     def test_dialog_not_ready_prevents_all_numeric_input(self):
         mouse=Mouse();keyboard=Keyboard()

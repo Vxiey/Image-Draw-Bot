@@ -6,7 +6,10 @@ amount of work; Draw quality controls how that budget is spent.  The planner rem
 from __future__ import annotations
 
 import math
+import heapq
+import weakref
 from dataclasses import dataclass
+from contextlib import closing
 from typing import Callable, Iterable, Sequence
 
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -17,6 +20,24 @@ from GpuAcceleration import (enhance_portrait as gpu_enhance_portrait, saliency 
 
 
 DRAW_QUALITY = ("Balanced", "High likeness", "Maximum likeness", "GPU enhanced", "Pixel Accurate")
+
+
+class _OwnedImages:
+    """Close surviving owned cores even when an exception retains its frame."""
+    def __init__(self, original):
+        self.original = original
+        self.references = []
+
+    def own(self, image):
+        if image is not self.original:
+            self.references.append(weakref.ref(image))
+        return image
+
+    def close_except(self, result=None):
+        for reference in self.references:
+            image = reference()
+            if image is not None and image is not result:
+                image.close()
 
 
 @dataclass(frozen=True)
@@ -88,17 +109,22 @@ def _enhance_local_contrast(gray: Image.Image, strength: float, *, cancelled=lam
     """
     if strength <= 0:
         return gray
-    blur = gray.filter(ImageFilter.GaussianBlur(radius=1.35))
-    src = gray.tobytes()
-    low = blur.tobytes()
-    out = []
-    for index, (value, blurred) in enumerate(zip(src, low)):
-        if index % 4096 == 0 and cancelled():
+    import numpy as np
+    with closing(gray.filter(ImageFilter.GaussianBlur(radius=1.35))) as blur:
+        src = np.frombuffer(gray.tobytes(), dtype=np.uint8)
+        low = np.frombuffer(blur.tobytes(), dtype=np.uint8)
+    out = np.empty(src.shape, dtype=np.uint8)
+    for start in range(0, len(src), 4096):
+        if cancelled():
             raise InterruptedError()
-        out.append(max(0, min(255, round(value + (value - blurred) * strength))))
-    result = Image.new("L", gray.size)
-    result.putdata(out)
-    return result
+        end = min(start + 4096, len(src))
+        values = src[start:end].astype(np.float64)
+        # float64 and ties-to-even preserve the original Python round formula.
+        enhanced = values + (values - low[start:end]) * strength
+        out[start:end] = np.clip(np.rint(enhanced), 0, 255).astype(np.uint8)
+    if cancelled():
+        raise InterruptedError()
+    return Image.fromarray(out.reshape(gray.height, gray.width))
 
 
 def _release_portrait_session(metadata: dict) -> None:
@@ -121,13 +147,17 @@ def prepare_portrait_image(image: Image.Image, area: tuple[int, int], detail: in
     """Prepare a portrait and retain analysis arrays only for an explicit owner."""
     metadata = acceleration_meta if acceleration_meta is not None else {}
     completed = False
+    result = None
+    images = _OwnedImages(image)
     try:
         result = _prepare_portrait_image_impl(
             image, area, detail, contrast, subject_focus, draw_quality, gpu_mode,
-            metadata, gpu_vram, gpu_performance, preview_detail_mode, preview_detail_meta, cancelled)
+            metadata, gpu_vram, gpu_performance, preview_detail_mode, preview_detail_meta, cancelled,
+            _images=images)
         completed = True
         return result
     finally:
+        images.close_except(result[0] if result is not None else None)
         if not completed or acceleration_meta is None:
             _release_portrait_session(metadata)
 
@@ -137,7 +167,8 @@ def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], deta
                            draw_quality: str = "Balanced", gpu_mode: str = "Auto",
                            acceleration_meta: dict | None = None, gpu_vram: str = "Auto",
                            gpu_performance: str = "Balanced", preview_detail_mode: str | None = None,
-                           preview_detail_meta: dict | None = None, cancelled=lambda: False) -> tuple[Image.Image, tuple[float, float]]:
+                           preview_detail_meta: dict | None = None, cancelled=lambda: False,
+                           *, _images: _OwnedImages) -> tuple[Image.Image, tuple[float, float]]:
     """Return an enhanced grayscale planning image and fitted physical size."""
     width, height = map(int, area)
     if width < 2 or height < 2:
@@ -150,7 +181,10 @@ def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], deta
     if cancelled():
         raise InterruptedError()
 
-    source = ImageOps.exif_transpose(image).convert("RGBA")
+    own = _images.own
+    transposed = own(ImageOps.exif_transpose(image))
+    source = own(transposed.convert("RGBA"))
+    if transposed is not image:transposed.close()
     scale = min(width / source.width, height / source.height)
     fitted = (source.width * scale, source.height * scale)
     limit = portrait_sample_limit(int(detail), draw_quality)
@@ -180,9 +214,11 @@ def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], deta
     if cancelled():
         raise InterruptedError()
 
-    flat = Image.new("RGBA", source.size, "white")
+    flat = own(Image.new("RGBA", source.size, "white"))
     flat.alpha_composite(source)
-    source_gray = flat.convert("L")
+    source.close()
+    source_gray = own(flat.convert("L"))
+    flat.close()
     if cancelled():
         raise InterruptedError()
     # GPU enhanced (and high-throughput CUDA modes) use an adaptive cubic scaler
@@ -190,31 +226,34 @@ def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], deta
     use_gpu_scaler = draw_quality in ("GPU enhanced", "Pixel Accurate") or gpu_performance in ("High throughput", "Maximum")
     if preview_detail_mode:
         from PreviewDetailEngine import detail_aware_resize_gray
-        gray = detail_aware_resize_gray(source_gray, size, preview_detail_mode, cancelled=cancelled, metadata=preview_detail_meta)
+        gray = own(detail_aware_resize_gray(source_gray, size, preview_detail_mode, cancelled=cancelled, metadata=preview_detail_meta))
         if acceleration_meta is not None:
             acceleration_meta["scaler"] = f"Detail-aware preview ({preview_detail_mode})"
     elif use_gpu_scaler:
-        gray, scale_info = gpu_resize_gray_advanced(source_gray, size, gpu_mode, gpu_vram, gpu_performance)
+        gray, scale_info = gpu_resize_gray_advanced(source_gray, size, gpu_mode, gpu_vram, gpu_performance,cancelled=cancelled)
+        own(gray)
         if acceleration_meta is not None:
             acceleration_meta.update(scale_info.as_dict())
             acceleration_meta["scaler"] = scale_info.scaler
     else:
-        gray = source_gray.resize(size, Image.Resampling.LANCZOS)
+        gray = own(source_gray.resize(size, Image.Resampling.LANCZOS))
         if acceleration_meta is not None:
             acceleration_meta.setdefault("scaler", "CPU Lanczos")
+    if gray is not source_gray:source_gray.close()
     if cancelled():
         raise InterruptedError()
-    gray = ImageOps.autocontrast(gray, cutoff=1)
+    gray = own(ImageOps.autocontrast(gray, cutoff=1))
     if contrast != 1.0:
-        gray = ImageEnhance.Contrast(gray).enhance(float(contrast))
-    gray = gray.filter(ImageFilter.UnsharpMask(radius=.75, percent=110, threshold=3))
+        gray = own(ImageEnhance.Contrast(gray).enhance(float(contrast)))
+    gray = own(gray.filter(ImageFilter.UnsharpMask(radius=.75, percent=110, threshold=3)))
     if cancelled():
         raise InterruptedError()
 
     scaler_name=acceleration_meta.get("scaler","CPU Lanczos") if acceleration_meta is not None else (f"Detail-aware preview ({preview_detail_mode})" if preview_detail_mode else "CPU Lanczos")
     accelerated, accel_info, gpu_session = gpu_enhance_portrait(
         gray, profile["local_contrast"], profile["tone_gamma"], subject_focus,
-        profile["background_lift"], gpu_mode, gpu_vram, gpu_performance)
+        profile["background_lift"], gpu_mode, gpu_vram, gpu_performance,cancelled=cancelled)
+    if accelerated is not None:own(accelerated)
     if acceleration_meta is not None:
         if gpu_session is not None:
             acceleration_meta["_gpu_session"] = gpu_session
@@ -223,11 +262,11 @@ def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], deta
     if cancelled():
         raise InterruptedError()
     if accelerated is not None:
-        gray = accelerated
+        gray = own(accelerated)
     else:
-        gray = _enhance_local_contrast(gray, profile["local_contrast"], cancelled=cancelled)
+        gray = own(_enhance_local_contrast(gray, profile["local_contrast"], cancelled=cancelled))
         gamma = profile["tone_gamma"]
-        gray = gray.point(lambda v: max(0, min(255, round(255 * ((v / 255) ** gamma)))))
+        gray = own(gray.point(lambda v: max(0, min(255, round(255 * ((v / 255) ** gamma))))))
         if subject_focus and gray.width >= 24 and gray.height >= 24:
             px = gray.load(); w, h = gray.size
             cx, cy = (w - 1) / 2, (h - 1) / 2
@@ -346,7 +385,7 @@ def _saliency_map(gray: Image.Image, subject_focus: bool, profile: dict,
                   cancelled=lambda: False) -> list[float]:
     """Structure score used only to choose among already valid hatch strokes."""
     session = acceleration_meta.get("_gpu_session") if acceleration_meta else None
-    accelerated, accel_info = gpu_saliency(gray, subject_focus, profile, gpu_mode, gpu_vram, gpu_performance, session)
+    accelerated, accel_info = gpu_saliency(gray, subject_focus, profile, gpu_mode, gpu_vram, gpu_performance, session,cancelled=cancelled)
     if acceleration_meta is not None and (accel_info.accelerated or not acceleration_meta.get("accelerated")):
         acceleration_meta.update(accel_info.as_dict())
     if cancelled():
@@ -396,18 +435,37 @@ def _evenly_sample(items, wanted):
 
 
 def _select_tone_candidates(candidates, wanted, saliency, pixels, width, height,
-                            priority_fraction: float):
+                            priority_fraction: float, *, cancelled=lambda: False):
     """Blend high-value detail selection with spatially even coverage."""
     if wanted <= 0 or not candidates:return [],0
-    scored=[(_stroke_score(stroke,saliency,pixels,width,height),i,stroke)
-            for i,stroke in enumerate(candidates)]
-    scored.sort(key=lambda item:(item[0],-item[1]),reverse=True)
-    wanted=min(wanted,len(scored))
+    wanted=min(wanted,len(candidates))
     priority_n=min(wanted,max(0,round(wanted*priority_fraction)))
-    priority=scored[:priority_n]
+    def scores():
+        for index, stroke in enumerate(candidates):
+            if index % 128 == 0 and cancelled():raise InterruptedError()
+            yield (_stroke_score(stroke,saliency,pixels,width,height),index,stroke)
+    # A heap reduces both sorting work and retained records for a small cap;
+    # selecting most candidates is faster with one stable full sort.
+    score_key=lambda item:(item[0],-item[1])
+    if priority_n >= max(1, len(candidates) // 4):
+        priority=sorted(scores(),key=score_key,reverse=True)[:priority_n]
+    else:
+        priority=heapq.nlargest(priority_n,scores(),key=score_key)
     selected_indices={i for _,i,_ in priority}
-    rest=[stroke for i,stroke in enumerate(candidates) if i not in selected_indices]
-    coverage=_evenly_sample(rest,wanted-priority_n)
+    rest_count=len(candidates)-priority_n
+    coverage_count=wanted-priority_n
+    coverage=[];rest_index=0
+    if coverage_count:
+        next_position=min(rest_count-1,int(.5*rest_count/coverage_count))
+        for index,stroke in enumerate(candidates):
+            if index % 128 == 0 and cancelled():raise InterruptedError()
+            if index in selected_indices:continue
+            if rest_index == next_position:
+                coverage.append(stroke)
+                if len(coverage) == coverage_count:break
+                next_position=min(rest_count-1,int((len(coverage)+.5)*rest_count/coverage_count))
+            rest_index+=1
+    if cancelled():raise InterruptedError()
     # Priority strokes are intentionally drawn first so an interrupted portrait
     # keeps more identity-bearing structure than a scan-order prefix.
     return [stroke for _,_,stroke in priority]+coverage,priority_n
@@ -421,7 +479,7 @@ def _edge_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool],
     cfg=_detail_config(detail); profile=_quality_profile(draw_quality)
     px=gray.load(); w,h=gray.size; step=cfg["edge_step"]
     session = acceleration_meta.get("_gpu_session") if acceleration_meta else None
-    accelerated_sobel, accel_info = gpu_sobel(gray, gpu_mode, gpu_vram, gpu_performance, session, subject_focus, profile)
+    accelerated_sobel, accel_info = gpu_sobel(gray, gpu_mode, gpu_vram, gpu_performance, session, subject_focus, profile,cancelled=cancelled)
     if acceleration_meta is not None and (accel_info.accelerated or not acceleration_meta.get("accelerated")):
         acceleration_meta.update(accel_info.as_dict())
     gx_flat=gy_flat=None
@@ -460,15 +518,21 @@ def _edge_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool],
     return [stroke for _,stroke in candidates]
 
 
-def _dot_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool]) -> list[tuple[int,int,int,int]]:
+def _dot_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool],
+                 max_strokes: int | None = None) -> list[tuple[int,int,int,int]]:
     """Ordered-dither portrait mode for users who explicitly choose Dots."""
     bayer=((0,8,2,10),(12,4,14,6),(3,11,1,9),(15,7,13,5))
     px=gray.load();w,h=gray.size;step=2 if detail<=8 else 1;strokes=[]
+    if max_strokes == 0:return strokes
     for y in range(0,h,step):
         if cancelled():raise InterruptedError()
         for x in range(0,w,step):
             darkness=255-px[x,y];threshold=(bayer[y%4][x%4]+.5)/16*255
-            if darkness>threshold:strokes.append((x,y,x,y))
+            if darkness>threshold:
+                strokes.append((x,y,x,y))
+                if max_strokes is not None and len(strokes)>=max_strokes:
+                    if cancelled():raise InterruptedError()
+                    return strokes
     return strokes
 
 
@@ -480,13 +544,18 @@ def portrait_strokes(gray: Image.Image, detail: int = 8, lines: bool = True,
                      acceleration_meta: dict | None = None, gpu_vram: str = "Auto",
                      gpu_performance: str = "Balanced") -> tuple[list[list[tuple[int,int,int,int]]], PortraitStats]:
     """Build portrait strokes and release analysis arrays on every exit path."""
+    converted = None
     try:
         if cancelled():
             raise InterruptedError()
+        if gray.mode != "L":
+            converted = gray.convert("L")
+            gray = converted
         return _portrait_strokes_impl(
             gray, detail, lines, cancelled, include_edges, max_strokes,
             draw_quality, subject_focus, gpu_mode, acceleration_meta, gpu_vram, gpu_performance)
     finally:
+        if converted is not None:converted.close()
         if acceleration_meta is not None:
             _release_portrait_session(acceleration_meta)
 
@@ -499,11 +568,14 @@ def _portrait_strokes_impl(gray: Image.Image, detail: int = 8, lines: bool = Tru
                      acceleration_meta: dict | None = None, gpu_vram: str = "Auto",
                      gpu_performance: str = "Balanced") -> tuple[list[list[tuple[int,int,int,int]]], PortraitStats]:
     """Build one black stroke group that approximates grayscale by density."""
-    if gray.mode!="L":gray=gray.convert("L")
     profile=_quality_profile(draw_quality);cfg=dict(_detail_config(detail))
-    if max_strokes is not None:cfg["max_strokes"]=max(80,min(cfg["max_strokes"],int(max_strokes)))
+    if max_strokes is not None:
+        from numbers import Integral
+        if isinstance(max_strokes,bool) or not isinstance(max_strokes,Integral) or max_strokes<0:
+            raise ValueError("max_strokes must be a nonnegative integer")
+        cfg["max_strokes"]=min(cfg["max_strokes"],int(max_strokes))
     if not lines:
-        dots=_dot_strokes(gray,detail,cancelled)[:cfg["max_strokes"]]
+        dots=_dot_strokes(gray,detail,cancelled,max_strokes=cfg["max_strokes"])
         meta=acceleration_meta or {}
         return [dots],PortraitStats(len(dots),0,1,gray.size,0,draw_quality,
                                     str(meta.get("backend","CPU")),str(meta.get("device","CPU")),bool(meta.get("accelerated",False)))
@@ -535,7 +607,7 @@ def _portrait_strokes_impl(gray: Image.Image, detail: int = 8, lines: bool = Tru
     selected_layers=[];priority_total=0;unused=0
     for candidates,allocation in zip(layer_candidates,allocations):
         take=min(len(candidates),allocation)
-        selected,priority=_select_tone_candidates(candidates,take,saliency,px,w,h,profile["priority_fraction"])
+        selected,priority=_select_tone_candidates(candidates,take,saliency,px,w,h,profile["priority_fraction"],cancelled=cancelled)
         selected_layers.append(selected);priority_total+=priority;unused+=allocation-len(selected)
 
     # Sparse bright layers can leave budget unused. Reallocate to darker layers,
@@ -545,7 +617,7 @@ def _portrait_strokes_impl(gray: Image.Image, detail: int = 8, lines: bool = Tru
             if unused<=0:break
             existing=set(selected_layers[idx])
             remaining=[s for s in layer_candidates[idx] if s not in existing]
-            extra,priority=_select_tone_candidates(remaining,min(unused,len(remaining)),saliency,px,w,h,profile["priority_fraction"])
+            extra,priority=_select_tone_candidates(remaining,min(unused,len(remaining)),saliency,px,w,h,profile["priority_fraction"],cancelled=cancelled)
             selected_layers[idx].extend(extra);priority_total+=priority;unused-=len(extra)
 
     # Darkest tonal layers first improves partial drawings and preserves small

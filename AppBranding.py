@@ -48,7 +48,8 @@ def _install_destroy_guard(root):
         return
 
     def destroy():
-        if getattr(root, '_image_draw_bot_destroying', False):
+        if (getattr(root, '_image_draw_bot_destroying', False)
+                or getattr(root, '_image_draw_bot_destroyed', False)):
             return
         root._image_draw_bot_destroying = True
         try:
@@ -65,8 +66,9 @@ def _install_destroy_guard(root):
                 # successful no-op; unrelated Tcl errors must still surface.
                 if not _already_destroyed_tcl_error(error):
                     raise
-        finally:
             root._image_draw_bot_destroyed = True
+        finally:
+            root._image_draw_bot_destroying = False
 
     root.destroy = destroy
     root._image_draw_bot_destroy_wrapped = True

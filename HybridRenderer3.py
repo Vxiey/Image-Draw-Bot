@@ -24,10 +24,13 @@ fully authoritative.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from contextlib import closing
+import math
 from typing import Any, Callable
 
 import numpy as np
 from PIL import Image
+from ImageGeometry import thumbnail_size
 
 HYBRID_RENDER_STYLE = "Hybrid Renderer 3.0"
 HYBRID_RENDERER_VERSION = "3.0"
@@ -93,16 +96,16 @@ def is_hybrid_renderer(options: dict[str, Any] | None) -> bool:
 
 
 def _deadline_seconds(options: dict[str, Any]) -> float | None:
-    if options.get("unlimited_time") or str(options.get("time_budget_mode") or "") == "Unlimited":
+    if options.get("unlimited_time") or str(options.get("time_budget_mode") or "") in ("Unlimited", "Unlimited / Accuracy", "Off"):
         return None
     if not options.get("time_budget_active"):
         return None
     for key in ("deadline_render_budget_seconds", "time_budget_seconds", "max_seconds"):
         try:
             value = float(options.get(key) or 0)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
-        if value > 0:
+        if math.isfinite(value) and value > 0:
             return value
     return None
 
@@ -123,13 +126,14 @@ def analyze_source(image: Image.Image, *, cancelled: Callable[[], bool] = lambda
     if width <= 0 or height <= 0:
         raise ValueError("Hybrid Renderer 3.0 cannot analyse an empty image.")
 
-    rgba = image.convert("RGBA")
-    sample = rgba.copy()
-    sample.thumbnail((160, 160), Image.Resampling.NEAREST)
-    if cancelled():
-        raise InterruptedError()
-
-    arr_rgba = np.asarray(sample, dtype=np.uint8)
+    sampled_size = thumbnail_size(image.size, (160, 160))
+    # NEAREST sampling selects original pixels, so conversion commutes with
+    # resizing for every source mode. Allocate only the bounded sample, then
+    # release both owned Pillow buffers on success or cancellation.
+    with closing(image.resize(sampled_size, Image.Resampling.NEAREST)) as sampled:
+        if cancelled():raise InterruptedError()
+        with closing(sampled.convert("RGBA")) as rgba:
+            arr_rgba = np.array(rgba, dtype=np.uint8)
     alpha = arr_rgba[:, :, 3].astype(np.float32)
     alpha_fraction = float(np.mean(alpha < 250.0, dtype=np.float64))
 
@@ -185,7 +189,7 @@ def analyze_source(image: Image.Image, *, cancelled: Callable[[], bool] = lambda
 
     return HybridSourceAnalysis(
         width=width, height=height,
-        sampled_width=int(sample.size[0]), sampled_height=int(sample.size[1]),
+        sampled_width=int(sampled_size[0]), sampled_height=int(sampled_size[1]),
         alpha_fraction=alpha_fraction, white_fraction=white_fraction,
         chroma_fraction=chroma_fraction, edge_density=edge_density,
         mean_gradient=mean_gradient, luminance_std=luminance_std,
@@ -260,6 +264,8 @@ def _apply_mode_policy(out: dict[str, Any], mode: str) -> None:
             "progressive_rendering": "On",
             "max_stroke_cap": "Unlimited",
             "target_stroke_count": "Auto",
+            "target_stroke_count_resolved": None,
+            "outline": False,
         })
         return
 

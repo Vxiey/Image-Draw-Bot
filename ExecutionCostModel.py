@@ -18,15 +18,16 @@ from typing import Any, Iterable, Sequence
 from DrawTimeCalibration import correction_for
 from SpeedOptimizer import normalize_speed, phase_delay
 from StrokeDelivery import resolve_stroke_delivery
+from Precision import effective_step, precision_path_count, round_screen
 
 Point = tuple[int, int]
-EXECUTION_MODEL_VERSION = 4
+EXECUTION_MODEL_VERSION = 5
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         out = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return float(default)
     return out if math.isfinite(out) else float(default)
 
@@ -90,6 +91,8 @@ class ExecutionCostModel:
         self.sx = max(.001, _safe_float(self.options.get("_execution_scale_x", self.options.get("_hybrid_scale_x", _sx_default)), _sx_default))
         self.sy = max(.001, _safe_float(self.options.get("_execution_scale_y", self.options.get("_hybrid_scale_y", _sy_default)), _sy_default))
         self.delivery = resolve_stroke_delivery(self.options, dry_run=False)
+        self.precision = self.options.get("precision", "High")
+        self.step_px = effective_step(self.precision, self.delivery.step_px)
         self.speed = normalize_speed(self.options.get("speed", "Balanced"))
         self.delay = max(0.0, _safe_float(self.options.get("delay"), 0.0))
         self.path_wait = max(float(self.delivery.min_path_delay),
@@ -160,7 +163,7 @@ class ExecutionCostModel:
 
     @property
     def draw_seconds_per_px(self) -> float:
-        return max(1e-12,(self.path_wait/max(.5,float(self.delivery.step_px)))*self.multiplier)
+        return max(1e-12,(self.path_wait/self.step_px)*self.multiplier)
 
     @property
     def color_change_seconds(self) -> float:
@@ -243,10 +246,13 @@ class ExecutionCostModel:
                                  operations=1, moves=1, source=self.source)
 
         moves = 0
-        for a, b in zip(path, path[1:]):
-            seg = math.hypot((b[0]-a[0])*self.sx, (b[1]-a[1])*self.sy)
-            if seg > 0:
-                moves += max(1, int(math.ceil(seg / max(.5, float(self.delivery.step_px)))))
+        # Native delivery first maps source pixel centres to integer desktop
+        # pixels, then applies the selected precision cap and de-duplicates
+        # repeated positions. Count that same path without allocating it.
+        screen_path = [(round_screen((x + .5) * self.sx - .5),
+                        round_screen((y + .5) * self.sy - .5)) for x, y in path]
+        for a, b in zip(screen_path, screen_path[1:]):
+            moves += precision_path_count(a, b, self.precision, self.delivery.step_px)
         drag = moves * self.path_wait
         target = self.boundary_wait + .0015
         body = press_release + drag + target
@@ -277,8 +283,8 @@ class ExecutionCostModel:
             "verification": max(.08, float(self.delivery.palette_click_delay) * .45),
         }
         base = defaults.get(kind, .0)
-        learned = self._learned_average(kind, base)
-        return learned if learned != base else base * self.multiplier
+        learned = self._learned_average(kind, 0.0)
+        return learned if learned > 0.0 else base * self.multiplier
 
     def sequence_cost(self, sequence: Iterable[dict[str, Any]], *,
                       initial_cursor: Point | None = None,

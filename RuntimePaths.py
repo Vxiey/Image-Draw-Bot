@@ -32,10 +32,12 @@ def _path_lock_key(path):
     return os.path.normcase(str(path.parent.resolve() / path.name))
 
 
-def _replace_with_retry(source: Path, destination: Path) -> None:
+def _replace_with_retry(source: Path, destination: Path, *, cancelled=None) -> None:
     """Serialize publishers; briefly retry Windows' transient sharing failures."""
     with _PUBLICATION_LOCK:
         for attempt in range(10):
+            if cancelled is not None and cancelled():
+                raise InterruptedError('File export cancelled.')
             try:
                 os.replace(source, destination)
                 return
@@ -110,6 +112,39 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
                 if error.errno not in {errno.EINVAL, errno.ENOSYS, errno.ENOTSUP}:
                     raise
         _replace_with_retry(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+@contextmanager
+def atomic_binary_writer(path: Path, *, cancelled=lambda: False):
+    """Stage streamed output beside its destination and publish only on success."""
+    if cancelled():
+        raise InterruptedError('File export cancelled.')
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w+b', prefix=f'.{path.name}.',
+                                         suffix='.tmp', dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            yield stream
+            if cancelled():
+                raise InterruptedError('File export cancelled.')
+            stream.flush()
+            try:
+                os.fsync(stream.fileno())
+            except OSError as error:
+                if error.errno not in {errno.EINVAL, errno.ENOSYS, errno.ENOTSUP}:
+                    raise
+        if cancelled():
+            raise InterruptedError('File export cancelled.')
+        _replace_with_retry(temporary, path,cancelled=cancelled)
         temporary = None
     finally:
         if temporary is not None:
