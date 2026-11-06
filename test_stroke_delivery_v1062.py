@@ -8,8 +8,8 @@ from Version import APP_VERSION, FILE_VERSION
 
 class StrokeDeliveryV1063Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.147')
+        self.assertEqual(FILE_VERSION,'1.0.147')
 
     def test_paint_auto_uses_reliable_delivery_for_non_pixel_draws(self):
         policy=resolve_stroke_delivery({'profile_name':'Microsoft Paint','stroke_step_px':8},dry_run=False)

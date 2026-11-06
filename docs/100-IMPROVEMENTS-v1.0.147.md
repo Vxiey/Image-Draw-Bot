@@ -1,4 +1,4 @@
-# Image Draw Bot v1.0.146-rc4: 100 implemented improvements
+# Image Draw Bot v1.0.147: 100 implemented improvements
 
 This release implements the 100 behavior changes below. The IDs are unique and
 continuous from 001 to 100. Version bumps, documentation, formatting and added
@@ -11,7 +11,7 @@ area reviews include compatibility details, test scope and remaining limits.
 
 ## 001–025: GPU discovery, execution and setup
 
-[Area review and validation limits](maintenance-rc4-gpu.md)
+[Area review and validation limits](maintenance-v1.0.147-gpu.md)
 
 | ID | Improvement | Implementation | Regression evidence |
 | --- | --- | --- | --- |
@@ -44,7 +44,7 @@ area reviews include compatibility details, test scope and remaining limits.
 
 ## 026–050: Windows, diagnostics and release validation
 
-[Area review and validation limits](maintenance-rc4-security.md)
+[Area review and validation limits](maintenance-v1.0.147-security.md)
 
 | ID | Behavior improved | Code path | Regression coverage |
 | --- | --- | --- | --- |
@@ -77,7 +77,7 @@ area reviews include compatibility details, test scope and remaining limits.
 
 ## 051–075: Images, profiles and session recovery
 
-[Area review and validation limits](maintenance-rc4-image-profiles.md)
+[Area review and validation limits](maintenance-v1.0.147-image-profiles.md)
 
 | ID | Problem and implemented behavior | Focused regression evidence |
 | --- | --- | --- |
@@ -110,7 +110,7 @@ area reviews include compatibility details, test scope and remaining limits.
 
 ## 076–100: Updates, mobile preview and UI
 
-[Area review and validation limits](maintenance-rc4-ui-updates.md)
+[Area review and validation limits](maintenance-v1.0.147-ui-updates.md)
 
 | ID | Improvement | Implementation and regression evidence |
 | --- | --- | --- |
@@ -168,5 +168,5 @@ security; they do not promise a zero-detection antivirus result or establish
 the cause of every external sandbox alert.
 
 See the [artifact-specific investigation](ANTIVIRUS-REVIEW-2026-11.md) and
-[release notes](../RELEASE-NOTES-v1.0.146-rc4.md). A scan of an earlier release
-hash is not a scan of the RC4 artifacts.
+[release notes](../RELEASE-NOTES-v1.0.147.md). A scan of an earlier release
+hash is not a scan of the v1.0.147 artifacts.

@@ -2,10 +2,6 @@
 
 Image Draw Bot is a Windows automatic image drawing app that converts pictures into mouse strokes, contours, fill regions and exact RGB colors for Microsoft Paint and calibrated drawing canvases.
 
-## Release candidate
-
-This is an Image Draw Bot release-candidate build. The versioned feature roadmap is frozen while RC validation is in progress.
-
 ## Download
 
 Use the Windows x64 installer for the normal installation path, or the portable Windows x64 ZIP when you do not want to install the application.
@@ -20,7 +16,7 @@ Verify downloaded artifacts against the accompanying `SHA256.txt` file before us
 - Contours, connected regions, safe fills, palette matching and exact custom colors.
 - Local image processing with no telemetry.
 
-## RC verification
+## Release verification
 
 Before publication, the release workflow must pass:
 
@@ -41,7 +37,7 @@ Before publication, the release workflow must pass:
 
 ## Safety
 
-CanvasGuard, calibration, target verification, small test, Safety Preflight and Fast Dry Run remain authoritative. RC hardening does not bypass native-input safety gates.
+CanvasGuard, calibration, target verification, small test, Safety Preflight and Fast Dry Run remain authoritative. Release hardening does not bypass native-input safety gates.
 
 ## Known release status
 

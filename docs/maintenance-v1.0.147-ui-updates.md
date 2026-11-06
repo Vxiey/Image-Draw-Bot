@@ -1,4 +1,4 @@
-# RC4 improvements 076–100: updates, mobile preview and UI
+# v1.0.147 improvements 076–100: updates, mobile preview and UI
 
 These entries describe separate behavior changes. Version edits, documentation
 and additional tests are not counted as improvements. Native Windows coverage

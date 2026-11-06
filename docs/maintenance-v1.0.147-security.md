@@ -1,4 +1,4 @@
-# RC4 security and release maintenance: improvements 026–050
+# v1.0.147 security and release maintenance: improvements 026–050
 
 These 25 entries describe changes to application behavior or release validation. Tests, documentation, version changes and equivalent DLL call sites are not counted as separate improvements.
 

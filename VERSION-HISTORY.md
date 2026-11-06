@@ -1,4 +1,4 @@
-# Image Draw Bot v1.0.146-rc4 — 100 Reliability & Security Improvements
+# Image Draw Bot v1.0.147 — 100 Reliability & Security Improvements
 
 - Publish 100 numbered behavior improvements across GPU execution, Windows loading, diagnostics, image/profile recovery, updates and UI.
 - Replace background PowerShell GPU enumeration with native DXGI and restrict Windows tool/DLL resolution to OS-reported locations.
@@ -6,7 +6,7 @@
 - Harden diagnostic/release files, transactional profile changes and image-bound recovery while keeping drawing input disarmed after restore.
 - Bound and cancel update transfers; protect installer verification through launch; improve mobile-preview ordering, server limits and reconnect behavior.
 - Add native Windows and portable regressions, including DXGI in the built and installed executable self-tests.
-- See [all 100 improvements](docs/100-IMPROVEMENTS-v1.0.146-rc4.md) and [release notes](RELEASE-NOTES-v1.0.146-rc4.md). Builds remain unsigned; new artifact hashes require their own antivirus analysis.
+- See [all 100 improvements](docs/100-IMPROVEMENTS-v1.0.147.md) and [release notes](RELEASE-NOTES-v1.0.147.md). Builds remain unsigned; new artifact hashes require their own antivirus analysis.
 
 # Image Draw Bot v1.0.146-rc3 — Security & Windows Packaging
 

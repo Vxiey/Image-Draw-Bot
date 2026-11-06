@@ -28,8 +28,8 @@ class BrowserVisualPreflightTests(unittest.TestCase):
         return detected,entries,meta
 
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.147')
+        self.assertEqual(FILE_VERSION,'1.0.147')
 
     def test_verified_canvas_and_palette_pass(self):
         im=self._gartic_image();detected,entries,meta=self._setup(im)

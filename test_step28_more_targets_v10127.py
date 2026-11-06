@@ -15,8 +15,8 @@ from Version import APP_VERSION, FILE_VERSION
 
 class Step28MoreTargetsTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.147')
+        self.assertEqual(FILE_VERSION,'1.0.147')
 
     def test_new_profiles_are_first_class(self):
         self.assertEqual(PROFILES['Kleki'][0],'kleki')

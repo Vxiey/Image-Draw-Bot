@@ -1,4 +1,4 @@
-# RC4 GPU improvements 001–025
+# v1.0.147 GPU improvements 001–025
 
 This ledger records 25 changes to program behavior. Tests, documentation, release
 metadata, and formatting are not counted as separate improvements.

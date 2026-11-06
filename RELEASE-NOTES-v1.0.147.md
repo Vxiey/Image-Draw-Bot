@@ -1,8 +1,8 @@
-# Image Draw Bot v1.0.146-rc4 — 100 reliability and security improvements
+# Image Draw Bot v1.0.147 — 100 reliability and security improvements
 
-This release candidate adds 100 numbered behavior improvements across GPU
+This release adds 100 numbered behavior improvements across GPU
 execution, Windows security, local recovery, profiles, updates and the mobile
-preview. The [complete implementation ledger](https://github.com/Vxiey/Image-Draw-Bot/blob/v1.0.146-rc4/docs/100-IMPROVEMENTS-v1.0.146-rc4.md)
+preview. The [complete implementation ledger](https://github.com/Vxiey/Image-Draw-Bot/blob/v1.0.147/docs/100-IMPROVEMENTS-v1.0.147.md)
 maps each improvement to its code and regression coverage. Version changes,
 documentation and new tests are not counted as separate improvements.
 
@@ -70,5 +70,5 @@ scan of an older hash does not describe this release.
 
 Downloads include a Windows installer, a portable ZIP, SHA-256 checksums and a
 release manifest. See the
-[antivirus investigation](https://github.com/Vxiey/Image-Draw-Bot/blob/v1.0.146-rc4/docs/ANTIVIRUS-REVIEW-2026-11.md)
+[antivirus investigation](https://github.com/Vxiey/Image-Draw-Bot/blob/v1.0.147/docs/ANTIVIRUS-REVIEW-2026-11.md)
 for artifact-specific findings and unresolved observations.
