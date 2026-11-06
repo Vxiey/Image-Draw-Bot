@@ -68,7 +68,7 @@ def _bounded_sample(image: Image.Image, max_side: int = 176) -> Image.Image:
     src = visible_rgb_image(image)
     w, h = src.size
     if max(w, h) <= max_side:
-        return src.copy()
+        return src
     scale = float(max_side) / float(max(w, h))
     size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
     # BOX is deterministic and preserves coverage better than a sharpening

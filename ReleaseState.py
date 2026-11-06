@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import atomic_write_text, data_dir, read_json
 from Version import APP_VERSION, BUILD_CHANNEL
 
 STATE_FILE = data_dir() / "release-state.json"
@@ -20,7 +20,7 @@ def load_state() -> dict:
         "last_seen_version": "",
     }
     try:
-        raw = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        raw = read_json(STATE_FILE, max_bytes=16384)
         if isinstance(raw, dict):
             if type(raw.get("welcome_seen")) is bool:
                 state["welcome_seen"] = raw["welcome_seen"]

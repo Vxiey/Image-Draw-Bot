@@ -431,7 +431,12 @@ class DeadlineScheduler:
             ranked=sorted(indexed,key=lambda pair:self._replan_priority(pair[1],pair[0]))
             candidate=[entry for _idx,entry in ranked]
             if [idx for idx,_entry in ranked] != list(range(len(block))):
-                if self._transition_count(candidate) <= self._transition_count(block):
+                previous = next((entry for entry in reversed(output) if self._op_type(entry) == 'stroke'), None)
+                following = next((rows[index] for index in range(end, len(rows))
+                                  if self._op_type(rows[index]) == 'stroke'), None)
+                prefix = [previous] if previous is not None else []
+                suffix = [following] if following is not None else []
+                if self._transition_count(prefix + candidate + suffix) <= self._transition_count(prefix + block + suffix):
                     moved += sum(1 for pos,(idx,_entry) in enumerate(ranked) if pos!=idx)
                     block=candidate
                 else:

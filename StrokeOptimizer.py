@@ -11,6 +11,7 @@ inside it, preserving every drawn segment while changing only pen-up order.
 from __future__ import annotations
 
 import math
+from itertools import islice
 from typing import Sequence
 
 Point = tuple[int, int]
@@ -81,9 +82,14 @@ def _nearest_order(paths: Sequence[Path], *, speed: str = 'Balanced', allow_reve
         window = min(len(remaining), max(window, 128))
 
     output: list[Path] = []
-    first = remaining.pop(0)
+    source = iter(remaining)
+    first = next(source)
     output.append(first)
     cursor = first[-1]
+    # Only the bounded search window needs arbitrary-index removal. Keeping
+    # every future path in that list makes an already ordered route quadratic
+    # because each pop(0) shifts the entire remaining job.
+    remaining = list(islice(source, window))
 
     while remaining:
         if cancelled():
@@ -108,6 +114,9 @@ def _nearest_order(paths: Sequence[Path], *, speed: str = 'Balanced', allow_reve
             chosen = _reverse(chosen)
         output.append(chosen)
         cursor = chosen[-1]
+        following = next(source, None)
+        if following is not None:
+            remaining.append(following)
     return output
 
 
@@ -213,7 +222,7 @@ def _bounded_two_opt(paths: Sequence[Path], *, speed: str = 'Balanced',
     }
 
 
-def _merge_exact_neighbors(paths: Sequence[Path]) -> tuple[list[Path], int]:
+def _merge_exact_neighbors(paths: Sequence[Path], *, allow_reverse: bool = True) -> tuple[list[Path], int]:
     """Merge adjacent paths only when their endpoints are identical."""
     merged: list[Path] = []
     joins = 0
@@ -228,7 +237,7 @@ def _merge_exact_neighbors(paths: Sequence[Path]) -> tuple[list[Path], int]:
         if previous[-1] == path[0]:
             merged[-1] = previous + path[1:]
             joins += 1
-        elif len(path) > 1 and previous[-1] == path[-1]:
+        elif allow_reverse and len(path) > 1 and previous[-1] == path[-1]:
             rev = _reverse(path)
             merged[-1] = previous + rev[1:]
             joins += 1
@@ -237,17 +246,21 @@ def _merge_exact_neighbors(paths: Sequence[Path]) -> tuple[list[Path], int]:
     return merged, joins
 
 
-def _merge_exact_graph(paths: Sequence[Path], cancelled=lambda: False) -> tuple[list[Path], int]:
+def _merge_exact_graph(paths: Sequence[Path], cancelled=lambda: False, *,
+                       allow_reverse: bool = True) -> tuple[list[Path], int]:
     """Build safe chains from paths that share exact endpoints anywhere in a group."""
     paths = [_clean_path(p) for p in paths if p]
     endpoint_map: dict[Point, list[int]] = {}
     for i, path in enumerate(paths):
+        if i % 512 == 0 and cancelled():
+            raise InterruptedError()
         endpoint_map.setdefault(path[0], []).append(i)
-        if path[-1] != path[0]:
+        if allow_reverse and path[-1] != path[0]:
             endpoint_map.setdefault(path[-1], []).append(i)
     used: set[int] = set()
     chains: list[Path] = []
     joins = 0
+    endpoint_positions: dict[Point, int] = {}
 
     for seed in range(len(paths)):
         if seed in used:
@@ -260,17 +273,18 @@ def _merge_exact_graph(paths: Sequence[Path], cancelled=lambda: False) -> tuple[
             if cancelled():
                 raise InterruptedError()
             endpoint = chain[-1]
-            candidate = None
-            for idx in endpoint_map.get(endpoint, ()):
-                if idx not in used:
-                    candidate = idx
-                    break
-            if candidate is None:
+            candidates = endpoint_map.get(endpoint, ())
+            position = endpoint_positions.get(endpoint, 0)
+            while position < len(candidates) and candidates[position] in used:
+                position += 1
+            endpoint_positions[endpoint] = position + 1
+            if position >= len(candidates):
                 break
+            candidate = candidates[position]
             path = paths[candidate]
             if path[0] == endpoint:
                 oriented = path
-            elif path[-1] == endpoint:
+            elif allow_reverse and path[-1] == endpoint:
                 oriented = _reverse(path)
             else:
                 break
@@ -304,12 +318,12 @@ def optimize_path_group(paths: Sequence[Path], *, mode: str = 'Auto', drawing_mo
         working = original
         smart_merge = effective in ('Smart merge', 'Smart merge + 2-opt')
         if smart_merge:
-            working, joins = _merge_exact_graph(working, cancelled=cancelled)
+            working, joins = _merge_exact_graph(working, cancelled=cancelled, allow_reverse=allow_reverse)
         result = _nearest_order(
             working, speed=speed, allow_reverse=allow_reverse, cancelled=cancelled,
         )
         if smart_merge:
-            result, joins2 = _merge_exact_neighbors(result)
+            result, joins2 = _merge_exact_neighbors(result, allow_reverse=allow_reverse)
             joins += joins2
         if effective == 'Smart merge + 2-opt':
             result, two_opt_meta = _bounded_two_opt(
@@ -317,7 +331,7 @@ def optimize_path_group(paths: Sequence[Path], *, mode: str = 'Auto', drawing_mo
             )
             # A route improvement can make exact endpoints adjacent. Merge only
             # those zero-gap boundaries; no connector is invented.
-            result, joins2 = _merge_exact_neighbors(result)
+            result, joins2 = _merge_exact_neighbors(result, allow_reverse=allow_reverse)
             joins += joins2
 
     after_distance = pen_up_distance(result)

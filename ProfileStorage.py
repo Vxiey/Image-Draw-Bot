@@ -16,9 +16,10 @@ from RuntimePaths import data_dir
 def safe_profile_key(profile_key: str | None) -> str:
     text = str(profile_key or "generic").strip().lower().replace(" ", "-")
     safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in text)
-    if safe != text or len(safe) > 80:
+    if safe != text or len(safe) > 80 or len(safe.encode('utf-8')) > 160:
         suffix = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
-        safe = safe[:67] + "-" + suffix
+        prefix = safe[:67].encode('utf-8')[:147].decode('utf-8', errors='ignore')
+        safe = prefix + "-" + suffix
     return safe or "generic"
 
 

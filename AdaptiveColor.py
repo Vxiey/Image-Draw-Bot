@@ -39,7 +39,9 @@ def method_candidates(selector, actions=None, *, has_sample=False, keyboard_avai
         add('palette',True);add('numeric',numeric);add('spectrum',spectrum);add('eyedropper',eye)
         return tuple(result)
     add('eyedropper',eye)
-    add(cached_method,cached_method in ('eyedropper','spectrum','numeric','palette') and not (selector.get('require_exact') and cached_method=='palette'))
+    ready = {'eyedropper': eye, 'spectrum': spectrum, 'numeric': numeric,
+             'palette': not selector.get('require_exact', False)}
+    add(cached_method, isinstance(cached_method, str) and ready.get(cached_method, False))
     # v1.0.109: image-derived custom selectors prefer calibrated numeric RGB
     # because it can reproduce the measured source RGB exactly. Older/manual
     # selectors keep the spectrum-first order for backwards compatibility.
@@ -63,10 +65,10 @@ def probe_item(item, smart_group, max_source_span=4.0):
     """
     span=max(1.0,float(max_source_span))
     if smart_group:
-        points=[tuple(map(int,p[:2])) for p in item]
-        if not points:return item
-        a=points[0]
-        b=next((p for p in points[1:] if p!=a),None)
+        points=(tuple(map(int,p[:2])) for p in item)
+        a=next(points, None)
+        if a is None:return item
+        b=next((p for p in points if p!=a),None)
         if b is None:return [a]
         dx,dy=b[0]-a[0],b[1]-a[1];length=math.hypot(dx,dy)
         if length<=span:return [a,b]

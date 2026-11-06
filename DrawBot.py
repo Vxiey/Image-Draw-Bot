@@ -7232,20 +7232,25 @@ class DrawBotApp:
 
     def paste_shortcut(self,event=None):
         # Text fields retain native paste; elsewhere Ctrl+V imports an image.
-        if event and isinstance(event.widget,(tk.Entry,ttk.Entry,ttk.Combobox)):
-            return
+        if event:
+            widget=getattr(event,'widget',None)
+            if isinstance(widget,str):
+                try:widget=self.root.nametowidget(widget)
+                except (KeyError,tk.TclError):widget=None
+            if isinstance(widget,(tk.Entry,ttk.Entry,ttk.Combobox,tk.Text,tk.Spinbox,ttk.Spinbox)):
+                return
         self.paste_image()
         return 'break'
 
     def paste_image(self):
-        if self.activity:return
-        from PIL import Image,ImageGrab
+        if self.activity or self.closing or getattr(self,'pending_clear_drawing',None) is not None:return
+        from PIL import Image,ImageGrab,ImageOps
         try:
             content=ImageGrab.grabclipboard()
             if isinstance(content,Image.Image):
                 if content.width*content.height>25_000_000:
                     raise ValueError('The image is too large. Choose an image up to 25 megapixels.')
-                self._suppress_recovery=False;self.original=content.convert('RGBA');self.plan=None
+                self._suppress_recovery=False;self.original=ImageOps.exif_transpose(content).convert('RGBA');self.plan=None
                 self.original.info.pop('draw_studio_format',None)
                 self.upscale_original=None
                 self.subject_region=None
@@ -7256,10 +7261,12 @@ class DrawBotApp:
                 self.file_label.set(image_label(self.original,'Pasted image'));self._mark_plan_stale('Image pasted. Press Build preview when ready.');self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40);self._maybe_auto_preview(delay=900, reason='paste-image')
                 DrawBotApp._queue_drop_in_start(self,action,source_label='pasted image')
             elif isinstance(content,list) and content:
-                self.load_source(content[0],Path(content[0]).name,action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
+                from CanvasDropPayload import parse_canvas_drop
+                source=parse_canvas_drop('',split_items=content)
+                self.load_source(source.source,source.label,action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
             else:
                 text=self.root.clipboard_get().strip()
-                if text.startswith(('https://','http://')):
+                if text.lower().startswith(('https://','http://')):
                     self.url.set(text);self.fetch_url()
                 else:self.status.set('Copy an image or use Win+Shift+S, then press Ctrl+V here.')
         except (OSError,ValueError,tk.TclError) as error:
@@ -7310,23 +7317,27 @@ class DrawBotApp:
                 self.events.put(('status',f'Recording starts in {second} s. Move this window away from the drawing area.'))
                 if self.stop.wait(1):raise InterruptedError()
             frames=[];durations=[]
-            started=time.monotonic()
-            for index in range(120):
-                if self.stop.is_set() or time.monotonic()-started>=30:break
-                tick=time.monotonic()
-                frame=grab_area(area);frame.thumbnail((800,500))
-                frames.append(frame.quantize(colors=128))
-                self.events.put(('status',f'● RECORDING {time.monotonic()-started:.0f}/30 s • STOP/Esc ends and saves the GIF'))
-                self.stop.wait(max(0,.25-(time.monotonic()-tick)))
-                durations.append(max(20,round((time.monotonic()-tick)*1000)))
-            if not frames:raise InterruptedError()
-            self.events.put(('status','Saving recording…'))
-            destination=Path(path);temporary=destination.with_name(destination.name+'.tmp')
             try:
-                frames[0].save(temporary,format='GIF',save_all=True,append_images=frames[1:],duration=durations,loop=0,optimize=False)
-                temporary.replace(destination)
+                started=time.monotonic()
+                for index in range(120):
+                    if self.stop.is_set() or time.monotonic()-started>=30:break
+                    tick=time.monotonic()
+                    frame=grab_area(area)
+                    try:
+                        frame.thumbnail((800,500))
+                        frames.append(frame.quantize(colors=128))
+                    finally:
+                        frame.close()
+                    self.events.put(('status',f'● RECORDING {time.monotonic()-started:.0f}/30 s • STOP/Esc ends and saves the GIF'))
+                    self.stop.wait(max(0,.25-(time.monotonic()-tick)))
+                    durations.append(max(20,round((time.monotonic()-tick)*1000)))
+                if not frames:raise InterruptedError()
+                self.events.put(('status','Saving recording…'))
+                from ScreenRecording import save_gif_atomic
+                destination=Path(path)
+                save_gif_atomic(destination,frames,durations)
             finally:
-                temporary.unlink(missing_ok=True)
+                for frame in frames:frame.close()
             self.events.put(('status',f'Recording saved: {destination.name}'))
         self.begin_worker('record',work)
 
@@ -7336,7 +7347,8 @@ class DrawBotApp:
 
     def fetch_url(self):
         source=self.url.get().strip()
-        if urlparse(source).scheme.lower() not in ('http','https'):
+        from CanvasDropPayload import _is_http_url
+        if not _is_http_url(source):
             self.status.set('Paste an image URL beginning with https:// and click Load.');return
         self.load_source(source,'Image from URL',action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
 
@@ -7348,14 +7360,11 @@ class DrawBotApp:
         DrawBotApp._cancel_after_attr(self,'preview_render_after')
         from ScreenTaskWindow import ScreenTaskWindow, SCREEN_ACTIVITIES
         screen_window=ScreenTaskWindow(getattr(self,'root',None))
-        if activity in SCREEN_ACTIVITIES:screen_window.hide()
-        self.screen_task_window=screen_window
-        self.stop.clear();self.set_busy(activity)
-        log_event(f'Worker {activity} started.')
         def work():
             started=time.monotonic()
             try:
                 if activity in SCREEN_ACTIVITIES and self.stop.wait(.30):raise InterruptedError()
+                if self.stop.is_set():raise InterruptedError()
                 task()
             except InterruptedError as error:
                 if activity=='draw':
@@ -7378,13 +7387,23 @@ class DrawBotApp:
                 log_event(f'Worker {activity} finished in {time.monotonic()-started:.3f} s.')
             finally:
                 self.events.put(('done',activity))
-        self.worker=threading.Thread(target=work,daemon=True,name=f'imagedrawbot-{activity}')
         try:
+            if activity in SCREEN_ACTIVITIES:screen_window.hide()
+            self.screen_task_window=screen_window
+            self.stop.clear();self.set_busy(activity)
+            log_event(f'Worker {activity} started.')
+            self.worker=threading.Thread(target=work,daemon=True,name=f'imagedrawbot-{activity}')
             self.worker.start()
         except Exception as error:
             self.worker=None
-            self.set_busy(None)
-            screen_window.restore()
+            self.stop.set()
+            try:self.set_busy(None)
+            except Exception as cleanup_error:
+                log_event(f'Worker startup UI cleanup failed: {cleanup_error!r}')
+            self.activity=None
+            try:screen_window.restore()
+            except Exception as cleanup_error:
+                log_event(f'Worker startup window restoration failed: {cleanup_error!r}')
             log_error(f'Worker {activity} could not start: {error!r}', category='worker-start', exc_info=True)
             raise
         return True
@@ -7766,7 +7785,10 @@ class DrawBotApp:
                     canvas._preview_photo=photo
                 except (ValueError,TypeError,MemoryError,OverflowError,OSError,RuntimeError) as error:
                     log_event(f'Preview render failed safely: {type(error).__name__}: {error}')
-                    canvas.create_text(max(1,canvas.winfo_width())/2,max(1,canvas.winfo_height())/2,text='This view could not be rendered. Try Fit or rebuild preview.',fill='#f0f4fb',width=280)
+                    try:
+                        canvas.create_text(max(1,canvas.winfo_width())/2,max(1,canvas.winfo_height())/2,text='This view could not be rendered. Try Fit or rebuild preview.',fill='#f0f4fb',width=280)
+                    except tk.TclError:
+                        pass  # The canvas may have been destroyed during rendering.
                 except tk.TclError as error:
                     # A canvas can disappear while the application is closing or a
                     # tab is being rebuilt. That should not terminate the GUI.
@@ -7790,7 +7812,8 @@ class DrawBotApp:
             log_event(f'Mobile Preview refresh failed safely: {error!r}')
 
     def _copy_mobile_preview_url(self):
-        url=str(getattr(self,'mobile_preview_url',tk.StringVar(value='')).get() or '')
+        value=getattr(self,'mobile_preview_url',None)
+        url=str(value.get() or '') if value is not None else ''
         if not url:
             self.status.set('Start Mobile Preview first.')
             return
@@ -10239,7 +10262,8 @@ class DrawBotApp:
     def poll(self):
         self.poll_after=None
         processed=0
-        while processed<250:
+        started=time.monotonic()
+        while processed<250 and (processed==0 or time.monotonic()-started<.015):
             try:kind,value=self.events.get_nowait()
             except queue.Empty:break
             processed+=1

@@ -80,6 +80,12 @@ def smart_color_weights(groups: Sequence[Sequence[Segment]], palette_rgb: Sequen
     }
     local_k,unique_k,scarce_k,cap=coefficients.get(str(fidelity),coefficients['Faithful'])
     multipliers={};anchor_scores={};unique_indexes=[]
+    nearest_distances={ci:100.0 for ci in active}
+    for position,ci in enumerate(active):
+        for other in active[position+1:]:
+            distance=float(delta_e2000(palette[ci],palette[other]))
+            nearest_distances[ci]=min(nearest_distances[ci],distance)
+            nearest_distances[other]=min(nearest_distances[other],distance)
     for ci in active:
         shares=[];dominant_cells=0;occupied=0
         for bucket in cells.values():
@@ -91,11 +97,7 @@ def smart_color_weights(groups: Sequence[Sequence[Segment]], palette_rgb: Sequen
         local_dom=max(shares or [0.0])
         locality=1.0-_clamp((occupied-1)/max(1.0,g*g*.50))
         cell_authority=_clamp(dominant_cells/max(1,occupied))
-        nearest=100.0
-        for other in active:
-            if other==ci:continue
-            nearest=min(nearest,float(delta_e2000(palette[ci],palette[other])))
-        if len(active)<=1:nearest=100.0
+        nearest=nearest_distances[ci]
         uniqueness=_clamp((nearest-2.5)/22.0)
         if nearest>=12.0:unique_indexes.append(ci)
         scarcity=1.0-_clamp(base[ci]/max_base)

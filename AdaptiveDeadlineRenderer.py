@@ -98,7 +98,7 @@ def _path_cost(path, transform: CanvasTransform, options: dict[str, Any]) -> flo
 
 def _fixed_overhead(options: dict[str, Any], groups, image_size, fitted) -> tuple[float, dict[str, float]]:
     delivery = resolve_stroke_delivery(options, dry_run=False)
-    active_colors = sum(bool(g) for g in groups)
+    active_colors = sum(any(bool(path) for path in g) for g in groups)
     palette = 0.0 if options.get("paint_current_color") else active_colors * delivery.palette_click_delay
     tool = len(options.get("tool_actions") or ()) * delivery.ui_control_delay
     clear = max(0.0, float(options.get("canvas_clear_estimate_seconds", 0.0) or 0.0))
@@ -121,7 +121,7 @@ def _fixed_overhead(options: dict[str, Any], groups, image_size, fitted) -> tupl
     if options.get('visual_verification_enabled'):
         verification += active_colors*.08
     countdown = 3.0
-    path_count=sum(len(g or ()) for g in groups)
+    path_count=sum(sum(bool(path) for path in (g or ())) for g in groups)
     focus = 0.0 if options.get("paint_profile") else .35
     guard = min(1.8, path_count * .0009)
     scheduler_jitter = min(2.8, .25 + path_count * .0018)
@@ -224,6 +224,8 @@ def adapt_execution_plan(image, fitted: tuple[int, int], execution_groups, optio
         for path in paths:
             if cancelled(): raise InterruptedError()
             path = tuple(path)
+            if not path:
+                continue
             imp = sample_path_importance(path, importance)
             span, length, closed, center = _path_geometry(path, image.size)
             structural = min(1.0, span * 1.55 + closed * .25 + min(1.0, length) * .20)

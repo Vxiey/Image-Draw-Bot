@@ -87,11 +87,7 @@ def _gpu_map(rgb: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
     border_rgb = cp.median(border, axis=0)
     fg = cp.sqrt(cp.sum((x - border_rgb[None, None, :]) ** 2, axis=2))
 
-    def norm(a):
-        # Percentiles stay on GPU; only the final map crosses PCIe.
-        lo = cp.percentile(a, 2.0); hi = cp.percentile(a, 98.0)
-        return cp.clip((a - lo) / cp.maximum(cp.float32(1e-6), hi - lo), 0.0, 1.0)
-    edge_n, contrast_n, fg_n = norm(edge), norm(local), norm(fg)
+    edge_n, contrast_n, fg_n = (_normalize_gpu(a, cp) for a in (edge, local, fg))
     dark_micro = cp.clip((.48 - lum) * 2.0, 0.0, 1.0) * cp.clip(local * 6.0, 0.0, 1.0)
     imp = cp.clip(.48 * edge_n + .22 * contrast_n + .20 * fg_n + .10 * dark_micro, 0.0, 1.0)
     h, w = lum.shape
@@ -109,24 +105,43 @@ def _gpu_map(rgb: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
     return cp.asnumpy(imp).astype(np.float32, copy=False), meta
 
 
+def _normalize_gpu(a, cp):
+    """Match the CPU fallback when percentiles collapse on sparse/flat maps."""
+    lo = cp.percentile(a, 2.0); hi = cp.percentile(a, 98.0)
+    fallback = (~cp.isfinite(lo)) | (~cp.isfinite(hi)) | (hi <= lo + 1e-6)
+    lo = cp.where(fallback, cp.minimum(a.min(), 0.0), lo)
+    hi = cp.where(fallback, cp.maximum(a.max(), 1.0), hi)
+    return cp.clip((a - lo) / cp.maximum(cp.float32(1e-6), hi - lo), 0.0, 1.0)
+
+
 def build_importance_map(image: Image.Image, options: dict[str, Any] | None = None,
                          cancelled=lambda: False) -> tuple[np.ndarray, dict[str, Any]]:
     if cancelled():
         raise InterruptedError()
     options = options or {}
-    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    from ColorMatchingEngine import visible_rgb_image
+    rgb = np.asarray(visible_rgb_image(image), dtype=np.uint8)
     h, w = rgb.shape[:2]
     pixels = int(h * w)
     use_gpu = str(options.get("gpu_mode") or "Auto") != "CPU"
     # Approx working set ~ 12 float planes. Respect an explicit VRAM allocation
     # if one is available from ResourceAllocation.
-    vram_mb = float(options.get("gpu_vram_budget_mb") or options.get("vram_budget_mb") or 0.0)
+    try:
+        vram_mb = float(options.get("gpu_vram_budget_mb") or options.get("vram_budget_mb") or 0.0)
+        valid_budget = math.isfinite(vram_mb) and vram_mb >= 0.0
+    except (ValueError, TypeError, OverflowError):
+        vram_mb = 0.0
+        valid_budget = False
     estimated_mb = pixels * 4 * 12 / (1024 * 1024)
-    if use_gpu and (not vram_mb or estimated_mb <= max(128.0, vram_mb * .55)):
+    if use_gpu and valid_budget and (not vram_mb or estimated_mb <= vram_mb * .55):
         try:
             out, meta = _gpu_map(rgb)
+            if cancelled():
+                raise InterruptedError()
             meta.update(width=w, height=h, pixels=pixels, estimated_working_mb=round(estimated_mb, 2))
             return out, meta
+        except InterruptedError:
+            raise
         except Exception as error:
             gpu_error = repr(error)
     else:
@@ -134,6 +149,8 @@ def build_importance_map(image: Image.Image, options: dict[str, Any] | None = No
     if cancelled():
         raise InterruptedError()
     out, meta = _cpu_map(rgb)
+    if cancelled():
+        raise InterruptedError()
     meta.update(width=w, height=h, pixels=pixels, estimated_working_mb=round(estimated_mb, 2), gpu_fallback_reason=gpu_error)
     return out, meta
 

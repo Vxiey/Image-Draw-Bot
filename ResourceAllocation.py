@@ -8,10 +8,12 @@ RAM chunking and runtime library thread hints.
 from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from collections import deque
 import math
 import os
 import sys
 from typing import Callable, Iterable, Sequence, TypeVar
+from pathlib import Path
 
 CPU_WORKER_CHOICES = ("Auto", "1", "2", "4", "6", "8", "12", "16", "24", "32", "All logical")
 CPU_ENGINE_MODES = ("Auto", "Threads", "Processes")
@@ -21,9 +23,19 @@ PLANNING_RESOLUTION_MODES = ("Auto", "Standard", "High", "Ultra", "Extreme")
 _T = TypeVar("_T")
 _U = TypeVar("_U")
 _MIB = 1024 * 1024
+_PROBE = object()
 
 
 def logical_cpu_count() -> int:
+    try:
+        probe = getattr(os, 'process_cpu_count', None)
+        if probe is not None and (count := probe()) is not None:
+            return max(1, int(count))
+        affinity = getattr(os, 'sched_getaffinity', None)
+        if affinity is not None:
+            return max(1, len(affinity(0)))
+    except (OSError, ValueError, TypeError):
+        pass
     return max(1, int(os.cpu_count() or 1))
 
 
@@ -45,6 +57,15 @@ def available_ram_mb() -> int | None:
                 return max(0, int(stat.ullAvailPhys // _MIB))
         except Exception:
             return None
+    if sys.platform.startswith('linux'):
+        try:
+            with Path('/proc/meminfo').open('r', encoding='ascii') as stream:
+                for line in stream:
+                    fields = line.split()
+                    if len(fields) == 3 and fields[0] == 'MemAvailable:' and fields[2] == 'kB':
+                        return max(0, int(fields[1]) // 1024)
+        except (OSError, ValueError, UnicodeError):
+            pass
     try:
         pages = os.sysconf("SC_AVPHYS_PAGES")
         page_size = os.sysconf("SC_PAGE_SIZE")
@@ -87,9 +108,9 @@ def parse_custom_ram_mb(value: str | int | None) -> int:
     return mb
 
 
-def resolve_cpu_workers(value: str = "Auto") -> int:
+def resolve_cpu_workers(value: str = "Auto", *, logical_cpus: int | None = None) -> int:
     validate_cpu_workers(value)
-    total = logical_cpu_count()
+    total = logical_cpu_count() if logical_cpus is None else max(1, int(logical_cpus))
     if value == "Auto":
         # Safe default for a GUI app: enough workers to use the CPU, but not 31+
         # Windows worker processes/threads that can starve Tk, Paint and input.
@@ -102,9 +123,11 @@ def resolve_cpu_workers(value: str = "Auto") -> int:
     return max(1, min(int(value), total))
 
 
-def resolve_ram_budget_mb(value: str = "Auto", custom_mb: str | int | None = None) -> int:
+def resolve_ram_budget_mb(value: str = "Auto", custom_mb: str | int | None = None, *, available_mb=_PROBE) -> int:
     validate_ram_budget(value)
-    available = available_ram_mb()
+    available = available_ram_mb() if available_mb is _PROBE else available_mb
+    if available is not None and available < 128:
+        raise ValueError('Less than 128 MB of RAM is available. Free memory before planning an image.')
     if value == "Custom":
         requested = parse_custom_ram_mb(custom_mb)
     elif value == "Auto":
@@ -135,31 +158,46 @@ def configure_runtime(cpu_workers: int) -> None:
 def resolve_allocation(cpu_workers: str = "Auto", cpu_engine: str = "Auto",
                        ram_budget: str = "Auto", custom_ram_mb: str | int | None = None) -> dict:
     validate_cpu_engine(cpu_engine)
-    workers = resolve_cpu_workers(cpu_workers)
-    ram_mb = resolve_ram_budget_mb(ram_budget, custom_ram_mb)
+    logical = logical_cpu_count()
+    available = available_ram_mb()
+    workers = resolve_cpu_workers(cpu_workers, logical_cpus=logical)
+    ram_mb = resolve_ram_budget_mb(ram_budget, custom_ram_mb, available_mb=available)
     configure_runtime(workers)
     return {
         "cpu_workers": cpu_workers, "cpu_workers_resolved": workers,
         "cpu_engine": cpu_engine, "ram_budget": ram_budget,
-        "ram_budget_mb": ram_mb, "available_ram_mb": available_ram_mb(),
-        "logical_cpus": logical_cpu_count(),
+        "ram_budget_mb": ram_mb, "available_ram_mb": available,
+        "logical_cpus": logical,
     }
 
 
 def row_chunk_ranges(height: int, width: int, *, workers: int, ram_budget_mb: int,
                      bytes_per_pixel: int = 64, min_rows: int = 8, max_rows: int = 256) -> list[tuple[int, int]]:
+    height = max(0, int(height)); width = max(1, int(width))
+    if height == 0:
+        return []
+    rows = rows_per_chunk(height, width, workers=workers, ram_budget_mb=ram_budget_mb,
+                          bytes_per_pixel=bytes_per_pixel, min_rows=min_rows, max_rows=max_rows)
+    return [(start, min(height, start + rows)) for start in range(0, height, rows)]
+
+
+def rows_per_chunk(height: int, width: int, *, workers: int, ram_budget_mb: int,
+                   bytes_per_pixel: int = 64, min_rows: int = 8, max_rows: int = 256) -> int:
     height = max(1, int(height)); width = max(1, int(width))
     workers = max(1, int(workers)); ram_budget_mb = max(128, int(ram_budget_mb))
     # Keep several waves of tasks queued so CPU workers do not starve. The RAM
     # budget still caps chunk size for very wide images and layered colour modes.
     per_task_budget = max(1, (ram_budget_mb * _MIB) // max(2, workers * 4))
-    rows = max(min_rows, min(max_rows, int(per_task_budget // max(1, width * max(8, bytes_per_pixel)))))
+    memory_rows = per_task_budget // (width * max(8, int(bytes_per_pixel)))
+    if memory_rows < 1:
+        raise ValueError('One image row exceeds the per-worker memory budget. Reduce workers or image width.')
+    rows = max(1, min(max(1, int(max_rows)), memory_rows))
     # Avoid a single oversized final chunk by targeting at least worker*2 chunks
     # for medium/large plans.
     target_chunks = max(1, workers * 2)
     if height // rows < target_chunks:
-        rows = max(min_rows, math.ceil(height / target_chunks))
-    return [(start, min(height, start + rows)) for start in range(0, height, rows)]
+        rows = min(rows, max(max(1, int(min_rows)), math.ceil(height / target_chunks)))
+    return rows
 
 
 def choose_parallel_backend(engine: str, *, width: int, height: int, workers: int,
@@ -277,5 +315,28 @@ def parallel_map(function: Callable[[_T], _U], tasks: Sequence[_T], *, backend: 
     if backend == "serial" or workers <= 1 or len(tasks) <= 1:
         return [function(task) for task in tasks]
     executor_cls = ProcessPoolExecutor if backend == "processes" else ThreadPoolExecutor
-    with executor_cls(max_workers=max(1, int(workers))) as executor:
-        return list(executor.map(function, tasks))
+    workers = min(len(tasks), max(1, int(workers)))
+    if backend == 'processes' and sys.platform == 'win32':
+        workers = min(workers, 61)
+    pending = deque()
+    iterator = iter(tasks)
+    result = []
+    with executor_cls(max_workers=workers) as executor:
+        try:
+            for _ in range(workers * 2):
+                try:
+                    task = next(iterator)
+                except StopIteration:
+                    break
+                pending.append(executor.submit(function, task))
+            while pending:
+                result.append(pending.popleft().result())
+                try:
+                    task = next(iterator)
+                except StopIteration:
+                    continue
+                pending.append(executor.submit(function, task))
+        finally:
+            for future in pending:
+                future.cancel()
+    return result

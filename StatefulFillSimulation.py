@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, asdict
+import math
 from typing import Any, Iterable
 
 import numpy as np
@@ -41,10 +42,14 @@ class FillSimulationResult:
         return out
 
 
-def _mask_from_spans(region: dict[str, Any], size: tuple[int, int]) -> np.ndarray:
+def _mask_from_spans(region: dict[str, Any], size: tuple[int, int], *, cancelled=lambda: False) -> np.ndarray:
+    if cancelled():
+        raise InterruptedError()
     w, h = map(int, size)
     mask = np.zeros((h, w), dtype=np.bool_)
-    for raw in region.get("row_spans") or ():
+    for index, raw in enumerate(region.get("row_spans") or ()):
+        if index % 512 == 0 and cancelled():
+            raise InterruptedError()
         try:
             y, x0, x1 = map(int, raw)
         except (TypeError, ValueError):
@@ -87,14 +92,19 @@ def _paint_square(mask: np.ndarray, x: int, y: int, brush_px: int) -> None:
         mask[y0:y1+1,x0:x1+1]=True
 
 
-def _contour_wall(region: dict[str, Any], size: tuple[int, int], brush_px: int) -> np.ndarray:
+def _contour_wall(region: dict[str, Any], size: tuple[int, int], brush_px: int, *,
+                  cancelled=lambda: False) -> np.ndarray:
+    if cancelled():
+        raise InterruptedError()
     w, h = map(int, size)
     wall = np.zeros((h, w), dtype=np.bool_)
     contour = tuple(region.get("contour") or ())
     if len(contour) < 4:
         return wall
     for a, b in zip(contour, contour[1:]):
-        for x, y in _line_points(a, b):
+        for index, (x, y) in enumerate(_line_points(a, b)):
+            if index % 1024 == 0 and cancelled():
+                raise InterruptedError()
             if 0 <= x < w and 0 <= y < h:
                 _paint_square(wall, x, y, brush_px)
     return wall
@@ -102,6 +112,8 @@ def _contour_wall(region: dict[str, Any], size: tuple[int, int], brush_px: int) 
 
 def _flood(blank: np.ndarray, seed: tuple[int, int], intended: np.ndarray,
            *, cancelled=lambda: False) -> tuple[np.ndarray, int, bool]:
+    if cancelled():
+        raise InterruptedError()
     h, w = blank.shape
     sx, sy = map(int, seed)
     visited = np.zeros_like(blank)
@@ -126,8 +138,13 @@ def simulate_fill_region(region: dict[str, Any], size: tuple[int, int], *,
                          max_missing_percent: float = 8.0,
                          cancelled=lambda: False) -> tuple[FillSimulationResult, np.ndarray]:
     """Simulate one contour+Fill operation against the supplied discrete canvas."""
+    if cancelled():
+        raise InterruptedError()
+    max_missing_percent = float(max_missing_percent)
+    if not math.isfinite(max_missing_percent) or not 0.0 <= max_missing_percent <= 100.0:
+        raise ValueError("max_missing_percent must be finite and between zero and 100")
     w,h=map(int,size)
-    intended=_mask_from_spans(region,(w,h))
+    intended=_mask_from_spans(region,(w,h),cancelled=cancelled)
     intended_n=int(np.count_nonzero(intended))
     state=(np.asarray(painted_state,dtype=np.bool_).copy()
            if painted_state is not None else np.zeros((h,w),dtype=np.bool_))
@@ -143,7 +160,7 @@ def simulate_fill_region(region: dict[str, Any], size: tuple[int, int], *,
         return FillSimulationResult(False,"Fill region overlaps already-painted state",intended_n,0,0,0,intended_n,100.0,
                                     tuple(region.get("seed_pixel") or ()) or None,max(1,int(brush_px))),state
 
-    wall=_contour_wall(region,(w,h),brush_px)
+    wall=_contour_wall(region,(w,h),brush_px,cancelled=cancelled)
     wall_n=int(np.count_nonzero(wall))
     outside_wall=wall & ~intended
     if np.any(outside_wall):
@@ -181,10 +198,12 @@ def simulate_fill_region(region: dict[str, Any], size: tuple[int, int], *,
             if flood[gy,gx]:
                 return FillSimulationResult(False,"outside guard pixel became flood-connected",intended_n,flood_n,wall_n,
                                             1,missing,missing_pct,seed,max(1,int(brush_px)),guards),state
-    if missing_pct > float(max_missing_percent):
+    if missing_pct > max_missing_percent:
         return FillSimulationResult(False,"narrow passage/brush footprint removes too much intended interior",
                                     intended_n,flood_n,wall_n,0,missing,missing_pct,seed,max(1,int(brush_px)),guards),state
 
+    if cancelled():
+        raise InterruptedError()
     new_state=state.copy()
     new_state |= wall
     new_state |= flood
@@ -248,6 +267,8 @@ def _local_region(region: dict[str,Any], x0: int, y0: int) -> dict[str,Any]:
 
 def filter_stateful_fill_regions(regions: Iterable[dict[str, Any]], size: tuple[int, int], *,
                                  brush_px: int = 1, cancelled=lambda: False) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if cancelled():
+        raise InterruptedError()
     rows=list(regions or ());w,h=map(int,size)
     accepted=[];rejected=[];state=np.zeros((h,w),dtype=np.bool_)
     peak_roi_pixels=0;total_roi_pixels=0

@@ -50,6 +50,8 @@ def _rgb_tuple(values) -> RGB:
 
 def visible_rgb_image(image: Image.Image, background: RGB=(255,255,255)) -> Image.Image:
     """Return the RGB pixels the user actually sees, including alpha compositing."""
+    if image.mode == 'RGB' and 'transparency' not in image.info:
+        return image.copy()
     rgba=image.convert('RGBA')
     if rgba.getextrema()[3] == (255,255):
         return rgba.convert('RGB')
@@ -90,9 +92,9 @@ def measure_color_pixels(pixels: np.ndarray, *, alpha_values: np.ndarray | None=
     if len(px)==0:
         return ColorSample((0,0,0),(0,0,0),(0,0,0),(0,0,0),0.0,0.0,0)
     mean=_rgb_tuple(np.mean(px,axis=0))
-    median=_rgb_tuple(np.median(px,axis=0))
+    p10,median_values,p90=np.percentile(px,(10,50,90),axis=0)
+    median=_rgb_tuple(median_values)
     dominant,dominant_fraction=_dominant_exact(px)
-    p10=np.percentile(px,10,axis=0);p90=np.percentile(px,90,axis=0)
     spread=float(np.max(p90-p10))
 
     # Flat artwork/UI colours should stay exactly on the dominant source RGB.
@@ -114,13 +116,25 @@ def measure_quantized_regions(source: Image.Image, labels: Image.Image) -> Dict[
     """Measure the real RGB pixels assigned to every quantizer label."""
     if source.size!=labels.size:
         raise ValueError('Source image and color labels must have the same size.')
-    rgba=np.asarray(source.convert('RGBA'),dtype=np.uint8)
     visible=np.asarray(visible_rgb_image(source),dtype=np.uint8)
     lab=np.asarray(labels,dtype=np.int32)
+    if lab.ndim != 2:
+        raise ValueError('Color labels must be a single-channel image.')
+    alpha = None
+    if source.mode != 'RGB' or 'transparency' in source.info:
+        alpha = np.asarray(source.convert('RGBA').getchannel('A'),dtype=np.uint8).reshape(-1)
     result: Dict[int,ColorSample]={}
-    for idx in np.unique(lab):
-        mask=lab==int(idx)
-        result[int(idx)]=measure_color_pixels(visible[mask],alpha_values=rgba[:,:,3][mask])
+    # Stable grouping preserves each region's source order, including the
+    # bounded representative sampler, without rescanning the image per label.
+    flat = lab.reshape(-1)
+    order = np.argsort(flat, kind='stable')
+    sorted_labels = flat[order]
+    boundaries = np.flatnonzero(sorted_labels[1:] != sorted_labels[:-1]) + 1
+    visible = visible.reshape(-1,3)
+    for indices in np.split(order,boundaries):
+        if len(indices):
+            result[int(flat[indices[0]])] = measure_color_pixels(
+                visible[indices], alpha_values=None if alpha is None else alpha[indices])
     return result
 
 

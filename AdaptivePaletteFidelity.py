@@ -191,15 +191,29 @@ def _base_anchors(groups: Sequence[Sequence[Segment]], palette: Sequence[tuple[i
 
 
 def _map_indices(active: Sequence[int], keep: Sequence[int], palette: Sequence[tuple[int,int,int]],
-                 weights: Sequence[float], fidelity: str) -> tuple[dict[int,int], list[tuple[int,float,float]]]:
+                 weights: Sequence[float], fidelity: str, *, cost_cache=None, error_cache=None) -> tuple[dict[int,int], list[tuple[int,float,float]]]:
     mapping: dict[int,int]={}
     errors=[]
+    def cost(i,j):
+        key=(i,j)
+        if cost_cache is not None and key in cost_cache:
+            return cost_cache[key]
+        value=palette_match_cost(palette[i],palette[j],color_rendering="Perceptual match",fidelity=fidelity)
+        if cost_cache is not None:
+            cost_cache[key]=value
+        return value
     for i in active:
         if i in keep:
             target=i; de=0.0
         else:
-            target=min(keep,key=lambda j:(palette_match_cost(palette[i],palette[j],color_rendering="Perceptual match",fidelity=fidelity),-weights[j],j))
-            de=delta_e2000(palette[i],palette[target])
+            target=min(keep,key=lambda j:(cost(i,j),-weights[j],j))
+            key=(i,target)
+            if error_cache is not None and key in error_cache:
+                de=error_cache[key]
+            else:
+                de=delta_e2000(palette[i],palette[target])
+                if error_cache is not None:
+                    error_cache[key]=de
         mapping[i]=target
         errors.append((i,float(de),float(weights[i])))
     return mapping,errors
@@ -270,11 +284,14 @@ def select_adaptive_palette(groups: Sequence[Sequence[Segment]], palette_rgb: Se
     longer posterized or the ceiling is reached.
     """
     validate_color_fidelity(fidelity)
+    limit=int(max_colors)
+    if limit < 1:
+        raise ValueError('Palette limit must be positive.')
     palette=[tuple(map(int,r[:3])) for r in palette_rgb]
     base_weights=group_weights(groups)
     weights,smart_meta=smart_color_weights(groups,palette,base_weights,fidelity=fidelity)
     active=[i for i,w in enumerate(weights) if w>0 and i<len(palette)]
-    cap=max(2,min(int(max_colors),len(active) if active else 2))
+    cap=min(limit,len(active)) if active else limit
     if not active:
         meta={'active_colors_before':0,'active_colors_after':0,'max_colors':int(max_colors),'posterization_risk':'LOW','palette_coverage_percent':100.0}
         meta.update(smart_meta);meta['smart_color_switch_cost_seconds']=round(max(.005,float(color_switch_seconds)),6)
@@ -299,7 +316,9 @@ def select_adaptive_palette(groups: Sequence[Sequence[Segment]], palette_rgb: Se
         return list(active),mapping,meta
 
     keep=_base_anchors(groups,palette,active,weights,cap,fidelity,smart_meta.get('smart_color_anchor_indexes',()))
-    mapping,errors=_map_indices(active,keep,palette,weights,fidelity)
+    cost_cache,error_cache={},{}
+    mapping,errors=_map_indices(active,keep,palette,weights,fidelity,
+                                cost_cache=cost_cache,error_cache=error_cache)
     metrics=palette_quality_metrics(active,keep,palette,weights,mapping,errors,fidelity=fidelity,max_colors=cap)
     last_gain=0.0;last_relative_gain=0.0;cost_stop=False
     # Faithful/Exact demand a better reduced palette before stopping.
@@ -311,7 +330,8 @@ def select_adaptive_palette(groups: Sequence[Sequence[Segment]], palette_rgb: Se
         for candidate in active:
             if candidate in keep: continue
             trial_keep=keep+[candidate]
-            _m,_e=_map_indices(active,trial_keep,palette,weights,fidelity)
+            _m,_e=_map_indices(active,trial_keep,palette,weights,fidelity,
+                               cost_cache=cost_cache,error_cache=error_cache)
             new_total=sum(de*w for _i,de,w in _e)
             delta=max(0.0,old_total-new_total)
             relative=delta/max(1e-9,old_total)

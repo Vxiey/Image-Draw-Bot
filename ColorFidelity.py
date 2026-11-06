@@ -214,7 +214,7 @@ def palette_match_cost(source: Sequence[int], candidate: Sequence[int], *,
     src = tuple(_clamp8(v) for v in source[:3])
     dst = tuple(_clamp8(v) for v in candidate[:3])
     base = _rgb_distance_scaled(src, dst) if color_rendering == "RGB nearest" else delta_e_oklab(src, dst)
-    if fidelity in ("Fast", "Exact"):
+    if color_rendering == "RGB nearest" or fidelity in ("Fast", "Exact"):
         return base
 
     sL, sC, sH = oklab_metrics(src)

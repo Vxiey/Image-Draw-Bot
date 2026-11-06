@@ -72,7 +72,8 @@ def _compress(points: Iterable[Point]) -> Path:
             ax, ay = cleaned[-3]
             bx, by = cleaned[-2]
             cx, cy = cleaned[-1]
-            if (bx - ax) * (cy - by) == (by - ay) * (cx - bx):
+            if ((bx - ax) * (cy - by) == (by - ay) * (cx - bx)
+                    and (bx - ax) * (cx - bx) + (by - ay) * (cy - by) >= 0):
                 cleaned.pop(-2)
             else:
                 break
@@ -154,10 +155,18 @@ def _components_from_runs(strokes: Sequence[Segment], cancelled=lambda: False) -
         prev = ids_by_row.get(y - 1, [])
         if not prev:
             continue
+        first_possible = 0
         for i in ids_by_row[y]:
+            if cancelled():
+                raise InterruptedError()
             x1, _, x2 = records[i]
-            for j in prev:
+            while first_possible < len(prev) and records[prev[first_possible]][2] < x1:
+                first_possible += 1
+            for position in range(first_possible, len(prev)):
+                j = prev[position]
                 px1, _, px2 = records[j]
+                if px1 > x2:
+                    break
                 if max(x1, px1) <= min(x2, px2):
                     union(i, j)
 
@@ -291,46 +300,60 @@ def _row_edges(component: _Component) -> tuple[list[Point], list[Point]]:
     return left, right
 
 
-def _rdp(points: Sequence[Point], tolerance: float) -> list[Point]:
+def _rdp(points: Sequence[Point], tolerance: float, *, cancelled=lambda: False) -> list[Point]:
     """Ramer-Douglas-Peucker simplification for smoother long paths."""
+    if cancelled():
+        raise InterruptedError()
     pts = [tuple(map(int, p)) for p in points]
     if len(pts) <= 2 or tolerance <= 0:
         return pts
+    # A zigzag can split off one point per iteration. An explicit stack keeps
+    # that valid contour independent of Python's recursion limit and avoids
+    # copying/re-normalizing every recursive suffix.
+    kept = {0, len(pts) - 1}
+    pending = [(0, len(pts) - 1)]
+    while pending:
+        if cancelled():
+            raise InterruptedError()
+        start, end = pending.pop()
+        ax, ay = pts[start]
+        bx, by = pts[end]
+        dx, dy = bx - ax, by - ay
+        denom = math.hypot(dx, dy)
+        best_index = -1
+        best_distance = -1.0
+        for i in range(start + 1, end):
+            if i % 256 == 0 and cancelled():
+                raise InterruptedError()
+            px, py = pts[i]
+            if denom == 0:
+                distance = math.hypot(px - ax, py - ay)
+            else:
+                distance = abs(dy * px - dx * py + bx * ay - by * ax) / denom
+            if distance > best_distance:
+                best_distance, best_index = distance, i
+        if best_distance > tolerance and best_index > start:
+            kept.add(best_index)
+            pending.append((best_index, end))
+            pending.append((start, best_index))
+    return [pts[index] for index in sorted(kept)]
 
-    ax, ay = pts[0]
-    bx, by = pts[-1]
-    dx, dy = bx - ax, by - ay
-    denom = math.hypot(dx, dy)
-    best_index = -1
-    best_distance = -1.0
-    for i, (px, py) in enumerate(pts[1:-1], start=1):
-        if denom == 0:
-            distance = math.hypot(px - ax, py - ay)
-        else:
-            distance = abs(dy * px - dx * py + bx * ay - by * ax) / denom
-        if distance > best_distance:
-            best_distance, best_index = distance, i
-    if best_distance > tolerance and best_index > 0:
-        left = _rdp(pts[:best_index + 1], tolerance)
-        right = _rdp(pts[best_index:], tolerance)
-        return left[:-1] + right
-    return [pts[0], pts[-1]]
 
-
-def _smooth_path(points: Sequence[Point], *, tolerance: float, closed: bool = False) -> Path:
+def _smooth_path(points: Sequence[Point], *, tolerance: float, closed: bool = False,
+                 cancelled=lambda: False) -> Path:
     cleaned = _compress(points)
     if len(cleaned) <= 2:
         return cleaned
     work = list(cleaned)
     if closed and work[0] != work[-1]:
         work.append(work[0])
-    simplified = _rdp(work, tolerance)
+    simplified = _rdp(work, tolerance, cancelled=cancelled)
     if closed and simplified and simplified[0] != simplified[-1]:
         simplified.append(simplified[0])
     return _compress(simplified)
 
 
-def _contour_paths_v2(component: _Component, *, brush_px: int) -> list[Path]:
+def _contour_paths_v2(component: _Component, *, brush_px: int, cancelled=lambda: False) -> list[Path]:
     """Build a recognizable outer silhouette for a connected colour component."""
     if not component.bbox:
         return []
@@ -345,7 +368,7 @@ def _contour_paths_v2(component: _Component, *, brush_px: int) -> list[Path]:
         return [((x0, y), (x1, y)) if x0 != x1 else ((x0, y),)]
     # left edge downward + bottom bridge + right edge upward + top bridge
     polygon = list(left) + list(reversed(right))
-    path = _smooth_path(polygon, tolerance=tolerance, closed=True)
+    path = _smooth_path(polygon, tolerance=tolerance, closed=True, cancelled=cancelled)
     if len(path) >= 2:
         return [path]
     return []
@@ -530,7 +553,7 @@ def build_shape_execution_paths(groups: Sequence[Sequence[Segment]], *,
                 continue
             if use_v2:
                 fills = _band_paths_v2(component, brush_px=brush_px, preview=preview, cancelled=cancelled)
-                contours = _contour_paths_v2(component, brush_px=brush_px)
+                contours = _contour_paths_v2(component, brush_px=brush_px, cancelled=cancelled)
             else:
                 step = _shape_step(component, brush_px, preview=preview)
                 fills = _hatch_paths(component, step=step, cancelled=cancelled)

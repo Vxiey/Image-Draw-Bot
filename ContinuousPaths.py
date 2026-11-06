@@ -170,12 +170,25 @@ def _horizontal_paths(strokes: Sequence[Segment], cancelled=lambda: False,
         active = still_active
         used: set[int] = set()
         next_active: list[_ActivePath] = []
+        first_possible = 0
 
         for run in runs:
             x1, _, x2, _ = run
             candidates = []
-            for idx, state in enumerate(active):
-                if idx in used or state.rows >= max_rows_per_path or len(state.points) >= max_points_per_path:
+            # Active paths inherit the previous row's increasing x1 order.
+            # Once an unused interval ends before this run, it cannot overlap
+            # any later run either. Avoid rescanning all separated columns.
+            while first_possible < len(active) and (first_possible in used or active[first_possible].x2 < x1):
+                first_possible += 1
+            for idx in range(first_possible, len(active)):
+                state = active[idx]
+                if idx % 256 == 0 and cancelled():
+                    raise InterruptedError()
+                if idx in used:
+                    continue
+                if state.x1 > x2:
+                    break
+                if state.rows >= max_rows_per_path or len(state.points) >= max_points_per_path:
                     continue
                 lo, hi = max(state.x1, x1), min(state.x2, x2)
                 if lo <= hi:

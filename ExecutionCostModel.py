@@ -315,8 +315,11 @@ class ExecutionCostModel:
                 if entry.get("brush_px") is not None:
                     brush = max(1, int(entry.get("brush_px")))
                 continue
+            path = entry.get("path") or ()
+            if not path:
+                continue
             new_color = int(entry.get("color_index", color if color is not None else 0))
-            new_brush = max(1, int(entry.get("brush_px") or self.options.get("brush_px") or 1))
+            new_brush = max(1, int(entry.get("brush_px") or brush or self.options.get("brush_px") or 1))
             if color is not None and new_color != color and not self.options.get("paint_current_color"):
                 totals["palette"] += self.switch_cost("palette_change"); totals["palette_n"] += 1
             elif color is None and not self.options.get("paint_current_color"):

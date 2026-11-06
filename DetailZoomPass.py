@@ -89,10 +89,10 @@ def _smallest_runtime_brush(options: dict) -> int:
     default = max(1, int(options.get("brush_px", 1) or 1))
     plan = options.get("browser_brush_plan") or {}
     try:
-        sizes = [max(1, int(v)) for v in (plan.get("nominal_sizes") or ())]
-        confidence = float(plan.get("confidence", 0) or 0)
-        if sizes and confidence >= .58:
-            return min(default, min(sizes))
+        from AdaptiveBrushEngine import verified_brush_sizes
+        sizes, dynamic = verified_brush_sizes(str(options.get("profile_key") or ""), plan, default)
+        if dynamic:
+            return min(sizes)
     except Exception:
         pass
     if str(options.get("profile_key") or "") == "microsoft-paint" and str(options.get("effective_paint_tool") or "") == "Pencil":
@@ -173,8 +173,18 @@ def _pick_cells(score: np.ndarray, cap: int, *, threshold: float) -> list[tuple[
     eligible = np.flatnonzero(flat >= threshold)
     if not len(eligible):
         return []
-    # Stable descending order: score first, then source index for determinism.
-    order = sorted((int(i) for i in eligible), key=lambda i: (-float(flat[i]), i))
+    # Each accepted cell blocks at most nine eligible cells. The best 9*(2*cap)
+    # entries therefore contain every cell the legacy scan can accept before
+    # reaching its 2*cap limit. Keep ties by original index, including at the
+    # partition boundary, then sort only that bounded shortlist.
+    shortlist = min(len(eligible), 18 * cap)
+    if shortlist < len(eligible):
+        values = flat[eligible]
+        cutoff = np.partition(values, len(values) - shortlist)[len(values) - shortlist]
+        stronger = eligible[values > cutoff]
+        tied = eligible[values == cutoff][:shortlist - len(stronger)]
+        eligible = np.concatenate((stronger, tied))
+    order = eligible[np.lexsort((eligible, -flat[eligible].astype(np.float64)))]
     h, w = score.shape
     blocked = np.zeros((h, w), dtype=bool)
     out = []
@@ -290,7 +300,7 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
     max_dim = 1800 if factor >= 4 else 1500
     effective = factor
     if max(w * effective, h * effective) > max_dim:
-        effective = max(2, int(max_dim / max(w, h)))
+        effective = min(factor, int(max_dim / max(w, h)))
     if effective < 2:
         return groups, execution_groups, execution_sequence, {"enabled": False, "requested": mode, "factor": 1, "reason": "planning image already near detail-analysis limit", "target_app_zoomed": False}
 

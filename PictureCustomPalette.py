@@ -38,8 +38,8 @@ def _sync_legacy_environment() -> None:
     _legacy.atomic_write_text = atomic_write_text
 
 
-def image_fingerprint(image) -> str:
-    return _legacy.image_fingerprint(image)
+def image_fingerprint(image, *, cancelled=lambda: False) -> str:
+    return _legacy.image_fingerprint(image, cancelled=cancelled)
 
 
 def cache_path(image_fp: str, calibration_fp: str = ""):

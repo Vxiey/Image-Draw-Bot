@@ -30,6 +30,8 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
     w, h = map(int, size)
     if w < 1 or h < 1:
         raise ValueError("Preview size must be positive.")
+    if cancelled():
+        raise InterruptedError()
 
     stroke = Image.new("RGB", (w, h), (15, 20, 29))
     sd = ImageDraw.Draw(stroke)
@@ -39,6 +41,11 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
         guard_meta = (options.get("preview_safety_meta") or {}).get("canvas_guard") or {}
         area = guard_meta.get("area") or (0, 0, w, h)
         fitted_local = (int(area[2]), int(area[3])) if isinstance(area, (tuple, list)) and len(area) == 4 else (w, h)
+        fitted_width, fitted_height = max(1.0, float(fitted_local[0])), max(1.0, float(fitted_local[1]))
+        def mapped(point):
+            # Keep the original operation order: multiplying by a precomputed
+            # ratio can put an exact pixel boundary just below its integer.
+            return float(point[0]) * w / fitted_width, float(point[1]) * h / fitted_height
         total_segments = sum(max(1, len(path) - 1) for paths in safety_groups for path in paths)
         max_segments = int(options.get("_preview_stroke_map_limit", 12000)) if options.get("_preview_plan") else 24000
         stride = 1 if options.get('_full_detail_preview') else max(1, math.ceil(total_segments / max(1, max_segments)))
@@ -50,18 +57,20 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
             for path in paths:
                 if cancelled():
                     raise InterruptedError()
-                mapped = [_canvas_to_preview(p, fitted_local, (w, h)) for p in path]
-                if len(mapped) == 1:
+                if len(path) == 1:
                     counter += 1
                     if counter % stride:
                         continue
-                    x, y = mapped[0]
+                    x, y = mapped(path[0])
                     sd.ellipse((x-line_width, y-line_width, x+line_width, y+line_width), fill=color)
                     continue
-                for a, b in zip(mapped, mapped[1:]):
+                for offset in range(1, len(path)):
                     counter += 1
+                    if counter % 256 == 0 and cancelled():
+                        raise InterruptedError()
                     if counter % stride:
                         continue
+                    a, b = mapped(path[offset - 1]), mapped(path[offset])
                     sd.line((*a, *b), fill=color, width=line_width)
     else:
         total_segments = sum(len(strokes) for strokes in groups)
@@ -87,7 +96,7 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
     if cancelled():
         raise InterruptedError()
     def bounded_source(resampling):
-        small = source.resize((w, h), resampling).convert("RGBA")
+        small = (source if source.size == (w, h) else source.resize((w, h), resampling)).convert("RGBA")
         background = Image.new("RGBA", (w, h), "white")
         background.alpha_composite(small)
         return background.convert("RGB")
@@ -112,9 +121,11 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
             color_index = int(region.get("color_index", -1))
             rgb = palette_rgb[color_index] if 0 <= color_index < len(palette_rgb) else (152, 237, 206)
             od.rectangle((p0[0], p0[1], p1[0], p1[1]), fill=(*rgb, 68), outline=(*_visible(rgb), 240), width=max(2, line_width))
-        except (KeyError, TypeError, ValueError, IndexError):
+        except (KeyError, TypeError, ValueError, IndexError, OverflowError):
             continue
     fill = Image.alpha_composite(fill, overlay).convert("RGB")
 
-    color_map = bounded_source(Image.Resampling.NEAREST)
+    color_map = src if source.size == (w, h) else bounded_source(Image.Resampling.NEAREST)
+    if cancelled():
+        raise InterruptedError()
     return {"stroke": stroke, "fill": fill, "color": color_map}

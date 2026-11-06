@@ -50,7 +50,9 @@ def timing_sample_gate(options: dict[str, Any] | None, *, completed_paths: int =
     for item in runtime.values():
         if isinstance(item, dict):
             try:
-                if int(item.get("count") or 0) > 0 or float(item.get("total_seconds") or 0.0) > 0.0:
+                count = item.get('count', 0)
+                elapsed = _number(item.get('total_seconds'), 0.0)
+                if (type(count) is int and count > 0) or elapsed > 0.0:
                     has_runtime_work = True
                     break
             except (TypeError, ValueError, OverflowError):
@@ -69,14 +71,21 @@ def timing_sample_gate(options: dict[str, Any] | None, *, completed_paths: int =
         return {"allowed": False, "reason": "no completed drawing work", "confidence": "none", "completion_ratio": 0.0}
 
     post = opts.get("post_draw_accuracy_meta") if isinstance(opts.get("post_draw_accuracy_meta"), dict) else None
-    if post and bool(post.get("available")):
-        if not bool(post.get("trusted")):
+    if post and 'available' in post and type(post['available']) is not bool:
+        return {"allowed": False, "reason": "final-canvas availability flag is invalid", "confidence": "none"}
+    if post and post.get('available') not in (None, False):
+        if post.get('available') is not True or post.get("trusted") is not True:
             return {
                 "allowed": False, "reason": "final-canvas accuracy evidence is untrusted",
                 "confidence": "none", "completion_ratio": round(completion_ratio, 4),
             }
         score = _number(post.get("visual_accuracy_percent"), None)
         coverage = _number(post.get("actual_coverage_percent"), None)
+        if (score is None or coverage is None or not 0 <= score <= 100 or not 0 <= coverage <= 100
+                or type(post.get('visual_accuracy_percent')) not in (int, float)
+                or type(post.get('actual_coverage_percent')) not in (int, float)):
+            return {"allowed": False, "reason": "final-canvas accuracy metrics are incomplete or invalid",
+                    "confidence": "none", "completion_ratio": round(completion_ratio, 4)}
         if score is not None and score < 82.0:
             return {
                 "allowed": False, "reason": f"final-canvas accuracy too low ({score:.1f}/100)",

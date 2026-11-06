@@ -77,18 +77,34 @@ class SourceFeatures:
 def _finite(value: Any, default: float = 0.0) -> float:
     try:
         v = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return float(default)
     return v if math.isfinite(v) else float(default)
 
 
 def _bounded_stats(image: Image.Image, max_side: int = 128) -> tuple[float, float]:
-    rgb = image.convert('RGB')
-    w, h = rgb.size
+    w, h = image.size
+    rgb = image
     if max(w, h) > max_side:
         scale = float(max_side) / float(max(w, h))
-        rgb = rgb.resize((max(1, int(round(w * scale))), max(1, int(round(h * scale)))), Image.Resampling.BOX)
+        size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+        # RGB and greyscale resampling commutes with conversion. Avoid a full
+        # source-size RGB copy for the common RGB screenshot/photo input.
+        if image.mode in ('RGB', 'L'):
+            rgb = image.resize(size, Image.Resampling.BOX)
+        else:
+            with image.convert('RGB') as converted:
+                rgb = converted.resize(size, Image.Resampling.BOX)
+    owned = rgb is not image
+    if rgb.mode != 'RGB':
+        converted = rgb.convert('RGB')
+        if owned:
+            rgb.close()
+        rgb = converted
+        owned = True
     a = np.asarray(rgb, dtype=np.int16)
+    if owned:
+        rgb.close()
     if not a.size:
         return 1.0, 0.0
     white = float(np.mean(np.min(a, axis=2) >= 238))
@@ -121,7 +137,11 @@ def analyze_source(image: Image.Image, *, fidelity: str = 'Faithful', source_kin
         raise InterruptedError()
     count, meta = recommend_adaptive_color_count(image, ceiling=32, fidelity=fidelity,
                                                  preview=True, cancelled=cancelled)
+    if cancelled():
+        raise InterruptedError()
     white, chromatic = _bounded_stats(image)
+    if cancelled():
+        raise InterruptedError()
     source_kind = _classify_source(white, chromatic, meta, source_kind_hint)
     return SourceFeatures(
         complexity=max(0.0, min(1.0, _finite(meta.get('complexity_score'), .5))),
@@ -413,10 +433,10 @@ def tune_options(image: Image.Image, options: dict[str, Any], *, source_kind_hin
 
 def _metric(meta: dict[str, Any], key: str) -> float | None:
     value = meta.get(key)
-    if value is None:
+    if type(value) not in (int, float):
         return None
     v = _finite(value, float('nan'))
-    return v if math.isfinite(v) else None
+    return v if math.isfinite(v) and 0 <= v <= 100 else None
 
 
 def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
@@ -435,18 +455,26 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
     edge = _metric(accuracy, 'edge_accuracy_percent')
     coverage = _metric(accuracy, 'coverage_percent')
     plan_exec = _metric(accuracy, 'plan_execution_accuracy_percent')
-    projected = _finite(draw_time.get('projected_seconds', plan.get('estimate')), 0.0)
+    raw_projected = draw_time.get('projected_seconds', plan.get('estimate'))
+    projected = _finite(raw_projected, float('nan'))
+    projected = projected if math.isfinite(projected) and projected >= 0 else None
     usable = gates.get('usable_deadline_seconds')
-    usable_f = None if usable is None else max(0.001, _finite(usable, 0.001))
+    usable_f = _finite(usable, float('nan'))
+    usable_f = usable_f if math.isfinite(usable_f) and usable_f > 0 else None
+    def passes(value, gate):
+        threshold = _metric(gates, gate)
+        return None if value is None or threshold is None else value + ACCEPTANCE_TOLERANCE_PERCENT >= threshold
 
     checks: dict[str, bool | None] = {
-        'visual': None if visual is None else visual + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('visual_accuracy_min_percent'), 0),
-        'perceptual_color': None if perceptual is None else perceptual + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('perceptual_color_min_percent'), 0),
-        'edge': None if edge is None else edge + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('edge_accuracy_min_percent'), 0),
-        'coverage': None if coverage is None else coverage + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('coverage_min_percent'), 0),
-        'plan_execution': None if plan_exec is None else plan_exec + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('plan_execution_min_percent'), 0),
-        'deadline': True if not gates.get('deadline_required') else (projected <= usable_f if usable_f is not None else None),
+        'visual': passes(visual, 'visual_accuracy_min_percent'),
+        'perceptual_color': passes(perceptual, 'perceptual_color_min_percent'),
+        'edge': passes(edge, 'edge_accuracy_min_percent'),
+        'coverage': passes(coverage, 'coverage_min_percent'),
+        'plan_execution': passes(plan_exec, 'plan_execution_min_percent'),
+        'deadline': True if not gates.get('deadline_required') else (projected <= usable_f if usable_f is not None and projected is not None else None),
     }
+    if 'deadline_required' in gates and type(gates['deadline_required']) is not bool:
+        checks['deadline'] = None
     # Step 11 acceptance is intentionally driven by the combined source-relative
     # Visual Accuracy from Step 1. Perceptual/edge/coverage components remain
     # visible diagnostics and must not be double-counted as separate hard gates,
@@ -457,7 +485,7 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
     # Only catastrophic renderer divergence blocks acceptance independently.
     # Values below the stricter advisory target remain surfaced as warnings.
     renderer_ok = True if plan_exec is None else plan_exec >= 70.0
-    deadline_ok = checks['deadline'] is not False
+    deadline_ok = checks['deadline'] is True
     accepted = bool(metrics_available and quality_ok and renderer_ok and deadline_ok)
     warnings=[]
     for key in ('perceptual_color','edge','coverage','plan_execution'):
@@ -477,7 +505,7 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
     else:
         status = 'RENDERER_CORRECTNESS_FAIL'
 
-    headroom = None if usable_f is None else usable_f - projected
+    headroom = None if usable_f is None or projected is None else usable_f - projected
     return {
         'version': AUTO_TUNER_VERSION, 'status': status, 'accepted': accepted,
         'metrics_available': metrics_available, 'quality_gate_passed': bool(quality_ok),
@@ -486,7 +514,7 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
         'visual_accuracy_percent': visual, 'perceptual_color_accuracy_percent': perceptual,
         'edge_accuracy_percent': edge, 'coverage_percent': coverage,
         'plan_execution_accuracy_percent': plan_exec,
-        'projected_draw_seconds': round(projected, 3),
+        'projected_draw_seconds': None if projected is None else round(projected, 3),
         'usable_deadline_seconds': None if usable_f is None else round(usable_f, 3),
         'schedule_headroom_seconds': None if headroom is None else round(headroom, 3),
         'selected_strategy': tuner.get('selected_strategy'), 'source_kind': features_meta.get('source_kind'),

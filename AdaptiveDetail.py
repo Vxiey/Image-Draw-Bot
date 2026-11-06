@@ -118,11 +118,15 @@ def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = Fa
     from PIL import Image, ImageFilter, ImageChops, ImageDraw
 
     validate_adaptive_detail(mode)
+    if cancelled():
+        raise InterruptedError()
     source = image.convert("RGBA")
     if mode == "Off" or source.width < 4 or source.height < 4:
         total = source.width * source.height
         mask = Image.new("L", source.size, 255)
         stats = AdaptiveDetailStats(mode, "Off", 0.0, total, 0, total, 100.0, 1, 255)
+        if cancelled():
+            raise InterruptedError()
         return source, mask, stats
     if cancelled():
         raise InterruptedError()
@@ -179,6 +183,8 @@ def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = Fa
         mode, effective, complexity, protected_pixels, total - protected_pixels,
         total, protected_pixels * 100.0 / total, smooth_kernel, threshold,
     )
+    if cancelled():
+        raise InterruptedError()
     return processed, protected, stats
 
 
@@ -213,10 +219,25 @@ def prune_flat_micro_strokes(groups: Sequence[Sequence[tuple[int, int, int, int]
             length = max(abs(x2 - x1), abs(y2 - y1)) + 1
             remove = False
             if length <= max_micro:
-                # Horizontal row runs are the normal planner representation. For
-                # any future vertical run, sample both endpoints + midpoint.
-                samples = ((x1, y1), (x2, y2), ((x1 + x2) // 2, (y1 + y2) // 2))
-                remove = all(0 <= x < width and 0 <= y < height and pix[x, y] < 64 for x, y in samples)
+                # Check every raster pixel of these at-most-four-pixel runs.
+                # Endpoint/midpoint sampling misses the third pixel of a run
+                # of length four and can erase protected thin detail.
+                x, y = x1, y1
+                dx, dy = abs(x2 - x1), -abs(y2 - y1)
+                sx, sy = (1 if x1 < x2 else -1), (1 if y1 < y2 else -1)
+                error = dx + dy
+                remove = True
+                while True:
+                    if not (0 <= x < width and 0 <= y < height and pix[x, y] < 64):
+                        remove = False
+                        break
+                    if (x, y) == (x2, y2):
+                        break
+                    twice = 2 * error
+                    if twice >= dy:
+                        error += dy; x += sx
+                    if twice <= dx:
+                        error += dx; y += sy
             if remove:
                 removed += 1
                 removed_pixels += length

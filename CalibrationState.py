@@ -40,7 +40,7 @@ def tool_state(profile_key: str) -> dict:
             from PaintTools import load_tool_calibration
             data = load_tool_calibration()
             available = bool(data.get("tools") or data.get("brush_menu"))
-            auto = data.get("auto") or {}
+            auto = data.get('auto') if isinstance(data.get('auto'), dict) else {}
             return {"state": "calibrated" if available else "unavailable", "available": available,
                     "profile_key": key, "confidence": float(auto.get("confidence", 0.0) or 0.0)}
         from AppTools import load_calibration
@@ -106,5 +106,5 @@ def profile_calibration_summary(profile_key: str, *, palette_path: Path | None =
         from CalibrationHealth import summarize_calibration_health
         result["health"] = summarize_calibration_health(result).as_dict()
     except Exception as error:
-        result["health"] = {"level":"unknown","score":0.0,"blocking":False,"reason":str(error)}
+        result["health"] = {"level":"unknown","score":0.0,"blocking":True,"reason":str(error)}
     return result

@@ -7,7 +7,8 @@ tests do not each invent slightly different guidance.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, fields
+from types import MappingProxyType
 from typing import Any, Mapping
 
 
@@ -32,8 +33,11 @@ class ProfileReleasePreset:
     warnings: tuple[str, ...]
     default_overrides: Mapping[str, Any]
 
+    def __post_init__(self):
+        object.__setattr__(self, 'default_overrides', MappingProxyType(dict(self.default_overrides)))
+
     def as_dict(self) -> dict[str, Any]:
-        data = asdict(self)
+        data = {field.name: getattr(self, field.name) for field in fields(self)}
         data["default_overrides"] = dict(self.default_overrides)
         return data
 
@@ -218,8 +222,12 @@ _PRESETS: dict[str, ProfileReleasePreset] = {
 
 
 def profile_release_preset(profile_name: str | None) -> ProfileReleasePreset:
-    return _PRESETS.get(str(profile_name or ""), _PRESETS["Microsoft Paint"] if str(profile_name or "") == "Microsoft Paint" else ProfileReleasePreset(
-        profile_name=str(profile_name or "Other drawing app"),
+    name = str(profile_name or '')
+    preset = _PRESETS.get(name)
+    if preset is not None:
+        return preset
+    return ProfileReleasePreset(
+        profile_name=name or 'Other drawing app',
         preset_name="Generic release profile",
         profile_key="generic",
         recommended_time_budget="Manual",
@@ -233,7 +241,7 @@ def profile_release_preset(profile_name: str | None) -> ProfileReleasePreset:
         calibration_flow=("Calibrate Brush / Fill", "Read colors / palette", "Select drawing area", "Build preview"),
         warnings=("Generic profiles need manual layout verification because the app is unknown.",),
         default_overrides={},
-    ))
+    )
 
 
 def final_profile_defaults(profile_name: str | None) -> dict[str, Any]:
@@ -247,7 +255,8 @@ def profile_setup_flow(profile_name: str | None) -> tuple[str, ...]:
 def profile_release_warnings(profile_name: str | None, calibration_state: Mapping[str, Any] | None = None) -> tuple[str, ...]:
     preset = profile_release_preset(profile_name)
     warnings = list(preset.warnings)
-    state = str((calibration_state or {}).get("palette_state") or (calibration_state or {}).get("state") or "").lower()
+    state_data = calibration_state if isinstance(calibration_state, Mapping) else {}
+    state = str(state_data.get("palette_state") or state_data.get("state") or "").lower()
     if state in ("estimated", "unavailable", "none"):
         warnings.append("Palette is not verified for this profile; use Auto Setup or Read colors before relying on color accuracy.")
     if str(profile_name or "") in BROWSER_RELEASE_PROFILES:
@@ -272,7 +281,7 @@ def apply_profile_polish(profile_name: str | None, options: Mapping[str, Any] | 
             if old != value:
                 out[key] = value
                 changed[key] = {"before": old, "after": value}
-    warnings = profile_release_warnings(profile_name, calibration_state or out.get("calibration_state") or {})
+    warnings = profile_release_warnings(profile_name, calibration_state if calibration_state is not None else out.get("calibration_state"))
     meta = {
         "step": 19,
         "profile_name": preset.profile_name,
@@ -303,7 +312,8 @@ def format_profile_polish(meta: Mapping[str, Any] | None, *, compact: bool = Tru
     budget = str(meta.get("recommended_time_budget") or "Manual")
     renderer = str(meta.get("renderer") or "renderer")
     color = str(meta.get("color_policy") or "color policy")
-    warnings = list(meta.get("warnings") or [])
+    raw_warnings = meta.get("warnings")
+    warnings = [raw_warnings] if isinstance(raw_warnings, str) else list(raw_warnings) if isinstance(raw_warnings, (list, tuple)) else []
     if compact:
         warn = f" · {len(warnings)} warning(s)" if warnings else ""
         return f"Profile polish: {name} · {budget} · {renderer}{warn}"

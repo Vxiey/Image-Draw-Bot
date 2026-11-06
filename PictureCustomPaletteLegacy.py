@@ -26,6 +26,7 @@ PROFILE_KEY = "microsoft-paint"
 DEFAULT_MAX_COLORS = 16
 MAX_ANALYSIS_DIMENSION = 640
 MAX_EDGE_SAMPLES = 24000
+MAX_CACHE_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,7 @@ def _rgb(value: Sequence[int]) -> tuple[int, int, int]:
 
 def _visible_rgb(image):
     from ColorMatchingEngine import visible_rgb_image
-    return visible_rgb_image(image).convert("RGB")
+    return visible_rgb_image(image)
 
 
 def _analysis_image(image):
@@ -75,27 +76,29 @@ def _analysis_image(image):
     source = _visible_rgb(image)
     if max(source.size) <= MAX_ANALYSIS_DIMENSION:
         return source
-    out = source.copy()
-    out.thumbnail((MAX_ANALYSIS_DIMENSION, MAX_ANALYSIS_DIMENSION), Image.Resampling.LANCZOS)
-    return out
+    source.thumbnail((MAX_ANALYSIS_DIMENSION, MAX_ANALYSIS_DIMENSION), Image.Resampling.LANCZOS)
+    return source
 
 
-def image_fingerprint(image) -> str:
-    """Stable bounded fingerprint of visible source pixels plus original size."""
-    from PIL import Image
-    source = _visible_rgb(image)
-    thumb = source.copy()
-    thumb.thumbnail((512, 512), Image.Resampling.LANCZOS)
+def image_fingerprint(image, *, cancelled=lambda: False) -> str:
+    """Hash all visible pixels in bounded row strips, including small edits."""
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     digest = hashlib.sha256()
-    digest.update(f"{source.width}x{source.height}|RGB|".encode("ascii"))
-    digest.update(thumb.tobytes())
+    digest.update(f"{image.width}x{image.height}|RGB|".encode("ascii"))
+    rows = max(1, min(128, 1024 * 1024 // max(1, image.width * 4)))
+    for top in range(0, image.height, rows):
+        if cancelled():
+            raise InterruptedError('Picture custom palette cancelled.')
+        strip = image.crop((0, top, image.width, min(image.height, top + rows)))
+        digest.update(_visible_rgb(strip).tobytes())
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     return digest.hexdigest()
 
 
 def _cache_root() -> Path:
-    root = data_dir() / "picture-palettes"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+    return data_dir() / "picture-palettes"
 
 
 def cache_path(image_fp: str, calibration_fp: str = "") -> Path:
@@ -108,8 +111,9 @@ def cache_path(image_fp: str, calibration_fp: str = "") -> Path:
 
 def _validate_payload(payload: dict, *, image_fp: str | None = None,
                       calibration_fp: str | None = None) -> dict:
-    if not isinstance(payload, dict) or int(payload.get("version", 0)) != SCHEMA:
+    if not isinstance(payload, dict) or type(payload.get("version")) is not int or payload["version"] != SCHEMA:
         raise ValueError("Invalid picture custom palette cache.")
+    payload = dict(payload)
     if payload.get("profile_key") != PROFILE_KEY:
         raise ValueError("Picture custom palette belongs to another profile.")
     if image_fp is not None and payload.get("image_fingerprint") != image_fp:
@@ -117,29 +121,50 @@ def _validate_payload(payload: dict, *, image_fp: str | None = None,
     if calibration_fp is not None and payload.get("calibration_fingerprint", "") != calibration_fp:
         raise ValueError("Picture custom palette was built for another Paint calibration.")
     size = payload.get("source_size")
-    if not isinstance(size, (list, tuple)) or len(size) != 2 or any(int(v) <= 0 for v in size):
+    if not isinstance(size, (list, tuple)) or len(size) != 2 or any(type(v) is not int or v <= 0 for v in size):
         raise ValueError("Invalid picture palette source size.")
+    limit = payload.get('max_colors')
+    if type(limit) is not int or not 1 <= limit <= 32:
+        raise ValueError('Invalid picture palette color limit.')
+    from ColorFidelity import validate_color_fidelity
+    validate_color_fidelity(payload.get('fidelity'))
     for name in ("colors", "custom_colors", "palette_colors"):
         values = payload.get(name, [])
-        if not isinstance(values, list):
+        if not isinstance(values, list) or len(values) > limit or (name == 'colors' and not values):
             raise ValueError(f"Invalid {name} in picture palette.")
-        payload[name] = [list(_rgb(v)) for v in values]
+        for value in values:
+            if (not isinstance(value, (list, tuple)) or len(value) != 3 or
+                    any(type(v) is not int or not 0 <= v <= 255 for v in value)):
+                raise ValueError('Invalid RGB channels in picture palette cache.')
+        clean = [tuple(value) for value in values]
+        if len(set(clean)) != len(clean):
+            raise ValueError(f'Duplicate colors in {name}.')
+        payload[name] = [list(value) for value in clean]
+    colors, custom, calibrated = (set(map(tuple, payload[name])) for name in
+                                  ('colors', 'custom_colors', 'palette_colors'))
+    if custom & calibrated or custom | calibrated != colors:
+        raise ValueError('Picture palette color groups do not match the prepared colors.')
     coverages = payload.get("custom_coverages", [])
-    if not isinstance(coverages, list):
+    if not isinstance(coverages, list) or len(coverages) != len(payload['custom_colors']):
         raise ValueError("Invalid picture palette coverage data.")
-    payload["custom_coverages"] = [max(0.0, min(1.0, float(v))) for v in coverages]
-    payload["max_colors"] = max(1, min(32, int(payload.get("max_colors", DEFAULT_MAX_COLORS))))
-    payload["fidelity"] = str(payload.get("fidelity") or "Faithful")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or
+           not 0 <= v <= 1 or not math.isfinite(v) for v in coverages):
+        raise ValueError('Picture palette coverage must be finite and between 0 and 1.')
+    payload['custom_coverages'] = [float(v) for v in coverages]
     return payload
 
 
 def load_cached_palette(image_fp: str, calibration_fp: str, *, max_colors: int,
                         fidelity: str) -> PicturePalette | None:
-    path = cache_path(image_fp, calibration_fp)
     try:
-        payload = _validate_payload(json.loads(path.read_text(encoding="utf-8")),
+        path = cache_path(image_fp, calibration_fp)
+        with path.open('rb') as stream:
+            raw = stream.read(MAX_CACHE_BYTES + 1)
+        if len(raw) > MAX_CACHE_BYTES:
+            return None
+        payload = _validate_payload(json.loads(raw.decode('utf-8-sig')),
                                     image_fp=image_fp, calibration_fp=calibration_fp)
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+    except (OSError, ValueError, TypeError, OverflowError, RecursionError):
         return None
     if int(payload["max_colors"]) != int(max_colors) or payload["fidelity"] != str(fidelity):
         return None
@@ -152,11 +177,11 @@ def load_cached_palette(image_fp: str, calibration_fp: str, *, max_colors: int,
 
 
 def save_palette(palette: PicturePalette) -> Path:
-    payload = palette.as_dict()
+    payload = _validate_payload(palette.as_dict())
     payload["cache_hit"] = False
     payload["saved_at_utc"] = datetime.now(timezone.utc).isoformat()
     path = cache_path(palette.image_fingerprint, palette.calibration_fingerprint)
-    atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2))
+    atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False))
     return path
 
 
@@ -182,7 +207,9 @@ def _edge_detail_colors(image, count: int, *, cancelled=lambda: False) -> list[t
     high-contrast details a chance to enter the prepared palette when coverage
     alone would put them below large flat regions.
     """
-    if count <= 0 or cancelled():
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
+    if count <= 0:
         return []
     from PIL import Image, ImageFilter
     source = _analysis_image(image)
@@ -196,7 +223,7 @@ def _edge_detail_colors(image, count: int, *, cancelled=lambda: False) -> list[t
     step = max(1, math.ceil(len(candidates) / MAX_EDGE_SAMPLES))
     candidates = candidates[::step][:MAX_EDGE_SAMPLES]
     if cancelled():
-        return []
+        raise InterruptedError('Picture custom palette cancelled.')
     sample = Image.new("RGB", (max(1, len(candidates)), 1))
     sample.putdata(candidates)
     q = sample.quantize(colors=max(1, min(int(count), 16)), method=Image.Quantize.MEDIANCUT,
@@ -218,10 +245,14 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
     from ColorFidelity import delta_e2000
     from DynamicColors import build_dynamic_color_strokes
 
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     max_colors = max(1, min(32, int(max_colors)))
     fidelity = str(fidelity or "Faithful")
-    image_fp = image_fingerprint(image)
+    image_fp = image_fingerprint(image, cancelled=cancelled)
     cached = load_cached_palette(image_fp, calibration_fingerprint, max_colors=max_colors, fidelity=fidelity)
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     if cached is not None:
         return cached
     if cancelled():
@@ -286,7 +317,16 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
         image_fp, str(calibration_fingerprint or ""), tuple(map(int, image.size)), max_colors, fidelity,
         tuple(all_colors), tuple(custom), tuple(palette_colors), tuple(custom_cov), False,
     )
-    save_palette(result)
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
+    try:
+        save_palette(result)
+    except OSError:
+        # Persistence is an optional reuse optimization; the complete in-memory
+        # palette remains usable if this machine's cache directory is read-only.
+        pass
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     return result
 
 

@@ -7,11 +7,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import math
 import time
 from pathlib import Path
 from typing import Any, Callable
 
-from RuntimePaths import data_dir
+from RuntimePaths import atomic_write_text, data_dir, is_finite_number, read_json
 from ResourceAllocation import available_ram_mb, logical_cpu_count, resolve_allocation
 from ResourceScheduler import benchmark_scheduler
 from UniversalHardwareBenchmark import (run_universal_hardware_benchmark, load_hardware_profile,
@@ -60,8 +61,12 @@ def _ram_recommendation(available_mb: int | None) -> tuple[str, str, int]:
 
     Leave substantial memory for Windows, the target app and preview images.
     """
-    if not available_mb:
+    if available_mb is None:
         return "2 GB", "2048", 2048
+    if available_mb < 128:
+        raise ValueError('Less than 128 MB of RAM is available for planning.')
+    if available_mb < 512:
+        return 'Custom', str(int(available_mb)), int(available_mb)
     avail = max(512, int(available_mb))
     target = max(512, min(12288, int(avail * 0.35)))
     # Keep at least 2 GiB of currently available memory unreserved when possible.
@@ -173,7 +178,7 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
     logical = logical_cpu_count()
     available = available_ram_mb()
     allocation = resolve_allocation("Auto", "Threads", "Auto", "4096")
-    scheduler = benchmark_scheduler(allocation, loops_per_worker=max(8_000, int(scheduler_loops)), save=True)
+    scheduler = benchmark_scheduler(allocation, loops_per_worker=max(8_000, int(scheduler_loops)), save=save)
 
     gpu_result: dict[str, Any] = {}
     gpu_error = ""
@@ -193,7 +198,7 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
         # The tuner must remain fully usable on CPU if an optional GPU runtime
         # or vendor driver misbehaves.
         hardware_error = f"{type(exc).__name__}: {exc}"
-        hardware_result = load_hardware_profile(validate_current=False) or {}
+        hardware_result = load_hardware_profile(validate_current=True) or {}
 
     recommendation = build_recommendation(
         scheduler_result=scheduler,
@@ -220,22 +225,35 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
 def save_tune_result(result: dict[str, Any], path: Path | None = None) -> Path:
     target = Path(path or TUNER_FILE)
     target.parent.mkdir(parents=True, exist_ok=True)
-    temp = target.with_suffix(target.suffix + ".tmp")
-    temp.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(target)
+    atomic_write_text(target, json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
     return target
 
 
 def load_tune_result(path: Path | None = None) -> dict[str, Any] | None:
     target = Path(path or TUNER_FILE)
     try:
-        value = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        value = read_json(target)
+    except (OSError, ValueError, TypeError):
         return None
-    if not isinstance(value, dict) or int(value.get("version", 0) or 0) != TUNER_VERSION:
+    if not isinstance(value, dict) or type(value.get('version')) is not int or value['version'] != TUNER_VERSION:
         return None
     if not isinstance(value.get("recommendation"), dict):
         return None
+    rec = value['recommendation']
+    logical = rec.get('logical_cpus')
+    workers = rec.get('cpu_workers_effective')
+    if type(logical) is not int or type(workers) is not int or not 1 <= workers <= logical:
+        return None
+    if 'gpu_available' in rec and type(rec['gpu_available']) is not bool:
+        return None
+    elapsed = value.get('elapsed_ms', 0.0)
+    if not is_finite_number(elapsed) or elapsed < 0:
+        return None
+    from ResourceAllocation import CPU_ENGINE_MODES, CPU_WORKER_CHOICES, PLANNING_RESOLUTION_MODES, RAM_BUDGETS
+    for key, choices in (('cpu_engine', CPU_ENGINE_MODES), ('cpu_workers', CPU_WORKER_CHOICES),
+                         ('planning_resolution', PLANNING_RESOLUTION_MODES), ('ram_budget', RAM_BUDGETS)):
+        if key in rec and rec[key] not in choices:
+            return None
     return value
 
 

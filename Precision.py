@@ -137,4 +137,19 @@ def precision_path(start, end, precision: str = 'High', requested_step_px: float
 
 
 def precision_path_count(start, end, precision: str = 'High', requested_step_px: float | int = 8) -> int:
+    sx, sy = map(int, start)
+    ex, ey = map(int, end)
+    if (sx, sy) == (ex, ey):
+        return 0
+    step = effective_step(precision, requested_step_px)
+    count = max(1, int(math.ceil(math.hypot(ex - sx, ey - sy) / step)))
+    if count > 100_000:
+        raise ValueError('A brush stroke is unexpectedly long. Select the drawing area again.')
+    # When each sample advances at least one pixel along the major axis,
+    # integer rounding cannot produce adjacent duplicates. Normal desktop
+    # coordinates also keep floating-point interpolation below rounding error.
+    if count <= max(abs(ex - sx), abs(ey - sy)) and max(abs(v) for v in (sx, sy, ex, ey)) <= 2**31:
+        return count
+    # Dense one-pixel diagonal sampling can repeat points. Preserve the exact
+    # execution-path contract for that case and unusually large coordinates.
     return len(precision_path(start, end, precision, requested_step_px))

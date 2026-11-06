@@ -30,8 +30,10 @@ def validate_drawing_style(value: Any) -> str:
 def _metrics(image: Image.Image | None) -> dict[str,float]:
     if not isinstance(image,Image.Image):
         return {'unique':1.0,'edge':.5,'white':0.0,'chroma':.5,'alpha_empty':0.0}
-    rgba=image.convert('RGBA')
-    sample=rgba.copy();sample.thumbnail((160,160),Image.Resampling.NEAREST)
+    # Nearest-neighbor selection commutes with pixelwise mode conversion. Keep
+    # the full source in its original mode and only convert the bounded sample.
+    sample=image.copy();sample.thumbnail((160,160),Image.Resampling.NEAREST)
+    sample=sample.convert('RGBA')
     rgb=sample.convert('RGB');gray=rgb.convert('L')
     colors=rgb.quantize(colors=64,method=Image.Quantize.MEDIANCUT).histogram()
     used=sum(1 for v in colors if v)

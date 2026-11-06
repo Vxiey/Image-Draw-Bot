@@ -21,6 +21,7 @@ import zipfile
 from typing import Iterable, Sequence
 
 from Version import APP_NAME, APP_VERSION, BUILD_CHANNEL
+from RuntimePaths import atomic_write_text
 
 
 ROOT_PREFIX = "Image-Draw-Bot"
@@ -148,7 +149,10 @@ def _parts(rel: PurePosixPath) -> tuple[str, ...]:
 
 
 def _is_runtime_file(parts: tuple[str, ...]) -> bool:
-    return len(parts) == 1 and any(fnmatchcase(parts[0], pattern) for pattern in RUNTIME_FILE_PATTERNS)
+    if len(parts) != 1:
+        return False
+    name = parts[0].removesuffix('.lock')
+    return any(fnmatchcase(name, pattern) for pattern in RUNTIME_FILE_PATTERNS)
 
 
 def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
@@ -307,7 +311,7 @@ def create_source_archive(root: Path, destination: Path) -> dict[str, object]:
 def write_checksum_file(paths: Sequence[Path], destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     rows = [f"{sha256(path)}  {path.name}" for path in paths]
-    destination.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    atomic_write_text(destination, "\n".join(rows) + "\n")
     return destination
 
 
@@ -320,7 +324,7 @@ def write_release_manifest(root: Path, destination: Path, artifacts: Sequence[Pa
         if path.is_file()
     ]
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    atomic_write_text(destination, json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n")
     return destination
 
 

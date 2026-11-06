@@ -212,6 +212,8 @@ def load_palette():
     for color, rgb in zip(allColors, values):
         color.R, color.G, color.B = rgb
         color.RGB = tuple(rgb)
+    from PixelData import closest_color
+    closest_color.cache_clear()
 
 
 CALIBRATION_FILE = DATA_DIR / 'calibration.json'

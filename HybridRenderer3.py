@@ -145,7 +145,10 @@ def analyze_source(image: Image.Image, *, cancelled: Callable[[], bool] = lambda
 
     # Integer luminance is sufficient for structural classification and avoids
     # importing the heavier colour engine into this lightweight policy module.
-    lum = (54 * rgb16[:, :, 0] + 183 * rgb16[:, :, 1] + 19 * rgb16[:, :, 2]) / 256.0
+    # Weighted channels can sum to 65,280. int16 wraps bright pixels negative
+    # and makes a white/black edge nearly disappear in the structural metrics.
+    rgb32 = rgb.astype(np.int32)
+    lum = (54 * rgb32[:, :, 0] + 183 * rgb32[:, :, 1] + 19 * rgb32[:, :, 2]) / 256.0
     luminance_std = float(np.std(lum, dtype=np.float64) / 255.0)
 
     gx = np.abs(np.diff(lum, axis=1)) if lum.shape[1] > 1 else np.zeros((lum.shape[0], 0))

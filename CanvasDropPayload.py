@@ -14,6 +14,8 @@ import re
 from urllib.parse import parse_qs, unquote, urlparse
 
 _IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.jpe', '.jfif', '.webp', '.bmp', '.gif'}
+MAX_DROP_CHARACTERS = 32_000_000
+MAX_DROP_ITEMS = 256
 _URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
 _IMG_SRC_RE = re.compile(
     r'''(?:src|data-src|data-original)\s*=\s*["'](https?://[^"']+)["']''',
@@ -41,10 +43,12 @@ def _file_uri_to_path(value: str) -> str | None:
         return None
     path = unquote(parsed.path or '')
     # file:///C:/... -> C:/... on Windows. UNC keeps //host/share.
-    if parsed.netloc:
+    if parsed.netloc and parsed.netloc.casefold() != 'localhost':
         path = f'//{parsed.netloc}{path}'
     elif len(path) >= 3 and path[0] == '/' and path[2] == ':':
         path = path[1:]
+    if any(ord(char) < 32 or ord(char) == 127 for char in path):
+        return None
     return path or None
 
 
@@ -130,10 +134,25 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
     ``split_items`` should normally be ``root.tk.splitlist(event.data)`` when
     available. It is optional so the parser can also handle DND_TEXT/HTML data.
     """
-    raw = str(raw_data or '').strip()
-    items = [str(item).strip().strip('{}') for item in (split_items or ()) if str(item).strip()]
+    raw = str(raw_data or '')
+    if len(raw) > MAX_DROP_CHARACTERS:
+        raise ValueError('The dropped image payload is too large.')
+    raw = raw.strip()
+    items = []
+    characters = len(raw)
+    for index, item in enumerate(split_items or ()):
+        if index >= MAX_DROP_ITEMS:
+            raise ValueError('Drop at most 256 items at a time.')
+        value = str(item)
+        characters += len(value)
+        if characters > 2 * MAX_DROP_CHARACTERS:
+            raise ValueError('The dropped image payload is too large.')
+        value = value.strip().strip('{}')
+        if value:
+            items.append(value)
 
     # 1) Local files and file:// URIs take priority because they need no network.
+    unsupported_file = False
     for item in items + ([raw] if raw else []):
         candidate = item.strip().strip('{}').strip('"')
         file_path = _file_uri_to_path(candidate)
@@ -146,7 +165,8 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
             exists = False
         if exists:
             if path.suffix.lower() not in _IMAGE_EXTENSIONS:
-                raise ValueError('Drop an image file (PNG, JPG, WEBP or BMP).')
+                unsupported_file = True
+                continue
             return CanvasDropSource(str(path), path.name, 'file')
 
     # 2) Chromium/Google Images may drag an in-memory thumbnail as a data URI.
@@ -158,28 +178,30 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
                 return CanvasDropSource(match.group(), 'Dropped web image', 'data')
 
     # 3) Prefer explicit <img src=...> or lazy-load image attributes from HTML.
-    html_urls = [_clean_url(unescape(match)) for match in _IMG_SRC_RE.findall(raw)]
-    for url in html_urls:
+    for match in _IMG_SRC_RE.finditer(raw):
+        url = _clean_url(unescape(match.group(1)))
         if _is_http_url(url):
             return CanvasDropSource(_unwrap_image_search_url(url), 'Dropped web image', 'url')
 
     # 4) Plain text/URI-list drops. Rank likely image URLs before generic URLs.
-    urls = []
-    seen = set()
+    best_url = None
+    best_rank = None
     for text in items + ([raw] if raw else []):
         direct = _clean_url(text)
         if _is_http_url(direct):
             candidates = [direct]
         else:
-            candidates = [_clean_url(match) for match in _URL_RE.findall(text)]
+            candidates = (_clean_url(match.group()) for match in _URL_RE.finditer(text))
         for url in candidates:
-            if url not in seen and _is_http_url(url):
-                seen.add(url)
-                urls.append(url)
-    if urls:
-        urls.sort(key=lambda url: (not _looks_like_image_url(url), len(url)))
-        return CanvasDropSource(_unwrap_image_search_url(urls[0]), 'Dropped web image', 'url')
+            if _is_http_url(url):
+                rank = (not _looks_like_image_url(url), len(url))
+                if best_rank is None or rank < best_rank:
+                    best_url, best_rank = url, rank
+    if best_url is not None:
+        return CanvasDropSource(_unwrap_image_search_url(best_url), 'Dropped web image', 'url')
 
+    if unsupported_file:
+        raise ValueError('Drop an image file (PNG, JPG, WEBP or BMP).')
     raise ValueError(
         'No image was found in the drop. Drag the image itself from Chrome/Edge or drop a local image file.'
     )

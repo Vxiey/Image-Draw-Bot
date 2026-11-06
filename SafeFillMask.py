@@ -15,7 +15,7 @@ Point = Tuple[int, int]
 
 
 def _pair(point: Sequence[int | float]) -> Point:
-    if len(point) != 2:
+    if isinstance(point, (str, bytes, Mapping)) or len(point) != 2:
         raise ValueError('point must contain x and y')
     return int(round(float(point[0]))), int(round(float(point[1])))
 
@@ -65,38 +65,59 @@ def point_inside_source_mask(point: Sequence[int | float], size: Sequence[int | 
 
 
 def _row_spans(region: Mapping[str, object]) -> tuple[tuple[int, int, int], ...]:
-    spans = region.get('row_spans') or ()
+    spans = region.get('row_spans')
+    if spans is None:
+        spans = ()
+    if isinstance(spans, (str, bytes, Mapping)):
+        raise ValueError('invalid row spans')
+    try:
+        iterator = iter(spans)
+    except TypeError as error:
+        raise ValueError('invalid row spans') from error
     out = []
-    for raw in spans:
+    for raw in iterator:
         try:
+            if isinstance(raw, (str, bytes, Mapping)) or len(raw) != 3:
+                raise ValueError('invalid row span')
             y, x0, x1 = raw  # type: ignore[misc]
-            out.append((int(y), int(x0), int(x1)))
-        except (TypeError, ValueError):
-            continue
+            converted = (int(y), int(x0), int(x1))
+            if any(clean != original for clean, original in zip(converted, raw)) or converted[1] > converted[2]:
+                raise ValueError('invalid row span')
+            out.append(converted)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError('invalid row span') from error
     if out:
         return tuple(out)
     try:
         x0, y0, x1, y1 = [int(v) for v in region.get('bbox', ())]  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return ()
     return tuple((y, x0, x1) for y in range(y0, y1 + 1))
 
 
-def _contour_points(region: Mapping[str, object]) -> tuple[Point, ...]:
-    contour = region.get('contour') or ()
+def _contour_points(region: Mapping[str, object]) -> tuple[Point, ...] | None:
+    contour = region.get('contour')
+    if contour is None:
+        contour = ()
+    if isinstance(contour, (str, bytes, Mapping)):
+        return None
+    try:
+        iterator = iter(contour)
+    except TypeError:
+        return None
     out = []
-    for raw in contour:
+    for raw in iterator:
         try:
             out.append(_pair(raw))
-        except (TypeError, ValueError):
-            return ()
+        except (TypeError, ValueError, OverflowError):
+            return None
     return tuple(out)
 
 
 def _region_mask_failure(region: Mapping[str, object], size: Sequence[int | float], margin_px: int | float) -> str:
     try:
         x0, y0, x1, y1 = [int(v) for v in region.get('bbox', ())]  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 'invalid bbox'
     w, h = _source_size(size)
     if x0 < 0 or y0 < 0 or x1 >= w or y1 >= h or x0 > x1 or y0 > y1:
@@ -106,14 +127,26 @@ def _region_mask_failure(region: Mapping[str, object], size: Sequence[int | floa
         return 'outside safe fill mask'
     try:
         seed = _pair(region.get('seed_pixel', ()))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 'invalid seed'
     if not point_inside_source_mask(seed, size, margin_px):
         return 'seed outside safe fill mask'
-    for y, sx0, sx1 in _row_spans(region):
+    try:
+        spans = _row_spans(region)
+    except (TypeError, ValueError, OverflowError):
+        return 'invalid row span'
+    seed_in_region = False
+    for y, sx0, sx1 in spans:
         if y < top or y > bottom or sx0 < left or sx1 > right:
             return 'span outside safe fill mask'
+        if not y0 <= y <= y1 or sx0 < x0 or sx1 > x1:
+            return 'span outside region bbox'
+        seed_in_region |= y == seed[1] and sx0 <= seed[0] <= sx1
+    if not seed_in_region:
+        return 'seed outside intended region'
     contour = _contour_points(region)
+    if contour is None:
+        return 'invalid contour'
     if contour:
         for point in contour:
             if not point_inside_source_mask(point, size, margin_px):
@@ -214,25 +247,39 @@ def _runtime_region_failure(region: Mapping[str, object], source_size: Sequence[
         return 0 <= x < w and 0 <= y < h and _screen_safe(canvas_guard, _source_to_screen(transform, (x, y)))
     try:
         seed = _pair(region.get('seed_pixel', ()))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 'invalid seed'
     if not source_ok(seed):
         return 'seed outside runtime safe canvas'
     try:
         x0, y0, x1, y1 = [int(v) for v in region.get('bbox', ())]  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        return 'invalid bbox'
+    if x0 > x1 or y0 > y1:
         return 'invalid bbox'
     for point in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
         if not source_ok(point):
             return 'bbox outside runtime safe canvas'
     contour = _contour_points(region)
+    if contour is None:
+        return 'invalid contour'
     if contour:
         for point in contour:
             if not source_ok(point):
                 return 'contour outside runtime safe canvas'
-    for y, sx0, sx1 in _row_spans(region):
+    try:
+        spans = _row_spans(region)
+    except (TypeError, ValueError, OverflowError):
+        return 'invalid row span'
+    seed_in_region = False
+    for y, sx0, sx1 in spans:
         if not source_ok((sx0, y)) or not source_ok((sx1, y)):
             return 'span outside runtime safe canvas'
+        if not y0 <= y <= y1 or sx0 < x0 or sx1 > x1:
+            return 'span outside region bbox'
+        seed_in_region |= y == seed[1] and sx0 <= seed[0] <= sx1
+    if not seed_in_region:
+        return 'seed outside intended region'
     return ''
 
 

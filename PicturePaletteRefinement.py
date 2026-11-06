@@ -29,6 +29,28 @@ def _assign(points, centers, cancelled):
     return indices, errors
 
 
+def _weighted_tail_error(errors, weights):
+    """Linear p95 of repeated errors without expanding every repeated pixel."""
+    if not len(errors):
+        return 0.0
+    if np.all(weights == 1):
+        return float(np.percentile(errors, 95))
+    order = np.argsort(errors, kind='stable')
+    cumulative = np.cumsum(weights[order], dtype=np.int64)
+    total = int(cumulative[-1])
+    if total <= 0:
+        return 0.0
+    position = (total - 1) * .95
+    low, high = int(np.floor(position)), int(np.ceil(position))
+    left = errors[order[np.searchsorted(cumulative, low, side='right')]]
+    right = errors[order[np.searchsorted(cumulative, high, side='right')]]
+    if left == right:
+        return float(left)
+    # Let NumPy retain its own interpolation and dtype rules; two endpoints
+    # reproduce the selected order statistics without an expanded array.
+    return float(np.quantile(np.asarray([left, right], dtype=errors.dtype), position - low))
+
+
 def refine_picture_palette(image, colors, max_colors, *, cancelled=lambda: False):
     from ColorMatchingEngine import visible_rgb_image
     from PixelAccuratePlanner import _to_oklab
@@ -58,7 +80,7 @@ def refine_picture_palette(image, colors, max_colors, *, cancelled=lambda: False
         labels, error = _assign(points, _to_oklab(palette), cancelled)
 
     def quality(errors):
-        return float(np.dot(errors, weights)), float(np.percentile(np.repeat(errors, weights), 95))
+        return float(np.dot(errors, weights)), _weighted_tail_error(errors, weights)
 
     best_score, best_tail = quality(error)
     for _ in range(MAX_ITERATIONS):

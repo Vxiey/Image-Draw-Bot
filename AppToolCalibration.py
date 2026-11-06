@@ -70,11 +70,13 @@ class AppToolCalibrationApp:
             if self.anchor_handle is not None and meta["handle"] != self.anchor_handle:
                 raise ValueError("All tool positions must be captured from the same target window.")
             if self.anchor is None:
-                self.anchor_handle = meta["handle"]; self.anchor = make_anchor(meta["client_rect"]); stored = point
+                anchor = make_anchor(meta["client_rect"]); stored = point
             else:
-                self.anchor_handle = meta["handle"]
                 dx,dy = ensure_same_layout(self.anchor, meta["client_rect"])
                 stored = (point[0]-dx, point[1]-dy)
+                anchor = self.anchor
+            self.anchor_handle = meta["handle"]
+            self.anchor = anchor
             self.positions[name] = stored
             self.status.set(f"Captured {name} at {point}.")
         except (OSError, AttributeError, ValueError) as error:

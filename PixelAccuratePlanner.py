@@ -90,6 +90,19 @@ def _oklab_chroma_hue(lab: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return chroma, hue
 
 
+def _palette_tiles(height: int, width: int, palette_count: int, row_chunk: int):
+    """Keep the pixel-by-palette working tensors bounded, even for wide rows."""
+    if height <= 0 or width <= 0:
+        return
+    pixels = max(1, 262_144 // max(1, palette_count))
+    tile_width = min(width, pixels)
+    tile_height = min(max(1, int(row_chunk)), max(1, pixels // tile_width))
+    for y0 in range(0, height, tile_height):
+        for x0 in range(0, width, tile_width):
+            yield (slice(y0, min(height, y0 + tile_height)),
+                   slice(x0, min(width, x0 + tile_width)))
+
+
 def _cpu_palette_map(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
                      color_fidelity: str = "Faithful", row_chunk: int = 96) -> np.ndarray:
     h, w = rgb.shape[:2]
@@ -99,9 +112,8 @@ def _cpu_palette_map(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
         pal_ok = _to_oklab(pal)
         pal_L = pal_ok[:, 0] * 100.0
         pal_chroma, pal_hue = _oklab_chroma_hue(pal_ok)
-        for y0 in range(0, h, row_chunk):
-            y1 = min(h, y0 + row_chunk)
-            src_ok = _to_oklab(rgb[y0:y1])
+        for rows, columns in _palette_tiles(h, w, len(pal), row_chunk):
+            src_ok = _to_oklab(rgb[rows, columns])
             diff = src_ok[:, :, None, :] - pal_ok[None, None, :, :]
             dist = np.sqrt(np.sum(diff * diff, axis=3, dtype=np.float32), dtype=np.float32) * 100.0
             if color_fidelity in ("Balanced", "Faithful"):
@@ -126,14 +138,13 @@ def _cpu_palette_map(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
                 else:
                     family = neutral_loss * 0.32 + hue_excess * 0.080 + hue_extreme * 0.120
                     dist += light_error * 0.22 + dark_loss * 0.55 * bright_boost + chroma_error * 0.115 + hue_error * 0.026 + family
-            out[y0:y1] = np.argmin(dist, axis=2).astype(np.int16)
+            out[rows, columns] = np.argmin(dist, axis=2).astype(np.int16)
     else:
-        for y0 in range(0, h, row_chunk):
-            y1 = min(h, y0 + row_chunk)
-            src = rgb[y0:y1].astype(np.float32)
+        for rows, columns in _palette_tiles(h, w, len(pal), row_chunk):
+            src = rgb[rows, columns].astype(np.float32)
             diff = src[:, :, None, :] - pal[None, None, :, :]
             dist = np.sum(diff * diff, axis=3)
-            out[y0:y1] = np.argmin(dist, axis=2).astype(np.int16)
+            out[rows, columns] = np.argmin(dist, axis=2).astype(np.int16)
     return out
 
 def exact_palette_map(image: Image.Image, palette_rgb: Sequence[Sequence[int]], *,
@@ -306,12 +317,29 @@ def protect_tiny_features(palette_index: np.ndarray, drawable: np.ndarray,
 
 def groups_from_pixel_map(pixel_map: PixelMap, palette_count: int, *, lines: bool = True,
                           cancelled=lambda: False) -> list[list[tuple[int, int, int, int]]]:
-    groups = [[] for _ in range(int(palette_count))]
-    idx = pixel_map.palette_index; mask = pixel_map.drawable_mask
+    count = int(palette_count)
+    if count < 0:
+        raise ValueError("palette_count must be nonnegative")
+    groups = [[] for _ in range(count)]
+    idx = np.asarray(pixel_map.palette_index)
+    mask = np.asarray(pixel_map.drawable_mask, dtype=np.bool_)
+    # PicturePalettePlanning's legacy adapter carries height and the arrays;
+    # full PixelMap instances also declare width, which remains authoritative.
+    width = getattr(pixel_map, 'width', idx.shape[1] if idx.ndim == 2 else -1)
+    shape = (pixel_map.height, width)
+    if idx.shape != shape or mask.shape != shape or not np.issubdtype(idx.dtype, np.integer):
+        raise ValueError("PixelMap indices and drawable mask must match its dimensions")
     for y in range(pixel_map.height):
         if cancelled():
             raise InterruptedError()
-        row = np.where(mask[y], idx[y], -1)
+        active = idx[y][mask[y]]
+        if active.size and (np.min(active) < 0 or np.max(active) >= count):
+            raise ValueError("Drawable PixelMap index is outside the palette")
+        # The -1 background sentinel must not be cast into an unsigned source
+        # dtype (NumPy 2 rejects that cast). Only validated drawable indices are
+        # copied; arbitrary masked-out values never participate in rendering.
+        row = np.full(mask[y].shape, -1, dtype=np.intp)
+        row[mask[y]] = active
         if not lines:
             for x in np.flatnonzero(mask[y]):
                 groups[int(row[x])].append((int(x), y, int(x), y))

@@ -69,8 +69,9 @@ def analyze_region_pixels(pixels, *, region_id: int=0, importance_score: float=0
         rgb=(0,0,0)
         return ColorRegionStats(region_id,0,rgb,rgb,rgb,rgb,rgb_to_lab(rgb),0.0,0.0,0.0,
                                 float(local_contrast),float(importance_score),0.0,0.0,0.0,0.0)
-    mean=_rgb(np.mean(px,axis=0));median=_rgb(np.median(px,axis=0));dominant,dom_frac=_dominant_exact(px)
-    p10=np.percentile(px,10,axis=0);p90=np.percentile(px,90,axis=0);spread=float(np.max(p90-p10))
+    mean=_rgb(np.mean(px,axis=0));dominant,dom_frac=_dominant_exact(px)
+    p10,median_values,p90=np.percentile(px,(10,50,90),axis=0)
+    median=_rgb(median_values);spread=float(np.max(p90-p10))
     representative=select_representative_color(px, mean_rgb=mean, median_rgb=median,
                                                 dominant_rgb=dominant, dominant_fraction=dom_frac,
                                                 spread=spread, importance_score=importance_score)
@@ -85,11 +86,14 @@ def analyze_region_pixels(pixels, *, region_id: int=0, importance_score: float=0
 def _nearest_actual(px: np.ndarray, target: RGB) -> RGB:
     if len(px)==0:return target
     work=px if len(px)<=8192 else px[::max(1,len(px)//8192)][:8192]
-    t=np.asarray(target,dtype=np.int16)
     # perceptual candidate refinement only over real source pixels
     candidates=np.unique(work,axis=0)
     if len(candidates)>2048:candidates=candidates[::max(1,len(candidates)//2048)][:2048]
-    scores=[delta_e_oklab(tuple(map(int,row)),target) for row in candidates]
+    # Reuse canonical cached color conversions, then reduce the distance
+    # vector once instead of repeatedly normalizing the same target RGB.
+    labs=np.asarray([rgb_to_oklab(tuple(map(int,row))) for row in candidates],dtype=np.float64)
+    delta=labs-np.asarray(rgb_to_oklab(tuple(target)),dtype=np.float64)
+    scores=np.sum(delta*delta,axis=1)
     return tuple(map(int,candidates[int(np.argmin(scores))]))
 
 
@@ -103,7 +107,8 @@ def select_representative_color(pixels, *, mean_rgb: RGB|None=None, median_rgb: 
     if dominant_rgb is None or dominant_fraction is None:
         dominant_rgb,dominant_fraction=_dominant_exact(px)
     if spread is None:
-        spread=float(np.max(np.percentile(px,90,axis=0)-np.percentile(px,10,axis=0)))
+        p10,p90=np.percentile(px,(10,90),axis=0)
+        spread=float(np.max(p90-p10))
     # Important/tiny accents keep a real dominant color sooner than broad noisy regions.
     dom_threshold=max(0.10,0.22-0.08*max(0.0,min(1.0,float(importance_score))))
     if float(dominant_fraction)>=dom_threshold:

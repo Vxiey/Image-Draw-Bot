@@ -57,13 +57,31 @@ def _bbox_area(path: Sequence[Point]) -> int:
     return max(1, x1 - x0 + 1) * max(1, y1 - y0 + 1)
 
 
-def _normalize_phase(phase: Any, path: Sequence[Point]) -> str:
+def _path_metrics(path: Sequence[Point]) -> tuple[float, int, tuple[float, float]]:
+    """Compute the repeatedly used geometry without temporary coordinate lists."""
+    first = path[0]
+    xmin = xmax = int(first[0])
+    ymin = ymax = int(first[1])
+    sum_x = sum_y = length = 0.0
+    previous = None
+    for point in path:
+        x, y = int(point[0]), int(point[1])
+        xmin = min(xmin, x); xmax = max(xmax, x)
+        ymin = min(ymin, y); ymax = max(ymax, y)
+        sum_x += float(point[0]); sum_y += float(point[1])
+        if previous is not None:
+            length += math.hypot(float(point[0] - previous[0]), float(point[1] - previous[1]))
+        previous = point
+    area = max(1, xmax - xmin + 1) * max(1, ymax - ymin + 1)
+    return length, area, (sum_x / len(path), sum_y / len(path))
+
+
+def _normalize_phase(phase: Any, path: Sequence[Point], *, metrics=None) -> str:
     if phase in _PHASE_ORDER:
         return str(phase)
     if len(path) <= 1:
         return "details"
-    length = _path_len(path)
-    area = _bbox_area(path)
+    length, area = metrics[:2] if metrics is not None else (_path_len(path), _bbox_area(path))
     if area >= 900 or length >= 80:
         return "foundation"
     if len(path) == 2 and (length >= 18 or area >= 80):
@@ -71,9 +89,8 @@ def _normalize_phase(phase: Any, path: Sequence[Point]) -> str:
     return "details"
 
 
-def _importance(path: Sequence[Point], phase: str, serial: int) -> float:
-    length = _path_len(path)
-    area = _bbox_area(path)
+def _importance(path: Sequence[Point], phase: str, serial: int, *, metrics=None) -> float:
+    length, area = metrics[:2] if metrics is not None else (_path_len(path), _bbox_area(path))
     if phase == "foundation":
         return area * 0.18 + length * 1.4 - serial * 1e-6
     if phase == "contour":
@@ -146,9 +163,10 @@ def build_progressive_sequence(execution_groups: Sequence[Sequence[Path]], *,
             if not path:
                 continue
             hint = color_hints[local_index] if local_index < len(color_hints) else None
-            phase = _normalize_phase(hint, path)
+            metrics = _path_metrics(path)
+            phase = _normalize_phase(hint, path, metrics=metrics)
             counts[phase] += 1
-            raw_score=_importance(path, phase, serial)
+            raw_score=_importance(path, phase, serial, metrics=metrics)
             structural=.92 if phase=='foundation' else (.72 if phase=='contour' else .18)
             entries.append({
                 "color_index": int(color_index),
@@ -160,7 +178,7 @@ def build_progressive_sequence(execution_groups: Sequence[Sequence[Path]], *,
                 "structural_score": structural,
                 "optional": phase=='details',
                 "_progressive_score": raw_score,
-                "_center": _center(path),
+                "_center": metrics[2],
             })
             serial += 1
 

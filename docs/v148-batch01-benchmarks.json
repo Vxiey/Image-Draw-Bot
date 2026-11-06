@@ -1,0 +1,701 @@
+{
+  "baseline_commit": "94a748ec7690eebb542c70311c594aa835434a98",
+  "captured_date": "2026-11-06",
+  "scope": "Local CPU measurements; real Windows input and physical GPU performance are not verified. Traced allocations exclude untraced native buffers and are not total RSS.",
+  "engine_before": {
+    "schema": 1,
+    "app_version": "1.0.147",
+    "python": "3.12.14",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "numpy": "2.5.4",
+    "pillow": "13.0.0",
+    "workers": 1,
+    "repeats": 3,
+    "palette": [
+      [
+        255,
+        255,
+        255
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        255,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        255
+      ],
+      [
+        255,
+        204,
+        64
+      ],
+      [
+        54,
+        160,
+        92
+      ],
+      [
+        70,
+        145,
+        225
+      ],
+      [
+        128,
+        128,
+        128
+      ]
+    ],
+    "options": {
+      "profile_key": "isolated-benchmark",
+      "gpu_mode": "CPU",
+      "speed": "Balanced",
+      "precision": "High",
+      "delay": 0.006,
+      "brush_px": 1,
+      "adaptive_hybrid_cost": "Auto"
+    },
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false,
+    "memory_scope": "tracemalloc allocation peak; excludes prebuilt PixelMap and untraced driver/RSS memory",
+    "quality_scope": "1px axis/line simulation against the quantized PixelMap, not original-image perceptual fidelity",
+    "cases": [
+      {
+        "case": "icon",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "a6fc697e824aa67471bab2cd7b4c633a903e97eaf4284345d438859f25cbf278",
+        "palette_mapping_seconds": 0.09315238100134593,
+        "cold_planning_seconds": 0.033184265999807394,
+        "warm_planning_seconds": [
+          0.030054737000682508,
+          0.03078393499890808,
+          0.031132050000451272
+        ],
+        "median_planning_seconds": 0.03078393499890808,
+        "peak_traced_allocation_bytes": 540482,
+        "operations": 7,
+        "color_selections": 2,
+        "model_execution_seconds": 12.914863119800021,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.0019144409998261835,
+          "components": 0.011653914998532855,
+          "candidate_paths": 0.015242341001794557,
+          "scheduling": 0.002231259999462054
+        }
+      },
+      {
+        "case": "line-art",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "2c6189080be20fbdbba0f7b431660e4e00e50bae9b75c5d418472a8941e76d89",
+        "palette_mapping_seconds": 0.03324940200036508,
+        "cold_planning_seconds": 0.030967937000241363,
+        "warm_planning_seconds": [
+          0.03253125899937004,
+          0.03274538699952245,
+          0.0342287400017085
+        ],
+        "median_planning_seconds": 0.03274538699952245,
+        "peak_traced_allocation_bytes": 560362,
+        "operations": 6,
+        "color_selections": 1,
+        "model_execution_seconds": 4.299940859875155,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.002111652998792124,
+          "components": 0.01096526699984679,
+          "candidate_paths": 0.018568210000012186,
+          "scheduling": 0.0024857560001692036
+        }
+      },
+      {
+        "case": "text-small-detail",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "21445bb7fc41d0bd96ed0a80012c2ab9c5c45acfb3f0d7d20e03a9aa785bc30d",
+        "palette_mapping_seconds": 0.031413467000675155,
+        "cold_planning_seconds": 0.1573715730010008,
+        "warm_planning_seconds": [
+          0.16572254200036696,
+          0.1624044159998448,
+          0.15241256000081194
+        ],
+        "median_planning_seconds": 0.1624044159998448,
+        "peak_traced_allocation_bytes": 1098578,
+        "operations": 119,
+        "color_selections": 6,
+        "model_execution_seconds": 6.411285308630837,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.002935812000941951,
+          "components": 0.02984965399991779,
+          "candidate_paths": 0.029434899999614572,
+          "scheduling": 0.08942025200121861
+        }
+      },
+      {
+        "case": "cartoon-large-colour",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "35dbe6bd1a5a4c847244429d9a5bc119c8cd8934092e9da8d4305b288da55b48",
+        "palette_mapping_seconds": 0.031200452000121004,
+        "cold_planning_seconds": 0.059157036999749835,
+        "warm_planning_seconds": [
+          0.06135936299870082,
+          0.07260888900054852,
+          0.06746413099972415
+        ],
+        "median_planning_seconds": 0.06746413099972415,
+        "peak_traced_allocation_bytes": 760735,
+        "operations": 15,
+        "color_selections": 4,
+        "model_execution_seconds": 26.142463646715175,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.002593555000203196,
+          "components": 0.021117039999808185,
+          "candidate_paths": 0.03747141600069881,
+          "scheduling": 0.005643555999995442
+        }
+      },
+      {
+        "case": "photo-gradient",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "5924872090b3c09e678bf27a0124a17a77f8cac0f19eb8ff88738540b2ddc4de",
+        "palette_mapping_seconds": 0.0348349470004905,
+        "cold_planning_seconds": 0.08026612399953592,
+        "warm_planning_seconds": [
+          0.08349202399949718,
+          0.08228219600096054,
+          0.09186717599914118
+        ],
+        "median_planning_seconds": 0.08349202399949718,
+        "peak_traced_allocation_bytes": 742242,
+        "operations": 44,
+        "color_selections": 14,
+        "model_execution_seconds": 29.638101720799895,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.00255767199996626,
+          "components": 0.02555333599957521,
+          "candidate_paths": 0.05076527500023076,
+          "scheduling": 0.012336064000919578
+        }
+      },
+      {
+        "case": "fill-risk",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "34f088f4c28aa77d2bca7bdf59f604110478ad08da87539815962a715c78d1c7",
+        "palette_mapping_seconds": 0.03877097800068441,
+        "cold_planning_seconds": 0.0621388699983072,
+        "warm_planning_seconds": [
+          0.059030149001046084,
+          0.05153405199962435,
+          0.04906012299943541
+        ],
+        "median_planning_seconds": 0.05153405199962435,
+        "peak_traced_allocation_bytes": 655438,
+        "operations": 12,
+        "color_selections": 3,
+        "model_execution_seconds": 14.010354980659056,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.0020583339992299443,
+          "components": 0.015644346000044607,
+          "candidate_paths": 0.027312992999213748,
+          "scheduling": 0.0038533480001206044
+        }
+      },
+      {
+        "case": "thin-diagonals",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "44c392e55081c69a725d7c0438329221fc4d53b02d70bcdb572d55c346e6af7e",
+        "palette_mapping_seconds": 0.028313411999988602,
+        "cold_planning_seconds": 0.5684885670016229,
+        "warm_planning_seconds": [
+          0.5682059390001086,
+          0.601540687999659,
+          0.5821985020011198
+        ],
+        "median_planning_seconds": 0.5821985020011198,
+        "peak_traced_allocation_bytes": 2126842,
+        "operations": 660,
+        "color_selections": 1,
+        "model_execution_seconds": 6.9397859924458345,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.0023187799997685943,
+          "components": 0.02057109199995466,
+          "candidate_paths": 0.07804042200041295,
+          "scheduling": 0.47964562899869634
+        }
+      },
+      {
+        "case": "many-islands",
+        "size": [
+          120,
+          90
+        ],
+        "source_sha256": "dd0053014043bca7b5c80fb0d483a3885f6228838d0b50a2bec0b2c2e9af6858",
+        "palette_mapping_seconds": 0.008121250000840519,
+        "cold_planning_seconds": 0.40802238000105717,
+        "warm_planning_seconds": [
+          0.4186184050013253,
+          0.4092858639996848,
+          0.427383321999514
+        ],
+        "median_planning_seconds": 0.4186184050013253,
+        "peak_traced_allocation_bytes": 1484218,
+        "operations": 690,
+        "color_selections": 1,
+        "model_execution_seconds": 9.886019999999881,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.0014245860002120025,
+          "components": 0.015087793999555288,
+          "candidate_paths": 0.028572283999892534,
+          "scheduling": 0.3813233250002668
+        }
+      }
+    ]
+  },
+  "engine_after": {
+    "schema": 1,
+    "app_version": "1.0.148",
+    "python": "3.12.14",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "numpy": "2.5.4",
+    "pillow": "13.0.0",
+    "workers": 1,
+    "repeats": 3,
+    "palette": [
+      [
+        255,
+        255,
+        255
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        255,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        255
+      ],
+      [
+        255,
+        204,
+        64
+      ],
+      [
+        54,
+        160,
+        92
+      ],
+      [
+        70,
+        145,
+        225
+      ],
+      [
+        128,
+        128,
+        128
+      ]
+    ],
+    "options": {
+      "profile_key": "isolated-benchmark",
+      "gpu_mode": "CPU",
+      "speed": "Balanced",
+      "precision": "High",
+      "delay": 0.006,
+      "brush_px": 1,
+      "adaptive_hybrid_cost": "Auto"
+    },
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false,
+    "memory_scope": "tracemalloc allocation peak; excludes prebuilt PixelMap and untraced driver/RSS memory",
+    "quality_scope": "1px axis/line simulation against the quantized PixelMap, not original-image perceptual fidelity",
+    "cases": [
+      {
+        "case": "icon",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "a6fc697e824aa67471bab2cd7b4c633a903e97eaf4284345d438859f25cbf278",
+        "palette_mapping_seconds": 0.07189228499919409,
+        "cold_planning_seconds": 0.03503027300030226,
+        "warm_planning_seconds": [
+          0.029737683002167614,
+          0.029684338998777093,
+          0.029983661999722244
+        ],
+        "median_planning_seconds": 0.029737683002167614,
+        "peak_traced_allocation_bytes": 540467,
+        "operations": 7,
+        "color_selections": 2,
+        "model_execution_seconds": 12.914863119800021,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.00241377899874351,
+          "components": 0.011293587002001004,
+          "candidate_paths": 0.013941503999376437,
+          "scheduling": 0.002225609998276923
+        }
+      },
+      {
+        "case": "line-art",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "2c6189080be20fbdbba0f7b431660e4e00e50bae9b75c5d418472a8941e76d89",
+        "palette_mapping_seconds": 0.021666926000762032,
+        "cold_planning_seconds": 0.030173467999702552,
+        "warm_planning_seconds": [
+          0.029127625999535667,
+          0.02955880499939667,
+          0.03279681099957088
+        ],
+        "median_planning_seconds": 0.02955880499939667,
+        "peak_traced_allocation_bytes": 560347,
+        "operations": 6,
+        "color_selections": 1,
+        "model_execution_seconds": 4.299940859875155,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.002813339997373987,
+          "components": 0.011423019001085777,
+          "candidate_paths": 0.016466827000840567,
+          "scheduling": 0.001998694999201689
+        }
+      },
+      {
+        "case": "text-small-detail",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "21445bb7fc41d0bd96ed0a80012c2ab9c5c45acfb3f0d7d20e03a9aa785bc30d",
+        "palette_mapping_seconds": 0.020260055000107968,
+        "cold_planning_seconds": 0.1493907889998809,
+        "warm_planning_seconds": [
+          0.15469723500063992,
+          0.1405277349986136,
+          0.14776377900125226
+        ],
+        "median_planning_seconds": 0.14776377900125226,
+        "peak_traced_allocation_bytes": 1095643,
+        "operations": 119,
+        "color_selections": 6,
+        "model_execution_seconds": 6.411285308630837,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.0031257020018529147,
+          "components": 0.03098733099977835,
+          "candidate_paths": 0.027310418998240493,
+          "scheduling": 0.08582058799947845
+        }
+      },
+      {
+        "case": "cartoon-large-colour",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "35dbe6bd1a5a4c847244429d9a5bc119c8cd8934092e9da8d4305b288da55b48",
+        "palette_mapping_seconds": 0.027992753999569686,
+        "cold_planning_seconds": 0.06828269900142914,
+        "warm_planning_seconds": [
+          0.06539658100155066,
+          0.06632656699730433,
+          0.06545594800263643
+        ],
+        "median_planning_seconds": 0.06545594800263643,
+        "peak_traced_allocation_bytes": 760720,
+        "operations": 15,
+        "color_selections": 4,
+        "model_execution_seconds": 26.142463646715175,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.003278055999544449,
+          "components": 0.021801364000566537,
+          "candidate_paths": 0.03284509299919591,
+          "scheduling": 0.007115078999049729
+        }
+      },
+      {
+        "case": "photo-gradient",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "5924872090b3c09e678bf27a0124a17a77f8cac0f19eb8ff88738540b2ddc4de",
+        "palette_mapping_seconds": 0.02422996500172303,
+        "cold_planning_seconds": 0.07190215900118346,
+        "warm_planning_seconds": [
+          0.07749321600203984,
+          0.07390117500108317,
+          0.07568520300264936
+        ],
+        "median_planning_seconds": 0.07568520300264936,
+        "peak_traced_allocation_bytes": 738584,
+        "operations": 44,
+        "color_selections": 14,
+        "model_execution_seconds": 29.638101720799895,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.003435769998759497,
+          "components": 0.02171599800203694,
+          "candidate_paths": 0.039433642999938456,
+          "scheduling": 0.010730696998507483
+        }
+      },
+      {
+        "case": "fill-risk",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "34f088f4c28aa77d2bca7bdf59f604110478ad08da87539815962a715c78d1c7",
+        "palette_mapping_seconds": 0.027675869001541287,
+        "cold_planning_seconds": 0.04765123399920412,
+        "warm_planning_seconds": [
+          0.05043840500002261,
+          0.05476246800026274,
+          0.04933604499819921
+        ],
+        "median_planning_seconds": 0.05043840500002261,
+        "peak_traced_allocation_bytes": 655423,
+        "operations": 12,
+        "color_selections": 3,
+        "model_execution_seconds": 14.010354980659056,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.0029684590008400846,
+          "components": 0.018086731997755123,
+          "candidate_paths": 0.023719511002127547,
+          "scheduling": 0.004397140997753013
+        }
+      },
+      {
+        "case": "thin-diagonals",
+        "size": [
+          240,
+          180
+        ],
+        "source_sha256": "44c392e55081c69a725d7c0438329221fc4d53b02d70bcdb572d55c346e6af7e",
+        "palette_mapping_seconds": 0.0209230229993409,
+        "cold_planning_seconds": 0.5796159179990354,
+        "warm_planning_seconds": [
+          0.5500718700022844,
+          0.6187368199971388,
+          0.5882372980013315
+        ],
+        "median_planning_seconds": 0.5882372980013315,
+        "peak_traced_allocation_bytes": 2058187,
+        "operations": 660,
+        "color_selections": 1,
+        "model_execution_seconds": 6.9397859924458345,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.0030941040022298694,
+          "components": 0.021597178998490563,
+          "candidate_paths": 0.07246726599987596,
+          "scheduling": 0.4892038770012732
+        }
+      },
+      {
+        "case": "many-islands",
+        "size": [
+          120,
+          90
+        ],
+        "source_sha256": "dd0053014043bca7b5c80fb0d483a3885f6228838d0b50a2bec0b2c2e9af6858",
+        "palette_mapping_seconds": 0.005822858998726588,
+        "cold_planning_seconds": 0.42959851499836077,
+        "warm_planning_seconds": [
+          0.3849509060019045,
+          0.3981485270014673,
+          0.3989467979990877
+        ],
+        "median_planning_seconds": 0.3981485270014673,
+        "peak_traced_allocation_bytes": 1484203,
+        "operations": 690,
+        "color_selections": 1,
+        "model_execution_seconds": 9.886019999999881,
+        "actual_draw_seconds": null,
+        "mismatched_plan_pixels": 0,
+        "exact_palette_geometry": true,
+        "stage_seconds": {
+          "source_runs": 0.0015688089988543652,
+          "components": 0.015144349999900442,
+          "candidate_paths": 0.022737866998795653,
+          "scheduling": 0.358369206001953
+        }
+      }
+    ]
+  },
+  "ui_before": {
+    "scope": "CPU-only helper microbenchmarks; no real desktop input or GPU timing",
+    "preset_30000": {
+      "seconds_median": 0.07894348099944182,
+      "seconds_samples": [
+        0.08006088199908845,
+        0.07894348099944182,
+        0.07842576599796303,
+        0.08055481300107203,
+        0.07820871400326723
+      ],
+      "peak_traced_bytes": 1192,
+      "result": "gartic-phone"
+    },
+    "dictionary_20000_words_100_queries": {
+      "seconds_median": 0.7960309869995399,
+      "seconds_samples": [
+        0.9870709870010614,
+        0.7960309869995399,
+        0.6971214849982061
+      ],
+      "peak_traced_bytes": 2852010,
+      "result": "2ea7ea67d66bd4c21d2a95ecaee0765aab33fbfceb6fa485898e7848d791ec2c"
+    },
+    "preview_200000_points": {
+      "seconds_median": 0.16459224999925937,
+      "seconds_samples": [
+        0.1552259590025642,
+        0.16459224999925937,
+        0.17339273099787533
+      ],
+      "peak_traced_bytes": 24027272,
+      "result": {
+        "stroke": "23c2331244ae6b673273224c45bd001dbb2c9a8200c14ab4a0da4506fc8987d9",
+        "fill": "5471713f385bc34084e73b1f6741787a43bded38c03f64333851a026d90f0c82",
+        "color": "5471713f385bc34084e73b1f6741787a43bded38c03f64333851a026d90f0c82"
+      }
+    },
+    "drop_16001_urls": {
+      "seconds_median": 0.30681930699938675,
+      "seconds_samples": [
+        0.3093429569998989,
+        0.3025481580007181,
+        0.30681930699938675
+      ],
+      "peak_traced_bytes": 5695062,
+      "result": "https://example.com/a.png"
+    }
+  },
+  "ui_after": {
+    "scope": "CPU-only helper microbenchmarks; no real desktop input or GPU timing",
+    "preset_30000": {
+      "seconds_median": 0.0027707670014933683,
+      "seconds_samples": [
+        0.0027707670014933683,
+        0.00249007199818152,
+        0.0025901799999701325,
+        0.0029003580020798836,
+        0.00297054200200364
+      ],
+      "peak_traced_bytes": 120,
+      "result": "gartic-phone"
+    },
+    "dictionary_20000_words_100_queries": {
+      "seconds_median": 0.019594591001805384,
+      "seconds_samples": [
+        0.019198025001969654,
+        0.019594591001805384,
+        0.02117645899852505
+      ],
+      "peak_traced_bytes": 2883666,
+      "result": "2ea7ea67d66bd4c21d2a95ecaee0765aab33fbfceb6fa485898e7848d791ec2c"
+    },
+    "preview_200000_points": {
+      "seconds_median": 0.0152270739999949,
+      "seconds_samples": [
+        0.016471143000671873,
+        0.015092890000232728,
+        0.0152270739999949
+      ],
+      "peak_traced_bytes": 388406,
+      "result": {
+        "stroke": "23c2331244ae6b673273224c45bd001dbb2c9a8200c14ab4a0da4506fc8987d9",
+        "fill": "5471713f385bc34084e73b1f6741787a43bded38c03f64333851a026d90f0c82",
+        "color": "5471713f385bc34084e73b1f6741787a43bded38c03f64333851a026d90f0c82"
+      }
+    },
+    "drop_16001_urls": {
+      "seconds_median": 0.24114357099824701,
+      "seconds_samples": [
+        0.22976093699980993,
+        0.2429061559996626,
+        0.24114357099824701
+      ],
+      "peak_traced_bytes": 3908748,
+      "result": "https://example.com/a.png"
+    }
+  }
+}

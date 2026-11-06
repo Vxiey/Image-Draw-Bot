@@ -202,12 +202,19 @@ def apply_target_path_cap(groups: Sequence[Sequence[Path]], cap: int | None, *,
     Phase hints are filtered with the exact same kept path indices and returned
     in metadata so DrawBot's existing ``path_meta.update`` keeps them aligned.
     """
-    normalized=[[tuple(path) for path in paths if path] for paths in groups]
+    original = [paths if isinstance(paths, Sequence) else list(paths) for paths in groups]
     inherited_hints=getattr(groups,'phase_hints',None)
     inherited_prefixes=getattr(groups,'protected_prefix_counts',None)
     inherited_semantic=getattr(groups,'semantic_meta',None)
-    hints=_aligned_phase_hints(normalized, phase_hints if phase_hints is not None else inherited_hints)
-    prefixes=_prefix_counts(normalized, protected_prefix_counts if protected_prefix_counts is not None else inherited_prefixes)
+    hints=_aligned_phase_hints(original, phase_hints if phase_hints is not None else inherited_hints)
+    prefixes=_prefix_counts(original, protected_prefix_counts if protected_prefix_counts is not None else inherited_prefixes)
+    normalized = []
+    for index, paths in enumerate(original):
+        kept = [position for position, path in enumerate(paths) if path]
+        normalized.append([tuple(paths[position]) for position in kept])
+        if hints is not None:
+            hints[index] = [hints[index][position] for position in kept]
+        prefixes[index] = sum(position < prefixes[index] for position in kept)
     semantic=dict(inherited_semantic or {}) if isinstance(inherited_semantic,dict) else {}
     before=sum(len(paths) for paths in normalized)
     protected_before=sum(prefixes)

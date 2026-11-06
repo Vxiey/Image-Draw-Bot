@@ -10,8 +10,8 @@ from Version import APP_VERSION, BUILD_CHANNEL, FILE_VERSION
 
 class ReleaseTests(unittest.TestCase):
     def test_release_metadata(self):
-        self.assertEqual(APP_VERSION,'1.0.147')
-        self.assertEqual(FILE_VERSION,'1.0.147')
+        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(FILE_VERSION,'1.0.148')
         self.assertEqual(BUILD_CHANNEL,'stable')
 
     def test_first_run_state_roundtrip(self):

@@ -5,6 +5,7 @@ No certificate creation, private-key export or trust-store changes are performed
 import os
 import re
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -54,7 +55,27 @@ def _is_primary_application_binary(path):
 
 
 def sign_distribution(root,config):
-    files=sorted(p for p in Path(root).rglob('*') if p.is_file() and p.suffix.lower() in ('.exe','.dll','.pyd'))
+    def is_link(path):
+        metadata = path.lstat()
+        return stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)
+    root = Path(root)
+    if is_link(root):
+        raise SigningError('The signing root must not be a link or junction.')
+    files = []
+    # Inspect the complete tree before the first signing mutation. A planted
+    # native-file link must never cause SignTool to modify an external target.
+    for current, directories, filenames in os.walk(root, followlinks=False):
+        current = Path(current)
+        if any(is_link(current / name) for name in directories):
+            raise SigningError('The signing tree contains a linked directory.')
+        for name in filenames:
+            path = current / name
+            if path.suffix.lower() not in ('.exe', '.dll', '.pyd'):
+                continue
+            if is_link(path) or not path.is_file():
+                raise SigningError(f'The signing tree contains a linked or non-regular native file: {name}')
+            files.append(path)
+    files.sort()
     if not files:raise SigningError('No native release binaries were found.')
     for path in files:
         # Always stamp the application EXE with the configured Image Draw Bot

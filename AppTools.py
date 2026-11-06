@@ -8,11 +8,10 @@ user and anchored to the selected target window.
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 from CalibrationAnchors import validate_anchor, resolve_point
-from RuntimePaths import data_dir
+from RuntimePaths import atomic_write_text, data_dir, read_json
 from ProfileStorage import safe_profile_key
 
 APP_TOOL_SCHEMA = 1
@@ -53,7 +52,7 @@ def _point(value, label: str) -> tuple[int, int]:
 
 
 def validate_calibration(data: dict, profile_key: str | None = None) -> dict:
-    if not isinstance(data, dict) or data.get("version") != APP_TOOL_SCHEMA:
+    if not isinstance(data, dict) or type(data.get('version')) is not int or data.get("version") != APP_TOOL_SCHEMA:
         raise ValueError("Invalid application tool calibration.")
     if profile_key is not None and data.get("profile") != profile_key:
         raise ValueError("Tool calibration belongs to a different application profile.")
@@ -80,22 +79,13 @@ def save_calibration(profile_key: str, tools: dict, *, anchor, path: Path | None
         data["tools"][name] = list(_point(value, name))
     clean = validate_calibration(data, profile_key)
     path = Path(path or tool_file(profile_key)); path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=path.parent, suffix=".tmp") as handle:
-            temporary = Path(handle.name)
-            json.dump(clean, handle, ensure_ascii=False, indent=2)
-            handle.flush()
-        temporary.replace(path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+    atomic_write_text(path, json.dumps(clean, ensure_ascii=False, indent=2, allow_nan=False))
     return clean
 
 
 def load_calibration(profile_key: str, path: Path | None = None) -> dict:
     path = Path(path or tool_file(profile_key))
-    return validate_calibration(json.loads(path.read_text(encoding="utf-8")), profile_key)
+    return validate_calibration(read_json(path, max_bytes=128 * 1024), profile_key)
 
 
 def build_tool_action(profile_key: str, tool: str, current_client_rect, path: Path | None = None) -> tuple[str, tuple[int, int]]:

@@ -1,4 +1,4 @@
-# v1.0.147 maintenance: images, profiles, and recovery (051–075)
+# v1.0.148 maintenance: images, profiles, and recovery (051–075)
 
 These 25 entries describe changes in runtime behavior. Tests and documentation
 are evidence for the changes and are not counted as separate improvements.

@@ -18,6 +18,11 @@ def select_region(owner,on_selected,on_error):
         except tk.TclError:pass
     overlay=None
     restored=False
+    captures=[]
+
+    def close_captures():
+        while captures:
+            captures.pop().close()
 
     def restore_windows():
         nonlocal restored
@@ -28,6 +33,8 @@ def select_region(owner,on_selected,on_error):
                 if state in ('normal','zoomed') and w.winfo_exists():
                     w.deiconify()
                     if state=='zoomed':w.state('zoomed')
+                elif state=='iconic' and w.winfo_exists():
+                    w.iconify()
             except tk.TclError:pass
 
     def destroy_overlay():
@@ -39,7 +46,7 @@ def select_region(owner,on_selected,on_error):
             except tk.TclError:pass
 
     def restore():
-        destroy_overlay();restore_windows()
+        destroy_overlay();close_captures();restore_windows()
 
     def capture():
         nonlocal overlay
@@ -48,7 +55,12 @@ def select_region(owner,on_selected,on_error):
             api=ctypes.windll.user32
             left,top,width,height=[api.GetSystemMetrics(i) for i in (76,77,78,79)]
             if width <= 0 or height <= 0:raise ValueError('Windows could not read the virtual desktop area.')
-            shot=ImageGrab.grab(all_screens=True).convert('RGB')
+            captured=ImageGrab.grab(all_screens=True)
+            try:
+                shot=captured.convert('RGB')
+            finally:
+                captured.close()
+            captures.append(shot)
             scale_x=scale_y=1.0
             display_shot=shot
             if shot.size!=(width,height):
@@ -58,6 +70,7 @@ def select_region(owner,on_selected,on_error):
                 # mapped back to physical capture pixels on release.
                 scale_x,scale_y=normalize_uniform_capture_mapping((width,height),shot.size)
                 display_shot=shot.resize((width,height),Image.Resampling.LANCZOS)
+                captures.append(display_shot)
             overlay=tk.Toplevel(owner);overlay.overrideredirect(True);overlay.attributes('-topmost',True)
             overlay.geometry(f'{width}x{height}+0+0');overlay.update_idletasks()
             from ctypes import wintypes
@@ -93,10 +106,10 @@ def select_region(owner,on_selected,on_error):
                              int(round(c*scale_x)),int(round(d*scale_y)))
                 pa=max(0,min(shot.width,pa));pc=max(pa+1,min(shot.width,pc))
                 pb=max(0,min(shot.height,pb));pd=max(pb+1,min(shot.height,pd))
-                crop=shot.crop((pa,pb,pc,pd)).copy()
+                crop=shot.crop((pa,pb,pc,pd))
                 box=(int(round(left+pa)),int(round(top+pb)),
                      int(round(left+pc)),int(round(top+pd)))
-                destroy_overlay()
+                destroy_overlay();close_captures()
 
                 def finish():
                     try:on_selected(box,crop)
@@ -104,6 +117,7 @@ def select_region(owner,on_selected,on_error):
                     finally:restore_windows()
                 try:owner.after(120,finish)
                 except (tk.TclError,RuntimeError):
+                    crop.close()
                     restore_windows()
 
             canvas.bind('<ButtonPress-1>',down);canvas.bind('<B1-Motion>',move);canvas.bind('<ButtonRelease-1>',up)

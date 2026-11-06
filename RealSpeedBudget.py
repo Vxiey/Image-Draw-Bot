@@ -55,7 +55,24 @@ def save_all(data: dict, path: Path = SPEED_FILE) -> None:
 def load_profile(profile_key: str, path: Path = SPEED_FILE) -> dict | None:
     key=str(profile_key or '').lower()
     item=load_all(path)['profiles'].get(key)
-    return dict(item) if isinstance(item,dict) else None
+    return _clean_profile(item)
+
+
+def _clean_profile(item):
+    if not isinstance(item, dict):
+        return None
+    try:
+        pps = float(item.get('paths_per_second', 0.0))
+        samples = int(item.get('samples', 0))
+        total_paths = int(item.get('total_paths', 0))
+        total_seconds = float(item.get('total_seconds', 0.0))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(pps) or not .2 <= pps <= 80.0 or samples < 0 or total_paths < 0 or not math.isfinite(total_seconds) or total_seconds < 0:
+        return None
+    out = dict(item)
+    out.update(paths_per_second=pps, samples=samples, total_paths=total_paths, total_seconds=total_seconds)
+    return out
 
 
 def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, *,
@@ -67,11 +84,14 @@ def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, 
     larger fraction of those runs.
     """
     key=str(profile_key or '').lower()
-    paths=max(0,int(paths));elapsed=float(elapsed_seconds)
-    if key not in SUPPORTED or paths < 3 or elapsed < .20:
+    try:
+        paths=max(0,int(paths));elapsed=float(elapsed_seconds);colors=max(0,int(colors))
+    except (TypeError, ValueError, OverflowError):
+        return {'recorded':False,'profile_key':key,'reason':'invalid timing sample'}
+    if key not in SUPPORTED or paths < 3 or not math.isfinite(elapsed) or elapsed < .20:
         return {'recorded':False,'profile_key':key,'reason':'sample too small or unsupported'}
     pps=max(.20,min(80.0,paths/elapsed))
-    db=load_all(path);profiles=db['profiles'];old=profiles.get(key) if isinstance(profiles.get(key),dict) else {}
+    db=load_all(path);profiles=db['profiles'];old=_clean_profile(profiles.get(key)) or {}
     old_pps=float(old.get('paths_per_second') or 0.0)
     # More completed paths = more trust. Small test remains useful as a first
     # sample but cannot swing a mature profile sharply.
@@ -84,6 +104,8 @@ def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, 
     samples=int(old.get('samples') or 0)+1
     total_paths=int(old.get('total_paths') or 0)+paths
     total_seconds=float(old.get('total_seconds') or 0.0)+elapsed
+    if not math.isfinite(total_seconds):
+        return {'recorded':False,'profile_key':key,'reason':'invalid timing total'}
     profile={
         'profile_key':key,
         'paths_per_second':round(learned,5),

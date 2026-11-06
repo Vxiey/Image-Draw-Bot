@@ -32,16 +32,21 @@ class StartDrawingStateMachine:
 
     def _emit(self,state,reason):
         if self.logger:
-            self.logger(f"Start state: {state} start_block_reason={reason!r}")
+            try:self.logger(f"Start state: {state} start_block_reason={reason!r}")
+            except Exception:pass  # Diagnostic I/O must not change authorization state.
 
     def transition(self,state:str,reason:str=""):
         state=str(state)
         if state not in STATES:raise ValueError(f"Unknown start state: {state}")
         if state!=self.state and state not in _ALLOWED.get(self.state,set()):
             raise ValueError(f"Invalid Start Drawing transition {self.state} -> {state}")
-        now=float(self.clock());self.state=state;self.changed=now
+        now=float(self.clock())
+        changed = state != self.state
+        self.state=state
+        if changed:self.changed=now
         self.block_reason=str(reason or "")
-        self.history.append((state,now,self.block_reason));self._emit(state,self.block_reason)
+        if changed:self.history.append((state,now,self.block_reason))
+        self._emit(state,self.block_reason)
         return self.snapshot()
 
     def set_block_reason(self,reason:str):
@@ -57,6 +62,6 @@ class StartDrawingStateMachine:
 
     def watchdog_text(self,threshold_seconds:float=2.0):
         snap=self.snapshot()
-        if not self.stalled(threshold_seconds):return ""
+        if snap.state in ("COMPLETED","ABORTED") or snap.elapsed_in_state<max(.1,float(threshold_seconds)):return ""
         reason=snap.block_reason or "waiting for the current stage"
         return f"{snap.state} for {snap.elapsed_in_state:.1f}s: {reason}"

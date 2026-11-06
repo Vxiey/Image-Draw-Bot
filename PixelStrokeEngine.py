@@ -216,13 +216,13 @@ def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, cancelled
         importance_values = pixel_map.importance_map[run.y, sl]
         edge_values = pixel_map.edge_map[run.y, sl]
         contour_values = (pixel_map.contour_map[run.y, sl] if pixel_map.contour_map is not None else edge_values)
-        shadow_values = (pixel_map.shadow_map[run.y, sl] if pixel_map.shadow_map is not None else np.zeros_like(edge_values))
-        shadow_detail_values = (pixel_map.shadow_detail_map[run.y, sl] if pixel_map.shadow_detail_map is not None else np.zeros_like(edge_values))
         stats[cid]["importance_sum"] += float(np.sum(importance_values, dtype=np.float64))
         stats[cid]["edge_sum"] += float(np.sum(edge_values, dtype=np.float64))
         stats[cid]["contour_sum"] += float(np.sum(contour_values, dtype=np.float64))
-        stats[cid]["shadow_sum"] += float(np.sum(shadow_values, dtype=np.float64))
-        stats[cid]["shadow_detail_sum"] += float(np.sum(shadow_detail_values, dtype=np.float64))
+        if pixel_map.shadow_map is not None:
+            stats[cid]["shadow_sum"] += float(np.sum(pixel_map.shadow_map[run.y, sl], dtype=np.float64))
+        if pixel_map.shadow_detail_map is not None:
+            stats[cid]["shadow_detail_sum"] += float(np.sum(pixel_map.shadow_detail_map[run.y, sl], dtype=np.float64))
         if importance_values.size:
             comp.importance_max = max(comp.importance_max, float(np.max(importance_values)))
         comp.protected_pixels += int(np.count_nonzero(pixel_map.protected_mask[run.y, sl]))
@@ -496,9 +496,15 @@ def build_component_paths(comp: Component, component_map: np.ndarray, *, cost_mo
             if exact0:
                 paths0=_bounded_axis_paths(paths0,cost_model,max_path_seconds,cancelled=cancelled)
                 ordered=order_paths(paths0,"Balanced",allow_reverse=True)
-                if cost_model.paths_seconds(ordered) <= cost_model.paths_seconds(paths0):
+                ordered_cost = float(cost_model.paths_seconds(ordered))
+                original_cost = float(cost_model.paths_seconds(paths0))
+                if ordered_cost <= original_cost:
                     paths0=ordered
-            cost=float(cost_model.paths_seconds(paths0)) if exact0 else float("inf")
+                    cost = ordered_cost
+                else:
+                    cost = original_cost
+            else:
+                cost = float("inf")
             candidate_meta[orientation]={"safe":bool(exact0),"paths":len(paths0),"estimated_seconds":None if not math.isfinite(cost) else round(cost,6)}
             if exact0:choices.append((cost,orientation,paths0,runs0))
         if choices:

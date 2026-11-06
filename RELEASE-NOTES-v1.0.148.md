@@ -1,10 +1,26 @@
-# Image Draw Bot v1.0.147 — 100 reliability and security improvements
+# Image Draw Bot v1.0.148 — development release notes
 
-This release adds 100 numbered behavior improvements across GPU
-execution, Windows security, local recovery, profiles, updates and the mobile
-preview. The [complete implementation ledger](https://github.com/Vxiey/Image-Draw-Bot/blob/v1.0.147/docs/100-IMPROVEMENTS-v1.0.147.md)
-maps each improvement to its code and regression coverage. Version changes,
-documentation and new tests are not counted as separate improvements.
+**This version has not been published.** The current development checkpoint contains 262 distinct runtime improvements: the original 100-change baseline plus 162 additional changes in batch 01. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Additional planning, color and performance improvements
+
+- Preserve protected micro-details, directed stroke geometry and exact pixel boundaries; correct int16 luminance overflow for bright source pixels.
+- Enforce both path and color dry-run limits, retain semantic outline barriers and account for actual brush/color state in execution estimates.
+- Bound palette fallback allocation across both image dimensions, reuse color conversions and geometry measurements, and reduce large-path preview allocations.
+- Keep transparent pixels out of drawing strokes and align scalar/vector RGB matching. Validate optional palette caches and fingerprint the complete visible image.
+- Check cancellation before expensive allocations, within long individual work units and before publishing completed results. Release portrait GPU sessions on all terminal paths.
+
+## Additional persistence, resource and UI improvements
+
+- Preserve existing state on real disk errors and serialize cooperating learning writers across threads/processes.
+- Reject malformed or nonfinite learned/calibration evidence; retain legitimate zero measurements and respect explicit CPU/no-save settings.
+- Bound queued executor work and row memory budgets; use one consistent hardware snapshot per allocation.
+- Keep native paste in text controls, restore UI state after startup failures, yield long event queues and avoid redundant preview layouts.
+- Save recordings through unique atomic staging files, preserve existing recordings on failure and release owned capture buffers.
+
+The batch passed 2,202 local unittest tests with 19 platform/hardware skips. Area ledgers contain reproducible CPU measurements and exact-output comparisons; Windows packaging, physical GPU behavior and real drawing remain separate verification scopes.
+
+## Original 100-change baseline
 
 ## GPU detection and execution
 
@@ -68,7 +84,7 @@ native extensions; normal bundled-Python behavior can continue to match generic
 detection rules. These changes do not promise zero antivirus detections, and a
 scan of an older hash does not describe this release.
 
-Downloads include a Windows installer, a portable ZIP, SHA-256 checksums and a
-release manifest. See the
-[antivirus investigation](https://github.com/Vxiey/Image-Draw-Bot/blob/v1.0.147/docs/ANTIVIRUS-REVIEW-2026-11.md)
+Planned downloads are a Windows installer, a portable ZIP, SHA-256 checksums and a
+release manifest; they become available after verified publication. See the
+[antivirus investigation](docs/ANTIVIRUS-REVIEW-2026-11.md)
 for artifact-specific findings and unresolved observations.

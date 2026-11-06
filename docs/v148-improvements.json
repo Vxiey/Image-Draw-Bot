@@ -1,0 +1,2005 @@
+{
+  "version": "1.0.148",
+  "target": 1000,
+  "implemented": 262,
+  "release_published": false,
+  "validation": "Batch 01 local full suite passed; Windows CI pending.",
+  "improvements": [
+    {
+      "id": 1,
+      "area": "baseline",
+      "local_id": "001",
+      "description": "Windows hardware discovery no longer starts PowerShell. Native DXGI enumerates NVIDIA, AMD, Intel, and other hardware; preserves full pointer-width dedicated VRAM; excludes software adapters by their documented flag; and retains hardware with no dedicated VRAM.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 2,
+      "area": "baseline",
+      "local_id": "002",
+      "description": "One unusable CUDA device no longer hides healthy devices.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 3,
+      "area": "baseline",
+      "local_id": "003",
+      "description": "Cached CUDA selection is applied to the thread that actually performs the work.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 4,
+      "area": "baseline",
+      "local_id": "004",
+      "description": "Windows cannot select an arbitrary `nvidia-smi` executable from PATH, the working directory, or environment-overridden install roots.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 5,
+      "area": "baseline",
+      "local_id": "005",
+      "description": "NVIDIA metadata cannot be assigned to a different GPU whose model merely shares a prefix.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 6,
+      "area": "baseline",
+      "local_id": "006",
+      "description": "Two physical adapters with the same model are retained when NVIDIA's utility is unavailable.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 7,
+      "area": "baseline",
+      "local_id": "007",
+      "description": "Missing NVIDIA fields do not erase useful native metadata.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 8,
+      "area": "baseline",
+      "local_id": "008",
+      "description": "Malformed NVIDIA CSV or nonfinite/fractional indices cannot crash discovery or select the wrong device.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 9,
+      "area": "baseline",
+      "local_id": "009",
+      "description": "A full Windows GPU refresh performs one native enumeration.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 10,
+      "area": "baseline",
+      "local_id": "010",
+      "description": "Refreshing NVIDIA information invalidates an older universal GPU snapshot.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 11,
+      "area": "baseline",
+      "local_id": "011",
+      "description": "CUDA fused kernels receive scalars with the widths declared by their C signatures.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 12,
+      "area": "baseline",
+      "local_id": "012",
+      "description": "Retrying a failed accuracy-scoring tile does not count pixels or brush hits twice.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 13,
+      "area": "baseline",
+      "local_id": "013",
+      "description": "Very dark byte palettes produce correct Oklab distances.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 14,
+      "area": "baseline",
+      "local_id": "014",
+      "description": "Damaged hardware profiles become recoverable cache misses instead of uncaught exceptions.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 15,
+      "area": "baseline",
+      "local_id": "015",
+      "description": "Explicit empty preference data is respected, and malformed nested preferences safely select CPU.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 16,
+      "area": "baseline",
+      "local_id": "016",
+      "description": "Nonfinite benchmark values cannot win backend selection or create infinite speedups.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 17,
+      "area": "baseline",
+      "local_id": "017",
+      "description": "Suggested GPU memory budgets respect currently reported free memory.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 18,
+      "area": "baseline",
+      "local_id": "018",
+      "description": "CPU-name fallback does not perform unnecessary WMI/platform queries.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 19,
+      "area": "baseline",
+      "local_id": "019",
+      "description": "Reading optional runtime versions does not initialize CUDA/OpenCL DLLs.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 20,
+      "area": "baseline",
+      "local_id": "020",
+      "description": "Auto backend status follows measured crossover thresholds and current backend health.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 21,
+      "area": "baseline",
+      "local_id": "021",
+      "description": "Cancellation is responsive during a single long stroke.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 22,
+      "area": "baseline",
+      "local_id": "022",
+      "description": "Programmatic GPU installers verify the actual target virtual environment before modifying packages.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 23,
+      "area": "baseline",
+      "local_id": "023",
+      "description": "Process start failures and timeouts return controlled setup results with CPU fallback.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 24,
+      "area": "baseline",
+      "local_id": "024",
+      "description": "OpenCL validation uses the selected Python interpreter before and after installation.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 25,
+      "area": "baseline",
+      "local_id": "025",
+      "description": "A broken first OpenCL adapter no longer hides another working GPU.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 26,
+      "area": "baseline",
+      "local_id": "026",
+      "description": "Windows OS DLLs used by DPI, taskbar and shared native helpers load with `LOAD_LIBRARY_SEARCH_SYSTEM32` before PyInstaller can rewrite a bare filename into the bundle. OS directory discovery uses Windows APIs rather than environment variables.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 27,
+      "area": "baseline",
+      "local_id": "027",
+      "description": "Failure to load the Windows DPI provider returns a safe 96-DPI default instead of aborting target inspection.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 28,
+      "area": "baseline",
+      "local_id": "028",
+      "description": "Taskbar properties reject a null COM store, avoid dereferencing null text and clear allocated PROPVARIANT output even when `GetValue` fails.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 29,
+      "area": "baseline",
+      "local_id": "029",
+      "description": "A diagnostics ZIP appears at its final path only after collection and ZIP closure succeed; interrupted collection removes the temporary archive.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 30,
+      "area": "baseline",
+      "local_id": "030",
+      "description": "Settings and calibration collection limits each JSON input to 4 MiB and each summary to 100 files, preventing unbounded exports from corrupted local state.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 31,
+      "area": "baseline",
+      "local_id": "031",
+      "description": "Diagnostics omit linked settings, calibration files and logs, including linked parent directories and Windows junctions.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 32,
+      "area": "baseline",
+      "local_id": "032",
+      "description": "Diagnostics include the consolidated debug-error log and its rotated copy, with the same redaction as other exported logs.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 33,
+      "area": "baseline",
+      "local_id": "033",
+      "description": "Calibration version metadata cannot copy an arbitrary nested object into an otherwise summarized export; string versions are sanitized and limited.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 34,
+      "area": "baseline",
+      "local_id": "034",
+      "description": "Cookie and Set-Cookie headers are redacted in plain logs and quoted JSON fields.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 35,
+      "area": "baseline",
+      "local_id": "035",
+      "description": "Shared logs redact common Windows user paths on drives other than C, plus Linux and macOS home paths. Missing home-directory lookup does not disable other redaction.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 36,
+      "area": "baseline",
+      "local_id": "036",
+      "description": "Non-finite numeric context is omitted so diagnostics metadata remains valid strict JSON.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 37,
+      "area": "baseline",
+      "local_id": "037",
+      "description": "Python-generated session, error and exception records redact credentials before writing them locally. Export sanitization remains a second boundary.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 38,
+      "area": "baseline",
+      "local_id": "038",
+      "description": "Individual application log records are limited to 64 Ki characters after sanitization; rotation considers the incoming record size.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 39,
+      "area": "baseline",
+      "local_id": "039",
+      "description": "Direct worker-error writes, log rotation and Python exception-stream writes share the reentrant log lock.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 40,
+      "area": "baseline",
+      "local_id": "040",
+      "description": "Runtime ZIP validation rejects traversal, absolute paths, unexpected roots, alternate data streams, reserved Windows names and trailing-dot/space aliases.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 41,
+      "area": "baseline",
+      "local_id": "041",
+      "description": "Runtime ZIP validation rejects duplicate paths under Windows case/separator rules and file-versus-directory collisions.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 42,
+      "area": "baseline",
+      "local_id": "042",
+      "description": "Runtime ZIP validation rejects symbolic links and special-file metadata.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 43,
+      "area": "baseline",
+      "local_id": "043",
+      "description": "Release build and validation inspect only the two-byte executable header instead of reading whole EXEs into memory. Hashing and CRC validation continue to stream complete content.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 44,
+      "area": "baseline",
+      "local_id": "044",
+      "description": "Checksum validation accepts only safe unique basenames and verifies exact coverage of the selected standard/CUDA release artifacts.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 45,
+      "area": "baseline",
+      "local_id": "045",
+      "description": "Manifest validation rejects malformed roots/rows, duplicate or unexpected artifacts, unsafe names, boolean schema values and non-integer sizes; generator inputs are fully verified.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 46,
+      "area": "baseline",
+      "local_id": "046",
+      "description": "Source archive creation preserves a previous archive on failure and atomically replaces it on success. The destination is excluded even through a `..` path; an output symlink is replaced without changing its target.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 47,
+      "area": "baseline",
+      "local_id": "047",
+      "description": "Under the same Python/zlib build, identical source contents produce identical ZIP bytes with fixed source-entry timestamps and permissions, independent of checkout mtimes and umask.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 48,
+      "area": "baseline",
+      "local_id": "048",
+      "description": "Source archives do not follow file/directory links or Windows junctions; runtime privacy exclusions also apply to Windows case variants.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 49,
+      "area": "baseline",
+      "local_id": "049",
+      "description": "Isolated target results reject boolean/invalid native IDs, invalid or empty rectangles and inconsistent DPI scaling. An explicit HWND probe must return that same window.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 50,
+      "area": "baseline",
+      "local_id": "050",
+      "description": "LocalDumps setup/restoration validates the complete saved configuration and all planned originals before any registry mutation. A changed later target can no longer leave an earlier target partially configured.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 51,
+      "area": "baseline",
+      "local_id": "051",
+      "description": "`SessionRecovery._safe_primitive` previously retained NaN and infinities. Saving drops nonfinite option values, and loading rejects nonfinite JSON numbers. Valid integers, booleans, and bounded strings remain supported.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 52,
+      "area": "baseline",
+      "local_id": "052",
+      "description": "Python equality allowed boolean/float recovery schemas and truthiness accepted strings such as `\"false\"` for `has_image`. Schema IDs now require an integer, and the image flag requires a boolean. Legacy absent image flags still mean false.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 53,
+      "area": "baseline",
+      "local_id": "053",
+      "description": "Session and render JSON previously used unbounded `read_text`. Reads are now limited to 128 KiB and 8 MiB respectively, with depth/item limits and safe handling of invalid UTF-8, decoder recursion, and nonfinite numbers. A broken render file still permits a valid session to load.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 54,
+      "area": "baseline",
+      "local_id": "054",
+      "description": "Saving and loading used different canvas-coordinate validation, and coercing infinity could raise `OverflowError`. Both paths now use one validator for exactly two pairs of integer coordinates within ±200,000, without silently truncating floats or accepting booleans.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 55,
+      "area": "baseline",
+      "local_id": "055",
+      "description": "Target-lock hints copied arbitrary nested lists and unbounded scalar values. Only known metadata fields are retained with explicit shapes, lengths, numeric limits, and types. Live handles and authorization remain excluded.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 56,
+      "area": "baseline",
+      "local_id": "056",
+      "description": "A fixed PNG temporary filename and separately replaced image/state could mix concurrent saves or change the previous snapshot's pixels after a state-write failure. New schema 3 publishes uniquely staged, SHA-256-addressed images before the state file. A thread lock and OS advisory lock serialize publication and cleanup. Successful saves retain the current and previous image generations; failed publication preserves the current snapshot.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 57,
+      "area": "baseline",
+      "local_id": "057",
+      "description": "Cached images previously decoded without a size gate. Loading now limits encoded bytes to 256 MiB and dimensions to 40 million pixels, treats Pillow decompression warnings as rejection, and verifies a new snapshot's image digest using the same open file that is decoded. The pixel limit preserves the existing screenshot-capture ceiling.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 58,
+      "area": "baseline",
+      "local_id": "058",
+      "description": "The recovery allowlist discarded existing snapshot fields, including resource scheduling, detail zoom, visual verification, color fidelity, profile/edge behavior, sketch detail, timer reading, and render preset. These fields now survive save/load without allowing input authorization or automatic preview restoration.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 59,
+      "area": "baseline",
+      "local_id": "059",
+      "description": "`clear_render_resume` deleted progress before the session write succeeded. It now clears progress only after the new state file publishes successfully.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 60,
+      "area": "baseline",
+      "local_id": "060",
+      "description": "Sequence checkpoints treated valid `color_index=0` as missing because of `or -1`. Zero now remains zero through checkpoint validation and resolution; absent/None color indices retain the missing-value sentinel.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 61,
+      "area": "baseline",
+      "local_id": "061",
+      "description": "A checkpoint could claim both path-level and sequence-level progress, and validation silently chose one. Contradictory modes now invalidate the checkpoint.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 62,
+      "area": "baseline",
+      "local_id": "062",
+      "description": "Sequence bit validation expanded every bit into a Python boolean list. Validation and count reconstruction now use packed bytes, enforce encoded length and zero tail bits, and cap the operation count before allocation. The existing `_decode_bits` compatibility helper remains available.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 63,
+      "area": "baseline",
+      "local_id": "063",
+      "description": "Custom profile names could collide by case or contain control/format characters. Creation, loading, and portable-profile validation now use printable, bounded names, and new registrations enforce casefold uniqueness while retaining ordinary Unicode names.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 64,
+      "area": "baseline",
+      "local_id": "064",
+      "description": "Two registry names could reuse one custom UUID and therefore share settings/calibration storage. Loading now records existing key owners and ignores a second owner of the same key.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 65,
+      "area": "baseline",
+      "local_id": "065",
+      "description": "The custom profile registry was an unbounded UTF-8 read. Loading now caps bytes and entries, rejects duplicate JSON keys, safely handles invalid UTF-8/decoder recursion, and only registers valid flat name/key pairs.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 66,
+      "area": "baseline",
+      "local_id": "066",
+      "description": "Importing profile settings and calibrations sequentially could leave a partially replaced profile. All new files are staged before publication, originals are retained as unique backups, and a reported write/move/delete failure restores prior files, including prior absence. A failed rollback retains recovery files and reports their paths.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 67,
+      "area": "baseline",
+      "local_id": "067",
+      "description": "Import-as-copy and new imported profiles registered a UI entry before their files were saved. Registry publication is now included in the file operation, and in-memory registration happens only after all profile files and the registry succeed.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 68,
+      "area": "baseline",
+      "local_id": "068",
+      "description": "Reset profile deleted files one at a time and could stop with half the original profile missing. Reset now uses the same backup/rollback mechanism, and does not reload defaults when a deletion fails.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 69,
+      "area": "baseline",
+      "local_id": "069",
+      "description": "App-tool and exact-color filenames used a different sanitizer from other profile files, causing collisions such as `a/b` and `a-b`. Both now use `ProfileStorage.safe_profile_key`; ordinary built-in/custom UUID filenames remain unchanged.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 70,
+      "area": "baseline",
+      "local_id": "070",
+      "description": "Integral floating factors such as `2.0` passed validation but produced floating resize dimensions, while size suggestions accepted dimensions rejected by actual upscaling. Upscale calculations now normalize supported numeric factors to integers and share strict positive-integer dimension validation with suggestions.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 71,
+      "area": "baseline",
+      "local_id": "071",
+      "description": "Corner color previously used exactly the Auto border model. It now samples small patches at the four actual corners and uses the dominant corner-color cluster. Full-border Auto modeling remains unchanged. Border connectivity, transparency preservation, and destructive-removal guards still apply.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 72,
+      "area": "baseline",
+      "local_id": "072",
+      "description": "Background removal checked cancellation only after EXIF/RGBA allocation and could return a result after cancellation during final alpha work. It now checks before allocation, before segmentation, and at every result-return boundary, including preservation branches.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 73,
+      "area": "baseline",
+      "local_id": "073",
+      "description": "Profile reset discarded `one_click_setup_after` without cancelling its Tk callback. It now cancels the old profile's pending setup callback before clearing its token and payload.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 74,
+      "area": "baseline",
+      "local_id": "074",
+      "description": "Scheduling a recovery checkpoint cancelled unrelated preview, setup, profile, capture, and drawing timers. `DrawBotApp._schedule_recovery_checkpoint` now reschedules only its own recovery timer and preserves image-request coalescing.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 75,
+      "area": "baseline",
+      "local_id": "075",
+      "description": "Recovery loaded a cached image unconditionally, ignoring the snapshot's image flag and identity. `DrawBotApp._apply_recovery_snapshot` now requires `has_image is True` and passes `image_sha256` to the loader. The recovered UI remains disarmed.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 76,
+      "area": "baseline",
+      "local_id": "076",
+      "description": "Stop can cancel a release check before a request or between metadata chunks; cancellation remains distinct from a network error.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 77,
+      "area": "baseline",
+      "local_id": "077",
+      "description": "Release checks enforce a 30-second elapsed-time budget between redirects and response chunks, in addition to socket timeouts. An active socket read remains subject to its read timeout; this is not a hard wall-clock interruption.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 78,
+      "area": "baseline",
+      "local_id": "078",
+      "description": "Version parsing accepts either `v` or `V` consistently and rejects ambiguous non-ASCII numeral tags.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 79,
+      "area": "baseline",
+      "local_id": "079",
+      "description": "Release-page links are constructed for the selected tag in this repository instead of trusting an arbitrary `html_url`.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 80,
+      "area": "baseline",
+      "local_id": "080",
+      "description": "An installer asset still being uploaded is not offered as a completed update.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 81,
+      "area": "baseline",
+      "local_id": "081",
+      "description": "Installer handoff validates metadata again and holds a Windows read handle that denies writes and deletion while hashing and starting the verified file.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 82,
+      "area": "baseline",
+      "local_id": "082",
+      "description": "Update downloads check available disk space before a network request or partial-file creation and explain how much space is required.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 83,
+      "area": "baseline",
+      "local_id": "083",
+      "description": "Binary downloads request unencoded bytes and reject unexpected content encoding or a conflicting Content-Length before reading the body.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 84,
+      "area": "baseline",
+      "local_id": "084",
+      "description": "GitHub rate-limit failures explain the limit and Retry-After delay, and retain the Releases-page alternative.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 85,
+      "area": "baseline",
+      "local_id": "085",
+      "description": "A slower, older mobile-preview encode cannot replace a newer frame within the same session.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 86,
+      "area": "baseline",
+      "local_id": "086",
+      "description": "Unchanged mobile image content keeps its revision, avoiding repeated image reloads on phones.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 87,
+      "area": "baseline",
+      "local_id": "087",
+      "description": "The opt-in preview server caps concurrent clients at 12 instead of creating unbounded request threads.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 88,
+      "area": "baseline",
+      "local_id": "088",
+      "description": "Idle or stalled preview clients have a five-second socket timeout, freeing workers and bounding slow writes.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 89,
+      "area": "baseline",
+      "local_id": "089",
+      "description": "Failure to start the preview server thread closes its socket and rolls back the published session state.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 90,
+      "area": "baseline",
+      "local_id": "090",
+      "description": "LAN discovery runs outside the image/state lock; cached addresses refresh when the sharing panel is reopened, and Stop cancels an in-progress start.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 91,
+      "area": "baseline",
+      "local_id": "091",
+      "description": "Advertised preview addresses are valid allowed IPv4 LAN addresses, deduplicated and sorted numerically; unusable public/IPv6 strings are omitted.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 92,
+      "area": "baseline",
+      "local_id": "092",
+      "description": "The phone page aborts stalled status requests, handles HTTP errors, hides stale images on disconnect and retries a failed image even when the frame revision has not changed.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 93,
+      "area": "baseline",
+      "local_id": "093",
+      "description": "The phone page uses image availability to show an empty state without requesting missing images, and gives the selected view and image accessible labels.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 94,
+      "area": "baseline",
+      "local_id": "094",
+      "description": "Invalid or non-finite wheel deltas no longer poison accumulated fractional scroll motion.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 95,
+      "area": "baseline",
+      "local_id": "095",
+      "description": "Wheel input at the end of an inner panel can scroll its enclosing panel.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 96,
+      "area": "baseline",
+      "local_id": "096",
+      "description": "Tree views, combo boxes, spin boxes, sliders and Shift-wheel retain their native input bindings.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 97,
+      "area": "baseline",
+      "local_id": "097",
+      "description": "macOS source runs interpret native wheel units without incorrectly dividing them by Windows' 120-unit scale.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 98,
+      "area": "baseline",
+      "local_id": "098",
+      "description": "Cancellation prevents recovery input after a failed transaction, is never retried as a transient exception, and is checked again before accepting a successful operation.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 99,
+      "area": "baseline",
+      "local_id": "099",
+      "description": "Invalid, NaN and infinite pacing parameters are rejected before they can reach UI waits.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 100,
+      "area": "baseline",
+      "local_id": "100",
+      "description": "Paint and its readable UI Automation PowerShell helper resolve their executable paths through the Windows API instead of trusting environment directory overrides.",
+      "ledger": "100-IMPROVEMENTS-v1.0.148.md"
+    },
+    {
+      "id": 101,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG01",
+      "description": "A cached numeric, spectrum or eyedropper method could be selected after its required controls, keyboard backend or sample became unavailable.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 102,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG02",
+      "description": "Creating a tiny probe copied an entire smart path and another slice before using its first distinct segment.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 103,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG03",
+      "description": "Worker palette matching used the global palette's length rather than the supplied palette. An exact match at index 23 could be ignored when the global palette contained 18 colors.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 104,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG04",
+      "description": "With Skip white disabled, CPU color planning turned fully transparent source pixels into white strokes. The accelerated path already left them undrawn.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 105,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG05",
+      "description": "Scalar RGB-nearest matching still applied perceptual fidelity penalties, so it could disagree with the universal CPU/CUDA/OpenCL score definition.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 106,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG06",
+      "description": "Serial color planning rebuilt the same palette and names for every pixel.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 107,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG07",
+      "description": "Basic serial planning unpacked four channels directly from the supplied image and crashed on ordinary RGB, grayscale and palette-mode images.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 108,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG08",
+      "description": "Rounding both fitted dimensions upward could exceed `prepare_image`'s hard pixel budget, including on thin panoramas.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 109,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG09",
+      "description": "Standard image preparation could continue converting/resizing an already cancelled image or return a result after Stop arrived during resize.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 110,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG10",
+      "description": "Reloading `palette.json` changed RGB values but left the nearest-color cache keyed to the previous palette.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 111,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG11",
+      "description": "Accuracy evaluation flattened source transparency but discarded preview alpha, treating hidden black pixels as visible black. A same-size cached source in grayscale/RGBA could also fail shape validation.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 112,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG12",
+      "description": "Importance maps were quantized to 8 bits even at their original size. A value of 0.62 became approximately 0.6196 and fell below the important-feature threshold.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 113,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG13",
+      "description": "NaN coverage could be clamped into a displayed 100% score; nonfinite execution scores had the same problem.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 114,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG14",
+      "description": "Stop arriving during late summary/heatmap work did not prevent publication of the completed accuracy result.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 115,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG15",
+      "description": "The delta-error heatmap retained a full RGB float staging image before copying it into RGB bytes.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 116,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG16",
+      "description": "General numeric RGB APIs inferred scale only from the brightest value, interpreting integer RGB(1,1,1) as normalized white.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 117,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG17",
+      "description": "An empty pairwise palette produced an indexing exception.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 118,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG18",
+      "description": "Forced-CUDA routing could crash on malformed stored throughput or select infinite/nonpositive benchmark values.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 119,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG19",
+      "description": "Negative OpenCL indices selected devices from the end of Python lists; malformed CUDA IDs could silently become device zero.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 120,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG20",
+      "description": "Several numeric GPU paths caught cancellation as a backend failure and retried on CPU. Completed work could also escape a late Stop, and the advanced color caller did not forward its callback.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 121,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG21",
+      "description": "Backend-health mutation and snapshot iteration were unsynchronized.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 122,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG22",
+      "description": "CPU palette matching repeated OKLab/features for each tile pair and allocated a pixel×palette×RGB difference cube.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 123,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG23",
+      "description": "Picture-palette cache loading read the entire file and allowed parser recursion failures to escape.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 124,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG24",
+      "description": "Cache validation coerced invalid schema/dimensions/RGB values, accepted inconsistent color groups, and converted nonfinite coverage into plausible values.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 125,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG25",
+      "description": "Saving an invalid palette could replace an existing valid cache with data that should never be trusted.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 126,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG26",
+      "description": "The image cache key hashed a 512-pixel thumbnail, so visible source edits could disappear during resampling and reuse an old palette.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 127,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG27",
+      "description": "A cancelled palette request could still hash the image, return a cache hit or continue edge-color sampling.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 128,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG28",
+      "description": "Failure to access or write the optional cache could prevent a valid in-memory picture palette from being used; lookup also created an empty directory.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 129,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG29",
+      "description": "Already-opaque RGB images were converted through RGBA, and analysis helpers copied newly owned RGB images again.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 130,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG30",
+      "description": "Region measurement scanned the full label image separately for every color.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 131,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG31",
+      "description": "Region measurement computed median and low/high percentiles in separate passes.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 132,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG32",
+      "description": "Source-backed representative selection repeatedly normalized the same target and computed Python scalar distances for every candidate.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 133,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG33",
+      "description": "Adaptive selection could keep two colors despite an explicit one-color maximum.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 134,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG34",
+      "description": "Adaptive palette analysis repeated symmetric CIEDE2000 comparisons and recomputed the same candidate pair costs across trials.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 135,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG35",
+      "description": "GPU importance normalization lacked the CPU fallback for collapsed percentile ranges, yielding different sparse/flat maps.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 136,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG36",
+      "description": "Importance analysis read hidden RGB values from transparent pixels, creating detail that the user would not see.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 137,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG37",
+      "description": "A 128 MiB floor could override a small explicit importance-map VRAM budget, and malformed budget values could abort analysis.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 138,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG38",
+      "description": "Importance analysis could return a CPU/GPU result after Stop; a GPU interruption could be swallowed as ordinary fallback.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 139,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG39",
+      "description": "Preset swatch detection retained a tuple for every component pixel solely to calculate its size and bounding box later.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 140,
+      "area": "colour-gpu",
+      "batch": 1,
+      "local_id": "CG40",
+      "description": "Every refinement-quality check expanded weighted color errors back into one entry per sampled pixel.",
+      "ledger": "v148-batch01-colour-gpu.md"
+    },
+    {
+      "id": 141,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL01",
+      "description": "A path cap of zero or two could retain four paths, one for each selected color.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 142,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL02",
+      "description": "Progressive execution sampling ignored the requested color cap; eight colors survived a cap of two.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 143,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL03",
+      "description": "Endpoint/midpoint sampling missed a protected third pixel in a four-pixel micro-stroke.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 144,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL04",
+      "description": "Removing empty paths before aligning metadata shifted outline phase hints and protected prefixes to later tone paths.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 145,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL05",
+      "description": "A block-local reorder passed its transition check while global color/brush changes rose from one to three.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 146,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL06",
+      "description": "A NaN elapsed sample recorded an 80 paths/sec estimate and invalid accumulated seconds. Corrupt profiles contaminated later estimates.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 147,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL07",
+      "description": "Counting ordinary moves constructed and retained the complete coordinate path.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 148,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL08",
+      "description": "Each run rescanned active paths whose sorted intervals had already ended.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 149,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL09",
+      "description": "A malformed explicitly supplied contour collapsed to the same value as an absent legacy contour and skipped checks.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 150,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL10",
+      "description": "Malformed or reversed exact row spans could be discarded into a permissive bounding-box fallback.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 151,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL11",
+      "description": "A seed outside its intended region was accepted if it lay inside the overall canvas.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 152,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL12",
+      "description": "Exact graph/neighbor merges reversed directed paths even with `allow_reverse=False`.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 153,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL13",
+      "description": "Collinear compression erased direction reversals and their painted excursion.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 154,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL14",
+      "description": "A 1,200-point alternating contour exceeded Python's recursion limit during RDP simplification.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 155,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL15",
+      "description": "Adjacent-pair testing split a later short run nested inside an earlier long run into a new component.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 156,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL16",
+      "description": "Component mass counted duplicate/overlapping source runs repeatedly.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 157,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL17",
+      "description": "Component detection compared every previous-row run with every current-row run.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 158,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL18",
+      "description": "Bounded nearest-neighbor search still shifted the entire future job on each list removal.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 159,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL19",
+      "description": "The last-resort palette fallback allocated a row-count × full-width × palette tensor, so very wide rows defeated the row bound.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 160,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL20",
+      "description": "A NaN missing-pixel tolerance approved a fixture missing 75% of its intended coverage.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 161,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL21",
+      "description": "Pre-cancelled work still allocated canvas masks; a very long contour outside the canvas had no bounded cancellation point.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 162,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL22",
+      "description": "A 160-pixel style thumbnail required full-resolution RGBA conversion and another full copy first.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 163,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL23",
+      "description": "Phase, importance, and spatial seeding repeatedly scanned the same path for length, bounds, and center.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 164,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL24",
+      "description": "Missing optional shadow maps allocated and summed two zero arrays for every raster run.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 165,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL25",
+      "description": "A negative drawable index selected the last palette color in dot mode, while line mode silently discarded it; malformed shapes were unchecked. Unsigned indices also failed when constructing a negative sentinel.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 166,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL26",
+      "description": "Pre-cancelled Off/small-image paths still converted the image, and cancellation during the final composite published a result.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 167,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL27",
+      "description": "Taking eight representative items first copied every entry in an already-indexable sequence.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 168,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL28",
+      "description": "`max(2, ...)` prevented the below-2 exit from ever enforcing the advertised analysis-size ceiling.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 169,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL29",
+      "description": "Nonmaximum suppression sorted all eligible cells into Python tuples before selecting at most twice the small path cap.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 170,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL30",
+      "description": "Empty geometry became billable dots or caused palette/brush state changes despite executing no stroke.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 171,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL31",
+      "description": "An explicit brush change followed by a stroke omitting brush metadata implicitly switched back to the default, charging a second switch.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 172,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL32",
+      "description": "Each orientation computed both candidate order costs, then recomputed the chosen cost.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 173,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL33",
+      "description": "Detail strokes chose the smallest nominal brush, even when only larger sizes had verified controls.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 174,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL34",
+      "description": "Repeated color-order entries overwrote a group's sample but incremented path totals repeatedly.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 175,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL35",
+      "description": "Every shared-endpoint join rescanned all already-used indices, producing quadratic behavior for repeated endpoints.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 176,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL36",
+      "description": "Dense-component density analysis built exact vertical runs, then vertical candidate generation built them again.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 177,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL37",
+      "description": "Portrait preparation ignored cancellation through most non-preview processing, including CPU contrast, subject lifting, and saliency loops.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 178,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL38",
+      "description": "GPU analysis sessions were released only after normal line-mode completion; dot returns and exceptions skipped cleanup. Preparation also had no explicit owner when metadata was omitted.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 179,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL39",
+      "description": "Weighted int16 luminance overflow made white evaluate as −1 instead of 255, suppressing a black/white edge.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 180,
+      "area": "planning",
+      "batch": 1,
+      "local_id": "PL40",
+      "description": "A single connected component could flood for its full size before checking cancellation; source-size rejection happened after conversion.",
+      "ledger": "v148-batch01-planning.md"
+    },
+    {
+      "id": 181,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS01",
+      "description": "`atomic_write_text` ignored every `fsync` failure and could replace good state after a real disk error.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 182,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS02",
+      "description": "Tool calibrations and scheduler saves skipped durable flushing; the performance tuner reused one staging filename; release metadata was written in place.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 183,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS03",
+      "description": "Several local state readers loaded arbitrary file sizes and accepted ambiguous duplicate keys, nonfinite numbers or excessive nesting.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 184,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS04",
+      "description": "Atomic replacement did not prevent two learning writers from reading the same old database and losing one update. Resets and migrations could race with writes.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 185,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS05",
+      "description": "A profile key limited to 80 Unicode characters could still exceed a filesystem component's encoded-byte limit once its filename prefix was added.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 186,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS06",
+      "description": "Boolean/fractional schema values passed equality/coercion checks; a list/string in exact-color `controls` could raise `AttributeError` during availability checks.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 187,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS07",
+      "description": "Exact-color points accepted arbitrarily large integers even though normal tool calibration already bounded positions.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 188,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS08",
+      "description": "Degenerate/inverted spectrum rectangles and coincident brightness endpoints could be advertised as usable custom-color calibration.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 189,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS09",
+      "description": "Numeric-only custom-color capability probing loaded and validated the same file twice; a concurrent replacement could also produce inconsistent observations.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 190,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS10",
+      "description": "Corrupt timing sample counts, ratios or runtime containers could crash estimation or prevent future good samples from being recorded.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 191,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS11",
+      "description": "Invalid operation counters or `last_average_seconds` could raise during learning, and invalid raw operation values could be persisted.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 192,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS12",
+      "description": "Delimiter characters inside a policy dimension could produce the same serialized context key as a different combination of dimensions.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 193,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS13",
+      "description": "A legitimate previous MAPE of zero was replaced with the new error by a truthiness fallback, exaggerating learned error after the next sample.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 194,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS14",
+      "description": "Invalid snapshot accuracy could become trusted after clamping; an `available` snapshot with no numeric visual score could crash feedback recording. Contradictory explicit trust flags were ignored.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 195,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS15",
+      "description": "Malformed stored feedback counters/history/EMA values could raise in recommendations or subsequent recording.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 196,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS16",
+      "description": "Per-context sample histories were limited, but the number of feedback contexts could grow without bound as strategies/settings changed.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 197,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS17",
+      "description": "Zero visual accuracy, coverage or confidence could disappear or be replaced by a positive secondary value in correction history.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 198,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS18",
+      "description": "Nonfinite/malformed calibration evidence could become high confidence, and an unexpected health-scoring exception was reported as nonblocking.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 199,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS19",
+      "description": "Final-canvas evidence with missing/invalid metrics or truthy non-Boolean flags could teach ETA calibration as a trusted completed draw.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 200,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS20",
+      "description": "Worker selection used machine CPU count even when the process could use only a restricted CPU set.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 201,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS21",
+      "description": "Linux available-memory estimates used free pages and ignored reclaimable memory, producing unnecessarily restrictive budgets.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 202,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS22",
+      "description": "One allocation probed CPU count and available RAM twice, so the budget and reported hardware could describe different moments.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 203,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS23",
+      "description": "Known available RAM below 128 MiB was rounded up to a larger planning budget; tuner recommendations could also exceed very low available memory.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 204,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS24",
+      "description": "The eight-row minimum and subsequent pressure scaling could override computed memory limits for wide images.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 205,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS25",
+      "description": "Python 3.12 executor `map` submitted every task eagerly, allowing a large pending-work allocation and unnecessary queued work after failure.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 206,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS26",
+      "description": "Explicit process mode with more than 61 Windows workers could fail at `ProcessPoolExecutor` construction.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 207,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS27",
+      "description": "The scheduler respected CPU mode for matrix work but still labeled correction scoring for GPU routing.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 208,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS28",
+      "description": "Invalid persisted scheduler schemas, worker counts, engine names or benchmark scores could crash selection or enter runtime recommendations.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 209,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS29",
+      "description": "Default recommendation loading reconstructed the machine signature from the stored CPU count, allowing an old CPU capacity to validate itself.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 210,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS30",
+      "description": "`run_auto_tune(save=False)` still called the scheduler benchmark with `save=True`.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 211,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS31",
+      "description": "A structurally shallow tuner cache check could load invalid CPU counts and unsupported planning/RAM/engine selections into the UI.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 212,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS32",
+      "description": "After a hardware benchmark error, the tuner loaded a cached profile without checking it against current hardware.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 213,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS33",
+      "description": "Explicit profiler stop tokens left active marks behind and repeated stops could double-count a phase.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 214,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS34",
+      "description": "An all-zero or unknown-only profile reported the first known phase as a bottleneck despite having no positive measurement.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 215,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS35",
+      "description": "Execution telemetry copied every path in a color group at once and allocated a slice for each pairwise distance traversal.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 216,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS36",
+      "description": "Known target lookups eagerly constructed unused fallback objects, and immutable classification sets were rebuilt repeatedly.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 217,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS37",
+      "description": "The bounded source probe copied a full-size RGB image before reducing it to at most 128 pixels on its long edge.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 218,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS38",
+      "description": "Cancellation arriving during source color analysis did not prevent the next probe or publication of source features.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 219,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS39",
+      "description": "Missing, negative or nonfinite projected time became zero, allowing a timed plan to pass the deadline gate.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 220,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS40",
+      "description": "Invalid quality thresholds defaulted to zero, while out-of-domain percentage metrics could pass acceptance.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 221,
+      "area": "storage-security",
+      "batch": 1,
+      "local_id": "SS41",
+      "description": "The signing walk could follow a native-file symlink and pass an external target to SignTool.",
+      "ledger": "v148-batch01-storage-security.md"
+    },
+    {
+      "id": 222,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI01",
+      "description": "Mixed file drops and clipboard file lists continue past unsupported files to find the first usable image.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 223,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI02",
+      "description": "Bound raw drop input, total item characters and item count before filesystem/regex processing; scan HTML/URL candidates without retaining all matches.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 224,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI03",
+      "description": "Interpret `file://localhost` as a local path instead of a UNC share.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 225,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI04",
+      "description": "Reject decoded control bytes in file URLs before filesystem use.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 226,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI05",
+      "description": "Switching preview tabs lays out only the changed pages; selecting the visible page avoids a redundant layout.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 227,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI06",
+      "description": "Reject duplicate or blank preview page names before allocating widgets and orphaning pages.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 228,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI07",
+      "description": "Contain Tk errors from destroyed CustomTkinter scroll targets.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 229,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI08",
+      "description": "Reuse existing profile presets without constructing a discarded generic preset on every lookup.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 230,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI09",
+      "description": "Protect shared profile preset defaults from caller mutation while returning an editable export copy.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 231,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI10",
+      "description": "Handle malformed optional calibration metadata when producing profile warnings.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 232,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI11",
+      "description": "Honor an explicitly supplied empty calibration state rather than falling back to stale state inside options.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 233,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI12",
+      "description": "Treat a warning string as one warning instead of rendering each character as a warning.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 234,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI13",
+      "description": "Preserve elapsed time when updating the same start state and use one clock snapshot for watchdog output.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 235,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI14",
+      "description": "Logging failures cannot interrupt valid start transitions or bypass invalid-transition rejection.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 236,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI15",
+      "description": "Require an actual supported integer calibration-anchor schema version.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 237,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI16",
+      "description": "Validate stored and translated calibration coordinates against signed Windows LONG bounds while retaining negative monitor coordinates.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 238,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI17",
+      "description": "Reject invalid layout tolerances consistently instead of truncating fractional tolerances or raising overflow errors.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 239,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI18",
+      "description": "Read only the version-history viewer's bounded character budget.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 240,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI19",
+      "description": "Try a readable bundled version-history fallback when the preferred existing file is inaccessible.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 241,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI20",
+      "description": "Bound dictionary bytes during the read, including files that grow between metadata inspection and reading.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 242,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI21",
+      "description": "Index immutable dictionary snapshots by letter count and reuse them across searches without stale results after caller list changes.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 243,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI22",
+      "description": "Keep native paste behavior in multiline text and spinbox controls, including Tcl widget path events.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 244,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI23",
+      "description": "Block clipboard imports while closing or waiting for a clear operation, preserving the in-flight operation's image state.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 245,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI24",
+      "description": "Apply EXIF orientation exactly once to pasted image objects without changing the clipboard source.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 246,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI25",
+      "description": "Recognize uppercase HTTP schemes and reject malformed hosts/ports before starting an image-fetch worker.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 247,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI26",
+      "description": "Roll back all worker startup stages, including hide/busy/thread-construction failures, while preserving the original error if cleanup also fails.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 248,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI27",
+      "description": "Respect cancellation that arrives before a non-screen worker begins its task.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 249,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI28",
+      "description": "Yield the UI event loop after a 15 ms drain budget instead of processing up to 250 expensive events in one uninterrupted call.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 250,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI29",
+      "description": "Contain canvas destruction during the preview error-message fallback itself.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 251,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI30",
+      "description": "Copy the mobile-preview URL without creating an unused Tk StringVar for every call.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 252,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI31",
+      "description": "Encode GIF recordings to a unique staging file, flush before atomic replacement, and preserve existing recordings on failure.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 253,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI32",
+      "description": "Close captured and quantized recording frames after success or partial capture failure.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 254,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI33",
+      "description": "Sample long safety-preview paths before coordinate conversion instead of allocating a transformed copy of every point.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 255,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI34",
+      "description": "Check preview cancellation before allocation, inside long individual paths and before returning completed layers.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 256,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI35",
+      "description": "Reuse the correctly composited source when preview dimensions already match, avoiding duplicate resizing and alpha compositing.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 257,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI36",
+      "description": "Skip nonfinite fill-region boxes without discarding otherwise valid auxiliary preview layers.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 258,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI37",
+      "description": "Commit a recaptured tool window identity only after anchor layout validation succeeds.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 259,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI38",
+      "description": "Keep subject-selector thumbnail bounds positive on compact desktops.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 260,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI39",
+      "description": "Destroy the subject-selection modal before invoking the application callback, including callbacks that raise.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 261,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI40",
+      "description": "Restore an initially minimized region-picker owner to its minimized state instead of leaving it withdrawn.",
+      "ledger": "v148-batch01-ui-input.md"
+    },
+    {
+      "id": 262,
+      "area": "ui-input",
+      "batch": 1,
+      "local_id": "UI41",
+      "description": "Release region-picker full-desktop buffers on selection/cancellation while leaving the delivered crop usable.",
+      "ledger": "v148-batch01-ui-input.md"
+    }
+  ]
+}

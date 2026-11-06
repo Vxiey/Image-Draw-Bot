@@ -5,6 +5,8 @@ routes instead of replaying every final stroke.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 DRY_RUN_PLANNING_SECONDS = 8.0
 DRY_RUN_EXECUTION_SECONDS = 12.0
 DRY_RUN_MAX_COLORS = 4
@@ -27,7 +29,7 @@ def sample_indices(length, limit):
 
 
 def sample_items(items, limit):
-    seq=list(items or ())
+    seq = items if isinstance(items, Sequence) else list(items or ())
     return [seq[i] for i in sample_indices(len(seq),limit)]
 
 
@@ -35,13 +37,26 @@ def _active_order(plan):
     groups=plan.get('groups') or []
     execution=plan.get('execution_groups')
     order=(plan.get('options') or {}).get('color_order') or list(range(len(groups)))
-    return [int(i) for i in order if 0<=int(i)<len(groups) and
-            (groups[int(i)] or (execution is not None and int(i)<len(execution) and execution[int(i)]))]
+    active = []
+    seen = set()
+    for value in order:
+        try:
+            index = int(value)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if index in seen or not 0 <= index < len(groups):
+            continue
+        seen.add(index)
+        if groups[index] or (execution is not None and index < len(execution) and execution[index]):
+            active.append(index)
+    return active
 
 
 def sample_plan(plan, *, max_colors=DRY_RUN_MAX_COLORS, max_paths=DRY_RUN_MAX_PATHS,
                 execution_seconds=DRY_RUN_EXECUTION_SECONDS):
     """Return a shallow safe dry-run plan capped to representative routes."""
+    max_colors = max(0, int(max_colors))
+    max_paths = max(0, int(max_paths))
     out=dict(plan); options=dict(plan.get('options') or {})
     options.update({
         'max_seconds':float(execution_seconds),
@@ -55,19 +70,30 @@ def sample_plan(plan, *, max_colors=DRY_RUN_MAX_COLORS, max_paths=DRY_RUN_MAX_PA
         'dry_run_sampled':True,
     })
     out['options']=options
-    sequence=list(plan.get('execution_sequence') or ())
+    sequence=plan.get('execution_sequence') or ()
+    if not isinstance(sequence, Sequence):
+        sequence = list(sequence)
     if sequence:
-        sampled=sample_items(sequence,max_paths)
+        active_colors = list(dict.fromkeys(entry.get('color_index') for entry in sequence
+                                          if entry.get('color_index') is not None))
+        chosen = [active_colors[index] for index in sample_indices(len(active_colors), min(max_colors, max_paths))]
+        selected = set(chosen)
+        eligible = [entry for entry in sequence if entry.get('color_index') is None or entry.get('color_index') in selected]
+        sampled = sample_items(eligible, max_paths) if max_colors and max_paths else []
         out['execution_sequence']=sampled
         out['count']=len(sampled)
+        options['color_order'] = list(dict.fromkeys(entry.get('color_index') for entry in sampled
+                                                   if entry.get('color_index') is not None))
+        options['dry_run_total_colors'] = len(active_colors)
+        options['dry_run_sample_colors'] = len(options['color_order'])
         options['dry_run_total_paths']=len(sequence)
         options['dry_run_sample_paths']=len(sampled)
         return out
 
-    groups=[list(g) for g in (plan.get('groups') or [])]
+    groups=plan.get('groups') or []
     exec_groups=plan.get('execution_groups')
     active=_active_order(plan)
-    chosen=[active[i] for i in sample_indices(len(active),max_colors)]
+    chosen=[active[i] for i in sample_indices(len(active),min(max_colors, max_paths))]
     options['color_order']=chosen
     per_color=max(1,int(max_paths)//max(1,len(chosen)))
     new_groups=[[] for _ in groups]
@@ -76,7 +102,7 @@ def sample_plan(plan, *, max_colors=DRY_RUN_MAX_COLORS, max_paths=DRY_RUN_MAX_PA
     for index in chosen:
         if exec_groups is not None and index<len(exec_groups) and exec_groups[index]:
             picked=sample_items(exec_groups[index],per_color)
-            new_exec[index]=picked;new_groups[index]=groups[index]
+            new_exec[index]=picked;new_groups[index]=list(groups[index])
             count+=len(picked)
         else:
             picked=sample_items(groups[index],per_color)

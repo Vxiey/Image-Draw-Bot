@@ -4,7 +4,7 @@ def select_subject(parent, image, callback):
     import customtkinter as ctk
     from PIL import ImageTk, ImageOps
     preview = ImageOps.exif_transpose(image).convert('RGB')
-    preview.thumbnail((min(900,parent.winfo_screenwidth()-100), min(600,parent.winfo_screenheight()-220)))
+    preview.thumbnail((max(1,min(900,parent.winfo_screenwidth()-100)), max(1,min(600,parent.winfo_screenheight()-220))))
     width, height = preview.size
     dialog = ctk.CTkToplevel(parent)
     dialog.title('Mark subject')
@@ -31,8 +31,9 @@ def select_subject(parent, image, callback):
         state['region']=(x0/width,y0/height,x1/width,y1/height) if x1-x0>=3 and y1-y0>=3 else None
     def apply():
         if state['region'] is None: return
-        callback(state['region'])
+        region=state['region']
         dialog.destroy()
+        callback(region)
     canvas.bind('<Button-1>',start)
     canvas.bind('<B1-Motion>',drag)
     canvas.bind('<ButtonRelease-1>',drag)

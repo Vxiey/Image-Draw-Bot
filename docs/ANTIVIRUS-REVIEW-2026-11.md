@@ -1,7 +1,7 @@
 # Antivirus report review — 2026-11-05
 
 This document retains the original rc2 investigation below. The
-[rc3 follow-up and v1.0.147 changes](#rc3-follow-up-reviewed-2026-11-06) record the
+[rc3 follow-up and v1.0.148 changes](#rc3-follow-up-reviewed-2026-11-06) record the
 later report separately; results for different hashes must not be combined.
 
 ## Artifact identified
@@ -187,9 +187,9 @@ provisioned trusted publisher identity. Signing establishes publisher/integrity
 information; it does not establish why a particular antivirus engine flagged
 this file or guarantee clearance. See [Windows code signing](WINDOWS-CODE-SIGNING.md).
 
-### v1.0.147 changes supported by code and tests
+### v1.0.148 changes supported by code and tests
 
-v1.0.147 replaces the background GPU PowerShell query with native DXGI enumeration.
+v1.0.148 replaces the background GPU PowerShell query with native DXGI enumeration.
 This removes a PATH-based executable-selection dependency and the 32-bit WMI
 memory-field limitation. Microsoft's
 [DXGI adapter description](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc1)
@@ -211,6 +211,6 @@ system-directory API rather than an environment override. No execution-policy
 bypass, scanner exclusion, renamed process, changed install path, packing or
 obfuscation is added to suppress a detector.
 
-See [all 100 v1.0.147 improvements](100-IMPROVEMENTS-v1.0.147.md) for the remaining
+See [the original 100 v1.0.148 improvements](100-IMPROVEMENTS-v1.0.148.md) for the remaining
 changes and regression evidence. Only analysis of the exact new installer and
 application hashes can determine whether vendors still flag those artifacts.

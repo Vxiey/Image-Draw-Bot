@@ -34,6 +34,8 @@ def normalize_source(source: Image.Image, size: tuple[int, int], *, background=(
     Alpha is flattened only for evaluation. The caller's original image is not
     modified. LANCZOS is intentionally used once at the comparison boundary.
     """
+    if source.mode == 'RGB' and 'transparency' not in source.info:
+        return source.resize(tuple(size), Image.Resampling.LANCZOS) if source.size != tuple(size) else source.copy()
     rgba = source.convert('RGBA')
     if rgba.size != tuple(size):
         rgba = rgba.resize(tuple(size), Image.Resampling.LANCZOS)
@@ -80,12 +82,13 @@ def _importance_weights(importance, size: tuple[int, int]) -> tuple[np.ndarray, 
         imp = np.full((size[1], size[0]), 0.5, dtype=np.float32)
     else:
         raw = np.asarray(importance, dtype=np.float32)
-        if raw.ndim != 2:
-            raise ValueError('importance map must be a 2D array')
-        imp_img = Image.fromarray(np.clip(raw * 255.0, 0, 255).astype(np.uint8), 'L')
-        if imp_img.size != tuple(size):
+        if raw.ndim != 2 or not raw.size or not np.all(np.isfinite(raw)):
+            raise ValueError('importance map must be a nonempty finite 2D array')
+        imp = np.clip(raw, 0.0, 1.0)
+        if imp.shape != (size[1], size[0]):
+            imp_img = Image.fromarray(imp)
             imp_img = imp_img.resize(tuple(size), Image.Resampling.BILINEAR)
-        imp = np.asarray(imp_img, dtype=np.float32) / 255.0
+            imp = np.asarray(imp_img, dtype=np.float32)
     return imp, (0.25 + 0.75 * imp).astype(np.float32, copy=False)
 
 
@@ -122,17 +125,15 @@ def _error_preview(perceptual_error: np.ndarray, luminance_error: np.ndarray,
 def _delta_e_preview(delta: np.ndarray, full_error: float = _OKLAB_PERCEPTUAL_FULL_ERROR) -> Image.Image:
     """Render a standalone OKLab distance heatmap without recomputing OKLab."""
     x=np.clip(np.asarray(delta,dtype=np.float32)/max(1e-6,float(full_error)),0.0,1.0)
-    out=np.empty((*x.shape,3),dtype=np.uint8)
+    out=np.zeros((*x.shape,3),dtype=np.uint8)
     # dark -> green -> amber -> red -> near-white
     stops=((0.00,(8,15,24)),(0.20,(34,118,85)),(0.45,(224,177,55)),(0.72,(228,78,65)),(1.00,(250,245,245)))
-    outf=np.zeros((*x.shape,3),dtype=np.float32)
     for (a,ca),(b,cb) in zip(stops,stops[1:]):
         mask=(x>=a)&(x< b if b<1.0 else x<=b)
         if not np.any(mask):continue
         t=((x[mask]-a)/max(1e-9,b-a))[:,None]
         va=np.asarray(ca,dtype=np.float32);vb=np.asarray(cb,dtype=np.float32)
-        outf[mask]=va+(vb-va)*t
-    out[:]=np.clip(outf,0,255).astype(np.uint8)
+        out[mask]=np.clip(va+(vb-va)*t,0,255).astype(np.uint8)
     return Image.fromarray(out,'RGB')
 
 
@@ -163,9 +164,21 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
     """
     if cancelled():
         raise InterruptedError()
+    def percentage(value, name):
+        if value is None:
+            return None
+        value = float(value)
+        if not math.isfinite(value):
+            raise ValueError(f'{name} must be finite')
+        return max(0.0, min(100.0, value))
+    coverage_percent = percentage(coverage_percent, 'coverage_percent')
+    plan_execution_accuracy_percent = percentage(plan_execution_accuracy_percent, 'plan_execution_accuracy_percent')
     size = tuple(map(int, preview.size))
-    src_img = normalized_source if isinstance(normalized_source, Image.Image) and normalized_source.size == size else normalize_source(source, size)
-    dst_img = preview.convert('RGB')
+    if min(size) < 1:
+        raise ValueError('preview must have positive dimensions')
+    source_buffer = normalized_source if isinstance(normalized_source, Image.Image) and normalized_source.size == size else source
+    src_img = normalize_source(source_buffer, size)
+    dst_img = normalize_source(preview, size)
 
     src = np.asarray(src_img, dtype=np.float32) / 255.0
     dst = np.asarray(dst_img, dtype=np.float32) / 255.0
@@ -292,4 +305,6 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
         result['_error_map_image'] = _error_preview(lab_delta, luminance_error, edge_error, imp)
     if return_delta_e_heatmap:
         result['_delta_e_heatmap_image'] = _delta_e_preview(lab_delta)
+    if cancelled():
+        raise InterruptedError()
     return result

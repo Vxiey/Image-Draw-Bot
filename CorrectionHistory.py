@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ProfileStorage import profile_correction_history_file, safe_profile_key
-from RuntimePaths import atomic_write_text
+from RuntimePaths import atomic_write_text, file_transaction, read_json
 
 VERSION = 1
 MAX_ENTRIES = 30
@@ -38,7 +38,7 @@ def _as_dict(value: Any) -> dict[str, Any]:
 def _finite(value: Any, default: float | None = None) -> float | None:
     try:
         out = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     return out if math.isfinite(out) else default
 
@@ -58,7 +58,7 @@ def _num(value: Any, ndigits: int = 3) -> float | None:
 def _int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -78,12 +78,12 @@ def _load(options: dict[str, Any], path: Path | None = None) -> tuple[Path, dict
     resolved = _resolved_path(options, path)
     profile = _profile_from_options(options)
     try:
-        raw = json.loads(resolved.read_text(encoding="utf-8"))
+        raw = read_json(resolved)
     except (OSError, ValueError, TypeError):
         return resolved, _empty(profile)
     if not isinstance(raw, dict):
         return resolved, _empty(profile)
-    if int(raw.get("version", 0) or 0) != VERSION:
+    if type(raw.get("version")) is not int or raw["version"] != VERSION:
         return resolved, _empty(profile)
     if safe_profile_key(raw.get("profile_key")) != profile:
         return resolved, _empty(profile)
@@ -139,18 +139,21 @@ def compact_result_metrics(meta: dict[str, Any] | None) -> dict[str, Any]:
     meta = _as_dict(meta)
     if not meta:
         return {}
+    def preferred(primary, secondary):
+        value = meta.get(primary)
+        return meta.get(secondary) if value is None else value
     out = {
         "available": bool(meta.get("available", True)),
         "trusted": bool(meta.get("trusted")) if "trusted" in meta else None,
         "trust": meta.get("feedback_trust") or meta.get("post_correction_trust"),
-        "confidence_percent": _metric(meta.get("confidence_percent") or meta.get("post_correction_confidence_percent")),
-        "visual_accuracy_percent": _metric(meta.get("visual_accuracy_percent") or meta.get("post_correction_visual_accuracy_percent")),
+        "confidence_percent": _metric(preferred("confidence_percent", "post_correction_confidence_percent")),
+        "visual_accuracy_percent": _metric(preferred("visual_accuracy_percent", "post_correction_visual_accuracy_percent")),
         "source_pixel_accuracy_percent": _metric(meta.get("source_pixel_accuracy_percent")),
         "perceptual_color_accuracy_percent": _metric(meta.get("perceptual_color_accuracy_percent")),
         "luminance_accuracy_percent": _metric(meta.get("luminance_accuracy_percent")),
         "hue_accuracy_percent": _metric(meta.get("hue_accuracy_percent")),
         "edge_accuracy_percent": _metric(meta.get("edge_accuracy_percent")),
-        "actual_coverage_percent": _metric(meta.get("actual_coverage_percent") or meta.get("post_correction_actual_coverage_percent")),
+        "actual_coverage_percent": _metric(preferred("actual_coverage_percent", "post_correction_actual_coverage_percent")),
         "actual_vs_simulated_visual_percent": _metric(meta.get("actual_vs_simulated_visual_percent")),
         "unexpected_ink_percent": _metric(meta.get("unexpected_ink_percent")),
         "visual_gate_passed": meta.get("visual_gate_passed") if isinstance(meta.get("visual_gate_passed"), bool) else None,
@@ -311,26 +314,27 @@ def record_correction_history(plan_or_options: dict[str, Any], *, actual_seconds
     entry = build_history_entry(plan if plan else options, actual_seconds=actual_seconds, created_at=created_at)
     if contains_image_data(entry):
         return {"recorded": False, "reason": "blocked unsafe image-data field", "profile_key": ctx["profile_key"]}
-    resolved, db = _load(options, path)
-    entries = list(db.get("entries") or [])
-    # Avoid duplicate double-click/UI-event records from the same correction run.
-    if not entries or entries[-1].get("id") != entry.get("id"):
-        entries.append(entry)
-    db["entries"] = entries[-MAX_ENTRIES:]
-    db["updated_at"] = round(time.time(), 3)
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2))
-    summary = summarize_correction_history(db, limit=DISPLAY_LIMIT)
-    return {
-        "recorded": True,
-        "profile_key": ctx["profile_key"],
-        "entry_id": entry.get("id"),
-        "state": entry.get("state"),
-        "entries": len(db["entries"]),
-        "latest": compact_history_entry(entry),
-        "summary": summary,
-        "storage_path": str(resolved),
-    }
+    with file_transaction(_resolved_path(options, path)):
+        resolved, db = _load(options, path)
+        entries = list(db.get("entries") or [])
+        # Avoid duplicate double-click/UI-event records from the same correction run.
+        if not entries or entries[-1].get("id") != entry.get("id"):
+            entries.append(entry)
+        db["entries"] = entries[-MAX_ENTRIES:]
+        db["updated_at"] = round(time.time(), 3)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2))
+        summary = summarize_correction_history(db, limit=DISPLAY_LIMIT)
+        return {
+            "recorded": True,
+            "profile_key": ctx["profile_key"],
+            "entry_id": entry.get("id"),
+            "state": entry.get("state"),
+            "entries": len(db["entries"]),
+            "latest": compact_history_entry(entry),
+            "summary": summary,
+            "storage_path": str(resolved),
+        }
 
 
 def compact_history_entry(entry: dict[str, Any]) -> dict[str, Any]:
@@ -428,9 +432,10 @@ def format_correction_history(history: dict[str, Any] | None, *, max_entries: in
 
 def reset_profile_history(options: dict[str, Any], *, path: Path | None = None) -> dict[str, Any]:
     resolved = _resolved_path(options if isinstance(options, dict) else {}, path)
-    existed = resolved.exists()
-    try:
-        resolved.unlink()
-    except FileNotFoundError:
-        pass
-    return {"reset": bool(existed), "profile_key": _profile_from_options(options if isinstance(options, dict) else {}), "storage_path": str(resolved)}
+    with file_transaction(resolved):
+        existed = resolved.exists()
+        try:
+            resolved.unlink()
+        except FileNotFoundError:
+            pass
+        return {"reset": bool(existed), "profile_key": _profile_from_options(options if isinstance(options, dict) else {}), "storage_path": str(resolved)}

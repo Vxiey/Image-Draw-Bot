@@ -53,6 +53,8 @@ def _filter_components(mask: np.ndarray, strength: np.ndarray, threshold: float,
             q=deque([(y,x)]);seen[y,x]=True;cells=[];peak=0.0
             while q:
                 cy,cx=q.popleft();cells.append((cy,cx));peak=max(peak,float(strength[cy,cx]))
+                if len(cells) % 512 == 0 and cancelled():
+                    raise InterruptedError()
                 for dy in (-1,0,1):
                     for dx in (-1,0,1):
                         if not (dx or dy):continue
@@ -71,10 +73,12 @@ def _filter_components(mask: np.ndarray, strength: np.ndarray, threshold: float,
 def structure_map(image: Image.Image, cancelled=lambda:False, detail='Detailed'):
     if detail not in SKETCH2_DETAILS:
         raise ValueError('Choose Simple, Balanced or Detailed sketch detail.')
+    if cancelled():
+        raise InterruptedError()
+    if max(image.size)>1500:
+        raise ValueError('Sketch 2.0 source is too large for the bounded structure pass.')
     cfg=_PROFILES[detail]
     flat=_flatten(image)
-    if max(flat.size)>1500:
-        raise ValueError('Sketch 2.0 source is too large for the bounded structure pass.')
     smooth=flat.filter(ImageFilter.GaussianBlur(cfg['blur']))
     arr=np.asarray(smooth,dtype=np.float32)
     lum=arr[:,:,0]*.2126+arr[:,:,1]*.7152+arr[:,:,2]*.0722
@@ -114,6 +118,8 @@ def structure_map(image: Image.Image, cancelled=lambda:False, detail='Detailed')
         min_component=int(cfg['min_component']),protect_factor=float(cfg['protect_factor']),cancelled=cancelled)
     lum_only=lum_mag>=threshold
     color_only=(color_mag*.46>=threshold*.55)&(~lum_only)&mask
+    if cancelled():
+        raise InterruptedError()
     meta={
         'engine':'Sketch 2.0','detail':detail,'threshold':round(threshold,3),
         'ink_pixels':int(mask.sum()),'luminance_edge_pixels':int((mask&lum_only).sum()),

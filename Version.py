@@ -1,6 +1,6 @@
 APP_NAME = 'Image Draw Bot'
 APP_TAGLINE = 'Automatic Image Drawing'
-APP_VERSION = '1.0.147'
-FILE_VERSION = '1.0.147'
+APP_VERSION = '1.0.148'
+FILE_VERSION = '1.0.148'
 BUILD_CHANNEL = 'stable'
 EXECUTABLE_NAME = 'ImageDrawBot.exe'

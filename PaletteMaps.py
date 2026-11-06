@@ -47,19 +47,22 @@ def detect_preset(image, preset, offset=(0,0)):
         for x in range(w):
             index=y*w+x;rgb=pixels[x,y]
             if visited[index] or rgb not in wanted:continue
-            visited[index]=1;stack=[(x,y)];points=[]
+            visited[index]=1;stack=[(x,y)];count=0
+            left=right=x;top=bottom=y
             while stack:
-                a,b=stack.pop();points.append((a,b))
+                a,b=stack.pop();count+=1
+                if a<left:left=a
+                elif a>right:right=a
+                if b<top:top=b
+                elif b>bottom:bottom=b
                 for nx,ny in ((a-1,b),(a+1,b),(a,b-1),(a,b+1)):
                     if 0<=nx<w and 0<=ny<h:
                         ni=ny*w+nx
                         if not visited[ni] and pixels[nx,ny]==rgb:
                             visited[ni]=1;stack.append((nx,ny))
-            left=min(p[0] for p in points);right=max(p[0] for p in points)
-            top=min(p[1] for p in points);bottom=max(p[1] for p in points)
             cw,ch=right-left+1,bottom-top+1
             if not (6<=cw<=100 and 6<=ch<=100 and .6<=cw/ch<=1.7):continue
-            if len(points)<cw*ch*.85:continue
+            if count<cw*ch*.85:continue
             cx,cy=(left+right)//2,(top+bottom)//2
             if all(pixels[a,b]==rgb for a in range(cx-2,cx+3) for b in range(cy-2,cy+3)):
                 candidates[rgb].append((cx+offset[0],cy+offset[1],cw,ch))

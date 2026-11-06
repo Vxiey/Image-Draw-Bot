@@ -15,6 +15,7 @@ Safety/compatibility rules:
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from functools import wraps
 import math
 import threading
 from typing import Any, Callable, Sequence
@@ -34,6 +35,7 @@ WORKLOAD_PROFILE_ALIAS = {
 }
 
 _LOCK = threading.RLock()
+_HEALTH_LOCK = threading.RLock()
 _FAILED: dict[tuple[str, str], str] = {}
 _OPENCL_CACHE: dict[str, tuple[Any, Any, Any, Any]] = {}
 
@@ -58,6 +60,18 @@ class RouteInfo:
 def _cancel(cancelled: Callable[[], bool]) -> None:
     if cancelled():
         raise InterruptedError()
+
+
+def _check_completed(function):
+    """Do not publish a finished numeric result after the caller pressed Stop."""
+    @wraps(function)
+    def checked(*args, **kwargs):
+        result = function(*args, **kwargs)
+        cancelled = kwargs.get('cancelled')
+        if cancelled is not None:
+            _cancel(cancelled)
+        return result
+    return checked
 
 
 def _cpu_route(workload: str, pixels: int, reason: str = "CPU/NumPy fallback") -> RouteInfo:
@@ -97,16 +111,26 @@ def select_route(workload: str, *, pixels: int, gpu_mode: str = "Auto",
     # existing CPU safety path wins rather than guessing a CUDA device.
     if mode == "NVIDIA CUDA":
         candidates = []
-        for row in prof.get("scores_large", ()) if isinstance(prof, dict) else ():
+        rows = prof.get("scores_large", ())
+        rows = rows if isinstance(rows, (list, tuple)) else ()
+        for row in rows:
             if not isinstance(row, dict):
                 continue
             if str(row.get("workload")) != mapped or not str(row.get("backend_id", "")).startswith("cuda:"):
                 continue
             if row.get("error"):
                 continue
-            candidates.append(row)
+            try:
+                rate = float(row.get("throughput_mp_s", 0.0))
+                elapsed = float(row.get("elapsed_ms", 1.0))
+                if not math.isfinite(rate) or rate <= 0 or not math.isfinite(elapsed) or elapsed <= 0:
+                    continue
+                _cuda_device_id(str(row['backend_id']))
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+            candidates.append((rate, row))
         if candidates:
-            best = max(candidates, key=lambda r: float(r.get("throughput_mp_s", 0.0) or 0.0))
+            best = max(candidates, key=lambda item: item[0])[1]
             pref = {
                 "backend_id": str(best.get("backend_id")), "backend": "CUDA/CuPy",
                 "vendor": "NVIDIA", "device": str(best.get("device") or "NVIDIA CUDA GPU"),
@@ -118,7 +142,15 @@ def select_route(workload: str, *, pixels: int, gpu_mode: str = "Auto",
     backend_id = str(pref.get("backend_id") or "cpu:numpy")
     if backend_id == "cpu:numpy":
         return _cpu_route(logical, px, str(pref.get("reason") or "CPU is fastest for this workload"))
-    failed = _FAILED.get((backend_id, logical)) or _FAILED.get((backend_id, mapped))
+    try:
+        if backend_id.startswith('cuda:'):
+            _cuda_device_id(backend_id)
+        else:
+            _opencl_device_ids(backend_id)
+    except ValueError:
+        return _cpu_route(logical, px, f'invalid measured backend id: {backend_id}')
+    with _HEALTH_LOCK:
+        failed = _FAILED.get((backend_id, logical)) or _FAILED.get((backend_id, mapped))
     if failed:
         return _cpu_route(logical, px, f"{backend_id} quarantined for {logical}: {failed}")
     return RouteInfo(
@@ -137,25 +169,31 @@ def _mark_failed(route: RouteInfo, error: BaseException) -> RouteInfo:
     except Exception:
         transient_memory=isinstance(error,MemoryError) or 'out of memory' in str(error).lower()
     if route.backend_id != "cpu:numpy" and not transient_memory:
-        _FAILED[(route.backend_id, route.workload)] = message
+        with _HEALTH_LOCK:
+            _FAILED[(route.backend_id, route.workload)] = message
     reason=(f"{route.backend_id} hit transient memory pressure and fell back for this call: {message}" if transient_memory else
             f"{route.backend_id} failed safely: {message}")
     return _cpu_route(route.workload, route.pixels, reason)
 
 
 def reset_runtime_backend_health() -> None:
-    with _LOCK:
+    with _HEALTH_LOCK:
         _FAILED.clear()
+    with _LOCK:
         _OPENCL_CACHE.clear()
 
 
 def backend_health_snapshot() -> dict[str, str]:
-    return {f"{backend}|{workload}": reason for (backend, workload), reason in _FAILED.items()}
+    with _HEALTH_LOCK:
+        return {f"{backend}|{workload}": reason for (backend, workload), reason in _FAILED.items()}
 
 
 def _rgb01(array: np.ndarray) -> np.ndarray:
-    a = np.asarray(array, dtype=np.float32)
-    if a.size and float(np.nanmax(a)) > 1.5:
+    raw = np.asarray(array)
+    a = np.asarray(raw, dtype=np.float32)
+    if not np.all(np.isfinite(a)):
+        raise ValueError('RGB channels must be finite')
+    if np.issubdtype(raw.dtype, np.integer) or (a.size and float(np.max(a)) > 1.5):
         a = a / 255.0
     return np.clip(a, 0.0, 1.0).astype(np.float32, copy=False)
 
@@ -272,11 +310,8 @@ def _opencl_context(backend_id: str):
     with _LOCK:
         if backend_id in _OPENCL_CACHE:
             return _OPENCL_CACHE[backend_id]
+        pidx, didx = _opencl_device_ids(backend_id)
         import pyopencl as cl
-        parts = backend_id.split(":")
-        if len(parts) != 3 or parts[0] != "opencl":
-            raise ValueError(f"invalid OpenCL backend id: {backend_id}")
-        pidx, didx = int(parts[1]), int(parts[2])
         platforms = list(cl.get_platforms())
         platform = platforms[pidx]
         devices = list(platform.get_devices(device_type=cl.device_type.GPU))
@@ -289,9 +324,21 @@ def _opencl_context(backend_id: str):
         return value
 
 
+def _backend_indices(backend_id: str, kind: str, count: int) -> tuple[int, ...]:
+    parts = str(backend_id).split(':')
+    if len(parts) != count + 1 or parts[0] != kind or any(
+        not part.isascii() or not part.isdecimal() for part in parts[1:]
+    ):
+        raise ValueError(f'invalid {kind} backend id: {backend_id}')
+    return tuple(map(int, parts[1:]))
+
+
 def _cuda_device_id(backend_id: str) -> int:
-    parts = str(backend_id).split(":", 1)
-    return int(parts[1]) if len(parts) == 2 else 0
+    return _backend_indices(backend_id, 'cuda', 1)[0]
+
+
+def _opencl_device_ids(backend_id: str) -> tuple[int, int]:
+    return _backend_indices(backend_id, 'opencl', 2)
 
 
 def _float4_host(rgb: np.ndarray, *, alpha: np.ndarray | None = None, scale255: bool = False) -> np.ndarray:
@@ -307,12 +354,14 @@ def _float4_host(rgb: np.ndarray, *, alpha: np.ndarray | None = None, scale255: 
     return out
 
 
+@_check_completed
 def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: dict[str, Any] | None = None,
                 cancelled: Callable[[], bool] = lambda: False) -> tuple[np.ndarray, dict[str, Any]]:
     _cancel(cancelled)
-    arr = np.asarray(rgb, dtype=np.float32)
+    arr = np.asarray(rgb)
     if arr.ndim < 2 or arr.shape[-1] != 3:
         raise ValueError("OKLab input must end in RGB channels")
+    arr = _rgb01(arr)
     shape = arr.shape
     pixels = int(np.prod(shape[:-1]))
     route = select_route("oklab", pixels=pixels, gpu_mode=gpu_mode, profile=profile)
@@ -349,6 +398,7 @@ def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: dict[str, A
         return _oklab_cpu(arr),fallback.as_dict()
 
 
+@_check_completed
 def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str = "Auto",
                     profile: dict[str, Any] | None = None,
                     cancelled: Callable[[], bool] = lambda: False) -> tuple[np.ndarray,np.ndarray,np.ndarray,dict[str,Any]]:
@@ -358,8 +408,8 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
     copied back, avoiding three independent transfers in accuracy diagnostics.
     """
     _cancel(cancelled)
-    src=np.asarray(src_rgb,dtype=np.float32);dst=np.asarray(dst_rgb,dtype=np.float32)
-    if src.shape!=dst.shape or src.shape[-1]!=3:
+    src=_rgb01(src_rgb);dst=_rgb01(dst_rgb)
+    if src.shape!=dst.shape or src.ndim < 1 or src.shape[-1]!=3:
         raise ValueError("perceptual_pair requires matching RGB arrays")
     pixels=int(np.prod(src.shape[:-1])); route=select_route("delta_e",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     if not route.accelerated:
@@ -388,11 +438,14 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
             target=src.shape
             return sa[:,:3].reshape(target),sb[:,:3].reshape(target),de.reshape(target[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
+    except InterruptedError:
+        raise
     except Exception as exc:
         fallback=_mark_failed(route,exc);sl=_oklab_cpu(src);dl=_oklab_cpu(dst);de=np.linalg.norm(sl-dl,axis=-1).astype(np.float32,copy=False)
         return sl,dl,de,fallback.as_dict()
 
 
+@_check_completed
 def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: dict[str, Any] | None = None,
                    cancelled: Callable[[], bool] = lambda: False) -> tuple[np.ndarray,dict[str,Any]]:
     _cancel(cancelled)
@@ -413,16 +466,19 @@ def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: di
             cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags
             flat=np.ascontiguousarray(lum.reshape(-1),dtype=np.float32);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=flat);dst=cl.Buffer(ctx,mf.WRITE_ONLY,flat.nbytes);program.ds_edge_kernel(queue,(pixels,),None,src,dst,np.int32(w),np.int32(h));sink=np.empty_like(flat);cl.enqueue_copy(queue,sink,dst);queue.finish();return sink.reshape(h,w),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
+    except InterruptedError:
+        raise
     except Exception as exc:
         fallback=_mark_failed(route,exc);return cpu(),fallback.as_dict()
 
 
+@_check_completed
 def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str = "Auto",
                         profile: dict[str,Any] | None=None,
                         cancelled: Callable[[],bool]=lambda:False) -> tuple[np.ndarray,dict[str,Any]]:
     _cancel(cancelled)
     a=_rgb01(src_rgb);b=_rgb01(dst_rgb)
-    if a.shape!=b.shape or a.shape[-1]!=3:raise ValueError("pixel_channel_error requires matching RGB arrays")
+    if a.shape!=b.shape or a.ndim < 1 or a.shape[-1]!=3:raise ValueError("pixel_channel_error requires matching RGB arrays")
     pixels=int(np.prod(a.shape[:-1]));route=select_route("pixel_math",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     if not route.accelerated:return np.mean(np.abs(a-b),axis=-1,dtype=np.float32),route.as_dict()
     try:
@@ -434,20 +490,40 @@ def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: s
         if route.backend_id.startswith("opencl:"):
             cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags;a4=_float4_host(a);b4=_float4_host(b);ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4);bo=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4);program.ds_absdiff_kernel(queue,(pixels,),None,ba,bb,bo,np.int32(pixels));sink=np.empty((pixels,),dtype=np.float32);cl.enqueue_copy(queue,sink,bo);queue.finish();return sink.reshape(a.shape[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
+    except InterruptedError:
+        raise
     except Exception as exc:
         fallback=_mark_failed(route,exc);return np.mean(np.abs(a-b),axis=-1,dtype=np.float32),fallback.as_dict()
 
 
-def _palette_cost_cpu(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool, fidelity: str) -> np.ndarray:
+def _palette_features(lab):
+    return (lab[...,0]*100.0,
+            np.hypot(lab[...,1],lab[...,2])*100.0,
+            np.mod(np.degrees(np.arctan2(lab[...,2],lab[...,1])),360.0))
+
+
+def _squared_color_distances(source, palette):
+    """Accumulate three channels without a pixel-by-palette-by-RGB cube."""
+    delta=source[...,0,None]-palette[...,0]
+    distance=delta*delta
+    for channel in (1,2):
+        delta=source[...,channel,None]-palette[...,channel]
+        distance+=delta*delta
+    return distance
+
+
+def _palette_cost_cpu(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool, fidelity: str,
+                      src_lab=None, pal_lab=None, src_features=None, pal_features=None) -> np.ndarray:
     src=np.asarray(rgb,dtype=np.float32);pal=np.asarray(palette,dtype=np.float32)
     if not perceptual:
-        diff=src[...,None,:]-pal;return np.sqrt(np.sum(diff*diff,axis=-1,dtype=np.float32)/3.0,dtype=np.float32)/255.0*100.0
-    src_lab=_oklab_cpu(src / 255.0);pal_lab=_oklab_cpu(pal / 255.0)
-    diff=src_lab[...,None,:]-pal_lab;dist=np.sqrt(np.sum(diff*diff,axis=-1,dtype=np.float32),dtype=np.float32)*100.0
+        return np.sqrt(_squared_color_distances(src,pal)/3.0,dtype=np.float32)/255.0*100.0
+    src_lab=_oklab_cpu(src / 255.0) if src_lab is None else src_lab
+    pal_lab=_oklab_cpu(pal / 255.0) if pal_lab is None else pal_lab
+    dist=np.sqrt(_squared_color_distances(src_lab,pal_lab),dtype=np.float32)*100.0
     if fidelity in ("Balanced","Faithful"):
-        srcL=src_lab[...,0]*100.0;palL=pal_lab[...,0]*100.0;light=np.abs(srcL[...,None]-palL);dark=np.maximum(srcL[...,None]-palL,0.0)
-        srcC=np.hypot(src_lab[...,1],src_lab[...,2])*100.0;palC=np.hypot(pal_lab[...,1],pal_lab[...,2])*100.0
-        srcH=np.mod(np.degrees(np.arctan2(src_lab[...,2],src_lab[...,1])),360.0);palH=np.mod(np.degrees(np.arctan2(pal_lab[...,2],pal_lab[...,1])),360.0)
+        srcL,srcC,srcH=_palette_features(src_lab) if src_features is None else src_features
+        palL,palC,palH=_palette_features(pal_lab) if pal_features is None else pal_features
+        light=np.abs(srcL[...,None]-palL);dark=np.maximum(srcL[...,None]-palL,0.0)
         chroma=np.abs(srcC[...,None]-palC);hd=np.abs(srcH[...,None]-palH);hue=np.minimum(hd,360.0-hd);hue=np.where(np.minimum(srcC[...,None],palC)<2.5,0.0,hue)
         bright=1.0+np.maximum(srcL-52.0,0.0)[...,None]/80.0;neutral_cut=np.maximum(2.5,srcC[...,None]*.28);neutral=np.where((srcC[...,None]>=5.0)&(palC<neutral_cut),srcC[...,None]-palC,0.0);hex=np.maximum(hue-45.0,0.0);hext=np.maximum(hue-85.0,0.0)
         if fidelity=="Balanced":dist+=light*.10+dark*.24*bright+chroma*.055+hue*.010+neutral*.18+hex*.035+hext*.060
@@ -455,6 +531,7 @@ def _palette_cost_cpu(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
     return dist.astype(np.float32,copy=False)
 
 
+@_check_completed
 def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indices: Sequence[int], custom_flags: Sequence[bool], *,
                          color_rendering: str="Perceptual match", custom_mode: str="Calibrated palette",
                          color_fidelity: str="Balanced", skip_white: bool=True, gpu_mode: str="Auto",
@@ -485,9 +562,13 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
         # palette must never allocate a full pixel x palette distance cube.
         flat = rgb.reshape(-1, 3)
         out = np.empty(pixels, dtype=np.int16)
+        palette_lab = _oklab_cpu(pal / 255.0) if perceptual else None
+        palette_features = _palette_features(palette_lab) if perceptual and color_fidelity in ('Balanced','Faithful') else None
         for start in range(0, pixels, 4096):
             _cancel(cancelled)
             end = min(pixels, start + 4096)
+            source_lab = _oklab_cpu(flat[start:end] / 255.0) if perceptual else None
+            source_features = _palette_features(source_lab) if palette_features is not None else None
             best = np.full(end-start, np.inf, dtype=np.float32)
             custom_best = np.full_like(best, np.inf)
             chosen = np.full(end-start, ids[0], dtype=np.int16)
@@ -496,7 +577,11 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
                 _cancel(cancelled)
                 p1 = min(len(ids), p0+32)
                 dist = _palette_cost_cpu(flat[start:end], pal[p0:p1],
-                                         perceptual=perceptual, fidelity=color_fidelity)
+                                         perceptual=perceptual, fidelity=color_fidelity,
+                                         src_lab=source_lab,
+                                         pal_lab=None if palette_lab is None else palette_lab[p0:p1],
+                                         src_features=source_features,
+                                         pal_features=None if palette_features is None else tuple(a[p0:p1] for a in palette_features))
                 pos = np.argmin(dist, axis=1)
                 score = dist[np.arange(end-start), pos]
                 better = score < best
@@ -557,6 +642,7 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
         fallback=_mark_failed(route,exc);result=cpu();return result,fallback.as_dict()
 
 
+@_check_completed
 def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="Auto", profile: dict[str,Any] | None=None,
                             cancelled: Callable[[],bool]=lambda:False) -> tuple[np.ndarray,dict[str,Any]]:
     """Deterministic quantization distance matrix routed by Step 22.
@@ -568,6 +654,9 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
     # This API receives palette RGB bytes, including palettes whose largest
     # channel is only 1. Normalize by that contract rather than inferring the
     # scale from the darkest/brightest color currently present.
+    _cancel(cancelled)
+    if not len(colors):
+        return np.empty((0,0),dtype=np.float32), _cpu_route('quantization',0,'Empty palette').as_dict()
     arr=np.asarray([tuple(map(int,c[:3])) for c in colors],dtype=np.float32)/255.0
     n=len(arr);pixels=n*n;route=select_route("quantization",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     _cancel(cancelled)
@@ -584,5 +673,7 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
         if route.backend_id.startswith("opencl:"):
             cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags;host4=_float4_host(arr);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4);lab=cl.Buffer(ctx,mf.READ_WRITE,host4.nbytes);outb=cl.Buffer(ctx,mf.WRITE_ONLY,n*n*4);program.ds_oklab_kernel(queue,(n,),None,src,lab,np.int32(n));program.ds_pairwise_lab(queue,(n*n,),None,lab,outb,np.int32(n));sink=np.empty((n*n,),dtype=np.float32);cl.enqueue_copy(queue,sink,outb);queue.finish();return sink.reshape(n,n),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
+    except InterruptedError:
+        raise
     except Exception as exc:
         fallback=_mark_failed(route,exc);lab=_oklab_cpu(arr);d=lab[:,None,:]-lab[None,:,:];return (np.sqrt(np.sum(d*d,axis=2,dtype=np.float32))*100.0).astype(np.float32,copy=False),fallback.as_dict()

@@ -79,7 +79,7 @@ def portrait_sample_limit(detail: int, draw_quality: str = "Balanced") -> int:
     return max(72, round(base * profile["sample_scale"]))
 
 
-def _enhance_local_contrast(gray: Image.Image, strength: float) -> Image.Image:
+def _enhance_local_contrast(gray: Image.Image, strength: float, *, cancelled=lambda: False) -> Image.Image:
     """Small deterministic high-pass boost that preserves facial midtones.
 
     PIL's global Contrast control cannot distinguish a faint eye/nose edge from
@@ -91,13 +91,48 @@ def _enhance_local_contrast(gray: Image.Image, strength: float) -> Image.Image:
     blur = gray.filter(ImageFilter.GaussianBlur(radius=1.35))
     src = gray.tobytes()
     low = blur.tobytes()
-    out = [max(0, min(255, round(v + (v - b) * strength))) for v, b in zip(src, low)]
+    out = []
+    for index, (value, blurred) in enumerate(zip(src, low)):
+        if index % 4096 == 0 and cancelled():
+            raise InterruptedError()
+        out.append(max(0, min(255, round(value + (value - blurred) * strength))))
     result = Image.new("L", gray.size)
     result.putdata(out)
     return result
 
 
+def _release_portrait_session(metadata: dict) -> None:
+    session = metadata.pop("_gpu_session", None)
+    if session is not None:
+        try:
+            gpu_release_analysis_session(session, trim_cache=True)
+        except Exception as error:
+            # Release is best effort after losing the final owner. Preserve the
+            # original planning/cancellation exception if the driver is failing.
+            metadata["gpu_session_cleanup_error"] = f"{type(error).__name__}: {error}"[:200]
+
+
 def prepare_portrait_image(image: Image.Image, area: tuple[int, int], detail: int,
+                           contrast: float = 1.0, subject_focus: bool = True,
+                           draw_quality: str = "Balanced", gpu_mode: str = "Auto",
+                           acceleration_meta: dict | None = None, gpu_vram: str = "Auto",
+                           gpu_performance: str = "Balanced", preview_detail_mode: str | None = None,
+                           preview_detail_meta: dict | None = None, cancelled=lambda: False) -> tuple[Image.Image, tuple[float, float]]:
+    """Prepare a portrait and retain analysis arrays only for an explicit owner."""
+    metadata = acceleration_meta if acceleration_meta is not None else {}
+    completed = False
+    try:
+        result = _prepare_portrait_image_impl(
+            image, area, detail, contrast, subject_focus, draw_quality, gpu_mode,
+            metadata, gpu_vram, gpu_performance, preview_detail_mode, preview_detail_meta, cancelled)
+        completed = True
+        return result
+    finally:
+        if not completed or acceleration_meta is None:
+            _release_portrait_session(metadata)
+
+
+def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], detail: int,
                            contrast: float = 1.0, subject_focus: bool = True,
                            draw_quality: str = "Balanced", gpu_mode: str = "Auto",
                            acceleration_meta: dict | None = None, gpu_vram: str = "Auto",
@@ -112,6 +147,8 @@ def prepare_portrait_image(image: Image.Image, area: tuple[int, int], detail: in
     if not math.isfinite(float(contrast)) or not .5 <= float(contrast) <= 2.0:
         raise ValueError("Contrast must stay between 0.5 and 2.0.")
     profile = _quality_profile(draw_quality)
+    if cancelled():
+        raise InterruptedError()
 
     source = ImageOps.exif_transpose(image).convert("RGBA")
     scale = min(width / source.width, height / source.height)
@@ -134,14 +171,20 @@ def prepare_portrait_image(image: Image.Image, area: tuple[int, int], detail: in
             if acceleration_meta is not None:
                 acceleration_meta.update(gpu_info.as_dict())
                 acceleration_meta['vram_resolution_boost']=round(limit/portrait_sample_limit(int(detail),draw_quality),3)
+        except InterruptedError:
+            raise
         except Exception:
             pass
     sample_scale = min(limit / max(fitted), 1.0)
     size = tuple(max(1, round(v * sample_scale)) for v in fitted)
+    if cancelled():
+        raise InterruptedError()
 
     flat = Image.new("RGBA", source.size, "white")
     flat.alpha_composite(source)
     source_gray = flat.convert("L")
+    if cancelled():
+        raise InterruptedError()
     # GPU enhanced (and high-throughput CUDA modes) use an adaptive cubic scaler
     # with restrained sharpening.  CPU/Lanczos remains the deterministic fallback.
     use_gpu_scaler = draw_quality in ("GPU enhanced", "Pixel Accurate") or gpu_performance in ("High throughput", "Maximum")
@@ -159,24 +202,30 @@ def prepare_portrait_image(image: Image.Image, area: tuple[int, int], detail: in
         gray = source_gray.resize(size, Image.Resampling.LANCZOS)
         if acceleration_meta is not None:
             acceleration_meta.setdefault("scaler", "CPU Lanczos")
+    if cancelled():
+        raise InterruptedError()
     gray = ImageOps.autocontrast(gray, cutoff=1)
     if contrast != 1.0:
         gray = ImageEnhance.Contrast(gray).enhance(float(contrast))
     gray = gray.filter(ImageFilter.UnsharpMask(radius=.75, percent=110, threshold=3))
+    if cancelled():
+        raise InterruptedError()
 
     scaler_name=acceleration_meta.get("scaler","CPU Lanczos") if acceleration_meta is not None else (f"Detail-aware preview ({preview_detail_mode})" if preview_detail_mode else "CPU Lanczos")
     accelerated, accel_info, gpu_session = gpu_enhance_portrait(
         gray, profile["local_contrast"], profile["tone_gamma"], subject_focus,
         profile["background_lift"], gpu_mode, gpu_vram, gpu_performance)
     if acceleration_meta is not None:
-        acceleration_meta.update(accel_info.as_dict())
-        acceleration_meta["scaler"]=scaler_name
         if gpu_session is not None:
             acceleration_meta["_gpu_session"] = gpu_session
+        acceleration_meta.update(accel_info.as_dict())
+        acceleration_meta["scaler"]=scaler_name
+    if cancelled():
+        raise InterruptedError()
     if accelerated is not None:
         gray = accelerated
     else:
-        gray = _enhance_local_contrast(gray, profile["local_contrast"])
+        gray = _enhance_local_contrast(gray, profile["local_contrast"], cancelled=cancelled)
         gamma = profile["tone_gamma"]
         gray = gray.point(lambda v: max(0, min(255, round(255 * ((v / 255) ** gamma)))))
         if subject_focus and gray.width >= 24 and gray.height >= 24:
@@ -185,6 +234,8 @@ def prepare_portrait_image(image: Image.Image, area: tuple[int, int], detail: in
             sx, sy = max(1.0, w * .62), max(1.0, h * .72)
             lift = profile["background_lift"]
             for y in range(h):
+                if cancelled():
+                    raise InterruptedError()
                 dy = (y - cy) / sy
                 for x in range(w):
                     dx = (x - cx) / sx
@@ -192,6 +243,8 @@ def prepare_portrait_image(image: Image.Image, area: tuple[int, int], detail: in
                     amount = max(0.0, min(1.0, (radial - .42) / .62))
                     if amount:
                         px[x, y] = min(255, round(px[x, y] + lift * amount))
+    if cancelled():
+        raise InterruptedError()
     return gray, fitted
 
 def _detail_config(detail: int):
@@ -289,12 +342,15 @@ def _runs(path: Sequence[tuple[int, int]], pixels, threshold: int,
 
 def _saliency_map(gray: Image.Image, subject_focus: bool, profile: dict,
                   gpu_mode: str = "Auto", acceleration_meta: dict | None = None,
-                  gpu_vram: str = "Auto", gpu_performance: str = "Balanced") -> list[float]:
+                  gpu_vram: str = "Auto", gpu_performance: str = "Balanced", *,
+                  cancelled=lambda: False) -> list[float]:
     """Structure score used only to choose among already valid hatch strokes."""
     session = acceleration_meta.get("_gpu_session") if acceleration_meta else None
     accelerated, accel_info = gpu_saliency(gray, subject_focus, profile, gpu_mode, gpu_vram, gpu_performance, session)
     if acceleration_meta is not None and (accel_info.accelerated or not acceleration_meta.get("accelerated")):
         acceleration_meta.update(accel_info.as_dict())
+    if cancelled():
+        raise InterruptedError()
     if accelerated is not None:
         return accelerated
     px=gray.load(); w,h=gray.size
@@ -302,6 +358,8 @@ def _saliency_map(gray: Image.Image, subject_focus: bool, profile: dict,
     cx,cy=(w-1)/2,(h-1)/2; radius=max(1.0,math.hypot(cx,cy))
     scores=[1.0]*(w*h)
     for y in range(h):
+        if cancelled():
+            raise InterruptedError()
         ym=max(0,y-1); yp=min(h-1,y+1)
         for x in range(w):
             xm=max(0,x-1); xp=min(w-1,x+1)
@@ -421,6 +479,25 @@ def portrait_strokes(gray: Image.Image, detail: int = 8, lines: bool = True,
                      subject_focus: bool = True, gpu_mode: str = "Auto",
                      acceleration_meta: dict | None = None, gpu_vram: str = "Auto",
                      gpu_performance: str = "Balanced") -> tuple[list[list[tuple[int,int,int,int]]], PortraitStats]:
+    """Build portrait strokes and release analysis arrays on every exit path."""
+    try:
+        if cancelled():
+            raise InterruptedError()
+        return _portrait_strokes_impl(
+            gray, detail, lines, cancelled, include_edges, max_strokes,
+            draw_quality, subject_focus, gpu_mode, acceleration_meta, gpu_vram, gpu_performance)
+    finally:
+        if acceleration_meta is not None:
+            _release_portrait_session(acceleration_meta)
+
+
+def _portrait_strokes_impl(gray: Image.Image, detail: int = 8, lines: bool = True,
+                     cancelled: Callable[[], bool] = lambda: False,
+                     include_edges: bool = True, max_strokes: int | None = None,
+                     draw_quality: str = "Balanced",
+                     subject_focus: bool = True, gpu_mode: str = "Auto",
+                     acceleration_meta: dict | None = None, gpu_vram: str = "Auto",
+                     gpu_performance: str = "Balanced") -> tuple[list[list[tuple[int,int,int,int]]], PortraitStats]:
     """Build one black stroke group that approximates grayscale by density."""
     if gray.mode!="L":gray=gray.convert("L")
     profile=_quality_profile(draw_quality);cfg=dict(_detail_config(detail))
@@ -434,7 +511,8 @@ def portrait_strokes(gray: Image.Image, detail: int = 8, lines: bool = True,
     px=gray.load();w,h=gray.size;total_budget=cfg["max_strokes"]
     edge_budget=round(total_budget*(profile["edge_share"] if include_edges else 0))
     tone_budget=total_budget-edge_budget
-    saliency=_saliency_map(gray,subject_focus,profile,gpu_mode,acceleration_meta,gpu_vram,gpu_performance)
+    saliency=_saliency_map(gray,subject_focus,profile,gpu_mode,acceleration_meta,gpu_vram,gpu_performance,
+                           cancelled=cancelled)
 
     layer_candidates=[]
     for layer,(threshold,direction) in enumerate(zip(cfg["thresholds"],cfg["directions"])):
@@ -444,6 +522,8 @@ def portrait_strokes(gray: Image.Image, detail: int = 8, lines: bool = True,
         merge_gap=(1 if detail<=8 else 2) if profile["merge_gap"] is None else profile["merge_gap"]
         candidates=[]
         for path in _line_paths(w,h,direction,spacing,offset):
+            if cancelled():
+                raise InterruptedError()
             candidates.extend(_runs(path,px,threshold,min_run=2 if detail>=8 else 3,
                                     merge_gap=merge_gap,max_run=profile["max_run"]))
         layer_candidates.append(candidates)
@@ -482,10 +562,6 @@ def portrait_strokes(gray: Image.Image, detail: int = 8, lines: bool = True,
     result=PortraitStats(len(tone),len(edges),len(cfg["thresholds"]),gray.size,
                          priority_total,draw_quality,str(meta.get("backend","CPU")),
                          str(meta.get("device","CPU")),bool(meta.get("accelerated",False)))
-    # Planning is complete; release live CUDA arrays so Paint/browser GPU usage
-    # has VRAM headroom while the actual mouse drawing runs.
-    session=meta.get("_gpu_session")
-    if session is not None:
-        gpu_release_analysis_session(session,trim_cache=True)
-        meta.pop("_gpu_session",None)
+    if cancelled():
+        raise InterruptedError()
     return [strokes],result

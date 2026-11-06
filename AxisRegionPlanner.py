@@ -75,9 +75,14 @@ def horizontal_components(strokes: Sequence[Sequence[int]], *, adjacency: int = 
     for _y, items in rows.items():
         if cancelled():
             raise InterruptedError()
-        for left, right in zip(items, items[1:]):
+        left = items[0]
+        for right in items[1:]:
             if right[0] <= left[1] + 1:
                 union(left[2], right[2])
+                if right[1] > left[1]:
+                    left = right
+            else:
+                left = right
 
     for y in sorted(rows):
         if cancelled():
@@ -109,12 +114,23 @@ def horizontal_components(strokes: Sequence[Sequence[int]], *, adjacency: int = 
     for i in range(count):
         buckets.setdefault(find(i), []).append(i)
 
+    # Overlapping custom runs describe the same pixels, even when source run
+    # indices must remain distinct. Count their union in each already-sorted row.
+    pixel_counts: dict[int, int] = {}
+    for items in rows.values():
+        previous_end = None
+        for x0, x1, index in items:
+            root = find(index)
+            start = x0 if previous_end is None else max(x0, previous_end + 1)
+            pixel_counts[root] = pixel_counts.get(root, 0) + max(0, x1 - start + 1)
+            previous_end = x1 if previous_end is None else max(previous_end, x1)
+
     out = []
-    for indices in buckets.values():
+    for root, indices in buckets.items():
         indices.sort()
         component_runs = tuple(runs[i] for i in indices)
         x0, y0, x1, y1 = _bbox(component_runs)
-        pixels = sum(r[2] - r[0] + 1 for r in component_runs)
+        pixels = pixel_counts[root]
         out.append({
             "indices": tuple(indices),
             "runs": component_runs,

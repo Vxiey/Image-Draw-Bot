@@ -23,6 +23,8 @@ def closest_color(rgb):
 def prepare_image(image, area, detail=9, *, sample_limit=None, max_pixels=None,
                   preview_detail_mode=None, preview_detail_meta=None, cancelled=lambda: False):
     from PIL import Image, ImageOps
+    if cancelled():
+        raise InterruptedError()
     if not 1 <= detail <= 10:
         raise ValueError("Detail must be between 1 and 10.")
     width, height = area
@@ -33,17 +35,30 @@ def prepare_image(image, area, detail=9, *, sample_limit=None, max_pixels=None,
     fitted = (image.width * scale, image.height * scale)
     samples = 200 / (11 - detail) if sample_limit is None else max(1.0, float(sample_limit))
     sample_scale = min(samples / max(fitted), 1.0)
+    pixel_limit = None
     if max_pixels is not None:
         try:
-            pixel_scale = (max(1, int(max_pixels)) / max(1.0, fitted[0] * fitted[1])) ** 0.5
+            pixel_limit = max(1, int(max_pixels))
+            pixel_scale = (pixel_limit / max(1.0, fitted[0] * fitted[1])) ** 0.5
             sample_scale = min(sample_scale, pixel_scale, 1.0)
         except (TypeError, ValueError, OverflowError):
             pass
     size = tuple(max(1, round(v * sample_scale)) for v in fitted)
+    if pixel_limit is not None and size[0] * size[1] > pixel_limit:
+        # Rounding both fitted dimensions upward can exceed the hard pixel
+        # budget, including extremely thin panoramas with a minimum side of 1.
+        if size[0] >= size[1]:
+            size = (max(1, min(size[0], pixel_limit // size[1])), size[1])
+        else:
+            size = (size[0], max(1, min(size[1], pixel_limit // size[0])))
     if preview_detail_mode:
         from PreviewDetailEngine import detail_aware_resize
-        return detail_aware_resize(image, size, preview_detail_mode, cancelled=cancelled, metadata=preview_detail_meta), fitted
-    return image.resize(size, Image.Resampling.LANCZOS), fitted
+        result = detail_aware_resize(image, size, preview_detail_mode, cancelled=cancelled, metadata=preview_detail_meta)
+    else:
+        result = image.resize(size, Image.Resampling.LANCZOS)
+    if cancelled():
+        raise InterruptedError()
+    return result, fitted
 
 
 def _nearest_palette_index(rgb, palette, cache):
@@ -137,6 +152,9 @@ def build_strokes(image, lines=True, skip_white=True, cancelled=lambda: False,
     path remains the compatibility/safety fallback and is used by old tests and
     small images.
     """
+    if cancelled():
+        return None
+    image = image.convert("RGBA")
     if cpu_workers and int(cpu_workers) > 1:
         parallel = _parallel_basic_strokes(image, lines, skip_white, cancelled, cpu_workers,
                                           cpu_engine, ram_budget_mb, preview_plan)

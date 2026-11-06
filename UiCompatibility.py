@@ -3,6 +3,7 @@
 No telemetry/networking. The patch is deliberately narrow and idempotent.
 """
 from __future__ import annotations
+import tkinter as tk
 
 _PATCHED = False
 
@@ -33,7 +34,7 @@ def patch_customtkinter_scroll_guard() -> bool:
             return False
         try:
             return original(self, widget)
-        except (AttributeError, RuntimeError):
+        except (AttributeError, RuntimeError, tk.TclError):
             return False
 
     guarded._imagedrawbot_safe_scroll_guard = True
