@@ -30,35 +30,55 @@ def prepare_image(image, area, detail=9, *, sample_limit=None, max_pixels=None,
     width, height = area
     if width < 2 or height < 2:
         raise ValueError("Select a larger drawing area.")
-    image = ImageOps.exif_transpose(image).convert("RGBA")
-    scale = min(width / image.width, height / image.height)
-    fitted = (image.width * scale, image.height * scale)
-    samples = 200 / (11 - detail) if sample_limit is None else max(1.0, float(sample_limit))
-    sample_scale = min(samples / max(fitted), 1.0)
-    pixel_limit = None
-    if max_pixels is not None:
-        try:
-            pixel_limit = max(1, int(max_pixels))
-            pixel_scale = (pixel_limit / max(1.0, fitted[0] * fitted[1])) ** 0.5
-            sample_scale = min(sample_scale, pixel_scale, 1.0)
-        except (TypeError, ValueError, OverflowError):
-            pass
-    size = tuple(max(1, round(v * sample_scale)) for v in fitted)
-    if pixel_limit is not None and size[0] * size[1] > pixel_limit:
-        # Rounding both fitted dimensions upward can exceed the hard pixel
-        # budget, including extremely thin panoramas with a minimum side of 1.
-        if size[0] >= size[1]:
-            size = (max(1, min(size[0], pixel_limit // size[1])), size[1])
+    source=image;owned=[];published=None
+    try:
+        # Imported images are normally already oriented RGBA. Pillow's no-op
+        # exif_transpose and same-mode convert each copy the full raster; neither
+        # copy is needed by these read-only resize consumers.
+        image.load()
+        if image.getexif().get(274,1) not in (None,1):
+            image=ImageOps.exif_transpose(image)
+            if image is not source:owned.append(image)
+        if cancelled():raise InterruptedError()
+        if image.mode!='RGBA':
+            oriented=image
+            image=oriented.convert('RGBA')
+            if image is not source:owned.append(image)
+            if oriented is not source:
+                oriented.close();owned.remove(oriented)
+        if cancelled():raise InterruptedError()
+        scale = min(width / image.width, height / image.height)
+        fitted = (image.width * scale, image.height * scale)
+        samples = 200 / (11 - detail) if sample_limit is None else max(1.0, float(sample_limit))
+        sample_scale = min(samples / max(fitted), 1.0)
+        pixel_limit = None
+        if max_pixels is not None:
+            try:
+                pixel_limit = max(1, int(max_pixels))
+                pixel_scale = (pixel_limit / max(1.0, fitted[0] * fitted[1])) ** 0.5
+                sample_scale = min(sample_scale, pixel_scale, 1.0)
+            except (TypeError, ValueError, OverflowError):
+                pass
+        size = tuple(max(1, round(v * sample_scale)) for v in fitted)
+        if pixel_limit is not None and size[0] * size[1] > pixel_limit:
+            # Rounding both fitted dimensions upward can exceed the hard pixel
+            # budget, including extremely thin panoramas with a minimum side of 1.
+            if size[0] >= size[1]:
+                size = (max(1, min(size[0], pixel_limit // size[1])), size[1])
+            else:
+                size = (size[0], max(1, min(size[1], pixel_limit // size[0])))
+        if preview_detail_mode:
+            from PreviewDetailEngine import detail_aware_resize
+            result = detail_aware_resize(image, size, preview_detail_mode, cancelled=cancelled, metadata=preview_detail_meta)
         else:
-            size = (size[0], max(1, min(size[1], pixel_limit // size[0])))
-    if preview_detail_mode:
-        from PreviewDetailEngine import detail_aware_resize
-        result = detail_aware_resize(image, size, preview_detail_mode, cancelled=cancelled, metadata=preview_detail_meta)
-    else:
-        result = image.resize(size, Image.Resampling.LANCZOS)
-    if cancelled():
-        raise InterruptedError()
-    return result, fitted
+            result = image.resize(size, Image.Resampling.LANCZOS)
+        if result is not source:owned.append(result)
+        if cancelled():raise InterruptedError()
+        published=result
+        return result, fitted
+    finally:
+        for private in reversed(owned):
+            if private is not published:private.close()
 
 
 def _nearest_palette_index(rgb, palette, cache):

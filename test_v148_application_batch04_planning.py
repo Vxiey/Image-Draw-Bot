@@ -115,7 +115,7 @@ class WatchdogPolicyTests(unittest.TestCase):
                 target_window=(1,(0,0,100,100)),_refresh_target_for_draw=lambda:(0,0,100,100),
                 stop=threading.Event(),paused=threading.Event(),events=queue.Queue(),
                 progress={},save_settings=lambda:True,keyboard=None,
-                begin_worker=lambda kind,work:jobs.append(work) or True)
+                begin_worker=lambda kind,work,**_worker_options:jobs.append(work) or True)
             def plan(image,area,resolved,cancelled):
                 owned.append(image)
                 clock[0]=100000.0

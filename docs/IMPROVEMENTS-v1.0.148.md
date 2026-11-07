@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 796 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **204 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 803 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **197 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -63,8 +63,14 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 787–789 | R1401–R1403 | Batch 14 lossless attachment, translucent fallback and prepared path costs | 3 | [Rendering ledger](v148-batch14-rendering.md); independent source and exact raster review. |
 | 790–792 | U1401–U1403 | Batch 14 preview ownership, keyboard inspection and selected browser images | 3 | [UI ledger](v148-batch14-ui-workflow.md); independent renderer review. |
 | 793–796 | P1401–P1404 | Batch 14 ordered resume, physical widths, source ownership and active diagnostics | 4 | [Platform ledger](v148-batch14-platform.md); independent root and native-execution review. |
+| 797–798 | A1501–A1502 | Batch 15 Stop-preserving start and drawing-source handoff | 2 | [Application ledger](v148-batch15-application.md); independent controller and ownership review. |
+| 799–800 | R1501–R1502 | Batch 15 Sketch scratch lifetimes and copy-free input preparation | 2 | [Rendering ledger](v148-batch15-rendering.md); independent exact pixel, EXIF and public-plan review. |
+| 801–802 | U1501–U1502 | Batch 15 clipboard text sources and numeric Contrast control | 2 | [UI ledger](v148-batch15-ui-workflow.md); independent importer, focus and controller review. |
+| 803 | P1501 | Batch 15 per-execution sequence recovery proof | 1 | [Platform ledger](v148-batch15-platform.md); independent root and actual-executor review. |
 
 ## Integration evidence
+
+- Batch 15: seven independently reviewed behavior groups bring the count to **803**, with **197 remaining**. Final frozen-source integration passed **3,851 tests** (48 platform/hardware skips); the **5,000-cycle source gate**, **1,106-file package hygiene**, **eight exact-raster fixtures** and all **three paired benchmarks** passed. All 820 source/configuration hashes stayed unchanged during integration. Existing final-plan/capture/edit/export ownership, preparation cancellation and manual-Paint guidance completions add zero IDs. [Final local validation](v148-batch15-validation.json); published-commit Windows/CI evidence is recorded in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
 
 - Batch 14: final frozen-source discovery passed **3,768 tests in 98.292 seconds**, with 46 platform/hardware skips and unchanged hashes for 806 source/configuration files. All fifteen groups have closed independent source reviews. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. [Final validation](v148-batch14-validation.json), [paired CPU measurements](v148-batch14-rendering-benchmarks.json) and [raster fixtures](v148-batch14-engine-benchmarks.json) bind the tested source. Six balanced AB/BA pairs preserve complete outputs across 942 helper/scheduler cases and four public planners; the measured complete-planning CPU reductions are 24.2–66.3%, with allocation scope reported separately. These results do not measure native drawing or GPU speed. Exact-commit Windows/Linux, dependency, CodeQL and packaged GUI checks are linked from PR46 after publication. This checkpoint adds fifteen groups and leaves 204 toward the requested target. Subject native footprint/preview and ownership, AVIF admission and late Stop status complete existing contracts with zero additional IDs.
 

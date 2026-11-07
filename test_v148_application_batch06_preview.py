@@ -22,7 +22,7 @@ class PreviewViewTests(unittest.TestCase):
         app=SimpleNamespace(activity=None,closing=False,original=images['original'],
             plan={'preview':fallback,'ui_previews':images},preview_tabs=Value('Original'),
             status=Value(''),events=queue.Queue(),stop=threading.Event(),jobs=[])
-        def begin(activity,job):app.jobs.append(job);return True
+        def begin(activity,job,*,cleanup=None):app.jobs.append(job);return True
         app.begin_worker=Mock(side_effect=begin)
         return app
 

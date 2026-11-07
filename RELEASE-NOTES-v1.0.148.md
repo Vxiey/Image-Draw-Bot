@@ -1,6 +1,30 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 796 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 803 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14 and seven in batch 15. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 15: lower planning memory and reliable application handoff
+
+- Preserve Esc throughout drawing preflight and the final worker handoff.
+- Release the private drawing-source image after planning; independent small
+  tests do not copy the loaded image. Stop also cleans up accepted image work
+  before the task begins. Final plan images remain alive through execution even
+  when Stop, clear or shutdown rejects their queued preview.
+- Reduce Sketch gradient scratch lifetimes and avoid two full-source identity
+  copies during normal RGBA preparation while preserving exact output.
+- Reuse a sequence recovery catalog per execution, preserving verified
+  completion and bitset compatibility. Measurements disclose retained memory
+  as well as CPU and peak-allocation changes.
+- Import supported local/file/data-image clipboard text through the normal
+  asynchronous loader, preserving direct URLs and explicit start ownership.
+- Show and adjust exact Contrast values with the keyboard; disabled sliders
+  cannot mutate a running job through the mouse wheel.
+
+Seven new groups bring the register to **803**, leaving **197** before the
+requested release target. Independent reviews are closed. Final local integration
+passed 3,851 tests with 48 platform/hardware skips and unchanged source.
+The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures and
+three paired benchmarks also passed. Published-commit Windows results are
+recorded separately in PR46. No 1.0.148 release is published.
 
 ## Batch 14: reliable execution, physical subject previews and responsive inspection
 

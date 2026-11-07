@@ -109,7 +109,7 @@ class EffectiveBudgetTests(unittest.TestCase):
             app.events = queue.Queue(); app.progress = {}; app.save_settings = lambda: True
             app.calibration_path = self.root / 'palette.json'; app.keyboard = None
             app.options = lambda: DrawBot.DrawBotApp.options(app)
-            app.begin_worker = lambda activity, work: jobs.append(work) or True
+            app.begin_worker = lambda activity, work, **_worker_options: jobs.append(work) or True
             def plan(image, area, options, cancelled):
                 owned.append(image)
                 resolved = DrawBot._ensure_time_budget_options(options)
@@ -156,7 +156,7 @@ class EffectiveBudgetTests(unittest.TestCase):
                 app.events = queue.Queue(); app.progress = {}; app.save_settings = lambda: True
                 app.calibration_path = self.root / 'palette.json'; app.keyboard = None
                 app.options = lambda: DrawBot.DrawBotApp.options(app)
-                app.begin_worker = lambda activity, work: jobs.append(work) or True
+                app.begin_worker = lambda activity, work, **_worker_options: jobs.append(work) or True
                 app.read_gartic_timer = Value(True)
                 app.planning_watchdog = Value('Off')
                 def capture(**kwargs):

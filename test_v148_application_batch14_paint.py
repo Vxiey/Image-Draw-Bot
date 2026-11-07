@@ -167,10 +167,14 @@ class PreparedPaintHandoffTests(unittest.TestCase):
         def planning(options, **kwargs):
             captured.append(options)
             raise InterruptedError('stop before building or drawing')
-        def begin(activity, task):
+        def begin(activity, task, *, reset_stop=True, cleanup=None):
             self.assertEqual(activity, 'draw')
-            with self.assertRaisesRegex(InterruptedError, 'stop before'):
-                task()
+            self.assertFalse(reset_stop)
+            try:
+                with self.assertRaisesRegex(InterruptedError, 'stop before'):
+                    task()
+            finally:
+                if cleanup is not None:cleanup()
             return False
         app.begin_worker = begin
         prepared = {'brush_px': 4, 'brush_px_requested': 'Auto',

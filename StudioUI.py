@@ -8,7 +8,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
-from UiKeyboardNavigation import KeyboardButton, KeyboardOptionMenu, KeyboardSwitch
+from UiKeyboardNavigation import KeyboardButton, KeyboardOptionMenu, KeyboardSwitch, KeyboardSlider
 from GameProfiles import PROFILES, profile_ui, profile_defaults
 from ProfileEngine import PROFILE_ENGINE_MODES, policy_summary
 from ProfilePortability import (export_profile_dialog, import_profile_dialog, reset_profile_dialog,
@@ -54,7 +54,7 @@ class ToolTip:
         widget.bind('<ButtonPress>', self._leave, add='+')
         widget.bind('<Destroy>', self._leave, add='+')
         for sequence, callback in (('<FocusIn>', self._enter), ('<FocusOut>', self._leave)):
-            if isinstance(widget, (KeyboardButton, KeyboardOptionMenu, KeyboardSwitch)):
+            if isinstance(widget, (KeyboardButton, KeyboardOptionMenu, KeyboardSwitch, KeyboardSlider)):
                 tk.Misc.bind(widget, sequence, callback, add='+')
             else:
                 widget.bind(sequence, callback, add='+')
@@ -617,10 +617,15 @@ def build_ui(a, quality, speed):
         control(KeyboardSwitch(smart_card, text=text, variable=var, command=a.options_changed,
                              progress_color=ACCENT_DARK, text_color=TEXT,
                              font=('Segoe UI', 10))).pack(anchor='w', pady=5)
-    label(smart_card, 'Contrast', bold=True, size=10).pack(anchor='w', pady=(6, 1))
-    control(ctk.CTkSlider(smart_card, from_=.5, to=2, variable=a.contrast,
-                         command=a.options_changed, progress_color=ACCENT,
-                         button_color=ACCENT, width=235)).pack(fill='x', pady=(2, 8))
+    contrast_value=label(smart_card, 'Contrast', bold=True, size=10)
+    contrast_value.pack(anchor='w', pady=(6, 1))
+    contrast_slider=control(KeyboardSlider(smart_card, from_=.5, to=2, variable=a.contrast,
+        keyboard_step=.01, reset_value=1.0, command=a.options_changed,
+        value_changed=lambda value:contrast_value.configure(text=f'Contrast · {value:.2f}×'),
+        progress_color=ACCENT, button_color=ACCENT, width=235))
+    contrast_slider.pack(fill='x', pady=(2, 4))
+    tooltip(contrast_slider,'Arrow keys: 0.01 · Shift/Page: 0.10 · Home/End: limits · Backspace: neutral 1.00. The wheel adjusts only while this control has focus.')
+    label(smart_card,'Arrows: 0.01 · Shift: 0.10 · Backspace: 1.00',muted=True,size=9,wraplength=250).pack(anchor='w',pady=(0,8))
 
     gpu_card = collapsible(advanced_host, 'GPU', 'Universal CUDA/OpenCL workload routing with safe CPU fallback.', False)
     setting_row(gpu_card, 'GPU acceleration', a.gpu_mode, ['Auto', 'CPU', 'NVIDIA CUDA'])

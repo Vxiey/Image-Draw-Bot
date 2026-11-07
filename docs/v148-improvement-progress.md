@@ -6,14 +6,17 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
-Batch 14 implements **796 total distinct improvements, with 204 remaining**.
-Final local integration passed **3,768 tests**, with 46 platform/hardware skips
-and unchanged hashes for 806 source/configuration files. Independent reviews,
-the 5,000-cycle source gate and eight exact-raster fixtures passed. [Batch 14
-validation](v148-batch14-validation.json) and [paired CPU measurements](v148-batch14-rendering-benchmarks.json)
-record the source-specific evidence. Exact-commit GitHub checks are linked from
-PR46 after publication. The release condition remains 1,000 independently
-verified behavior changes.
+Batch 15 implements **803 total distinct improvements, with 197 remaining**.
+All seven new groups and existing-contract completions have closed independent
+source reviews. Final frozen-source integration passed **3,851 tests**
+(48 platform/hardware skips), with all 820 source/configuration hashes
+unchanged. Three paired benchmarks, the 5,000-cycle source gate, 1,106-file
+package hygiene and eight exact-raster fixtures passed. [Final local evidence](v148-batch15-validation.json)
+is separate from the published-commit Windows/CI gate recorded in PR46. The previous 796-group checkpoint at
+`43a1c968eb56a63224827f1567e4ccc354acdadb` passed all seven GitHub checks,
+including Windows/Linux, dependencies, CodeQL and packaged Windows GUI/native
+drag-and-drop in [run 42371919639](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42371919639).
+The release condition remains 1,000 independently verified behavior changes.
 
 - The first 100 improvements are merged on `main` at `eb9804560c8648a92aabe2688e362a6b4a1d28b5`; Windows and Linux CI passed for their reviewed source head.
 - Version 1.0.147's promotion PR was closed unmerged after the target changed. The RC4 release run was cancelled before publication.
@@ -274,11 +277,23 @@ These are observations of the repository dashboards, not antivirus results for
 a new installer and not proof that every possible vulnerability is absent.
 The new source checkpoint must still pass its own dependency and CodeQL checks.
 
-## Confirmed next work after batch 14
+## Batch 15 — verified local checkpoint
 
-- Reuse the immutable sequence checkpoint catalog within one execution. Actual 201-path execution currently rebuilds it nine times, hashing 1,809 catalog entries; Stop can still wait for redundant catalog/context work. Preserve exact schema, occurrence identity and verified completion boundaries, and measure retained memory as well as work/time.
-- Reduce the lifetime of large RGB-gradient scratch arrays in `Sketch2Planner.structure_map`, with complete mask/metadata and real Paint/SketchFill plan parity. This is separate from the existing component-list optimization.
-- Route clipboard text containing an already supported data-image URI, local image path or file URI through the shared bounded importer. Preserve asynchronous ownership and explicitly armed start behavior.
+Seven groups cover synchronous Start/Stop handoff, shorter private source
+retention, Sketch gradient memory, avoidable preparation copies, clipboard text
+sources, numeric Contrast control and per-execution sequence checkpoints.
 
-These are reproduced or source-identified candidates, not additional completed
-improvements. New counts require implementation, regression evidence and review.
+- [Application](v148-batch15-application.md): A1501–A1502; capture/edit/export
+  ownership, final draw-plan UI/executor ownership and existing manual-Paint
+  guidance are uncounted completions.
+- [Rendering](v148-batch15-rendering.md): R1501–R1502; exact masks, metadata,
+  EXIF, preview pixels and complete public plans are preserved.
+- [UI workflow](v148-batch15-ui-workflow.md): U1501–U1502; native Windows focus
+  and event delivery remain part of the published-commit CI gate.
+- [Platform](v148-batch15-platform.md): P1501; cached recovery proof retains
+  more memory during execution, separately disclosed from its reduced CPU work.
+
+These complete the three reproduced next-work candidates from batch 14 and
+four further independently reproduced behavior groups. Final validation and
+measurements are bound to the frozen source in the checkpoint report. The target
+remains 1,000 and no 1.0.148 release is published.

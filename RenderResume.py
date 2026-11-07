@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import heapq
 import json
 from collections import Counter, defaultdict
 from contextlib import closing
+from itertools import islice
+from types import MappingProxyType
 
 SCHEMA = 3
 SUPPORTED_SCHEMAS = (1, 2, 3)
@@ -24,19 +27,27 @@ def _clean_rgb(value):
         return (0, 0, 0)
 
 
-def active_color_order(plan):
+def _check_cancelled(cancelled):
+    if cancelled is not None and cancelled():
+        raise InterruptedError('Render checkpoint preparation cancelled.')
+
+
+def active_color_order(plan, *, cancelled=None):
     groups = plan.get('groups') or []
     execution_groups = plan.get('execution_groups')
     count = max(len(groups), len(execution_groups or ()))
     requested = (plan.get('options') or {}).get('color_order') or list(range(count))
     result = []
-    for raw in requested:
+    for number, raw in enumerate(requested):
+        if number % 256 == 0:
+            _check_cancelled(cancelled)
         try:index = int(raw)
         except (TypeError, ValueError, OverflowError):continue
         if not 0 <= index < count:continue
         has_strokes = bool(index < len(groups) and groups[index])
         has_paths = bool(execution_groups is not None and index < len(execution_groups) and execution_groups[index])
         if has_strokes or has_paths:result.append(index)
+    _check_cancelled(cancelled)
     return result
 
 
@@ -84,7 +95,21 @@ def items_fingerprint(items) -> str:
     return h.hexdigest()
 
 
-def plan_fingerprint(plan):
+def _hash_json(hasher, value, cancelled):
+    encoder = json.JSONEncoder(sort_keys=True, separators=(',', ':'), default=str)
+    if cancelled is None:
+        for chunk in encoder.iterencode(value):
+            hasher.update(chunk.encode('utf-8'))
+    else:
+        for number, chunk in enumerate(encoder.iterencode(value)):
+            if number % 256 == 0:
+                _check_cancelled(cancelled)
+            hasher.update(chunk.encode('utf-8'))
+        _check_cancelled(cancelled)
+
+
+def plan_fingerprint(plan, *, cancelled=None):
+    _check_cancelled(cancelled)
     h = hashlib.sha256()
     image = plan.get('image')
     if image is not None:
@@ -93,14 +118,18 @@ def plan_fingerprint(plan):
         h.update(f'image-rgba:{image.width}x{image.height}:'.encode())
         rows = max(1, (1024 * 1024) // max(1, image.width * 4))
         for top in range(0, image.height, rows):
+            _check_cancelled(cancelled)
             with closing(image.crop((0, top, image.width, min(image.height, top + rows)))) as strip:
                 with closing(strip.convert('RGBA')) as rgba:
                     h.update(rgba.tobytes())
+        _check_cancelled(cancelled)
     h.update(repr(tuple(plan.get('fitted') or ())).encode())
     h.update(repr(tuple(_clean_rgb(c) for c in (plan.get('colors') or ()))).encode())
-    order = active_color_order(plan);h.update(repr(tuple(order)).encode());h.update(str(int(plan.get('count') or 0)).encode())
+    order = active_color_order(plan, cancelled=cancelled);h.update(repr(tuple(order)).encode());h.update(str(int(plan.get('count') or 0)).encode())
     selectors=[]
-    for index in order:
+    for number, index in enumerate(order):
+        if number % 256 == 0:
+            _check_cancelled(cancelled)
         src=(plan.get('color_selectors') or ())
         selector=src[index] if index < len(src) and isinstance(src[index],dict) else {}
         selectors.append((selector.get('kind'),selector.get('palette_index'),selector.get('fallback_palette_index'),_clean_rgb(selector.get('rgb') or (0,0,0))))
@@ -115,18 +144,16 @@ def plan_fingerprint(plan):
         'fill_regions','background_fill_plan','tool_actions','fill_tool_actions',
         'fill_restore_actions','exact_color_actions','canvas_clear_actions',
     )
-    h.update(json.dumps({k:options.get(k) for k in context_keys},sort_keys=True,
-                        separators=(',',':'),default=str).encode('utf-8'))
+    _hash_json(h, {k:options.get(k) for k in context_keys}, cancelled)
     for key in ('groups','execution_groups','execution_sequence','plan_area'):
         h.update(key.encode('ascii'))
-        encoder = json.JSONEncoder(sort_keys=True, separators=(',', ':'), default=str)
-        for chunk in encoder.iterencode(plan.get(key)):
-            h.update(chunk.encode('utf-8'))
+        _hash_json(h, plan.get(key), cancelled)
+    _check_cancelled(cancelled)
     return h.hexdigest()
 
 
-def _base(plan, completed_count, *, prelude_complete=True, fingerprint=None):
-    order = active_color_order(plan)
+def _base(plan, completed_count, *, prelude_complete=True, fingerprint=None, cancelled=None):
+    order = active_color_order(plan, cancelled=cancelled)
     if (type(completed_count) is not int or not 0 <= completed_count <= len(order)
             or type(prelude_complete) is not bool or (completed_count and not prelude_complete)):
         raise ValueError('Completed color count/prelude is inconsistent with the plan.')
@@ -239,11 +266,11 @@ def _sequence_catalog(plan):
     return keys,digest
 
 
-def sequence_context_fingerprint(plan):
+def sequence_context_fingerprint(plan, *, cancelled=None):
     """Fingerprint everything except sequence order, which Dynamic Replanner may change."""
     clone=dict(plan)
     clone['execution_sequence']=[]
-    return plan_fingerprint(clone)
+    return plan_fingerprint(clone) if cancelled is None else plan_fingerprint(clone, cancelled=cancelled)
 
 
 def _encode_bits(flags) -> str:
@@ -353,6 +380,148 @@ def checkpoint_sequence_progress(plan, completed_counts, *, prelude_complete=Tru
         'path_level':False,
     })
     return out
+
+
+def _sorted_catalog_keys(keys, cancelled):
+    """Bound each noninterruptible sort, then poll while merging the chunks."""
+    iterator = iter(keys)
+    chunks = []
+    while True:
+        _check_cancelled(cancelled)
+        chunk = list(islice(iterator, 4096))
+        if not chunk:
+            break
+        chunk.sort()
+        chunks.append(chunk)
+    for number, key in enumerate(heapq.merge(*chunks)):
+        if number % 256 == 0:
+            _check_cancelled(cancelled)
+        yield key
+    _check_cancelled(cancelled)
+
+
+def _sequence_ranges(plan, cancelled):
+    """Freeze the existing sorted-multiset identity without retaining geometry."""
+    _check_cancelled(cancelled)
+    if len(plan.get('execution_sequence') or ()) > MAX_SEQUENCE_OPERATIONS:
+        raise ValueError('Execution sequence exceeds the supported resume limit.')
+    available = Counter()
+    for operation in execution_sequence_with_brushes(plan, cancelled=cancelled):
+        available[sequence_entry_key(operation)] += 1
+    digest = hashlib.sha256()
+    ranges = {}
+    total = 0
+    for key in _sorted_catalog_keys(available, cancelled):
+        count = available[key]
+        ranges[key] = (total, count)
+        encoded = key.encode('ascii')
+        digest.update((b'|' if total else b'') + encoded)
+        # A duplicated operation still occupies one canonical bit per visit.
+        # Stream its exact old '|'.join byte sequence in small bounded chunks.
+        remaining = count - 1
+        while remaining:
+            _check_cancelled(cancelled)
+            take = min(remaining, 2048)
+            digest.update((b'|' + encoded) * take)
+            remaining -= take
+        total += count
+    _check_cancelled(cancelled)
+    return MappingProxyType(ranges), total, digest.hexdigest()
+
+
+class SequenceCheckpointSession:
+    """One executor's immutable proof plus an incrementally completed bitset.
+
+    Construct after final effective options are fixed, before native input, and
+    discard when that invocation exits. Only canonical keys from its frozen
+    operation catalogue may be completed. Seed counts must come from a verified
+    resume result. The session keeps no plan, source image, path or callback.
+
+    ``completed_counts`` is a live read-only view. The executor marks completion
+    only after its existing drawing/visual-verification boundary approves work.
+    Snapshots are ordinary independently owned schema-3 dictionaries; Stop can
+    save approved work without reopening the source or rescanning the catalogue.
+    """
+
+    def __init__(self, plan, *, completed_counts=None, cancelled=lambda: False):
+        ranges, total, catalog = _sequence_ranges(plan, cancelled)
+        fingerprint = sequence_context_fingerprint(plan, cancelled=cancelled)
+        _check_cancelled(cancelled)
+        base = _base(plan, 0, prelude_complete=False, fingerprint=fingerprint, cancelled=cancelled)
+        base.pop('completed_keys')
+        self._base = MappingProxyType(base)
+        self._ranges = ranges
+        self._total = total
+        self._catalog = catalog
+        self._bits = bytearray((total + 7) // 8)
+        self._completed = {}
+        self._completed_view = MappingProxyType(self._completed)
+        self._completed_total = 0
+        self._encoded_bits = None
+        for number, (key, count) in enumerate(dict(completed_counts or {}).items()):
+            if number % 256 == 0:
+                _check_cancelled(cancelled)
+            if not isinstance(key, str) or type(count) is not int or count < 0:
+                raise ValueError('Invalid verified sequence completion count.')
+            if not count:
+                continue
+            span = self._ranges.get(key)
+            if span is None or count > span[1]:
+                raise ValueError('Verified sequence completion exceeds this catalogue.')
+            start, end = span[0], span[0] + count
+            while start < end and start % 8:
+                self._bits[start // 8] |= 1 << (start % 8)
+                start += 1
+            whole_end = end // 8
+            for first in range(start // 8, whole_end, 65536):
+                _check_cancelled(cancelled)
+                last = min(whole_end, first + 65536)
+                self._bits[first:last] = b'\xff' * (last - first)
+            start = max(start, whole_end * 8)
+            while start < end:
+                self._bits[start // 8] |= 1 << (start % 8)
+                start += 1
+            self._completed[key] = count
+            self._completed_total += count
+        _check_cancelled(cancelled)
+
+    @property
+    def completed_counts(self):
+        return self._completed_view
+
+    def complete(self, key):
+        """Approve one occurrence; unknown/exhausted operations cannot advance."""
+        span = self._ranges.get(key) if isinstance(key, str) else None
+        count = self._completed.get(key, 0) if span is not None else 0
+        if span is None or count >= span[1]:
+            raise ValueError('Completed operation is absent from or exceeds this sequence catalogue.')
+        index = span[0] + count
+        self._bits[index // 8] |= 1 << (index % 8)
+        self._completed[key] = count + 1
+        self._completed_total += 1
+        self._encoded_bits = None
+
+    def snapshot(self, *, prelude_complete=True, last_entry=None):
+        if type(prelude_complete) is not bool or (self._completed_total and not prelude_complete):
+            raise ValueError('Completed sequence operations require a completed prelude.')
+        if self._encoded_bits is None:
+            self._encoded_bits = base64.b64encode(self._bits).decode('ascii')
+        completed, total = self._completed_total, self._total
+        last_color = (last_entry or {}).get('color_index')
+        out = dict(self._base, completed_keys=[], prelude_complete=prelude_complete)
+        out.update({
+            'schema': SCHEMA,
+            'sequence_level': True, 'sequence_total': total, 'sequence_completed_count': completed,
+            'sequence_catalog_fingerprint': self._catalog, 'sequence_completed_bits': self._encoded_bits,
+            'sequence_coverage_percent': round((completed / max(1, total)) * 100.0, 3),
+            'sequence_remaining_count': max(0, total - completed),
+            'sequence_last_phase': str((last_entry or {}).get('phase') or '')[:80],
+            'sequence_last_color_index': int(last_color) if last_color is not None else -1,
+            'sequence_last_brush_px': max(0, int((last_entry or {}).get('brush_px', 0) or 0)),
+            'path_level': False,
+        })
+        return out
+
 
 def _hex(value, length):
     return isinstance(value, str) and len(value) == length and all(c in '0123456789abcdef' for c in value)

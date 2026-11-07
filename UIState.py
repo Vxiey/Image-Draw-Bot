@@ -132,7 +132,7 @@ def classify_error(status: str) -> dict[str, str] | None:
         return {
             "title": "Start is still safely locked",
             "message": text,
-            "action": "Open Setup wizard to see the next step. Paint uses Prepare Paint & draw; its tests and previews are optional. Other profiles use Unlock full drawing, then Start after setup.",
+            "action": "Open Setup wizard for the next step. Paint Auto uses Prepare Paint & draw. With a manual Paint tool or another profile, finish setup, then Unlock full drawing and Start.",
         }
     if "gpu" in low or "cuda" in low or "vram" in low:
         return {

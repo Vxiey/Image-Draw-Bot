@@ -8,11 +8,12 @@ import weakref
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from io import BytesIO
-from contextlib import closing
+from contextlib import ExitStack, closing
 from itertools import pairwise, islice
 from pathlib import Path
 from urllib.parse import urlparse
 from WorkerEventQueue import WorkerEventQueue
+from WorkerPlanOwnership import WorkerPlanPublication
 
 from Colors import allColors, enable_dpi_awareness, DATA_DIR, load_calibration, reset_palette, CALIBRATION_FILE, normalize_rgb
 from ProfileStorage import profile_palette_file, profile_settings_file, calibration_context_fingerprint
@@ -304,13 +305,13 @@ def load_image(source, cancelled=lambda: False):
 
 
 def grab_area(area):
-    from PIL import ImageGrab
+    from ScreenGuard import _grab_rgb
     x, y, w, h = map(int, area)
     if w < 1 or h < 1:
         raise ValueError('The capture area is empty.')
     if w * h > MAX_CAPTURE_PIXELS:
         raise ValueError('The selected drawing area is too large to capture safely. Select a smaller canvas.')
-    return ImageGrab.grab(bbox=(x, y, x + w, y + h), all_screens=True).convert('RGB')
+    return _grab_rgb((x, y, x + w, y + h))
 
 
 
@@ -2411,7 +2412,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             log_event(f'Verified Paint color cache load skipped: {cache_error!r}')
     from AdaptiveColor import method_candidates,method_label,rgb_key,probe_item,confidence_text
     from RenderResume import (resolve_resume, checkpoint_after_batch, checkpoint_before_path,
-                              checkpoint_after_path, checkpoint_sequence_progress, items_fingerprint,
+                              checkpoint_after_path, SequenceCheckpointSession, items_fingerprint,
                               sequence_entry_key, execution_sequence_with_brushes)
     resume_info=resolve_resume(plan,(plan.get('options') or {}).get('render_resume_state'))
     resume_completed=int(resume_info.get('completed_count',0)) if resume_info.get('compatible') else 0
@@ -2899,6 +2900,26 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         # measuring only operations performed by this invocation.
         prepared_execution_sequence=list(execution_sequence_with_brushes(plan,cancelled=stop.is_set))
         has_execution_sequence=bool(plan.get('execution_sequence'))
+        sequence_completed_counts=(
+            {str(k):max(0,int(v or 0)) for k,v in dict(resume_info.get('sequence_completed_counts') or {}).items()}
+            if has_execution_sequence and resume_sequence_level else {})
+        sequence_checkpoint_session=None
+        # Freeze the exact effective context before target preparation/input.
+        # A session stores only canonical proof and completion bits; periodic
+        # and Stop checkpoints must not rescan the image or geometry.
+        plan['options']['edge_behavior_resolved']=runtime_edge_mode
+        if has_execution_sequence and checkpoint is not None and not dry_run:
+            try:
+                sequence_checkpoint_session=SequenceCheckpointSession(
+                    dict(plan,execution_sequence=prepared_execution_sequence),
+                    completed_counts=sequence_completed_counts,cancelled=stop.is_set)
+                sequence_completed_counts=sequence_checkpoint_session.completed_counts
+            except InterruptedError:raise
+            except Exception as checkpoint_error:
+                # Resume support has its own capacity limit. Failure to prepare
+                # recovery must not introduce a lower drawing-operation limit.
+                checkpoint=None
+                log_event(f'Sequence recovery disabled for this execution: {checkpoint_error!r}')
         if has_execution_sequence:
             progress_total=len(prepared_execution_sequence)
             if resume_sequence_level:
@@ -3216,7 +3237,6 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             paint_profile=bool(plan['options'].get('visual_verification_enabled',False)),
             dry_run=dry_run,test=False)
         edge_mode=runtime_edge_mode
-        plan['options']['edge_behavior_resolved']=edge_mode
         plan['options'].setdefault('edge_behavior_meta',{'active':True,'mode':edge_mode,'hard_clip':0,'hard_skip':0,'adaptive_boundary':0,'preserve_outline_boundary':0,'safe_skip':0})
         resume_input_generation=0
         restored_input_generation=0
@@ -3808,11 +3828,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             return True
 
         execution_sequence=prepared_execution_sequence
-        sequence_completed_counts={}
         sequence_new_completed=0
         sequence_last_entry=None
         if execution_sequence and resume_sequence_level:
-            sequence_completed_counts={str(k):max(0,int(v or 0)) for k,v in dict(resume_info.get('sequence_completed_counts') or {}).items()}
             _skip=dict(sequence_completed_counts);_remaining=[];_skipped=0
             for _entry in execution_sequence:
                 _entry_key=sequence_entry_key(_entry)
@@ -3861,11 +3879,12 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 # contract as the original colour-batched execution succeeds.
                 for completed_entry,_ in sequence_visual_pending:
                     key=sequence_entry_key(completed_entry)
-                    sequence_completed_counts[key]=int(sequence_completed_counts.get(key,0))+1
+                    if sequence_checkpoint_session is not None:sequence_checkpoint_session.complete(key)
+                    else:sequence_completed_counts[key]=int(sequence_completed_counts.get(key,0))+1
                     sequence_new_completed+=1;sequence_last_entry=completed_entry
                 sequence_visual_pending.clear()
                 if checkpoint is not None and sequence_completed_counts:
-                    try:checkpoint(checkpoint_sequence_progress(plan,sequence_completed_counts,prelude_complete=True,last_entry=sequence_last_entry))
+                    try:checkpoint(sequence_checkpoint_session.snapshot(prelude_complete=True,last_entry=sequence_last_entry))
                     except Exception as checkpoint_error:log_event(f'Verified detail sequence checkpoint skipped: {checkpoint_error!r}')
             current_color=None
             current_phase=None
@@ -3919,7 +3938,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             for _execution_index, entry in enumerate(execution_sequence):
                 if stop.is_set():
                     if checkpoint is not None and not dry_run and sequence_completed_counts:
-                        try:checkpoint(checkpoint_sequence_progress(plan,sequence_completed_counts,prelude_complete=True,last_entry=sequence_last_entry))
+                        try:checkpoint(sequence_checkpoint_session.snapshot(prelude_complete=True,last_entry=sequence_last_entry))
                         except Exception as checkpoint_error:log_event(f'Sequence stop checkpoint skipped: {checkpoint_error!r}')
                     raise InterruptedError()
                 pause_guard()
@@ -3983,7 +4002,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                             _decision=classify_interruption(error,str(plan['options'].get('profile_key') or ''))
                             plan['options']['smart_recovery_last_decision']=_decision.as_dict()
                             if _decision.recoverable:
-                                _progress=checkpoint_sequence_progress(plan,sequence_completed_counts,prelude_complete=True,last_entry=sequence_last_entry)
+                                _progress=sequence_checkpoint_session.snapshot(prelude_complete=True,last_entry=sequence_last_entry)
                                 checkpoint(_progress);plan['options']['smart_recovery_checkpoint']=_progress
                                 report('status',f'Smart Recovery saved {int(_progress.get("sequence_completed_count",0)):,}/{int(_progress.get("sequence_total",0)):,} completed sequence operations. Press Start again; target recalibration + visual preflight will run before resume.')
                         except Exception as checkpoint_error:log_event(f'Sequence Smart Recovery checkpoint skipped: {checkpoint_error!r}')
@@ -3994,10 +4013,11 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     sequence_visual_pending.append((entry,item))
                 else:
                     _entry_key=sequence_entry_key(entry)
-                    sequence_completed_counts[_entry_key]=int(sequence_completed_counts.get(_entry_key,0))+1
+                    if sequence_checkpoint_session is not None:sequence_checkpoint_session.complete(_entry_key)
+                    else:sequence_completed_counts[_entry_key]=int(sequence_completed_counts.get(_entry_key,0))+1
                     sequence_new_completed+=1;sequence_last_entry=entry
                 if not sequence_visual and checkpoint is not None and not dry_run and sequence_new_completed%25==0:
-                    try:checkpoint(checkpoint_sequence_progress(plan,sequence_completed_counts,prelude_complete=True,last_entry=entry))
+                    try:checkpoint(sequence_checkpoint_session.snapshot(prelude_complete=True,last_entry=entry))
                     except Exception as checkpoint_error:log_event(f'Sequence recovery checkpoint skipped: {checkpoint_error!r}')
                 if deadline_scheduler is not None:
                     deadline_scheduler.after(entry,excluded_seconds=paused_seconds-_pause_before_entry)
@@ -4016,7 +4036,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 if deadline_scheduler.skipped:
                     report('status',f'Deadline scheduler skipped {deadline_scheduler.skipped:,} low-value path(s); catch-up activations={deadline_scheduler.catch_up_activations}; panic activations={deadline_scheduler.panic_activations}.')
             if checkpoint is not None and not dry_run and sequence_completed_counts:
-                try:checkpoint(checkpoint_sequence_progress(plan,sequence_completed_counts,prelude_complete=True,last_entry=sequence_last_entry))
+                try:checkpoint(sequence_checkpoint_session.snapshot(prelude_complete=True,last_entry=sequence_last_entry))
                 except Exception as checkpoint_error:log_event(f'Final sequence checkpoint skipped: {checkpoint_error!r}')
         else:
             color_order=plan['options'].get('color_order') or list(range(len(plan['groups'])))
@@ -4276,6 +4296,7 @@ class DrawBotApp:
         self.preview_after = None
         # Monotonic generation protects the UI from late preview worker results.
         self.preview_generation = 0
+        self._draw_plan_publication = None
         # Preview rendering has its own debounce job. Keeping this separate from
         # preview generation prevents Canvas <Configure> storms from recursively
         # re-entering Tk while widgets are still laying themselves out.
@@ -6689,17 +6710,17 @@ class DrawBotApp:
             try:
                 cancelled=lambda:self.stop.is_set() or (request is not None and request['cancelled'].is_set())
                 if cancelled():raise InterruptedError('One-click Setup verification cancelled.')
-                from ScreenGuard import WindowMonitor
-                from PIL import ImageGrab
+                from ScreenGuard import WindowMonitor, _grab_rgb
                 monitor=WindowMonitor();handle=int(meta['handle']);target=(handle,tuple(meta['rect']))
                 if not monitor.activate(target):raise ValueError('Windows could not activate the verified target for the second read-only check.')
                 if self.stop.wait(.18) or cancelled():raise InterruptedError('One-click Setup verification cancelled.')
                 current_rect=tuple(monitor.rectangle(handle));client=tuple(monitor.client_rectangle(handle));dpi=monitor.dpi(handle)
                 live_meta=dict(meta);live_meta.update({'handle':handle,'rect':current_rect,'client_rect':client,'dpi':dpi})
-                shot=ImageGrab.grab(bbox=client,all_screens=True).convert('RGB')
                 from OneClickSetupVerification import verify_browser_live,verify_paint_live
-                result=(verify_browser_live(profile_key,live_meta,canvas,palette_path,screenshot=shot)
-                        if mode=='browser' else verify_paint_live(live_meta,canvas,palette_path,screenshot=shot))
+                with closing(_grab_rgb(client)) as shot:
+                    if cancelled():raise InterruptedError('One-click Setup verification cancelled.')
+                    result=(verify_browser_live(profile_key,live_meta,canvas,palette_path,screenshot=shot)
+                            if mode=='browser' else verify_paint_live(live_meta,canvas,palette_path,screenshot=shot))
                 if cancelled():raise InterruptedError('One-click Setup verification cancelled.')
                 out=result.as_dict();out['profile_name']=profile_name;out['target_meta']=live_meta
                 out['_browser_request']=request
@@ -7864,7 +7885,7 @@ class DrawBotApp:
             self.events.put(('background_removed',result))
         started=False
         try:
-            started=bool(self.begin_worker('background-remove',work))
+            started=bool(self.begin_worker('background-remove',work,cleanup=source.close))
             return started
         finally:
             if not started:source.close()
@@ -7911,7 +7932,7 @@ class DrawBotApp:
             self.events.put(('png_saved',path))
         started=False
         try:
-            started=bool(self.begin_worker('png-export',work))
+            started=bool(self.begin_worker('png-export',work,cleanup=snapshot.close))
             return started
         finally:
             if not started:snapshot.close()
@@ -8011,10 +8032,13 @@ class DrawBotApp:
                 source=parse_canvas_drop('',split_items=content)
                 self.load_source(source.source,source.label,action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
             else:
-                text=self.root.clipboard_get().strip()
-                if text.lower().startswith(('https://','http://')):
-                    self.url.set(text);self.fetch_url()
-                else:self.status.set('Copy an image or use Win+Shift+S, then press Ctrl+V here.')
+                from ClipboardImport import parse_text_source
+                source=parse_text_source(self.root.clipboard_get())
+                if source.kind=='url':
+                    self.url.set(source.source);self.fetch_url()
+                else:
+                    self.load_source(source.source,source.label,
+                        action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
         except (OSError,ValueError,tk.TclError) as error:
             self.status.set(f'Could not paste. Copy an image first. {error}')
 
@@ -8095,7 +8119,7 @@ class DrawBotApp:
             self.events.put(('png_saved',path))
         started=False
         try:
-            started=bool(self.begin_worker('png-export',work))
+            started=bool(self.begin_worker('png-export',work,cleanup=snapshot.close))
             return started
         finally:
             if not started:snapshot.close()
@@ -8163,9 +8187,17 @@ class DrawBotApp:
                     getattr(self,'profile_change_after',None) is not None or
                     getattr(self,'profile_change_in_progress',False))
 
-    def begin_worker(self,activity,task):
+    def begin_worker(self,activity,task,*,reset_stop=True,cleanup=None):
+        """Run one task; optional resource cleanup also runs if Stop skips it.
+
+        Cleanup runs on the worker and must not touch Tk. The caller still owns
+        its resources when this returns False or raises during thread startup.
+        """
         if not DrawBotApp._profile_action_ready(self):
             log_event(f'Worker {activity} not started: busy={self.activity!r} closing={self.closing!r}.')
+            return False
+        if not reset_stop and self.stop.is_set():
+            log_event(f'Worker {activity} not started: its preflight was stopped.')
             return False
         request=getattr(self,'browser_one_click_request',None)
         browser_worker_request=None
@@ -8207,13 +8239,18 @@ class DrawBotApp:
             else:
                 log_event(f'Worker {activity} finished in {time.monotonic()-started:.3f} s.')
             finally:
+                if cleanup is not None:
+                    try:cleanup()
+                    except Exception as cleanup_error:
+                        log_event(f'Worker {activity} resource cleanup failed: {cleanup_error!r}')
                 completion=(activity,browser_worker_request) if browser_worker_request is not None else activity
                 self.events.put(('done',completion))
         try:
             if activity in SCREEN_ACTIVITIES:screen_window.hide()
             self.screen_task_window=screen_window
             self._worker_terminal_status=None
-            self.stop.clear();self.set_busy(activity)
+            if reset_stop:self.stop.clear()
+            self.set_busy(activity)
             log_event(f'Worker {activity} started.')
             self.worker=threading.Thread(target=work,daemon=True,name=f'imagedrawbot-{activity}')
             self.worker.start()
@@ -8790,7 +8827,7 @@ class DrawBotApp:
             self.events.put(('status',f'{name} saved as PNG.'))
         started=False
         try:
-            started=bool(self.begin_worker('preview-export',work))
+            started=bool(self.begin_worker('preview-export',work,cleanup=snapshot.close))
             return started
         finally:
             if not started:snapshot.close()
@@ -9381,6 +9418,9 @@ class DrawBotApp:
             try:self.summary.set('No image loaded. Choose an image, paste with Ctrl+V, or drag a file into Image Draw Bot first.')
             except (tk.TclError,AttributeError):pass
             return
+        # Accept a fresh explicit start here, before any synchronous preflight.
+        # The worker must preserve Esc received during the checks or handoff.
+        self.stop.clear()
         try:
             if start_state:start_state.transition('PREFLIGHT','validating target, palette, canvas and calibrated tools')
             if not test and DrawBotApp._strict_safety_required(self):
@@ -9390,6 +9430,7 @@ class DrawBotApp:
             if not bypasses_palette(self):
                 load_calibration(self.calibration_path,current_client_rect=current_client,require_anchor=paint_profile,profile_key=PROFILES[self.game.get()][0])
             current_client=DrawBotApp._run_browser_visual_preflight(self,current_client,reason=action_label)
+            if self.stop.is_set() or self.closing:raise InterruptedError('Drawing start cancelled.')
             area=self.area()
             palette=() if bypasses_palette(self) else tuple((c.x,c.y) for c in allColors)
             if min(area[2:])<10:raise ValueError('Select a larger drawing area.')
@@ -9413,61 +9454,64 @@ class DrawBotApp:
             # verified layout. Only a visually plausible control row produces a
             # click target; otherwise execution leaves the website untouched and
             # uses a conservative CanvasGuard brush inset.
-            try:
-                from BrowserBrushSize import SUPPORTED as BRUSH_PROFILES,plan_browser_brush_size
-                if profile_key in BRUSH_PROFILES:
-                    from PIL import ImageGrab
-                    shot=ImageGrab.grab(bbox=tuple(current_client),all_screens=True).convert('RGB')
-                    pal_box=None
-                    if palette:
-                        xs=[p[0] for p in palette];ys=[p[1] for p in palette]
-                        pal_box=(min(xs),min(ys),max(xs)+1,max(ys)+1)
-                    x,y,w,h=area
-                    brush_plan=plan_browser_brush_size(profile_key,shot,tuple(current_client),
-                        canvas_box=(x,y,x+w,y+h),palette_box=pal_box,requested_px=options.get('brush_px',3))
-                    options['browser_brush_plan']=brush_plan.as_dict()
-                    options['brush_px']=int(brush_plan.effective_px)
-                    options['canvas_guard_brush_px']=int(brush_plan.safe_guard_px)
-                    _brush_meta=options['browser_brush_plan']
-                    _level_note=(f" level={_brush_meta.get('effective_level')}" if _brush_meta.get('effective_level') else '')
-                    log_event(f"Automatic browser brush preflight: profile={profile_key} requested={brush_plan.requested_px}{_level_note} physical={brush_plan.effective_px}px target={brush_plan.target_position!r} selected={brush_plan.selected_index!r} confidence={brush_plan.confidence:.3f} guard={brush_plan.safe_guard_px}px.")
-                    if profile_key in ('gartic-phone','gartic-io'):
-                        from GarticOpacity import plan_gartic_opacity
-                        opacity_plan=plan_gartic_opacity(profile_key,shot,tuple(current_client),
-                            canvas_box=(x,y,x+w,y+h),source_image=self.original,
-                            requested=options.get('gartic_opacity','Auto'),draw_quality=options.get('draw_quality',''),
-                            render_style=options.get('render_style',''),drawing_mode=options.get('drawing_mode',''),
-                            outline=bool(options.get('outline')))
-                        options['gartic_opacity_plan']=opacity_plan.as_dict()
-                        options['gartic_opacity_percent']=int(opacity_plan.selected_percent)
-                        log_event(f"Gartic opacity preflight: requested={opacity_plan.requested} selected={opacity_plan.selected_percent}% confidence={opacity_plan.confidence:.3f} target={opacity_plan.target_position!r} reason={opacity_plan.reason}.")
-            except Exception as brush_error:
-                # Brush automation is an optimization/convenience layer. A
-                # detector failure must not invent clicks; keep the current brush
-                # and enlarge only the safety inset.
-                from BrowserBrushSize import conservative_brush_guard
-                options['canvas_guard_brush_px']=conservative_brush_guard(profile_key,options.get('brush_px',3))
-                options['browser_brush_plan']={'profile_key':profile_key,'target_position':None,'safe_guard_px':options['canvas_guard_brush_px'],'method':str(brush_error)}
-                log_event(f'Automatic browser brush detection fell back safely: {brush_error!r}.')
-            try:
-                from BrowserToolLayout import SUPPORTED as TOOL_PROFILES,plan_browser_tools
-                if profile_key in TOOL_PROFILES:
-                    from PIL import ImageGrab
-                    tool_shot=locals().get('shot')
-                    if tool_shot is None:
-                        tool_shot=ImageGrab.grab(bbox=tuple(current_client),all_screens=True).convert('RGB')
-                    tool_pal_box=None
-                    if palette:
-                        xs=[p[0] for p in palette];ys=[p[1] for p in palette]
-                        tool_pal_box=(min(xs),min(ys),max(xs)+1,max(ys)+1)
-                    x,y,w,h=area
-                    tool_plan=plan_browser_tools(profile_key,tool_shot,tuple(current_client),
-                        canvas_box=(x,y,x+w,y+h),palette_box=tool_pal_box)
-                    options['browser_tool_plan']=tool_plan.as_dict()
-                    log_event(f"Automatic browser tools preflight: profile={profile_key} tools={sorted((tool_plan.tools or {}).keys())} confidence={tool_plan.confidence:.3f} method={tool_plan.method!r}.")
-            except Exception as tool_error:
-                options['browser_tool_plan']={'tools':{},'confidence':0.0,'tool_scores':{},'method':str(tool_error)}
-                log_event(f'Automatic browser tool detection fell back safely: {tool_error!r}.')
+            from ScreenGuard import _grab_rgb
+            with ExitStack() as capture_scope:
+                shot=None
+                try:
+                    from BrowserBrushSize import SUPPORTED as BRUSH_PROFILES,plan_browser_brush_size
+                    if profile_key in BRUSH_PROFILES:
+                        shot=capture_scope.enter_context(closing(_grab_rgb(tuple(current_client))))
+                        pal_box=None
+                        if palette:
+                            xs=[p[0] for p in palette];ys=[p[1] for p in palette]
+                            pal_box=(min(xs),min(ys),max(xs)+1,max(ys)+1)
+                        x,y,w,h=area
+                        brush_plan=plan_browser_brush_size(profile_key,shot,tuple(current_client),
+                            canvas_box=(x,y,x+w,y+h),palette_box=pal_box,requested_px=options.get('brush_px',3))
+                        options['browser_brush_plan']=brush_plan.as_dict()
+                        options['brush_px']=int(brush_plan.effective_px)
+                        options['canvas_guard_brush_px']=int(brush_plan.safe_guard_px)
+                        _brush_meta=options['browser_brush_plan']
+                        _level_note=(f" level={_brush_meta.get('effective_level')}" if _brush_meta.get('effective_level') else '')
+                        log_event(f"Automatic browser brush preflight: profile={profile_key} requested={brush_plan.requested_px}{_level_note} physical={brush_plan.effective_px}px target={brush_plan.target_position!r} selected={brush_plan.selected_index!r} confidence={brush_plan.confidence:.3f} guard={brush_plan.safe_guard_px}px.")
+                        if profile_key in ('gartic-phone','gartic-io'):
+                            from GarticOpacity import plan_gartic_opacity
+                            opacity_plan=plan_gartic_opacity(profile_key,shot,tuple(current_client),
+                                canvas_box=(x,y,x+w,y+h),source_image=self.original,
+                                requested=options.get('gartic_opacity','Auto'),draw_quality=options.get('draw_quality',''),
+                                render_style=options.get('render_style',''),drawing_mode=options.get('drawing_mode',''),
+                                outline=bool(options.get('outline')))
+                            options['gartic_opacity_plan']=opacity_plan.as_dict()
+                            options['gartic_opacity_percent']=int(opacity_plan.selected_percent)
+                            log_event(f"Gartic opacity preflight: requested={opacity_plan.requested} selected={opacity_plan.selected_percent}% confidence={opacity_plan.confidence:.3f} target={opacity_plan.target_position!r} reason={opacity_plan.reason}.")
+                except InterruptedError:raise
+                except Exception as brush_error:
+                    # Brush automation is an optimization/convenience layer. A
+                    # detector failure must not invent clicks; keep the current brush
+                    # and enlarge only the safety inset.
+                    from BrowserBrushSize import conservative_brush_guard
+                    options['canvas_guard_brush_px']=conservative_brush_guard(profile_key,options.get('brush_px',3))
+                    options['browser_brush_plan']={'profile_key':profile_key,'target_position':None,'safe_guard_px':options['canvas_guard_brush_px'],'method':str(brush_error)}
+                    log_event(f'Automatic browser brush detection fell back safely: {brush_error!r}.')
+                try:
+                    from BrowserToolLayout import SUPPORTED as TOOL_PROFILES,plan_browser_tools
+                    if profile_key in TOOL_PROFILES:
+                        tool_shot=shot
+                        if tool_shot is None:
+                            tool_shot=capture_scope.enter_context(closing(_grab_rgb(tuple(current_client))))
+                        tool_pal_box=None
+                        if palette:
+                            xs=[p[0] for p in palette];ys=[p[1] for p in palette]
+                            tool_pal_box=(min(xs),min(ys),max(xs)+1,max(ys)+1)
+                        x,y,w,h=area
+                        tool_plan=plan_browser_tools(profile_key,tool_shot,tuple(current_client),
+                            canvas_box=(x,y,x+w,y+h),palette_box=tool_pal_box)
+                        options['browser_tool_plan']=tool_plan.as_dict()
+                        log_event(f"Automatic browser tools preflight: profile={profile_key} tools={sorted((tool_plan.tools or {}).keys())} confidence={tool_plan.confidence:.3f} method={tool_plan.method!r}.")
+                except InterruptedError:raise
+                except Exception as tool_error:
+                    options['browser_tool_plan']={'tools':{},'confidence':0.0,'tool_scores':{},'method':str(tool_error)}
+                    log_event(f'Automatic browser tool detection fell back safely: {tool_error!r}.')
             # Paint-only real preflight: resolve stale palette-only saved
             # settings against the *actual* profile calibration before planning.
             # This is what lets Image Draw Bot open Edit colors automatically when
@@ -9590,6 +9634,7 @@ class DrawBotApp:
                         if area[0]<=px<=area[0]+area[2] and area[1]<=py<=area[1]+area[3]:
                             raise ValueError(f'The calibrated {kind} control overlaps the drawing area. Recalibrate application tools.')
                 log_event(f"Automatic canvas clear preflight: enabled=True strategy={clear_strategy.strategy!r} reason={clear_strategy.reason!r} estimate={clear_strategy.estimated_seconds:.2f}s.")
+            if self.stop.is_set() or self.closing:raise InterruptedError('Drawing start cancelled.')
         except (OSError,ValueError,InterruptedError) as error:
             if start_state and start_state.state!='ABORTED':start_state.transition('ABORTED',f'preflight stopped: {error}')
             self.status.set(f'Preflight stopped: {error}');return
@@ -9598,7 +9643,6 @@ class DrawBotApp:
         if palette and not runtime_palette_guard:
             log_event(f"Runtime palette guard delegated to Browser Visual Preflight: profile={profile_key!r} swatches={len(palette)}.")
         guarded=GuardedMouse(self.mouse,WindowMonitor(),self.target_window,runtime_palette_guard,live_target_check=self._make_live_target_check() if (not test and DrawBotApp._strict_safety_required(self) and DrawBotApp._target_lock_valid(self)) else None)
-        original=self.original.copy() if self.original else None
         if test:
             if options.get('erase_mode'):
                 prompt='This erases one short line in the selected drawing area. Put a visible mark under the test area first so you can confirm the Eraser works. Continue?'
@@ -9606,6 +9650,34 @@ class DrawBotApp:
                 prompt='This draws up to three lines in the selected drawing area. Use an empty test canvas. Continue?'
             if not messagebox.askokcancel('Drawing test',prompt):return
         self.paused.clear();self.progress['value']=0;self.save_settings()
+        if self.stop.is_set() or self.closing:
+            if start_state:start_state.transition('ABORTED','drawing start cancelled before snapshot')
+            self.status.set('Drawing start cancelled. No automatic restart.')
+            return False
+        # A small test does not plan from the loaded image. For a real plan,
+        # keep one private snapshot only through the last planning attempt.
+        original=self.original.copy() if self.original is not None and not test else None
+        self.preview_generation=int(getattr(self,'preview_generation',0))+1
+        generation=self.preview_generation
+        publication=WorkerPlanPublication(lambda plan:DrawBotApp._release_plan_images(self,plan))
+        self._draw_plan_publication=publication
+        def release_source_snapshot(retained_plan=None,*,transfer=False):
+            nonlocal original
+            snapshot=original
+            if snapshot is None:return
+            if retained_plan is not None:
+                from AutoSketchBudget import _trial_images
+                # A planner may transfer its input into an owned image field.
+                # The final plan's publication owner then keeps it alive for
+                # execution and releases it if UI publication is rejected.
+                if any(image is snapshot for image in _trial_images(retained_plan)):
+                    if transfer:original=None
+                    return
+            original=None
+            snapshot.close()
+        def release_worker_images():
+            try:publication.finish()
+            finally:release_source_snapshot()
         def work():
             started=time.monotonic()
             if start_state:start_state.set_block_reason('building/validating final render plan before mouse input')
@@ -9688,6 +9760,8 @@ class DrawBotApp:
                 label=last_timeout.name if last_timeout else 'no attempt'
                 log_event(f'Final planning failed before mouse input was armed. last={label!r}.')
                 raise ValueError('Final planning did not produce a plan. Lower planning resolution or use a smaller target stroke count.')
+            publication.own(plan)
+            release_source_snapshot(plan,transfer=True)
             if not test and not dry_run and plan.get('options',{}).get('auto_clear_canvas'):
                 add_clear=True
                 try:
@@ -9705,12 +9779,14 @@ class DrawBotApp:
             if dry_run:
                 original_count=int(plan.get('count') or 0)
                 plan=sample_dry_run_plan(plan, execution_seconds=DRY_RUN_EXECUTION_SECONDS)
+                publication.own(plan)
                 dm=plan.get('options') or {}
                 self.events.put(('status',f"Fast Dry run: sampling up to {int(dm.get('dry_run_sample_paths',plan.get('count',0))):,} representative paths from {original_count:,}. Cursor test budget {DRY_RUN_EXECUTION_SECONDS:.0f}s. Reaching the budget is a normal PASS if no safety check fails. No clicks."))
                 log_event(f"Dry-run route sampled: paths={dm.get('dry_run_sample_paths',plan.get('count'))}/{dm.get('dry_run_total_paths',original_count)} colors={dm.get('dry_run_sample_colors','n/a')}/{dm.get('dry_run_total_colors','n/a')} max_seconds={DRY_RUN_EXECUTION_SECONDS}.")
             log_event(f"Final planning finished in {time.monotonic()-started:.3f} s total using attempt={plan.get('options',{}).get('planning_attempt_name','Primary settings')!r}: {_plan_log_text(plan)}.")
             if start_state:start_state.transition('PLAN_READY','final deadline-aware plan built and validated')
-            self.events.put(('planned',plan))
+            plan['preview_generation']=generation
+            publication.publish(self.events)
             if not plan['count'] and not (plan['options'].get('background_fill_plan') or {}).get('enabled') and not plan['options'].get('fill_regions'):
                 log_event('Final planning produced no drawable strokes or fills.')
                 raise ValueError('No brush strokes or safe Fill regions were found. Choose a darker image for simple Paint sketch mode, or check the color settings.')
@@ -9746,10 +9822,23 @@ class DrawBotApp:
                 self.events.put(('dry_run_passed',True))
             if test and not self.stop.is_set():
                 self.events.put(('test_passed',True))
-        if self.begin_worker('dry-run' if dry_run else 'draw',work):
+        try:
+            accepted=self.begin_worker('dry-run' if dry_run else 'draw',work,
+                reset_stop=False,cleanup=release_worker_images)
+        except BaseException:
+            release_worker_images()
+            self._draw_plan_publication=None
+            raise
+        if accepted:
             if not dry_run and not test:self.drop_in_sync_phase=DROP_SYNC_DRAWING
             try:self.root.iconify()
             except tk.TclError:pass
+        else:
+            release_worker_images()
+            self._draw_plan_publication=None
+            if self.stop.is_set():
+                if start_state:start_state.transition('ABORTED','drawing start cancelled before worker handoff')
+                self.status.set('Drawing start cancelled. No automatic restart.')
 
     def quick_start_hotkey(self):
         """F1 Quick Start: same setup guards as the buttons, without unsafe bypasses."""
@@ -9786,6 +9875,8 @@ class DrawBotApp:
         self.smart_drop_pending_payload=None
         self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
         self.preview_generation=int(getattr(self,'preview_generation',0))+1
+        publication=getattr(self,'_draw_plan_publication',None)
+        if publication is not None:publication.reject()
         mouse=getattr(self,'mouse',None)
         if hasattr(mouse,'disarm_input'):
             try:mouse.disarm_input()
@@ -10436,6 +10527,13 @@ class DrawBotApp:
     def help(self):
         self.show_welcome()
 
+    def _release_plan_images(self,plan):
+        """Release plan images while preserving the current UI's image owners."""
+        from AutoSketchBudget import _release_trial
+        retained={name:getattr(self,name,None) for name in
+                  ('original','upscale_original','background_removal_original')}
+        _release_trial(plan,retained['original'],retained,getattr(self,'plan',None))
+
     def _discard_worker_result(self,kind,value):
         """Release rejected worker-owned images while retaining live UI owners."""
         if kind=='recovery_image_prepared':
@@ -10444,11 +10542,12 @@ class DrawBotApp:
             if value is getattr(self,'_recovery_image_job',None):self._recovery_image_job=None
             return
         from PIL import Image
-        from AutoSketchBudget import _release_trial
         retained={name:getattr(self,name,None) for name in
                   ('original','upscale_original','background_removal_original')}
         if kind=='planned':
-            _release_trial(value,retained['original'],retained,getattr(self,'plan',None))
+            publication=getattr(self,'_draw_plan_publication',None)
+            if publication is not None and publication.reject(value):return
+            DrawBotApp._release_plan_images(self,value)
             return
         candidate=None
         if kind in ('loaded','pasted','upscaled') and isinstance(value,(list,tuple)) and value:
@@ -10479,6 +10578,7 @@ class DrawBotApp:
                 if value=='performance-auto-tuner':self.hardware_benchmark_running=False
                 if value=='recovery-clear':self._recovery_clear_previous_suppression=None
                 self.activity=None;self.worker=None
+                if value in ('draw','dry-run'):self._draw_plan_publication=None
                 screen_window=getattr(self,'screen_task_window',None)
                 if screen_window is not None:screen_window.restore()
             else:DrawBotApp._discard_worker_result(self,kind,value)
@@ -10968,11 +11068,19 @@ class DrawBotApp:
             except (tk.TclError,AttributeError):pass
             self.status.set('Preview took too long, so it was cancelled safely. You can still press Start drawing to generate the final plan.')
         elif kind=='planned':
-            if not isinstance(value,dict) or 'preview' not in value or 'count' not in value or 'estimate' not in value:
-                raise ValueError('The preview worker returned an invalid plan.')
-            if int(value.get('preview_generation',-1))!=int(getattr(self,'preview_generation',0)):
+            try:
+                if not isinstance(value,dict) or 'preview' not in value or 'count' not in value or 'estimate' not in value:
+                    raise ValueError('The preview worker returned an invalid plan.')
+                current=int(value.get('preview_generation',-1))==int(getattr(self,'preview_generation',0))
+            except (TypeError,ValueError,OverflowError):
+                DrawBotApp._discard_worker_result(self,kind,value)
+                raise
+            if not current:
                 log_event(f"Ignored stale preview result generation={value.get('preview_generation')} current={getattr(self,'preview_generation',0)}.")
                 DrawBotApp._discard_worker_result(self,kind,value)
+                return
+            publication=getattr(self,'_draw_plan_publication',None)
+            if publication is not None and publication.owns(value) and not publication.adopt(value):
                 return
             self.plan=value
             self.preview_dirty_reason=''
@@ -11295,6 +11403,7 @@ class DrawBotApp:
             from StabilityRC import current_completion
             if current_completion(self.activity,value):
                 finished=self.activity
+                if finished in ('draw','dry-run'):self._draw_plan_publication=None
                 if browser_done_request is not None:self.browser_one_click_worker_request=None
                 if finished=='recovery-clear':
                     previous=getattr(self,'_recovery_clear_previous_suppression',None)

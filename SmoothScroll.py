@@ -19,6 +19,7 @@ def install_scrolling(root):
     previous=getattr(root,'_image_draw_scroll_dispatcher',None)
     if isinstance(previous,dict) and not previous.get('closed',True):return previous
     from customtkinter import CTkScrollbar,CTkSlider,CTkTextbox
+    from UiKeyboardNavigation import KeyboardSlider
     wheel_owners=(CTkScrollbar,CTkSlider,CTkTextbox)
     state={'canvas':None,'job':None,'delta':ScrollAccumulator(),'closed':False}
     try:window_system=root.tk.call('tk','windowingsystem')
@@ -77,7 +78,11 @@ def install_scrolling(root):
         while widget is not None:
             # CTk sliders and scrollbars wrap a Canvas/Frame, so native class
             # names alone do not identify controls that already own the wheel.
-            if isinstance(widget,wheel_owners):return None
+            if isinstance(widget,KeyboardSlider):
+                # The contrast control only owns wheel input after deliberate
+                # focus. Otherwise scrolling through its row still moves the panel.
+                if widget._keyboard_owns_wheel():return None
+            elif isinstance(widget,wheel_owners):return None
             try:kind=widget.winfo_class()
             except (AttributeError,RuntimeError,tk.TclError):return None
             if kind in ('Text','Listbox','Menu','Treeview','TCombobox','Spinbox','TSpinbox','Scale','TScale'):return None

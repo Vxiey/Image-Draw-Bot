@@ -66,7 +66,7 @@ class CaptureExportOwnershipTests(unittest.TestCase):
         jobs = []
         app = SimpleNamespace(activity=None, closing=False, status=Mock(), root=object(),
             stop=threading.Event(), events=queue.Queue(), jobs=jobs)
-        app.begin_worker = Mock(side_effect=lambda activity, work: jobs.append(work) or True)
+        app.begin_worker = Mock(side_effect=lambda activity, work, *, cleanup=None: jobs.append(work) or True)
         return app
 
     def test_png_encoding_waits_for_worker_and_owns_snapshot_after_capture_closes(self):

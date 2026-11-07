@@ -4,10 +4,12 @@ Bindings belong to each button and end with its lifetime. A button is one Tab
 stop; Return, keypad Enter and Space use its existing state-checked invoke().
 Selectors share focus visibility and use their existing variable/command path.
 Switches use CTk's ordinary toggle(), including its on/off values and command.
+Sliders keep native value/variable callbacks with focused numeric key input.
 """
 from __future__ import annotations
 
 import tkinter as tk
+import math
 from weakref import WeakSet
 
 import customtkinter as ctk
@@ -463,6 +465,125 @@ class KeyboardOptionMenu(_KeyboardFocusSupport, ctk.CTkOptionMenu):
     def destroy(self):
         self._keyboard_closed = True
         self._keyboard_close_popup()
+        super().destroy()
+
+
+class KeyboardSlider(_KeyboardFocusSupport, ctk.CTkSlider):
+    """One focused numeric control; wheel/keys obey the same live busy state."""
+
+    def __init__(self, *args, keyboard_step=.01, reset_value=None,
+                 value_changed=None, focus_color='#72e2bd', **kwargs):
+        self._keyboard_step=float(keyboard_step)
+        if not math.isfinite(self._keyboard_step) or self._keyboard_step<=0:
+            raise ValueError('Slider keyboard step must be finite and positive.')
+        self._keyboard_reset=None if reset_value is None else float(reset_value)
+        if self._keyboard_reset is not None and not math.isfinite(self._keyboard_reset):
+            raise ValueError('Slider reset value must be finite.')
+        self._keyboard_ready=False
+        self._keyboard_closed=False
+        self._keyboard_focus_active=False
+        self._keyboard_focus_displayed=False
+        self._keyboard_focus_color=focus_color
+        self._keyboard_value_callback=value_changed
+        self._keyboard_display_value=None
+        super().__init__(*args, **kwargs)
+        self._keyboard_ready=True
+        self._canvas.configure(takefocus=0)
+        tk.Frame.configure(self,takefocus=self._keyboard_focusable)
+        for sequence, callback in (('<FocusIn>',self._keyboard_focus_in),
+                                   ('<FocusOut>',self._keyboard_focus_out),
+                                   ('<KeyPress>',self._keyboard_key_press)):
+            tk.Misc.bind(self,sequence,callback,add='+')
+        self._keyboard_refresh_value()
+
+    def _keyboard_focusable(self, _path=None):
+        try:
+            return bool(not self._keyboard_closed and self.winfo_exists()
+                        and self.winfo_ismapped() and self.cget('state')!='disabled')
+        except (tk.TclError,RuntimeError):
+            return False
+
+    def _keyboard_focus_in(self, _event=None):
+        self._keyboard_focus_active=True
+        self._keyboard_reveal_focus()
+        self._keyboard_draw_focus()
+
+    def _keyboard_focus_out(self, _event=None):
+        self._keyboard_focus_active=False
+        self._keyboard_draw_focus()
+
+    def _keyboard_refresh_value(self):
+        callback=self._keyboard_value_callback
+        value=self.get()
+        if callable(callback) and value!=self._keyboard_display_value:
+            try:callback(value)
+            except (tk.TclError,RuntimeError):return
+            self._keyboard_display_value=value
+
+    def _draw(self, *args, **kwargs):
+        super()._draw(*args, **kwargs)
+        if getattr(self,'_keyboard_ready',False) and not self._keyboard_closed:
+            self._keyboard_draw_focus()
+            self._keyboard_refresh_value()
+
+    def _keyboard_select(self, value):
+        low,high=sorted((float(self._from_),float(self._to)))
+        if not all(math.isfinite(number) for number in (low,high,value)) or low==high:
+            return False
+        value=self._round_to_step_size(max(low,min(high,round(value,12))))
+        if value==self.get():return False
+        # CTk's own input path updates its value, draws, writes the linked Tk
+        # variable, then invokes the existing command, exactly as a pointer does.
+        self._update_value((value-self._from_)/(self._to-self._from_))
+        return True
+
+    def _keyboard_step_value(self, direction, *, large=False):
+        current=float(self.get())
+        if not math.isfinite(current):return False
+        # Join the documented numeric grid after an arbitrary pointer position.
+        index=round((current-self._from_)/self._keyboard_step)
+        index+=direction*(10 if large else 1)
+        return self._keyboard_select(self._from_+index*self._keyboard_step)
+
+    def _keyboard_key_press(self, event):
+        key=getattr(event,'keysym','')
+        state=getattr(event,'state',0) or 0
+        if state & (4|8|128|0x20000):return None
+        keys=('Left','Right','Up','Down','Prior','Next','Home','End')
+        if key not in keys and not (key=='BackSpace' and self._keyboard_reset is not None):return None
+        if not self._keyboard_focusable() or not self._keyboard_has_focus() or not self._keyboard_in_view():return 'break'
+        if key=='Home':self._keyboard_select(self._from_)
+        elif key=='End':self._keyboard_select(self._to)
+        elif key=='BackSpace':self._keyboard_select(self._keyboard_reset)
+        else:
+            direction=1 if key in ('Right','Up','Prior') else -1
+            self._keyboard_step_value(direction,large=bool(state&1) or key in ('Prior','Next'))
+        return 'break'
+
+    def _keyboard_owns_wheel(self):
+        return bool(self._keyboard_focusable() and self._keyboard_has_focus()
+                    and self._keyboard_in_view())
+
+    def _mouse_scroll_event(self, event):
+        # CTk's raw wheel handler ignores state='disabled'. Leave ordinary
+        # panel scrolling alone until the user deliberately focuses this slider.
+        if ((getattr(event,'state',0) or 0) & (4|8|128|0x20000) or
+                not self._keyboard_owns_wheel()):return None
+        number=getattr(event,'num',None)
+        delta=getattr(event,'delta',0) or 0
+        if not delta and number not in (4,5):return None
+        self._keyboard_step_value(-1 if delta<0 or number==5 else 1,
+                                  large=bool((getattr(event,'state',0) or 0)&1))
+        return 'break'
+
+    def _clicked(self, event=None):
+        if self._keyboard_focusable():
+            self.focus_set()
+            return super()._clicked(event)
+
+    def destroy(self):
+        self._keyboard_closed=True
+        self._keyboard_value_callback=None
         super().destroy()
 
 

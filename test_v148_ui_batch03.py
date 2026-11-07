@@ -145,7 +145,7 @@ class ImageExportTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(),b'old');self.assertEqual(list(Path(tmp).iterdir()),[path])
 
     def test_png_export_uses_worker_and_decodes_after_atomic_publication(self):
-        app=app_for_edit();work=[];app.begin_worker=lambda kind,task:work.append((kind,task)) or True
+        app=app_for_edit();work=[];app.begin_worker=lambda kind,task,*,cleanup=None:work.append((kind,task)) or True
         with TemporaryDirectory() as tmp,patch('DrawBot.filedialog.asksaveasfilename',return_value=str(Path(tmp)/'export.png')):
             self.assertTrue(DrawBotApp.save_png_copy(app))
             path=Path(tmp)/'export.png'
@@ -156,7 +156,7 @@ class ImageExportTests(unittest.TestCase):
             self.assertEqual(app.events.get_nowait(),('png_saved',str(path)))
 
     def test_export_preview_encodes_off_ui_thread_and_uses_a_snapshot(self):
-        app=app_for_edit();work=[];app.begin_worker=lambda kind,task:work.append((kind,task)) or True
+        app=app_for_edit();work=[];app.begin_worker=lambda kind,task,*,cleanup=None:work.append((kind,task)) or True
         with TemporaryDirectory() as tmp,patch('DrawBot.filedialog.asksaveasfilename',return_value=str(Path(tmp)/'preview.png')):
             self.assertTrue(DrawBotApp.export_preview(app))
             self.assertEqual(work[0][0],'preview-export')
@@ -168,7 +168,7 @@ class ImageExportTests(unittest.TestCase):
     def test_refused_workers_release_export_and_edit_snapshots(self):
         copy=Image.Image.copy
         for operation in ('save_png_copy','export_preview','remove_image_background'):
-            images=[];app=app_for_edit();app.begin_worker=lambda *args:False
+            images=[];app=app_for_edit();app.begin_worker=lambda *args,cleanup=None:False
             def traced(image):
                 result=copy(image);images.append(result);return result
             with self.subTest(operation=operation),patch('DrawBot.filedialog.asksaveasfilename',return_value='unused.png'),patch.object(Image.Image,'copy',traced):
@@ -180,7 +180,7 @@ class ImageExportTests(unittest.TestCase):
             self.assertIsNone(app.background_removal_original)
 
     def test_save_failure_never_reports_success_or_replaces_destination(self):
-        app=app_for_edit();work=[];app.begin_worker=lambda kind,task:work.append(task) or True
+        app=app_for_edit();work=[];app.begin_worker=lambda kind,task,*,cleanup=None:work.append(task) or True
         with TemporaryDirectory() as tmp:
             path=Path(tmp)/'export.png';path.write_bytes(b'existing')
             with patch('DrawBot.filedialog.asksaveasfilename',return_value=str(path)):
@@ -194,7 +194,7 @@ class ImageExportTests(unittest.TestCase):
 
 class BackgroundUiTests(unittest.TestCase):
     def test_failed_background_request_does_not_create_undo_state(self):
-        app=app_for_edit();work=[];app.begin_worker=lambda kind,task:work.append(task) or True
+        app=app_for_edit();work=[];app.begin_worker=lambda kind,task,*,cleanup=None:work.append(task) or True
         self.assertTrue(DrawBotApp.remove_image_background(app))
         self.assertIsNone(app.background_removal_original)
         with patch('BackgroundRemoval.remove_background',side_effect=ValueError('cannot segment')),self.assertRaises(ValueError):work[0]()

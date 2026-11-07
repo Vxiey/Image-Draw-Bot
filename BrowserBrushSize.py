@@ -244,9 +244,9 @@ def plan_browser_brush_size(profile_key, screenshot, client_rect, *, canvas_box=
 
 
 def capture_control_patch(position, radius=18):
-    from PIL import ImageGrab
+    from ScreenGuard import _grab_rgb
     x,y=map(int,position);r=max(8,min(40,int(radius)))
-    return ImageGrab.grab(bbox=(x-r,y-r,x+r+1,y+r+1),all_screens=True).convert('RGB')
+    return _grab_rgb((x-r,y-r,x+r+1,y+r+1))
 
 
 def verify_brush_selection(plan_dict, target_index) -> bool:

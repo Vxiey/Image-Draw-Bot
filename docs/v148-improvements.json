@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 796,
+  "implemented": 803,
   "release_published": false,
-  "validation": "Batch 14: all fifteen behavior groups and existing-contract completions have closed independent source reviews. Whole-program discovery passed 3,768 tests in 98.292 seconds with 46 platform/hardware skips and unchanged hashes for 806 Python, batch, workflow and requirements files. The 5,000-cycle source gate and eight exact-raster fixtures passed. Paired CPU measurements preserve complete outputs across 942 helper/scheduler cases and four public plans. Final local evidence is in v148-batch14-validation.json. Exact published-commit GitHub checks are linked from PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 15: 3,851 tests passed in 103.373 seconds, with 48 platform/hardware skips and all 820 source/configuration hashes unchanged. Seven new behavior groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, 1,106-file package hygiene, eight exact-raster fixtures and three frozen-source paired benchmarks passed. Exact evidence is in v148-batch15-validation.json; published-commit platform checks are recorded in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6187,6 +6187,62 @@
       "local_id": "P1404",
       "description": "Prioritize the applied active profile within bounded settings/calibration diagnostic summaries. Add an opaque record-selection map without exposing storage keys, filenames or coordinates; retain existing cancellation, file validation, privacy and candidate limits.",
       "ledger": "v148-batch14-platform.md"
+    },
+    {
+      "local_id": "A1501",
+      "area": "batch15-application",
+      "ledger": "v148-batch15-application.md",
+      "description": "Preserve emergency Stop from the beginning of an accepted synchronous drawing preflight through worker handoff. A new explicit Start clears an earlier Stop before its checks; the worker preserves later Esc, and detector interruptions abort rather than becoming convenience fallbacks. Actual controller/worker tests reproduce the old lost-Stop behavior and cover normal, Dry run, small test and construction boundaries.",
+      "batch": 15,
+      "id": 797
+    },
+    {
+      "local_id": "A1502",
+      "area": "batch15-application",
+      "ledger": "v148-batch15-application.md",
+      "description": "Keep the private drawing-source snapshot only through the final planning attempt, then release it before execution. Small tests take no unrelated source copy. Worker cleanup covers accepted work stopped before its task, rejected work and failed startup; intentional plan-image aliases transfer to the explicit final-plan owner, which releases rejected results only after worker exit. Actual public-plan, retry, failure and ownership tests preserve the app original and live result images.",
+      "batch": 15,
+      "id": 798
+    },
+    {
+      "local_id": "R1501",
+      "area": "batch15-rendering",
+      "ledger": "v148-batch15-rendering.md",
+      "description": "Reduce Sketch 2.0 scratch retention by ending the smoothed and raw gradient phases before later allocations. Retain exact metadata predicates instead of completed full RGB float32 cubes. Preserve every float32 expression, mask, contour, public Paint/Sketch Fill plan and independent ink raster; paired measurements report lower traced memory with unchanged or workload-specific CPU time.",
+      "batch": 15,
+      "id": 799
+    },
+    {
+      "local_id": "R1502",
+      "area": "batch15-rendering",
+      "ledger": "v148-batch15-rendering.md",
+      "description": "Borrow already oriented RGBA input during standard preparation instead of making two full-size identity copies before the same resize. Preserve exact pixels, EXIF, metadata, geometry and detail-aware preview behavior across modes and lazy decoders. Return an independent owned result, keep source images usable and verify two avoided full-source copies through the actual public planner.",
+      "batch": 15,
+      "id": 800
+    },
+    {
+      "local_id": "U1501",
+      "area": "batch15-ui-workflow",
+      "ledger": "v148-batch15-ui-workflow.md",
+      "description": "Route clipboard text containing already supported local paths, Copy as path strings, file URIs and data-image URIs through the existing bounded asynchronous importer. Preserve native bitmap/file-list priority and complete direct HTTP URLs, including embedded data-image query values. Actual Paste-to-worker-to-adoption tests verify pixels, Stop and explicit Drop-In/Browser One-Click ownership.",
+      "batch": 15,
+      "id": 801
+    },
+    {
+      "local_id": "U1502",
+      "area": "batch15-ui-workflow",
+      "ledger": "v148-batch15-ui-workflow.md",
+      "description": "Make Contrast one focused numeric control with a live value, bounded fine/coarse keyboard steps and neutral reset. Prevent the underlying slider wheel from changing options while disabled or inactive. Focused eligible controls own wheel changes; other wheel events reach the panel. Preserve CTk variable/command order, real controller invalidation, pointer behavior and native focus traversal.",
+      "batch": 15,
+      "id": 802
+    },
+    {
+      "local_id": "P1501",
+      "area": "batch15-platform",
+      "ledger": "v148-batch15-platform.md",
+      "description": "Build the immutable sequence recovery proof once per execution before input, then mark verified operation occurrences in a compact bitset. Periodic, Stop and failure checkpoints serialize existing proof without rescanning source pixels, geometry or the full catalog. Preserve schema 3, inherited-brush identity, repeated operations, deadline skips and visual-verification boundaries; cancellable initialization and capacity fallback keep existing drawing limits. Whole-executor comparisons disclose reduced CPU work and the additional retained catalog memory.",
+      "batch": 15,
+      "id": 803
     }
   ]
 }
