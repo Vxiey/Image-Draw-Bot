@@ -37,8 +37,8 @@ class ReleaseTests(unittest.TestCase):
 
     def test_github_workflow_builds_and_publishes(self):
         text=(Path(__file__).resolve().parent/'.github'/'workflows'/'build-windows.yml').read_text(encoding='utf-8')
-        self.assertIn('actions/checkout@v4',text); self.assertIn('actions/setup-python@v5',text)
-        self.assertIn('actions/upload-artifact@v4',text); self.assertIn('python ReleasePackage.py --check',text); self.assertIn('ReleaseCandidateHardening.py --source-gate',text)
+        self.assertIn('actions/checkout@v7',text); self.assertIn('actions/setup-python@v7',text)
+        self.assertIn('actions/upload-artifact@v7',text); self.assertIn('python ReleasePackage.py --check',text); self.assertIn('ReleaseCandidateHardening.py --source-gate',text)
         self.assertIn('gh release create',text); self.assertIn('--notes-file',text)
         self.assertIn("- 'Version.py'",text); self.assertIn("- '.github/release-build-trigger'",text)
 

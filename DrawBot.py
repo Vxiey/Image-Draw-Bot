@@ -1572,20 +1572,22 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     # detail strokes are layered on top.  Extra Fast 2.0 renders the exact
     # source row spans for irregular connected regions instead of painting the
     # whole bounding box, keeping Step 1 source-relative accuracy truthful.
-    for region in options.get('fill_regions',[]) or []:
-        try:
-            index=int(region['color_index']);color=palette_rgb[index]
-            spans=region.get('row_spans') or ()
-            if spans:
-                for raw in spans:
-                    y,x0,x1=map(int,raw)
-                    p0=point(x0,y);p1=point(x1,y)
-                    draw.line((p0[0],p0[1],p1[0],p1[1]),fill=color,width=max(1,round(scale)))
-            else:
-                x0,y0,x1,y1=map(int,region['bbox']);p0=point(x0,y0);p1=point(x1,y1)
-                draw.rectangle((p0[0],p0[1],p1[0],p1[1]),fill=color)
-        except (KeyError,TypeError,ValueError,IndexError):
-            continue
+    def draw_preview_fills():
+        for region in options.get('fill_regions',[]) or []:
+            try:
+                index=int(region['color_index']);color=palette_rgb[index]
+                spans=region.get('row_spans') or ()
+                if spans:
+                    for raw in spans:
+                        y,x0,x1=map(int,raw)
+                        p0=point(x0,y);p1=point(x1,y)
+                        draw.line((p0[0],p0[1],p1[0],p1[1]),fill=color,width=max(1,round(scale)))
+                else:
+                    x0,y0,x1,y1=map(int,region['bbox']);p0=point(x0,y0);p1=point(x1,y1)
+                    draw.rectangle((p0[0],p0[1],p1[0],p1[1]),fill=color)
+            except (KeyError,TypeError,ValueError,IndexError):
+                continue
+    draw_preview_fills()
 
     profiler_stop(options, 'preview_rendering', _prof_preview)
     drawing_mode=options.get('drawing_mode')
@@ -1961,10 +1963,10 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     estimate_step_px=estimate_delivery.step_px
     preview_safety=None
     try:
-        _detail_sequence=(execution_sequence if options.get('detail_zoom_meta',{}).get('enabled')
-                          and execution_sequence else None)
+        # Every final pass order belongs to the preview, including progressive
+        # scheduling and Pixel corrections when Detail Zoom is disabled.
         preview_safety=build_preview_safety_plan(image.size,fitted,groups,execution_groups,options,cancelled,
-                                                execution_sequence=_detail_sequence)
+                                                execution_sequence=execution_sequence or None)
         options['preview_safety_meta']=preview_safety.as_dict()
         options['_preview_safety_groups']=preview_safety.groups
         draw_safe_paths(draw,preview_safety,fitted,size,palette_rgb,brush,cancelled)
@@ -1983,39 +1985,49 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
         # remains a fallback and the warning is surfaced in plan metadata.
         log_event(f'Smart Preview Safety fallback: {error!r}')
         options['preview_safety_meta']={'active':False,'reason':str(error)}
-        if execution_groups is not None:
-            for index,paths in enumerate(execution_groups):
-                if cancelled():raise InterruptedError()
-                for path in paths:
-                    if cancelled():raise InterruptedError()
-                    mapped=[point(x,y) for x,y in path]
-                    if len(mapped)==1:
-                        x,y=mapped[0];radius=brush/2
-                        draw.ellipse((x-radius,y-radius,x+radius,y+radius),fill=palette_rgb[index])
-                        dot_count+=1
-                        continue
-                    draw.line([coord for p in mapped for coord in p],fill=palette_rgb[index],width=brush,joint='curve')
-                    radius=brush/2
-                    for x,y in (mapped[0],mapped[-1]):
-                        draw.ellipse((x-radius,y-radius,x+radius,y+radius),fill=palette_rgb[index])
-                    for (x1,y1),(x2,y2) in zip(path,path[1:]):
-                        if (x1,y1)!=(x2,y2):
-                            path_moves_total+=precision_path_count(execution_transform.point(x1,y1),execution_transform.point(x2,y2),precision,estimate_step_px)
-        else:
-            for index,strokes in enumerate(groups):
-                if cancelled():
-                    raise InterruptedError()
-                for x1,y1,x2,y2 in strokes:
-                    if cancelled():
-                        raise InterruptedError()
-                    p1,p2=point(x1,y1),point(x2,y2)
-                    draw.line((*p1,*p2),fill=palette_rgb[index],width=brush)
-                    radius=brush/2
-                    for x,y in (p1,p2):draw.ellipse((x-radius,y-radius,x+radius,y+radius),fill=palette_rgb[index])
-                    if x1==x2 and y1==y2:
-                        dot_count+=1
+        # A failed renderer may have left partial guarded ink on the bitmap.
+        # Rebuild the fill prelude, then replay the same final schedule without
+        # allowing a display-only failure to change actual drawing behavior.
+        draw.rectangle((0,0,size[0]-1,size[1]-1),fill=preview_bg)
+        draw_preview_fills()
+        path_moves_total=dot_count=0
+        def fallback_paths():
+            physical_brush=max(1,int(options.get('brush_px',3)))
+            if execution_sequence:
+                from AdaptiveBrushEngine import brush_for_entry
+                for entry in execution_sequence:
+                    physical_brush=brush_for_entry(entry,physical_brush)
+                    yield int(entry['color_index']),entry.get('path') or (),physical_brush
+            else:
+                order=options.get('color_order') or range(len(groups))
+                for raw in order:
+                    index=int(raw)
+                    if not 0<=index<len(groups):continue
+                    if execution_groups is not None and index<len(execution_groups):
+                        for path in execution_groups[index]:yield index,path,physical_brush
                     else:
-                        path_moves_total+=precision_path_count(execution_transform.point(x1,y1),execution_transform.point(x2,y2),precision,estimate_step_px)
+                        for x1,y1,x2,y2 in groups[index]:
+                            path=((x1,y1),) if (x1,y1)==(x2,y2) else ((x1,y1),(x2,y2))
+                            yield index,path,physical_brush
+        for index,path,physical_brush in fallback_paths():
+            if cancelled():raise InterruptedError()
+            if not path:continue
+            mapped=[]
+            for number,(x,y) in enumerate(path):
+                if number%512==0 and cancelled():raise InterruptedError()
+                mapped.append(point(x,y))
+            width=max(1,round(physical_brush*scale))
+            if len(mapped)>1:
+                draw.line([coord for p in mapped for coord in p],fill=palette_rgb[index],width=width,joint='curve')
+            else:dot_count+=1
+            for x,y in (mapped[0],mapped[-1]):
+                if width==1:draw.point((x,y),fill=palette_rgb[index])
+                else:
+                    before,after=(width-1)//2,width//2
+                    draw.ellipse((x-before,y-before,x+after,y+after),fill=palette_rgb[index])
+            for (x1,y1),(x2,y2) in zip(path,path[1:]):
+                if (x1,y1)!=(x2,y2):
+                    path_moves_total+=precision_path_count(execution_transform.point(x1,y1),execution_transform.point(x2,y2),precision,estimate_step_px)
 
     if options.get('sketch_fill_active') and execution_sequence:
         try:

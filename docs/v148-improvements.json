@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 779,
+  "implemented": 781,
   "release_published": false,
-  "validation": "Batch 12: final frozen-source discovery passed 3,626 tests in 150.380 seconds (45 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for both new behavior groups and the uncounted physical-brush completion. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired full public-planner measurements bind the final source and retain identical results while reducing repeated score preparation. Timing and traced allocations are reported separately; these are not native drawing or GPU benchmarks. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.",
+  "validation": "Resumed maintenance: whole-program discovery passed 3,649 tests in 100.304 seconds with 45 platform/hardware skips and unchanged hashes for 787 Python, batch, workflow and requirements files. Independent source reviews closed for preview, physical brush policy, route optimization, Windows verification and source packaging. The source gate passed 5,000 cycles. Exact-raster and source-package results are recorded in v148-maintenance-validation.json. GitHub checks for the exact published commit are linked from PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6051,6 +6051,22 @@
       "local_id": "R1201",
       "description": "Pixel Accurate rebuilt the same target and source-edge/protected score data for repeated correction and checkpoint evaluations. Share one lazy context within the public planner operation and release it before final preview analysis; never cache it on mutable PixelMap objects, options or returned plans. Two actual public fixtures retain all six scores while reducing target preparation from eight builds to one and source-edge percentiles from six to one. Independent per-pixel oracles preserve every metric and error map; complete-plan parity preserves correction decisions, phases, geometry, previews and costs. Background changes, separate-call mutations, cancellation, GPU success and CPU fallback retain their contracts. Paired whole-call measurements disclose timing and traced memory for both fixtures without a universal speed claim.",
       "ledger": "v148-batch12-rendering.md"
+    },
+    {
+      "id": 780,
+      "area": "resumed-maintenance-rendering",
+      "batch": 13,
+      "local_id": "R1301",
+      "description": "The existing Smart merge + 2-opt search recalculated unchanged route-boundary distances for every candidate. Prepare adjacent-link costs once per pass, rebuild after each reversal, preserve exact addition order, ties, phases, geometry and metadata, and poll Stop during preparation. Complete public optimizer and make_plan parity, independent geometry checks, work-count regressions and balanced AB/BA measurements verify reduced CPU work. Timing gains are scoped to measured CPU fixtures; traced peaks increase slightly.",
+      "ledger": "v148-improvement-progress.md"
+    },
+    {
+      "id": 781,
+      "area": "resumed-maintenance-platform",
+      "batch": 13,
+      "local_id": "P1301",
+      "description": "The Windows verification command imposed a 60-second diagnostic timeout on complete unittest discovery, shorter than the established suite runtime. Give discovery a bounded 1,800-second budget while retaining 60-second startup/GUI/mouse diagnostics. Preserve command order, interpreter, cwd, first-failure logging, report location and exit status. Make imports inert so actual CLI behavior is independently testable without starting checks.",
+      "ledger": "v148-improvement-progress.md"
     }
   ]
 }

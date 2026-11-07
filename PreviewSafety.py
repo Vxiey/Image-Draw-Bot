@@ -142,6 +142,12 @@ def build_preview_safety_plan(
     source_groups = execution_groups if execution_groups is not None else groups
     safe_groups: list[list[Path]] = [[] for _ in (source_groups or [])]
     safe_sequence = [] if execution_sequence is not None else None
+    color_order = None
+    if execution_sequence is None:
+        # Match execute_plan's batch schedule, including an explicit subset or
+        # repeated colour. An empty preference falls back to palette order.
+        requested = options.get('color_order') or range(len(groups or ()))
+        color_order = tuple(int(raw) for raw in requested if 0 <= int(raw) < len(groups or ()))
     guards = {max(1, int(options.get('brush_px', 3))): guard}
     used_brushes = set()
     meta = {
@@ -164,6 +170,8 @@ def build_preview_safety_plan(
         'image_offset': image_offset,
         'path_coordinate_space': 'canvas-local',
     }
+    if color_order is not None:
+        meta['color_order'] = color_order
     def source_paths():
         if execution_sequence is not None:
             from AdaptiveBrushEngine import brush_for_entry
@@ -175,13 +183,17 @@ def build_preview_safety_plan(
                 if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(safe_groups):
                     raise ValueError('Invalid sequence palette index.')
                 current_brush=brush_for_entry(entry,current_brush)
-                yield index, path, current_brush
+                yield index, path, current_brush, True
         else:
-            for index, items in enumerate(source_groups or []):
-                for item in items:
-                    yield index, item, max(1, int(options.get('brush_px', 3)))
+            seen = set()
+            for index in color_order:
+                if index >= len(source_groups):continue
+                retain = index not in seen
+                seen.add(index)
+                for item in source_groups[index]:
+                    yield index, item, max(1, int(options.get('brush_px', 3))), retain
 
-    for path_index, (color_index, item, physical_brush) in enumerate(source_paths(), 1):
+    for path_index, (color_index, item, physical_brush, retain) in enumerate(source_paths(), 1):
         if cancelled():
             raise InterruptedError()
         meta['paths_in'] += 1
@@ -216,7 +228,9 @@ def build_preview_safety_plan(
         for subpath in result.subpaths:
             if len(subpath) >= 1:
                 path = tuple(subpath)
-                safe_groups[color_index].append(path)
+                # A repeated batch reuses the same guarded group at render
+                # time. Storing it twice would paint that batch twice again.
+                if retain:safe_groups[color_index].append(path)
                 if safe_sequence is not None:
                     safe_sequence.append({'color_index': color_index, 'path': path, 'brush_px': physical_brush})
                 meta['drawable_subpaths'] += 1
@@ -256,8 +270,9 @@ def draw_safe_paths(draw: ImageDraw.ImageDraw, safety_plan: PreviewSafetyPlan, f
             for entry in safety_plan.sequence:
                 yield entry['color_index'], entry['path'], max(1, round(entry['brush_px'] * scale))
         else:
-            for index, paths in enumerate(safety_plan.groups):
-                for path in paths:
+            order = safety_plan.meta.get('color_order', range(len(safety_plan.groups)))
+            for index in order:
+                for path in safety_plan.groups[index]:
                     yield index, path, max(1, int(brush))
 
     for index, path, width in render_paths():

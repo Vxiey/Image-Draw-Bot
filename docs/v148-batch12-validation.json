@@ -39,9 +39,13 @@
     "ok": true
   },
   "exact_raster_fixtures": 8,
-  "checkpoint_native_ci": "pending",
+  "checkpoint_native_ci": "42331930641: all four Windows/Linux and dependency jobs passed",
   "previous_checkpoint_ci": "42330134079: all four jobs and all seven commit checks passed",
   "uncounted_completions": [
     "R901 physical brush policy in Auto rescue and Masterpiece/Unlimited"
-  ]
+  ],
+  "checkpoint_commit": "4704a94df364df9ceeefb113f5273f26ec4ee988",
+  "checkpoint_native_ci_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42331930641",
+  "checkpoint_commit_checks": "all seven checks succeeded",
+  "checkpoint_codeql_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42331925857"
 }

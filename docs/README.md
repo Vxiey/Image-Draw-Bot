@@ -4,7 +4,7 @@ Image Draw Bot converts pictures into mouse paths for Microsoft Paint and calibr
 
 ## Install and use
 
-- [Windows downloads and quick start](../README.md#download-for-windows)
+- [Windows downloads and quick start](../README.md#download-image-draw-bot-for-windows)
 - [First drawing](GETTING-STARTED.md)
 - [Full Wiki and setting help](https://github.com/Vxiey/Image-Draw-Bot/wiki)
 - [Frequently asked questions](FAQ.md)

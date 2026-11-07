@@ -24,15 +24,15 @@ It uses local image processing, deterministic render planning and safe mouse aut
 
 ## Download Image Draw Bot for Windows
 
-**Version 1.0.148 is in development and has not been published.** The planned installer and portable ZIP below will include Python; their links become available after verified publication. Follow the [improvement progress](docs/IMPROVEMENTS-v1.0.148.md) or [published releases](https://github.com/Vxiey/Image-Draw-Bot/releases).
+**Version 1.0.148 is in development and has not been published.** The latest available download is **1.0.146-rc3 (prerelease)**. Its installer and portable ZIP include Python. The development changes described in the [improvement progress](docs/IMPROVEMENTS-v1.0.148.md) are not included in that published build.
 
 | Download | How to use it |
 | --- | --- |
-| [Windows installer — recommended](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.148/ImageDrawBot-1.0.148-Windows-x64-Setup.exe) | Run Setup, then open Image Draw Bot. |
-| [Portable Windows ZIP](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.148/ImageDrawBot-1.0.148-Windows-x64.zip) | Extract the complete ZIP and run `ImageDrawBot/ImageDrawBot.exe`. |
-| [SHA-256 checksums](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.148/ImageDrawBot-1.0.148-SHA256.txt) | Verify the published files. |
+| [Windows installer — 1.0.146-rc3](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc3/ImageDrawBot-1.0.146-rc3-Windows-x64-Setup.exe) | Run Setup, then open Image Draw Bot. |
+| [Portable Windows ZIP — 1.0.146-rc3](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc3/ImageDrawBot-1.0.146-rc3-Windows-x64.zip) | Extract the complete ZIP and run `ImageDrawBot/ImageDrawBot.exe`. |
+| [SHA-256 checksums — 1.0.146-rc3](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.146-rc3/ImageDrawBot-1.0.146-rc3-SHA256.txt) | Verify the published files. |
 
-[All releases](https://github.com/Vxiey/Image-Draw-Bot/releases) · [Release notes](RELEASE-NOTES-v1.0.148.md) · [Getting started](docs/GETTING-STARTED.md) · [FAQ](docs/FAQ.md) · [Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
+[All releases](https://github.com/Vxiey/Image-Draw-Bot/releases) · [Published release notes](RELEASE-NOTES-v1.0.146-rc3.md) · [1.0.148 development notes](RELEASE-NOTES-v1.0.148.md) · [Getting started](docs/GETTING-STARTED.md) · [FAQ](docs/FAQ.md) · [Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
 
 ## AutoDraw for Microsoft Paint, Gartic Phone and Skribbl.io
 

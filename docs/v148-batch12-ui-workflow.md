@@ -4,8 +4,8 @@ Baseline: published batch11 commit
 `b0eedca7d8d63fde5c9da6a1cffb394613ff95bf`, tree
 `fa09dfb415b7d851ff33625f38bff68981bfcbf8` (777 recorded improvements).
 This area records **one distinct behavior group, U1201**. Independent source
-review and the combined local checkpoint gates are complete. The new native
-Windows checks await this checkpoint's CI.
+review and the combined local checkpoint gates are complete. The native Windows checks also passed for the saved batch12 checkpoint
+`4704a94d` in run `42331930641`.
 This is development work, not a release.
 
 ## U1201 — keyboard access to existing boolean settings
@@ -96,7 +96,7 @@ they replace only the native drawing/widget boundaries.
   to check Tab order, all decorative children, repeated Space/Return delivery,
   focus indication/tooltips, disabled/re-enabled state, scroll reveal and Tcl
   callback cleanup. They also check unchanged global key bindings. They do not
-  inject operating-system input. These tests await Windows CI.
+  inject operating-system input. These tests passed in the saved batch12 Windows CI run `42331930641`.
 
 The new module passed its 13 portable tests; its two Windows checks were skipped
 on Linux. The combined new and related regression selection completed **68 tests
@@ -127,4 +127,4 @@ operation has been performed by this area worker.
 
 ## Frozen checkpoint validation
 
-Batch 12: final frozen-source discovery passed 3,626 tests in 150.380 seconds (45 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for both new behavior groups and the uncounted physical-brush completion. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired full public-planner measurements bind the final source and retain identical results while reducing repeated score preparation. Timing and traced allocations are reported separately; these are not native drawing or GPU benchmarks. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
+Batch 12: final frozen-source discovery passed 3,626 tests in 150.380 seconds (45 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for both new behavior groups and the uncounted physical-brush completion. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired full public-planner measurements bind the final source and retain identical results while reducing repeated score preparation. Timing and traced allocations are reported separately; these are not native drawing or GPU benchmarks. The published batch12 checkpoint `4704a94df364df9ceeefb113f5273f26ec4ee988` passed all four Windows/Linux and dependency jobs in [CI run 42331930641](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42331930641). All seven checks on that commit succeeded, including [CodeQL analysis run 42331925857](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42331925857). Windows self-test, bundle validation and packaged GUI/native drag-and-drop also passed. These results apply to that saved checkpoint; subsequent source changes require their own verification. No 1.0.148 release is published.

@@ -183,6 +183,15 @@ def _bounded_two_opt(paths: Sequence[Path], *, speed: str = 'Balanced',
         iterations += 1
         best_gain = 1e-9
         best_pair = None
+        # Candidate pairs replace two links in the same unchanged route. Price
+        # its existing adjacent links once for this pass instead of repeating
+        # both hypot calls for every pair. Rebuild after each accepted reversal;
+        # no costs survive this operation or describe another route order.
+        edge_costs = []
+        for edge_index in range(n - 1):
+            if edge_index % 256 == 0 and cancelled():
+                raise InterruptedError()
+            edge_costs.append(_distance(route[edge_index][-1], route[edge_index + 1][0]))
 
         for i in range(0, n - 1):
             if cancelled():
@@ -195,11 +204,11 @@ def _bounded_two_opt(paths: Sequence[Path], *, speed: str = 'Balanced',
                 old_cost = 0.0
                 new_cost = 0.0
                 if previous is not None:
-                    old_cost += _distance(previous, old_first)
+                    old_cost += edge_costs[i - 1]
                     new_cost += _distance(previous, route[j][-1])
                 if following is not None:
-                    old_cost += _distance(route[j][-1], following)
-                    new_cost += _distance(route[i][0], following)
+                    old_cost += edge_costs[j]
+                    new_cost += _distance(old_first, following)
                 evaluations += 1
                 gain = old_cost - new_cost
                 if gain > best_gain:

@@ -5,7 +5,7 @@ Baseline: published batch10 commit
 `d8941d4c99747e38bb39dea13667e4f6f6b19fd2`.
 This area contains **one distinct behavior group, A1101**. The automatic
 quality-rescue caller, replacement ownership and final acceptance belong to
-one complete replanning workflow. Independent source review is closed; the combined gates remain pending.
+one complete replanning workflow. Independent source review and the combined checkpoint gates are complete; see the frozen checkpoint validation below.
 No release is implied.
 
 ## A1101 — rebuild an automatic rescue from policy, then assess its final plan

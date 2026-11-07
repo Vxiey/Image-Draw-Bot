@@ -1,0 +1,116 @@
+{
+  "baseline_commit": "4704a94df364df9ceeefb113f5273f26ec4ee988",
+  "implemented": 781,
+  "target": 1000,
+  "remaining": 219,
+  "added_behavior_groups": [
+    "R1301",
+    "P1301"
+  ],
+  "uncounted_completions": [
+    "Final preview execution order and physical brush replay",
+    "R901 explicit Pixel Art and Line Art physical brush policy",
+    "Existing source-package maintenance and diagnostic exclusions"
+  ],
+  "uncounted_maintenance": [
+    "GitHub Actions v7 references and regression assertions",
+    "TkinterDnD2 0.7 dependency range",
+    "Download links and development-status documentation"
+  ],
+  "release_published": false,
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 3649,
+    "runner_seconds": 100.304,
+    "wall_seconds": 101.857,
+    "status": "OK (skipped=45)",
+    "skipped": 45,
+    "source_files": 787,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "368458e3af564669234b70885b13070b945b8281bd3a28f00df79d24bbeb3186"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1056,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "exact_raster_results": {
+    "fixtures": 8,
+    "all_zero_mismatches": true,
+    "cases": [
+      {
+        "case": "icon",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "a6fc697e824aa67471bab2cd7b4c633a903e97eaf4284345d438859f25cbf278"
+      },
+      {
+        "case": "line-art",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "2c6189080be20fbdbba0f7b431660e4e00e50bae9b75c5d418472a8941e76d89"
+      },
+      {
+        "case": "text-small-detail",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "21445bb7fc41d0bd96ed0a80012c2ab9c5c45acfb3f0d7d20e03a9aa785bc30d"
+      },
+      {
+        "case": "cartoon-large-colour",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "35dbe6bd1a5a4c847244429d9a5bc119c8cd8934092e9da8d4305b288da55b48"
+      },
+      {
+        "case": "photo-gradient",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "5924872090b3c09e678bf27a0124a17a77f8cac0f19eb8ff88738540b2ddc4de"
+      },
+      {
+        "case": "fill-risk",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "34f088f4c28aa77d2bca7bdf59f604110478ad08da87539815962a715c78d1c7"
+      },
+      {
+        "case": "thin-diagonals",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "44c392e55081c69a725d7c0438329221fc4d53b02d70bcdb572d55c346e6af7e"
+      },
+      {
+        "case": "many-islands",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "dd0053014043bca7b5c80fb0d483a3885f6228838d0b50a2bec0b2c2e9af6858"
+      }
+    ]
+  },
+  "python": "3.12.14",
+  "numpy": "2.3.5",
+  "pillow": "13.0.0",
+  "tkinterdnd2": "0.7.0",
+  "independent_source_reviews": "Preview, style width, optimizer, Windows verifier and source archive reviews closed without blockers.",
+  "remote_validation": "The exact published commit must pass its GitHub checks. See PR46 for the commit and CI links; local Linux tests alone do not establish Windows bundle/native drag-and-drop results.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46",
+  "benchmark": "v148-maintenance-stroke-benchmarks.json",
+  "source_unchanged_before_publication": true
+}

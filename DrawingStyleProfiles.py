@@ -128,6 +128,12 @@ def apply_drawing_style(image: Image.Image | None, options: dict[str,Any]) -> di
     # existing Auto/Extra Fast engines, avoiding a second independent planner.
     if requested!='Auto':
         policy = _explicit_profile(resolved)
+        # Style selection runs after native brush preflight. Its thin-line
+        # preference cannot replace the physical width without selecting a
+        # verified control. Keep the profile default only for callers that
+        # supplied no width; AdaptiveBrush owns any verified size changes.
+        if 'brush_px' in out:
+            policy.pop('brush_px', None)
         if (resolved == 'Portrait' and out.get('paint_current_color')
                 and not out.get('erase_mode')):
             # Single-color portraits use the existing shaded stroke renderer.

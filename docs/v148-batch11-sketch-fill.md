@@ -4,7 +4,7 @@ Baseline: published batch10 commit
 `a8fabbc811029a8bfcbe8a5af2a848b034e5cd89`, tree
 `d8941d4c99747e38bb39dea13667e4f6f6b19fd2`.
 This area contains **one distinct behavior improvement**, S1101. The combined
-checkpoint gates remain pending. This is development work, not a release.
+checkpoint gates passed; see the frozen checkpoint validation below. This is development work, not a release.
 
 ## S1101 — the composed Sketch Fill plan owns its final results
 

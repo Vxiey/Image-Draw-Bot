@@ -78,6 +78,7 @@ RUNTIME_FILE_PATTERNS = (
     "correction-history-*.json", "layout-fingerprints-v2*.json",
     "hardware-performance-profile-v1.json", "real-speed-profiles.json",
     "performance-auto-tuner-v1.json", "profiles.json",
+    "verification.txt",
 )
 
 OUTPUT_DIR_NAMES = {"build", "dist", "release"}
@@ -89,6 +90,22 @@ EXCLUDED_PREFIXES = (
     "ImageDrawBot-session",
     "ImageDrawBot-target-probe",
     "ImageDrawBot-mouse-probe",
+)
+
+# Completed v1.0.145 integration jobs remain in git as history. Exclude only
+# their known repository-root paths, keeping current tooling and doc examples.
+_HISTORICAL_INTEGRATION_RCS = (4, 5, *range(13, 24))
+HISTORICAL_INTEGRATION_PATHS = frozenset(
+    {f".github/workflows/implement-rc{rc}.yml" for rc in _HISTORICAL_INTEGRATION_RCS}
+    | {f".github/implement-rc{rc}-trigger" for rc in _HISTORICAL_INTEGRATION_RCS}
+    | {f".github/scripts/implement_rc{rc}.py" for rc in _HISTORICAL_INTEGRATION_RCS if rc != 4}
+    | {
+        ".github/scripts/fix_rc19_class_indent.py",
+        ".github/scripts/fix_rc20_test.py",
+        ".github/scripts/migrate_rc16_tests.py",
+        ".github/scripts/migrate_rc17_tests.py",
+        ".github/scripts/run_rc21_retry.py",
+    }
 )
 
 REQUIRED_RELEASE_FILES = (
@@ -167,6 +184,15 @@ def _is_runtime_file(parts: tuple[str, ...]) -> bool:
     return any(fnmatchcase(name, pattern) for pattern in RUNTIME_FILE_PATTERNS)
 
 
+def _is_integration_maintenance_file(parts: tuple[str, ...]) -> bool:
+    if "/".join(parts) in HISTORICAL_INTEGRATION_PATHS:
+        return True
+    name = parts[-1] if parts else ""
+    return name.endswith('_once.py') or (
+        len(parts) >= 3 and parts[0] == '.github' and parts[1] == 'workflows' and 'once' in name
+    )
+
+
 def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
     rel = PurePosixPath(relative_path)
     parts = _parts(rel)
@@ -187,9 +213,7 @@ def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
         return True
     # One-shot integration/packaging helpers are repository maintenance state,
     # never source-release contents.
-    if name.lower().endswith('_once.py'):
-        return True
-    if len(parts) >= 3 and parts[0] == '.github' and parts[1] == 'workflows' and 'once' in name.lower():
+    if _is_integration_maintenance_file(parts):
         return True
     return False
 
@@ -204,9 +228,7 @@ def is_nonfatal_excluded_path(relative_path: str | PurePosixPath) -> bool:
         return True
     if name.startswith(("image-draw-bot-", "imagedrawbot-")) and suffix in {'.zip','.exe'}:
         return True
-    if name.lower().endswith('_once.py'):
-        return True
-    if len(parts) >= 3 and parts[0] == '.github' and parts[1] == 'workflows' and 'once' in name.lower():
+    if _is_integration_maintenance_file(parts):
         return True
     return False
 

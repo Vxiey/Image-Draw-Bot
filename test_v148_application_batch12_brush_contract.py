@@ -1,4 +1,4 @@
-"""Automatic quality policy cannot invent a physically unavailable brush."""
+"""Automatic quality and style policies cannot invent an unavailable brush."""
 from contextlib import ExitStack, closing
 from pathlib import Path
 import tempfile
@@ -85,6 +85,19 @@ class PhysicalBrushMouse(Mouse):
             self._paint(self.position, self.position)
 
 
+class ContourBrushMouse(PhysicalBrushMouse):
+    """Allow the real contour executor's diagonal moves in the width oracle."""
+    def _paint(self, start, end):
+        if start[0] == end[0] or start[1] == end[1]:
+            return super()._paint(start, end)
+        if self.color is None:
+            raise AssertionError('A real palette selection must precede ink.')
+        self.ink_widths.append(self.brush)
+        points = [(x - ORIGIN[0], y - ORIGIN[1]) for x, y in (start, end)]
+        for surface, width in ((self.physical, self.brush), (self.modeled, self.model_width)):
+            ImageDraw.Draw(surface).line(points, fill=self.color, width=width)
+
+
 class PhysicalBrushContractTests(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
@@ -105,11 +118,12 @@ class PhysicalBrushContractTests(unittest.TestCase):
         self.line_art = self.stack.enter_context(closing(Image.new('RGB', (48, 32), 'white')))
         ImageDraw.Draw(self.line_art).line(((12, 8), (36, 24)), fill='black', width=1)
 
-    def options(self, *, profile='Other drawing app', preset='Auto', mode='Custom', requested='4', source=None, seconds=60):
+    def options(self, *, profile='Other drawing app', preset='Auto', mode='Custom', requested='4', source=None, seconds=60,
+                style='Auto'):
         app = ui_fixtures.AdvertisedRendererTests().app(profile)
         for name, value in dict(brush_px=requested, render_style='Standard / pixel', render_preset=preset,
                                 time_budget_mode=mode, max_seconds=str(seconds), draw_quality='High likeness',
-                                drawing_style='Auto').items():
+                                drawing_style=style).items():
             setattr(app, name, Value(value))
         app.original = self.source if source is None else source
         app.corners = (ORIGIN, tuple(a + b for a, b in zip(ORIGIN, AREA)))
@@ -132,15 +146,15 @@ class PhysicalBrushContractTests(unittest.TestCase):
         self.stack.callback(close_plan, plan, source)
         return plan, proposals
 
-    def execute(self, plan, *, verification=True):
+    def execute(self, plan, *, verification=True, mouse_type=PhysicalBrushMouse):
         physical = self.stack.enter_context(closing(Image.new('I', AREA, -1)))
         modeled = self.stack.enter_context(closing(Image.new('I', AREA, -1)))
         palette = [(20 + 5 * index, 15) for index in range(len(plan['colors']))]
         brush_plan = plan['options'].get('browser_brush_plan') or {}
         controls = dict(zip(map(tuple, brush_plan.get('control_positions') or ()),
                             brush_plan.get('nominal_sizes') or ()))
-        mouse = PhysicalBrushMouse(physical, modeled, palette,
-                                   model_width=plan['options']['brush_px'], controls=controls)
+        mouse = mouse_type(physical, modeled, palette,
+                           model_width=plan['options']['brush_px'], controls=controls)
         events = []
         checked = []
         def verify_current(saved, index):
@@ -199,6 +213,40 @@ class PhysicalBrushContractTests(unittest.TestCase):
                 self.assertTrue(plan['options']['pixel_accurate'])
                 self.assert_fixed_four_pixel_execution(plan)
 
+    def test_explicit_styles_preserve_ui_declared_fixed_native_width(self):
+        for style, source in (('Pixel Art', self.source), ('Line Art', self.line_art)):
+            with self.subTest(style=style):
+                options = self.options(preset='Manual', mode='Unlimited', source=source, style=style)
+                self.assertEqual((options['brush_px'], options['brush_px_requested']), (4, '4'))
+                self.assertEqual(options['drawing_style'], style)
+                plan, proposals = self.plan(source, options)
+                self.assertFalse(proposals)
+                # Both public renderer paths execute before comparing the ink.
+                # Line Art has no Pixel execution sequence, so observe its real
+                # contour moves as well as the fixed-width Pixel Art sequence.
+                mouse, actual, modeled, checked = self.execute(plan, mouse_type=ContourBrushMouse)
+                self.assertTrue(mouse.ink_widths)
+                self.assertEqual(set(mouse.ink_widths), {4})
+                self.assertFalse(mouse.brush_clicks)
+                self.assertFalse(checked)
+                self.assertFalse(mouse.held)
+                differences = int(np.count_nonzero(actual != modeled))
+                self.assertEqual(differences, 0,
+                    f'{style}: {differences} native pixels differ: physical 4 px, plan {plan["options"]["brush_px"]} px.')
+                self.assertEqual(plan['options']['brush_px'], 4)
+                self.assertEqual(options['brush_px'], 4)
+                self.assertEqual(plan['options']['calibration_fingerprint'], options['calibration_fingerprint'])
+                self.assertEqual(plan['options']['canvas_edge_verification'], options['canvas_edge_verification'])
+                self.assertGreaterEqual(plan['options']['canvas_guard_meta']['brush_inset']['brush_px'], 4)
+                if style == 'Pixel Art':
+                    self.assertTrue(plan['options']['pixel_accurate'])
+                    self.assertEqual({entry['brush_px'] for entry in plan['execution_sequence']}, {4})
+                    counts = plan['options']['runtime_path_counts']
+                    self.assertEqual(counts['sent'] + counts['guard_skipped'], plan['count'])
+                else:
+                    self.assertTrue(plan['options']['outline'])
+                    self.assertEqual(plan['options']['background_fill'], 'Off')
+
     def test_verified_browser_ladder_never_invents_one_pixel_control(self):
         # The real detector proves four controls from a synthetic screenshot.
         # The nominal fifth control is blank and must remain unverified.
@@ -210,32 +258,35 @@ class PhysicalBrushContractTests(unittest.TestCase):
             radius = 11 + 2 * index
             draw.ellipse((x - radius, y - radius, x + radius, y + radius),
                          fill=(90, 90, 90), outline='white' if index == 1 else (30, 30, 30), width=3)
-        options = self.options(profile='Gartic Phone', preset='Masterpiece', requested='2', source=self.line_art)
-        brush = plan_browser_brush_size('gartic-phone', screenshot, (0, 0, 1000, 700),
-                                       canvas_box=(200, 140, 800, 500), requested_px=options['brush_px'])
-        evidence = brush.as_dict()
-        self.assertEqual(evidence['verified_sizes'], [2, 4, 8, 16])
-        self.assertEqual(brush.effective_px, 4)
-        # These are the same three transfers made by Start's real preflight.
-        options.update(browser_brush_plan=evidence, brush_px=brush.effective_px,
-                       canvas_guard_brush_px=brush.safe_guard_px)
-        plan, proposals = self.plan(self.line_art, options)
-        self.assertFalse(proposals)
-        self.assertTrue(plan['options']['pixel_accurate'])
-        self.assertEqual(plan['options']['brush_px'], 4)
-        self.assertIsNone(propose_rescue_options(plan))
-        widths = {entry['brush_px'] for entry in plan['execution_sequence']}
-        self.assertTrue(widths)
-        self.assertTrue(widths <= {2, 4, 8, 16})
-        self.assertNotIn(1, widths)
-        mouse, actual, modeled, checked = self.execute(plan)
-        self.assertTrue(checked)
-        self.assertTrue(set(checked) <= {2, 4, 8, 16})
-        self.assertTrue(set(mouse.ink_widths) <= widths)
-        self.assertTrue(mouse.brush_clicks)
-        self.assertFalse(mouse.held)
-        np.testing.assert_array_equal(actual, modeled)
-        self.assertEqual(plan['options']['browser_brush_plan'], evidence)
+        for preset, style in (('Masterpiece', 'Auto'), ('Manual', 'Pixel Art')):
+            with self.subTest(preset=preset, style=style):
+                options = self.options(profile='Gartic Phone', preset=preset, requested='2',
+                                       source=self.line_art, style=style)
+                brush = plan_browser_brush_size('gartic-phone', screenshot, (0, 0, 1000, 700),
+                                               canvas_box=(200, 140, 800, 500), requested_px=options['brush_px'])
+                evidence = brush.as_dict()
+                self.assertEqual(evidence['verified_sizes'], [2, 4, 8, 16])
+                self.assertEqual(brush.effective_px, 4)
+                # These are the same three transfers made by Start's real preflight.
+                options.update(browser_brush_plan=evidence, brush_px=brush.effective_px,
+                               canvas_guard_brush_px=brush.safe_guard_px)
+                plan, proposals = self.plan(self.line_art, options)
+                self.assertFalse(proposals)
+                self.assertTrue(plan['options']['pixel_accurate'])
+                self.assertEqual(plan['options']['brush_px'], 4)
+                self.assertIsNone(propose_rescue_options(plan))
+                widths = {entry['brush_px'] for entry in plan['execution_sequence']}
+                self.assertTrue(widths)
+                self.assertTrue(widths <= {2, 4, 8, 16})
+                self.assertNotIn(1, widths)
+                mouse, actual, modeled, checked = self.execute(plan)
+                self.assertTrue(checked)
+                self.assertTrue(set(checked) <= {2, 4, 8, 16})
+                self.assertTrue(set(mouse.ink_widths) <= widths)
+                self.assertTrue(mouse.brush_clicks)
+                self.assertFalse(mouse.held)
+                np.testing.assert_array_equal(actual, modeled)
+                self.assertEqual(plan['options']['browser_brush_plan'], evidence)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,27 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 779 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11 and 2 changes in batch 12. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 781 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11 2 changes in batch 12 and 2 in resumed maintenance. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Resumed maintenance: faster routes and completed behavior
+
+- Reuse 2-opt route-boundary costs per pass. Public optimizer fixture medians
+  improve about 33%; full planning medians improve 18.68% and 27.11% for the two
+  measured images, with complete result parity. These CPU measurements apply to
+  Smart merge + 2-opt and include a small traced-allocation increase.
+- Give Windows full-suite verification a bounded 1,800-second budget, retaining
+  60-second startup/diagnostic limits and first-failure reporting.
+- Complete preview color/brush ordering and preserve the physical brush in
+  explicit Pixel Art and Line Art, without duplicate improvement IDs.
+- Update GitHub Actions and TkinterDnD2, exclude historical one-shot tools and
+  local verification logs from source packages, and correct download/status docs.
+- Retain Python 3.11 support through the compatible NumPy range.
+
+The registry contains **781 entries, with 219 remaining**. Local integration
+passed **3,649 tests**, with **45 platform/hardware skips**, and unchanged source
+hashes. [Maintenance evidence](docs/v148-improvement-progress.md#resumed-maintenance-r1301-and-p1301),
+[paired measurements](docs/v148-maintenance-stroke-benchmarks.json) and
+[validation report](docs/v148-maintenance-validation.json) state the exact scope.
+The published commit's native Windows checks are linked from PR46.
 
 ## Batch 12: accessible switches and shared accuracy preparation
 
@@ -8,7 +29,7 @@
 - Prepare Pixel Accurate source-score data once per planning operation and release it before final preview analysis. Keep all metric, correction, checkpoint, geometry and preview results; disclose measured time and memory for both public fixtures.
 - Complete the existing physical-brush contract: Auto quality rescue and Masterpiece/Unlimited rendering preserve the declared or preflight-resolved width. A renderer choice cannot invent a missing 1 px brush control. This correction adds no duplicate improvement ID.
 
-Batch 12: final frozen-source discovery passed 3,626 tests in 150.380 seconds (45 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for both new behavior groups and the uncounted physical-brush completion. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired full public-planner measurements bind the final source and retain identical results while reducing repeated score preparation. Timing and traced allocations are reported separately; these are not native drawing or GPU benchmarks. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
+Batch 12: final frozen-source discovery passed 3,626 tests in 150.380 seconds (45 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for both new behavior groups and the uncounted physical-brush completion. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired full public-planner measurements bind the final source and retain identical results while reducing repeated score preparation. Timing and traced allocations are reported separately; these are not native drawing or GPU benchmarks. The published batch12 checkpoint `4704a94df364df9ceeefb113f5273f26ec4ee988` passed all four Windows/Linux and dependency jobs in [CI run 42331930641](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42331930641). All seven checks on that commit succeeded, including [CodeQL analysis run 42331925857](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42331925857). Windows self-test, bundle validation and packaged GUI/native drag-and-drop also passed. These results apply to that saved checkpoint; subsequent source changes require their own verification. No 1.0.148 release is published.
 
 ## Batch 11: coherent replanning, physical coordinates and composed sketches
 
