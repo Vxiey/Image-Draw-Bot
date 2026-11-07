@@ -16,7 +16,7 @@ class Improvements(unittest.TestCase):
             path=Path(directory)/'calibration.json'
             positions=[(i,20) for i in range(18)];rgbs=[c.RGB for c in allColors]
             save_calibration(positions,rgbs,path);before=path.read_bytes()
-            with patch.object(Path,'replace',side_effect=OSError('disk')):
+            with patch('RuntimePaths.os.replace',side_effect=OSError('disk')):
                 with self.assertRaises(OSError):save_calibration(positions,rgbs,path)
             self.assertEqual(path.read_bytes(),before)
             self.assertEqual(len(list(Path(directory).iterdir())),1)

@@ -440,17 +440,25 @@ def build_pixel_map(image: Image.Image, palette_rgb: Sequence[Sequence[int]], *,
     if cancelled():raise InterruptedError()
     from ShadowDetailEngine import analyze_shadow_contours
     tone = analyze_shadow_contours(rgb, index_map, drawable, edges,cancelled=cancelled)
-    if cancelled():raise InterruptedError()
+    try:
+        if cancelled():raise InterruptedError()
+        contour = tone["contour_map"]
+        shadow = tone["shadow_map"]
+        shadow_detail = tone["shadow_detail_map"]
+        tone_meta = tone["metadata"]
+    finally:
+        # Retain only consumed planes; another owner may retain this mapping.
+        tone = None
     micro = micro_detail_map(index_map, drawable, edges)
     if cancelled():raise InterruptedError()
     importance = importance_map(
-        rgb, index_map, edges, drawable, contour_map=tone["contour_map"],
-        shadow_map=tone["shadow_map"], shadow_detail_map=tone["shadow_detail_map"],
+        rgb, index_map, edges, drawable, contour_map=contour,
+        shadow_map=shadow, shadow_detail_map=shadow_detail,
         micro_detail=micro)
     if cancelled():raise InterruptedError()
     protected = protect_tiny_features(
-        index_map, drawable, edges, importance, contour_map=tone["contour_map"],
-        shadow_detail_map=tone["shadow_detail_map"], micro_detail=micro)
+        index_map, drawable, edges, importance, contour_map=contour,
+        shadow_detail_map=shadow_detail, micro_detail=micro)
     if cancelled():raise InterruptedError()
     meta = {
         "engine": "Step 26 Detail Fidelity PixelMap + Shadow/Contour",
@@ -470,8 +478,8 @@ def build_pixel_map(image: Image.Image, palette_rgb: Sequence[Sequence[int]], *,
             "importance": "cpu:numpy",
             "micro_detail": "cpu:numpy",
         },
-        **palette_meta, **edge_meta, **tone["metadata"],
+        **palette_meta, **edge_meta, **tone_meta,
     }
     return PixelMap(rgb.shape[1], rgb.shape[0], rgb, index_map, drawable,
-                    edges, importance, protected, meta, tone["contour_map"],
-                    tone["shadow_map"], tone["shadow_detail_map"], micro)
+                    edges, importance, protected, meta, contour,
+                    shadow, shadow_detail, micro)

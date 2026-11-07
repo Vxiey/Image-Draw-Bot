@@ -38,7 +38,44 @@ class HybridCostEngineTests(unittest.TestCase):
         # Exact planner fallback/verification is authoritative for holes.
         self.assertTrue(meta['safe_verified'] or meta['fallback'])
     def test_drawbot_forwards_full_options_to_subject_planner(self):
-        text=Path('DrawBot.py').read_text(encoding='utf-8');self.assertIn('options=options,cancelled=cancelled)',text)
+        from contextlib import closing
+        from unittest.mock import patch
+        import DrawBot
+        import SubjectFocus
+        from test_v148_rendering_batch06_canvas import close_plan
+        from test_v148_rendering_batch17_layered_diagnostics import calibrated
+        from test_v148_rendering_batch24_component_queue import public_options
+        original=SubjectFocus.focused_stroke_plan
+        cancelled=lambda:False
+        for policy in ('Auto','Off'):
+            with self.subTest(adaptive_hybrid_cost=policy),calibrated(PALETTE),closing(Image.new('RGBA',(28,22),'white')) as image:
+                draw=ImageDraw.Draw(image)
+                draw.rectangle((2,3,20,12),fill='red')
+                draw.line((24,2,24,19),fill='blue')
+                del draw
+                settings=public_options(adaptive_hybrid_cost=policy,profile_key='microsoft-paint',
+                    profile_name='Microsoft Paint',gpu_mode='CPU',subject_focus='Off')
+                observed=[]
+                def forward(*args,options,cancelled,**kwargs):
+                    observed.append((options,cancelled))
+                    return original(*args,options=options,cancelled=cancelled,**kwargs)
+                plan=None
+                try:
+                    with patch.object(SubjectFocus,'focused_stroke_plan',new=forward):
+                        plan=DrawBot.make_plan(image,image.size,settings,cancelled)
+                    self.assertEqual(len(observed),1)
+                    forwarded,callback=observed[0]
+                    self.assertIs(callback,cancelled)
+                    for key in ('profile_key','adaptive_hybrid_cost','gpu_mode','subject_focus',
+                                'brush_px','cpu_workers_resolved','skip_white'):
+                        self.assertEqual(forwarded[key],settings[key],key)
+                    self.assertIs(forwarded['_execution_cost_calibration_override'],settings['_execution_cost_calibration_override'])
+                    self.assertTrue(forwarded['pixel_accurate'])
+                    self.assertEqual(forwarded['color_selectors'],plan['color_selectors'])
+                    self.assertEqual(plan['options']['pixel_stroke_meta']['cost_aware'],policy=='Auto')
+                    self.assertGreater(plan['count'],0)
+                finally:
+                    if plan is not None:close_plan(plan,image)
     def test_region_fill_uses_shared_cost_model(self):
         text=Path('RegionFillEngine.py').read_text(encoding='utf-8')
         self.assertIn('from ExecutionCostModel import build_cost_model',text)

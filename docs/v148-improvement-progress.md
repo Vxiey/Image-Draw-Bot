@@ -6,11 +6,23 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 26 implements **838 total distinct improvements, with 162 remaining**.
+
+Batch 26: 4,431 tests completed in 215.945 seconds: 4,361 passed and 70 platform/hardware cases skipped, with 923 source/configuration hashes unchanged. One independently reviewed topology-reuse group brings the total to 838, with 162 remaining; all 837 preceding entries and the incoming batch25 implementation and fixture repairs are preserved. OpenCL host-failure ownership completes already-counted P2504; strict calibration/grid/legacy/cache storage, shared GIF publication, normalized dictionary round trips and unused shadow-output retirement complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical comparisons cover 36 regional score pairs, 38 full public plans including two active-timer pairs, 24 independent brush-one rasters and 692 GPU cases against each of two historical checkpoints. Seventeen workloads have six balanced pairs and separate allocation probes; the OpenCL comparison reproduces already-counted work against586, not a new gain over837. All final gates bind the same 873 root Python hashes. Slower controls and topology retention costs remain disclosed, without a general planner/GPU/RSS claim. Exact-commit Windows/package checks are recorded separately in PR46. Version 1.0.148 is not released.
+
+[Final local evidence](v148-batch26-validation.json) binds the merged source. [Target topology](v148-batch26-topology.md) records the one unique group; [OpenCL completion](v148-batch26-opencl-host.md), [palette storage](v148-batch26-color-storage-completion.md), [GIF publication](v148-batch26-gif-storage-completion.md), [dictionary persistence](v148-batch26-word-storage-completion.md) and [shadow ownership](v148-batch26-shadow-ownership-completion.md) record zero-ID completions.
+
+<details>
+<summary>Previous batch25 checkpoint</summary>
+
 Batch 25 implements **837 total distinct improvements, with 163 remaining**.
 
 Batch 25: 4,372 tests completed in 209.654 seconds: 4,302 passed and 70 platform/hardware cases skipped, with all 919 source/configuration hashes unchanged. Seven independently reviewed groups bring the total to 837, with 163 remaining; all 830 preceding entries and concurrent batch24 implementation are preserved. Existing widget/worker/calibration, Stop, image-handoff and whole-click completions add zero IDs. The 5,000-cycle source gate, 1,284-file package hygiene and eight existing-raster geometry fixtures passed. Three rendering workloads have six balanced pairs and share 863 unchanged root Python hashes; unchanged/slower controls and added Fill allocation are disclosed without a general speedup claim. Fill diagnostics remain within the documented categorical model. The parent checkpoint passed all seven remote checks; new exact-commit Windows/package/native sampling results are recorded separately in PR46. Version 1.0.148 is not released.
 
 The seven groups cover timed Pixel paint order, categorical contour/seed Fill footprints, measured compute-route recommendations, an applicable RAM signature, real executor measurement, necessary OpenCL host preparation and bounded native screen sampling. [Final local evidence](v148-batch25-validation.json) binds the merged source; published-commit Windows/package/native results are recorded in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
+
+
+</details>
 
 <details>
 <summary>Previous batch24 checkpoint</summary>

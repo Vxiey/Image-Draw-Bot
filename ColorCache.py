@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import math
 import threading
-from RuntimePaths import atomic_write_text
+from RuntimePaths import atomic_write_text, read_json
 
 from ProfileStorage import calibration_context_fingerprint, profile_verified_color_file
 
@@ -61,11 +61,7 @@ def _colors(raw, context, workflow):
 
 def _read(profile):
     try:
-        with cache_path(profile).open('rb') as stream:
-            raw = stream.read(MAX_CACHE_BYTES + 1)
-        if len(raw) > MAX_CACHE_BYTES:
-            return None
-        data = json.loads(raw.decode('utf-8-sig'))
+        data = read_json(cache_path(profile), max_bytes=MAX_CACHE_BYTES)
         if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != SCHEMA:
             return None
         if data.get('profile') != str(profile):

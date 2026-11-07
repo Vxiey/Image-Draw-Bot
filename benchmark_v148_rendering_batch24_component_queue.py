@@ -1,8 +1,9 @@
 """Exact historical Pixel scheduling/public plans and bounded queue work.
 
-Use --verify-only before the coordinated measurement window. Final timings
-compare the complete bb6dfa6 PixelStrokeEngine module with the current module,
-using balanced AB/BA pairs and separately measured traced allocations.
+Historical replay pins the complete published batch24 caller graph, switching
+only the original bb6dfa6/586e12d PixelStrokeEngine module. Use --verify-only
+for compatibility checks. Any output must be an explicit, previously unused
+path; the published batch24 raw evidence is never overwritten.
 """
 import argparse
 from collections import Counter
@@ -27,6 +28,7 @@ import DrawBot
 import ExecutionCostModel as costs
 import PixelStrokeEngine as strokes
 from benchmark_v148_image_workflow import fingerprint, old_module
+from benchmark_v148_rendering_batch26_topology import historical_graph, linked_graph
 from test_v148_rendering_batch06_canvas import close_plan
 from test_v148_rendering_batch15_sketch_memory import VOLATILE_PATHS
 from test_v148_rendering_batch17_layered_diagnostics import calibrated
@@ -36,6 +38,7 @@ from test_v148_rendering_batch24_component_queue import (
 
 ROOT = Path(__file__).resolve().parent
 BASELINE = 'bb6dfa6a5e8a43bfcfc77c9e00f52dc2dfd7db9c'
+AFTER_CHECKPOINT = '586e12db5ea5142951c844f60dc2364f07a01c37'
 
 
 def comparable(value, path=()):
@@ -231,12 +234,23 @@ def workloads(stack):
 
 
 def measure(revision=BASELINE, repeats=6, verify_only=False):
+    common, common_hashes = historical_graph(AFTER_CHECKPOINT)
+    # Replaying the original queue experiment must not mix in batch25's new
+    # topology handoff. Both variants receive the same complete published
+    # caller/accuracy/subject modules; only the original scheduler module varies.
+    with linked_graph(common), patch.dict(globals(), {
+            'DrawBot': common['DrawBot'], 'strokes': common['PixelStrokeEngine']}):
+        return _measure(revision, repeats, verify_only, common_hashes)
+
+
+def _measure(revision, repeats, verify_only, common_hashes):
     if type(repeats) is not int or repeats < 2 or repeats % 2:
         raise ValueError('Use an even repeat count of at least two for balanced AB/BA pairs.')
     historical_source = subprocess.check_output(['git', 'show', f'{revision}:PixelStrokeEngine.py'], cwd=ROOT)
     before = old_module('PixelStrokeEngine', revision)
     source_before = source_hashes()
     report = dict(baseline=revision, baseline_module_sha256=hashlib.sha256(historical_source).hexdigest(),
+        common_after_checkpoint=AFTER_CHECKPOINT, common_historical_module_sha256=common_hashes,
         python=sys.version.split()[0], platform=platform.platform(), numpy=np.__version__, pillow=pillow_version,
         verify_only=verify_only, repeats=0 if verify_only else repeats, source_sha256=source_before,
         method=('Complete historical parity, one untimed workload pair and separate work-count calls; '
@@ -247,8 +261,10 @@ def measure(revision=BASELINE, repeats=6, verify_only=False):
             'No cached plan. Fingerprinting, independent raster verification and owned-image cleanup are outside timing.',
         allocation_scope='Python/NumPy allocations during the same build only, including retained returned outputs; '
             'not total process RSS or all Pillow/native allocations. The borrowed input components/images are prepared before tracing.',
-        historical_linkage='Complete historical PixelStrokeEngine is installed under its public module name for the actual '
-            'DrawBot and PixelAccuracyEngine nested imports. Other modules are shared unchanged between both sides.',
+        historical_linkage='Both variants use the complete published 586e12d DrawBot, SubjectFocus and PixelAccuracyEngine '
+            'caller graph. Before installs the complete bb6dfa6 PixelStrokeEngine; after installs its complete 586e12d '
+            'counterpart. Shared dependencies are identical on both sides. This preserves the original queue-only '
+            'experiment without dropping a new keyword from the current product or charging batch25 topology work.',
         comparison_exclusions=[list(path) for path in sorted(VOLATILE_PATHS)],
         work_scope='Actual sorted-list pop shifts and actual bounded-list C-pop shifts; profiling/cost-call counting is outside all timing/tracing.',
         parity=parity_cases(before), workloads=[])
@@ -309,8 +325,12 @@ if __name__ == '__main__':
     parser.add_argument('--revision', default=BASELINE)
     parser.add_argument('--repeats', type=int, default=6)
     parser.add_argument('--verify-only', action='store_true')
-    parser.add_argument('--output', type=Path, default=ROOT / 'docs/v148-batch24-component-queue-benchmarks.json')
+    parser.add_argument('--output', type=Path, required=True,
+                        help='Explicit new replay report; an existing artifact cannot be overwritten.')
     args = parser.parse_args()
+    if args.output.exists():
+        parser.error('--output must name a previously unused file; published evidence is immutable')
     result = measure(args.revision, args.repeats, args.verify_only)
-    args.output.write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + '\n', encoding='utf-8')
+    with args.output.open('x', encoding='utf-8') as output:
+        output.write(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + '\n')
     print(str(args.output), flush=True)

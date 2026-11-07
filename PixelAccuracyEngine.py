@@ -523,58 +523,83 @@ def _detail_safe_corrections(pixel_map, current, corrections, desired, *, max_pa
 
 
 def region_accuracy_scores(pixel_map: PixelMap, result: SimulationResult, *, max_regions: int = 64,
-                           cancelled=lambda: False) -> dict:
+                           cancelled=lambda: False, _region_topology=None) -> dict:
     """Measure planned execution accuracy per exact connected target region."""
     from PixelStrokeEngine import connected_components
-    components,cmap,_meta=connected_components(pixel_map,cpu_workers=1,include_vertical_runs=False,cancelled=cancelled)
-    desired=np.asarray(pixel_map.palette_index,dtype=np.int16)
-    simulated=np.asarray(result.simulated_index,dtype=np.int16)
-    covered=np.asarray(result.coverage_count)>0
-    edge=np.asarray(pixel_map.edge_map,dtype=np.float32)>=.5
-    protected=np.asarray(pixel_map.protected_mask,dtype=bool)
-    # Sum component statistics in bounded linear passes. A full-canvas mask for
-    # every component makes checkerboards and fine text quadratic in pixels.
-    component_counts=np.zeros((6,len(components)),dtype=np.int64)
-    planes=[np.asarray(plane).ravel() for plane in (cmap,simulated,desired,covered,edge,protected)]
-    for start in range(0,cmap.size,262_144):
+    borrowed=records=record=components=comp=cmap=planes=None
+    ids=actual=wanted=hit=is_edge=is_detail=valid=correct=flags=flag=None
+    desired=simulated=covered=edge=protected=component_counts=None
+    try:
         if cancelled():raise InterruptedError()
-        ids,actual,wanted,hit,is_edge,is_detail=[plane[start:start+262_144] for plane in planes]
-        valid=ids>=0
-        if not np.any(valid):continue
-        ids=ids[valid]
-        correct=actual[valid]==wanted[valid]
-        flags=(correct,hit[valid],is_edge[valid],is_detail[valid],
-               correct & is_edge[valid],correct & is_detail[valid])
-        for index,flag in enumerate(flags):
-            component_counts[index] += np.bincount(ids[flag],minlength=len(components))
-    rows=[];weighted=0.0;weighted_area=0
-    def pct(n,d,fallback):
-        return float(fallback) if int(d)<=0 else float(n)/float(d)*100.0
-    for serial,comp in enumerate(components):
-        if serial%64==0 and cancelled():raise InterruptedError()
-        cid=int(comp.component_id);area=int(comp.area)
-        if area<=0:continue
-        correct_n,covered_n,edge_n,detail_n,correct_edge_n,correct_detail_n=map(int,component_counts[:,cid])
-        color_acc=pct(correct_n,area,0.0)
-        coverage_acc=pct(covered_n,area,0.0)
-        edge_acc=pct(correct_edge_n,edge_n,color_acc)
-        detail_acc=pct(correct_detail_n,detail_n,color_acc)
-        score=.40*color_acc+.25*coverage_acc+.20*edge_acc+.15*detail_acc
-        row={'component_id':int(comp.component_id),'color_index':int(comp.color_index),'area':area,
-             'bbox':tuple(map(int,comp.bbox)),'score':round(score,4),
-             'color_accuracy_percent':round(color_acc,4),'coverage_percent':round(coverage_acc,4),
-             'edge_accuracy_percent':round(edge_acc,4),'protected_detail_percent':round(detail_acc,4),
-             'error_pixels':int(area-correct_n),
-             'protected_pixels':detail_n}
-        rows.append(row);weighted+=score*area;weighted_area+=area
-    rows.sort(key=lambda row:(float(row['score']),-int(row['area']),int(row['component_id'])))
-    limit=max(1,int(max_regions))
-    scores=[float(row['score']) for row in rows]
-    return {'region_count':len(rows),'weighted_score':round(weighted/max(1,weighted_area),4),
-            'mean_score':round(sum(scores)/max(1,len(scores)),4) if rows else 100.0,
-            'minimum_score':round(min(scores),4) if rows else 100.0,
-            'worst_regions':rows[:limit],
-            'score_formula':'0.40*color + 0.25*coverage + 0.20*edge + 0.15*protected_detail'}
+        if _region_topology is not None:
+            borrowed=_region_topology.take(pixel_map,cancelled=cancelled)
+        if borrowed is None:
+            components,cmap,_meta=connected_components(pixel_map,cpu_workers=1,include_vertical_runs=False,cancelled=cancelled)
+            component_count=len(components)
+        else:
+            records,cmap=borrowed
+            component_count=len(records)
+        desired=np.asarray(pixel_map.palette_index,dtype=np.int16)
+        simulated=np.asarray(result.simulated_index,dtype=np.int16)
+        covered=np.asarray(result.coverage_count)>0
+        edge=np.asarray(pixel_map.edge_map,dtype=np.float32)>=.5
+        protected=np.asarray(pixel_map.protected_mask,dtype=bool)
+        # Sum component statistics in bounded linear passes. A full-canvas mask for
+        # every component makes checkerboards and fine text quadratic in pixels.
+        component_counts=np.zeros((6,component_count),dtype=np.int64)
+        planes=[np.asarray(plane).ravel() for plane in (cmap,simulated,desired,covered,edge,protected)]
+        for start in range(0,cmap.size,262_144):
+            if cancelled():raise InterruptedError()
+            ids,actual,wanted,hit,is_edge,is_detail=[plane[start:start+262_144] for plane in planes]
+            valid=ids>=0
+            if not np.any(valid):continue
+            ids=ids[valid]
+            correct=actual[valid]==wanted[valid]
+            flags=(correct,hit[valid],is_edge[valid],is_detail[valid],
+                   correct & is_edge[valid],correct & is_detail[valid])
+            for index,flag in enumerate(flags):
+                component_counts[index] += np.bincount(ids[flag],minlength=component_count)
+        rows=[];weighted=0.0;weighted_area=0
+        def pct(n,d,fallback):
+            return float(fallback) if int(d)<=0 else float(n)/float(d)*100.0
+        for serial in range(component_count):
+            if serial%64==0 and cancelled():raise InterruptedError()
+            if records is None:
+                comp=components[serial]
+                cid=int(comp.component_id);area=int(comp.area)
+            else:
+                record=records[serial]
+                cid=int(record[0]);area=int(record[2])
+            if area<=0:continue
+            correct_n,covered_n,edge_n,detail_n,correct_edge_n,correct_detail_n=map(int,component_counts[:,cid])
+            color_acc=pct(correct_n,area,0.0)
+            coverage_acc=pct(covered_n,area,0.0)
+            edge_acc=pct(correct_edge_n,edge_n,color_acc)
+            detail_acc=pct(correct_detail_n,detail_n,color_acc)
+            score=.40*color_acc+.25*coverage_acc+.20*edge_acc+.15*detail_acc
+            color=int(comp.color_index) if records is None else int(record[1])
+            bbox=tuple(map(int,comp.bbox if records is None else record[3:7]))
+            row={'component_id':cid,'color_index':color,'area':area,
+                 'bbox':bbox,'score':round(score,4),
+                 'color_accuracy_percent':round(color_acc,4),'coverage_percent':round(coverage_acc,4),
+                 'edge_accuracy_percent':round(edge_acc,4),'protected_detail_percent':round(detail_acc,4),
+                 'error_pixels':int(area-correct_n),
+                 'protected_pixels':detail_n}
+            rows.append(row);weighted+=score*area;weighted_area+=area
+        rows.sort(key=lambda row:(float(row['score']),-int(row['area']),int(row['component_id'])))
+        limit=max(1,int(max_regions))
+        scores=[float(row['score']) for row in rows]
+        return {'region_count':len(rows),'weighted_score':round(weighted/max(1,weighted_area),4),
+                'mean_score':round(sum(scores)/max(1,len(scores)),4) if rows else 100.0,
+                'minimum_score':round(min(scores),4) if rows else 100.0,
+                'worst_regions':rows[:limit],
+                'score_formula':'0.40*color + 0.25*coverage + 0.20*edge + 0.15*protected_detail'}
+    finally:
+        # Ravel/chunk/record views can otherwise pin the private shared export
+        # through a retained Stop or NumPy exception after its owner is closed.
+        borrowed=records=record=components=comp=cmap=planes=None
+        ids=actual=wanted=hit=is_edge=is_detail=valid=correct=flags=flag=None
+        desired=simulated=covered=edge=protected=component_counts=None
 
 
 def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[dict], palette_rgb: Sequence[Sequence[int]], *,
@@ -584,7 +609,7 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
                             gpu_mode: str = "CPU",
                             gpu_vram: str = "Auto", gpu_performance: str = "High throughput",
                             score_context: PixelScoreContext | None = None,
-                            cancelled=lambda: False) -> dict:
+                            cancelled=lambda: False, _region_topology=None) -> dict:
     """Simulate, score and append correction passes only while accuracy improves."""
     background_index=_white_background_index(palette_rgb)
     score_context=_score_context(pixel_map,score_context)
@@ -694,7 +719,11 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
         sequence.extend(corrections);accepted_entries.extend(corrections);current=candidate
     final=dict(current.metrics)
     try:
-        region_meta=region_accuracy_scores(pixel_map,current,max_regions=64,cancelled=cancelled)
+        if _region_topology is None:
+            region_meta=region_accuracy_scores(pixel_map,current,max_regions=64,cancelled=cancelled)
+        else:
+            region_meta=region_accuracy_scores(pixel_map,current,max_regions=64,cancelled=cancelled,
+                                               _region_topology=_region_topology)
     except InterruptedError:raise
     except Exception as exc:
         region_meta={'region_count':0,'weighted_score':None,'mean_score':None,'minimum_score':None,

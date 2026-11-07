@@ -4,6 +4,10 @@ The quality changes intentionally alter selected order or diagnostics. Each
 variant must repeat its complete selected-output fingerprint. The no-Fill
 control must match across versions, and Fill execution geometry must match.
 No image assets are generated and no native input is sent.
+
+Replay pins the published batch25 caller graph on both sides, so a newer
+private topology API cannot change this historical experiment. An explicit
+unused output path is mandatory; published raw evidence is never replaced.
 """
 import argparse
 from collections import Counter
@@ -30,6 +34,7 @@ from AdaptiveBrushEngine import assign_adaptive_brushes
 from DrawBot import make_plan
 from PixelStrokeEngine import build_pixel_stroke_plan
 from benchmark_v148_image_workflow import fingerprint, old_module
+from benchmark_v148_rendering_batch26_topology import historical_graph, linked_graph
 from test_v148_accuracy_batch12_context import public_options
 from test_v148_rendering_batch06_canvas import close_plan
 from test_v148_rendering_batch08_fill import fill_options
@@ -38,6 +43,7 @@ from test_v148_rendering_batch25_progressive_order import detail_pairs, PALETTE
 
 ROOT = Path(__file__).resolve().parent
 BASELINE = '586e12db5ea5142951c844f60dc2364f07a01c37'
+AFTER_CHECKPOINT = '5b0c22ac5dc620a911fa2a1f6216e272f644f7db'
 ORIGINAL_REPRODUCTION = 'bb6dfa6a5e8a43bfcfc77c9e00f52dc2dfd7db9c'
 ASSETS = {'detail': ROOT/'golden-regression/small-detail-preservation.png',
           'fill': ROOT/'golden-regression/dominant-hue-four-color.png'}
@@ -100,6 +106,23 @@ def order_observation(module):
 
 
 def measure(*, repeats=6, verify_only=False):
+    common, common_hashes = historical_graph(AFTER_CHECKPOINT)
+    after_hybrid = old_module('AdaptiveRegionHybrid', AFTER_CHECKPOINT)
+    common_hashes['AdaptiveRegionHybrid'] = hashlib.sha256(subprocess.check_output(
+        ['git', 'show', f'{AFTER_CHECKPOINT}:AdaptiveRegionHybrid.py'], cwd=ROOT)).hexdigest()
+    after = {'PixelAccuracyEngine': common['PixelAccuracyEngine'],
+             'AdaptiveRegionHybrid': after_hybrid}
+    # Preserve the original experiment's two changed modules. Both sides use
+    # the same complete published caller/builder/subject graph without a
+    # topology owner, instead of discarding a keyword in today's product.
+    with linked_graph(common), patch.dict(globals(), {
+            'make_plan': common['DrawBot'].make_plan,
+            'build_pixel_stroke_plan': common['PixelStrokeEngine'].build_pixel_stroke_plan,
+            'CURRENT': after}):
+        return _measure(repeats=repeats, verify_only=verify_only, common_hashes=common_hashes)
+
+
+def _measure(*, repeats, verify_only, common_hashes):
     if type(repeats) is not int or repeats < 2 or repeats % 2:
         raise ValueError('Use an even number of balanced timing pairs, at least two.')
     if tracemalloc.is_tracing():
@@ -107,6 +130,7 @@ def measure(*, repeats=6, verify_only=False):
     previous = {name: old_module(name, BASELINE) for name in MODULES}
     hashes = source_hashes()
     report = {'baseline': BASELINE, 'original_reproduction': ORIGINAL_REPRODUCTION,
+        'common_after_checkpoint': AFTER_CHECKPOINT, 'common_historical_module_sha256': common_hashes,
         'baseline_module_sha256': {name: hashlib.sha256(subprocess.check_output(
             ['git','show',f'{BASELINE}:{name}.py'], cwd=ROOT)).hexdigest() for name in MODULES},
         'source_sha256': hashes, 'python': sys.version, 'platform': platform.platform(),
@@ -115,13 +139,15 @@ def measure(*, repeats=6, verify_only=False):
             'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for key,path in ASSETS.items()},
         'detail_crop': CROP, 'verify_only': verify_only,
         'repeats': None if verify_only else repeats,
-        'method': ('Complete historical PixelAccuracyEngine and AdaptiveRegionHybrid modules versus current '
-            'inside the same public make_plan caller. All unrelated dependencies are current on both sides. '
-            'One warm call per variant, balanced AB/BA pairs, separate traced peaks after garbage collection. '
+        'method': ('Untimed public quality, complete selected-output and geometry controls; no elapsed or '
+            'allocation probes.' if verify_only else f'Original boundaries retained: one warm call per variant, '
+            f'{repeats} balanced AB/BA pairs and separate traced peaks after garbage collection. '
             'Every call checks its complete selected-output fingerprint.'),
-        'integration': ('The selected baseline module bodies are unchanged from the original reproduction. '
-            'The integrated PixelStrokeEngine bounded queue is shared by both variants; the complete '
-            'current root Python manifest binds this rerun rather than reusing pre-integration timings.'),
+        'integration': ('Both sides use the complete published 5b0c22a DrawBot, SubjectFocus and '
+            'PixelStrokeEngine graph. Only the original PixelAccuracyEngine/AdaptiveRegionHybrid pair '
+            'switches from complete 586e12d modules to complete 5b0c22a modules. Neither side receives '
+            'the later topology handoff. Other current dependencies are shared identically, and the '
+            'current source manifest binds this new replay rather than overwriting old raw evidence.'),
         'timing_scope': 'CPU public planning, selected-output fingerprinting and owned-image cleanup; no GUI, native drawing or GPU timing.',
         'allocation_scope': 'Traced Python/NumPy peak; not process RSS and not most native Pillow storage.',
         'compared_plan_fields': PLAN_FIELDS, 'compared_option_fields': OPTION_FIELDS,
@@ -208,10 +234,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repeats', type=int, default=6)
     parser.add_argument('--verify-only', action='store_true')
-    parser.add_argument('--output', type=Path, default=ROOT/'docs/v148-batch25-rendering-quality.json')
+    parser.add_argument('--output', type=Path, required=True,
+                        help='Explicit new replay report; existing published artifacts cannot be overwritten.')
     args = parser.parse_args()
+    if args.output.exists():
+        parser.error('--output must name a previously unused file; published evidence is immutable')
     report = measure(repeats=args.repeats, verify_only=args.verify_only)
-    args.output.write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
+    with args.output.open('x', encoding='utf-8') as output:
+        output.write(json.dumps(report, indent=2)+'\n')
     print(json.dumps({name: {key: value for key,value in row.items()
         if key.endswith(('median_ms','peak_bytes','parity'))}
         for name,row in report['workloads'].items()}, indent=2))

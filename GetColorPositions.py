@@ -2,7 +2,7 @@
 import tkinter as tk
 from tkinter import ttk
 from contextlib import closing
-from RuntimePaths import atomic_write_text
+from RuntimePaths import atomic_write_text, read_json
 BG="#0b0f14"
 PANEL="#151d29"
 FIELD="#202c3d"
@@ -116,8 +116,7 @@ class CalibrationApp:
         from pathlib import Path
         self.grid_path=Path(path).with_suffix('.grid.json')
         try:
-            import json
-            counts=json.loads(self.grid_path.read_text(encoding='utf-8'))
+            counts=read_json(self.grid_path)
             r,c=counts['rows'],counts['columns']
             if type(r) is int and type(c) is int and min(r,c)>0 and r*c<=self.max_colors:self.rows.set(r);self.columns.set(c)
         except (OSError,ValueError,KeyError,TypeError):pass

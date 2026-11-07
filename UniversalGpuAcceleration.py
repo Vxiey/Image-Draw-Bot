@@ -715,23 +715,30 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
     pal=np.asarray([tuple(map(int,palette[i][:3])) for i in candidates],dtype=np.float32)
     ids=np.asarray(candidates,dtype=np.int16);custom=np.asarray([bool(custom_flags[i]) if i<len(custom_flags) else False for i in candidates],dtype=np.uint8)
     route=select_route("palette_match",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
+    rgb=visible=None
+    def prepare_host_pixels():
+        # OpenCL consumes raw RGBA and produces its own visibility mask. Keep
+        # the full host composite lazy for CPU/CUDA or an actual CPU fallback.
+        nonlocal raw,rgb,visible
+        try:
+            if rgb is None:
+                _cancel(cancelled)
+                rgb,visible=_rgba_visible_rgb(raw)
+                if skip_white:visible&=np.min(rgb,axis=2)<245.0
+        except BaseException:
+            # A retained helper traceback also retains its closure cells.
+            # Nothing can consume these private inputs after preparation fails.
+            raw=rgb=visible=None
+            raise
+    if route.accelerated and not route.backend_id.startswith("opencl:"):
+        # Host allocation failures must remain outside the native CUDA attempt;
+        # they are not evidence that the GPU backend is unhealthy.
+        prepare_host_pixels()
     perceptual=color_rendering!="RGB nearest"; fidelity=2 if color_fidelity=="Faithful" else (1 if color_fidelity=="Balanced" else 0); custom_first=custom_mode=="Custom colors first" and bool(np.any(custom))
-    host_input=None
-    def visible_host_input():
-        nonlocal host_input
-        if host_input is None:
-            _cancel(cancelled)
-            rgb,visible=_rgba_visible_rgb(raw)
-            if skip_white:visible&=np.min(rgb,axis=2)<245.0
-            # Publish only complete preparation. OpenCL consumes raw RGBA and
-            # computes visibility natively; it never needs these full buffers.
-            # CUDA fallback can reuse them instead of repeating compositing.
-            host_input=(rgb,visible)
-        return host_input
     def cpu():
+        prepare_host_pixels()
         # Bound both dimensions: even a one-row panorama or a large custom
         # palette must never allocate a full pixel x palette distance cube.
-        rgb,visible=visible_host_input()
         flat = rgb.reshape(-1, 3)
         out = np.empty(pixels, dtype=np.int16)
         palette_lab = _oklab_cpu(pal / 255.0) if perceptual else None
@@ -775,7 +782,6 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
     def accelerated():
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
-            rgb,visible=visible_host_input()
             with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
                 from CudaPalette import match
                 out = match(

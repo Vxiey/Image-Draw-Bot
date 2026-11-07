@@ -794,7 +794,8 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
 
 
 def build_pixel_stroke_plan(pixel_map: PixelMap, palette_count: int, *, lines: bool = True,
-                            cpu_workers: int = 1, options=None, cancelled=lambda: False) -> dict:
+                            cpu_workers: int = 1, options=None, cancelled=lambda: False,
+                            _region_topology=None) -> dict:
     """Build Block B component paths while preserving every drawable PixelMap pixel."""
     started=time.perf_counter()
     groups = groups_from_pixel_map(pixel_map, palette_count, lines=lines, cancelled=cancelled)
@@ -892,6 +893,13 @@ def build_pixel_stroke_plan(pixel_map: PixelMap, palette_count: int, *, lines: b
     }
     # Keep a bounded diagnostic sample; full component lists can be huge on photos.
     metadata["component_sample"] = [c.meta() for c in sorted(components, key=lambda c: (-_priority(c), c.component_id))[:24]]
+    if _region_topology is not None:
+        try:
+            _region_topology.offer(pixel_map, components, component_map, cancelled=cancelled)
+        finally:
+            # The optional owner keeps only labels and compact scalar rows.
+            # Also retire this late handoff's aliases when Stop retains a frame.
+            components = component_map = comp = _ = None
     return {
         "groups": groups,
         "execution_groups": execution_groups,

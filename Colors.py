@@ -139,17 +139,20 @@ def reset_palette():
     closest_color.cache_clear()
 
 from pathlib import Path
-import os
 
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import atomic_write_text, data_dir, read_json, read_bounded_text
 
 DATA_DIR = data_dir()
 POSITIONS_FILE = DATA_DIR / "positions.txt"
 
+# Match the existing profile-export and calibration-fingerprint byte budget.
+# Palette files and their supported legacy files retain the same domain data.
+MAX_CALIBRATION_BYTES = 8 * 1024 * 1024
+
 
 def load_positions(path=POSITIONS_FILE):
     """Validate the entire legacy position file before changing any colors."""
-    values = [int(line) for line in Path(path).read_text(encoding="utf-8").splitlines()]
+    values = [int(line) for line in read_bounded_text(path,max_bytes=MAX_CALIBRATION_BYTES).splitlines()]
     if len(values) != len(allColors) * 2:
         raise ValueError(f"Position file must contain {len(allColors) * 2} coordinates. Recalibrate colors.")
     for index, color in enumerate(allColors):
@@ -188,10 +191,9 @@ def save_palette(rgb_values):
 
 
 def load_palette():
-    import json
     if not PALETTE_FILE.exists():
         return
-    values = json.loads(PALETTE_FILE.read_text(encoding="utf-8"))
+    values = read_json(PALETTE_FILE, max_bytes=MAX_CALIBRATION_BYTES)
     if not isinstance(values,list) or len(values)!=len(allColors):
         raise ValueError("Invalid palette.json. Recalibrate colors.")
     try:values=[normalize_rgb(rgb) for rgb in values]
@@ -245,11 +247,10 @@ def validate_calibration(data, profile_key=None):
 
 def calibration_metadata(path=CALIBRATION_FILE, *, profile_key=None):
     """Return validated metadata without mutating the global palette."""
-    import json
     path=Path(path)
     if not path.exists():
         return {'version':0,'anchor':None}
-    data=json.loads(path.read_text(encoding='utf-8'))
+    data=read_json(path,max_bytes=MAX_CALIBRATION_BYTES)
     rows=validate_calibration(data, profile_key=profile_key)
     anchor=data.get('anchor') if data.get('version')==4 else None
     if anchor is not None:
@@ -263,7 +264,7 @@ def calibration_metadata(path=CALIBRATION_FILE, *, profile_key=None):
 
 def save_calibration(positions,rgbs,path=CALIBRATION_FILE,*,names=None,indices=None,anchor=None,
                      profile_key=None,state='calibrated',verification=None):
-    import json,tempfile
+    import json
     if len(positions)!=len(rgbs):raise ValueError('Different numbers of colors and positions.')
     normalized=[normalize_rgb(rgb) for rgb in rgbs]
     state=str(state or 'calibrated').strip().lower()
@@ -285,16 +286,7 @@ def save_calibration(positions,rgbs,path=CALIBRATION_FILE,*,names=None,indices=N
         if len(indices)!=len(rgbs) or indices!=list(range(len(rgbs))):raise ValueError('Invalid color index map.')
         for row,index in zip(data['colors'],indices):row['game_index']=index
     validate_calibration(data, profile_key=profile_key)
-    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
-    temporary=None
-    try:
-        with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=path.parent,delete=False) as stream:
-            temporary=Path(stream.name)
-            json.dump(data,stream,ensure_ascii=False,indent=2)
-            stream.flush();os.fsync(stream.fileno())
-        temporary.replace(path)
-    finally:
-        if temporary:temporary.unlink(missing_ok=True)
+    atomic_write_text(Path(path),json.dumps(data,ensure_ascii=False,indent=2,allow_nan=False))
 
 
 def load_calibration(path=CALIBRATION_FILE,*,current_client_rect=None,require_anchor=False,profile_key=None):
@@ -303,7 +295,6 @@ def load_calibration(path=CALIBRATION_FILE,*,current_client_rect=None,require_an
     Resizing is rejected by CalibrationAnchors because Paint may reflow its
     toolbar/palette.  This happens before any mouse input is armed.
     """
-    import json
     path=Path(path);anchor=None
     if not path.exists():
         if path!=CALIBRATION_FILE:raise FileNotFoundError(path)
@@ -315,7 +306,7 @@ def load_calibration(path=CALIBRATION_FILE,*,current_client_rect=None,require_an
         finally:
             for c,(x,y,rgb) in zip(allColors,old):c.x,c.y=x,y;c.RGB=rgb;c.R,c.G,c.B=rgb
     else:
-        data=json.loads(path.read_text(encoding='utf-8'))
+        data=read_json(path,max_bytes=MAX_CALIBRATION_BYTES)
         rows=validate_calibration(data, profile_key=profile_key)
         if data.get('version')==4 and data.get('anchor') is not None:
             from CalibrationAnchors import validate_anchor

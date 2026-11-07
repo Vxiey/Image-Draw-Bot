@@ -277,6 +277,16 @@ def _read_json_bytes(stream, max_bytes):
         first = block = buffer = stream = None
 
 
+def read_bounded_text(path: Path, *, max_bytes: int = 4 * 1024 * 1024,
+                      encoding: str = "utf-8") -> str:
+    """Decode bounded local text without translating its newline characters."""
+    with Path(path).open('rb') as stream:
+        raw = _read_json_bytes(stream, max_bytes)
+    if len(raw) > max_bytes:
+        raise ValueError('Local state exceeds the supported file size.')
+    return raw.decode(encoding)
+
+
 def read_json(path: Path, *, max_bytes: int = 4 * 1024 * 1024,
               max_depth: int = 32, max_items: int = 100000):
     """Read a bounded local JSON document without ambiguous or nonfinite data."""

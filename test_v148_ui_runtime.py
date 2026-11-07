@@ -210,7 +210,7 @@ class RecordingRuntimeTests(unittest.TestCase):
             with self.subTest(operation=operation), tempfile.TemporaryDirectory() as folder:
                 path = Path(folder) / 'recording.gif'; path.write_bytes(b'previous')
                 with Image.new('P', (3, 3), 2) as frame:
-                    target = 'PIL.Image.Image.save' if operation == 'encode' else 'ScreenRecording.os.fsync'
+                    target = 'PIL.Image.Image.save' if operation == 'encode' else 'RuntimePaths.os.fsync'
                     with patch(target, side_effect=OSError('disk full')):
                         with self.assertRaisesRegex(OSError, 'disk full'):
                             save_gif_atomic(path, [frame], [250])

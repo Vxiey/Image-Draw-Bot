@@ -1002,50 +1002,58 @@ def _make_plan(original, area, options, cancelled=lambda: False):
         options["_hybrid_scale_x"]=float(fitted[0])/max(1,pixel_map.width)
         options["_hybrid_scale_y"]=float(fitted[1])/max(1,pixel_map.height)
         from SubjectFocus import focused_stroke_plan
-        pixel_map,stroke_plan=focused_stroke_plan(
-            pixel_map,image,len(picture_plan_colors),options.get('subject_focus','Off'),options.get('subject_region'),lines=bool(options.get('lines',True)),
-            cpu_workers=int(options.get('cpu_workers_resolved',1) or 1),options=options,cancelled=cancelled)
-        from AdaptiveBrushEngine import assign_adaptive_brushes
-        adaptive_brush=assign_adaptive_brushes(
-            stroke_plan['execution_sequence'],profile_key=str(options.get('profile_key') or ''),
-            default_brush_px=max(1,int(options.get('brush_px',1) or 1)),
-            browser_brush_plan=options.get('browser_brush_plan'))
-        stroke_plan['execution_sequence']=adaptive_brush['execution_sequence']
-        stroke_plan['metadata']=dict(stroke_plan.get('metadata') or {})
-        stroke_plan['metadata']['adaptive_brush']=adaptive_brush['metadata']
-        subject_brush_meta=None
-        subject_projection=None
-        if options.get('subject_focus')=='Subject only':
-            from SubjectFocus import clip_subject_brush_sequence
-            from NativeBrushProjection import NativeBrushProjection
-            subject_projection=NativeBrushProjection.for_scaled_plan(
-                (pixel_map.width,pixel_map.height),fitted,options,cancelled=cancelled)
-            stroke_plan['execution_sequence'],subject_brush_meta=clip_subject_brush_sequence(
-                stroke_plan['execution_sequence'],pixel_map.drawable_mask,
-                default_brush_px=max(1,int(options.get('brush_px') or 1)),
-                projection=subject_projection,cancelled=cancelled)
-            stroke_plan['metadata']['subject_brush_mask']=subject_brush_meta
-            stroke_plan['metadata']['execution_paths']=subject_brush_meta['retained_paths']
-            adaptive_brush['metadata']=dict(adaptive_brush['metadata'],
-                **{key:subject_brush_meta[key] for key in ('used_brush_sizes','brush_path_counts',
-                    'brush_reason_counts','planned_brush_switches')},
-                geometry_changed=bool(subject_brush_meta['trimmed_source_paths']),subject_mask_constrained=True)
-            stroke_plan['metadata']['adaptive_brush']=adaptive_brush['metadata']
-        # v1.0.89 Block D: preserve the full Block-B plan, then optionally fit
-        # execution to a user timer by phase/importance only. CUDA performs the
-        # expensive brush simulation when available; corrections stay inside the
-        # same progressive path budget.
-        from PixelAccuracyEngine import (PixelScoreContext, refine_with_corrections, execution_groups_from_sequence,
-                                         render_coverage_map, render_error_map, progressive_time_budget,
-                                         progressive_accuracy_checkpoints)
-        progressive_budget=progressive_time_budget(
-            stroke_plan['execution_sequence'],active=bool(options.get('time_budget_active')),
-            seconds=int(options.get('time_budget_seconds') or options.get('max_seconds') or 600),
-            profile_key=str(options.get('profile_key') or ''),
-            correction_reserve_ratio=(0 if options.get('subject_focus','Off')!='Off' else .12))
-        base_sequence=progressive_budget['execution_sequence']
+        from PixelRegionTopology import PixelRegionTopology
+        _pixel_topology=None
+        if options.get('subject_focus','Off')=='Off' and bool(options.get('lines',True)):
+            try:
+                _pixel_topology=PixelRegionTopology(pixel_map)
+            except MemoryError:
+                if cancelled():raise InterruptedError()
         native_subject_accuracy=None
         try:
+            pixel_map,stroke_plan=focused_stroke_plan(
+                pixel_map,image,len(picture_plan_colors),options.get('subject_focus','Off'),options.get('subject_region'),lines=bool(options.get('lines',True)),
+                cpu_workers=int(options.get('cpu_workers_resolved',1) or 1),options=options,cancelled=cancelled,
+                _region_topology=_pixel_topology)
+            from AdaptiveBrushEngine import assign_adaptive_brushes
+            adaptive_brush=assign_adaptive_brushes(
+                stroke_plan['execution_sequence'],profile_key=str(options.get('profile_key') or ''),
+                default_brush_px=max(1,int(options.get('brush_px',1) or 1)),
+                browser_brush_plan=options.get('browser_brush_plan'))
+            stroke_plan['execution_sequence']=adaptive_brush['execution_sequence']
+            stroke_plan['metadata']=dict(stroke_plan.get('metadata') or {})
+            stroke_plan['metadata']['adaptive_brush']=adaptive_brush['metadata']
+            subject_brush_meta=None
+            subject_projection=None
+            if options.get('subject_focus')=='Subject only':
+                from SubjectFocus import clip_subject_brush_sequence
+                from NativeBrushProjection import NativeBrushProjection
+                subject_projection=NativeBrushProjection.for_scaled_plan(
+                    (pixel_map.width,pixel_map.height),fitted,options,cancelled=cancelled)
+                stroke_plan['execution_sequence'],subject_brush_meta=clip_subject_brush_sequence(
+                    stroke_plan['execution_sequence'],pixel_map.drawable_mask,
+                    default_brush_px=max(1,int(options.get('brush_px') or 1)),
+                    projection=subject_projection,cancelled=cancelled)
+                stroke_plan['metadata']['subject_brush_mask']=subject_brush_meta
+                stroke_plan['metadata']['execution_paths']=subject_brush_meta['retained_paths']
+                adaptive_brush['metadata']=dict(adaptive_brush['metadata'],
+                    **{key:subject_brush_meta[key] for key in ('used_brush_sizes','brush_path_counts',
+                        'brush_reason_counts','planned_brush_switches')},
+                    geometry_changed=bool(subject_brush_meta['trimmed_source_paths']),subject_mask_constrained=True)
+                stroke_plan['metadata']['adaptive_brush']=adaptive_brush['metadata']
+            # v1.0.89 Block D: preserve the full Block-B plan, then optionally fit
+            # execution to a user timer by phase/importance only. CUDA performs the
+            # expensive brush simulation when available; corrections stay inside the
+            # same progressive path budget.
+            from PixelAccuracyEngine import (PixelScoreContext, refine_with_corrections, execution_groups_from_sequence,
+                                             render_coverage_map, render_error_map, progressive_time_budget,
+                                             progressive_accuracy_checkpoints)
+            progressive_budget=progressive_time_budget(
+                stroke_plan['execution_sequence'],active=bool(options.get('time_budget_active')),
+                seconds=int(options.get('time_budget_seconds') or options.get('max_seconds') or 600),
+                profile_key=str(options.get('profile_key') or ''),
+                correction_reserve_ratio=(0 if options.get('subject_focus','Off')!='Off' else .12))
+            base_sequence=progressive_budget['execution_sequence']
             if subject_projection is not None:
                 from SubjectFocus import evaluate_native_subject_plan
                 native_subject_accuracy=evaluate_native_subject_plan(
@@ -1066,7 +1074,8 @@ def _make_plan(original, area, options, cancelled=lambda: False):
                     max_total_paths=(progressive_budget.get('path_budget') if progressive_budget.get('active') else None),
                     gpu_mode=options.get('gpu_mode','Auto'),gpu_vram=options.get('gpu_vram','Auto'),
                     gpu_performance=options.get('gpu_performance','High throughput'),cancelled=cancelled,
-                    score_context=_pixel_score_context)
+                    score_context=_pixel_score_context,_region_topology=_pixel_topology)
+            if _pixel_topology is not None:_pixel_topology.close()
             stroke_plan['execution_sequence']=accuracy_plan['execution_sequence']
             stroke_plan['execution_groups']=execution_groups_from_sequence(
                 stroke_plan['execution_sequence'],len(picture_plan_colors))
@@ -1165,6 +1174,8 @@ def _make_plan(original, area, options, cancelled=lambda: False):
                     except Exception as cleanup_error:
                         failure.add_note(f'Subject diagnostic cleanup also failed: {type(cleanup_error).__name__}.')
             raise
+        finally:
+            if _pixel_topology is not None:_pixel_topology.close()
 
     plan_options=dict(options)
     _prof_color = profiler_start(plan_options, 'color_planning')
@@ -8044,9 +8055,12 @@ class DrawBotApp:
         path=filedialog.askopenfilename(filetypes=[('Word list','*.txt')])
         if not path:return
         try:
-            from WordGuesser import load_words
+            from WordGuesser import MAX_WORD_LIST_BYTES,load_words
             words=load_words(Path(path))
-            atomic_write_text(DATA_DIR/'guess-words.txt','\n'.join(words)+'\n')
+            text='\n'.join(words)+'\n'
+            if len(text.encode('utf-8'))>MAX_WORD_LIST_BYTES:
+                raise ValueError('The normalized word list can be at most 2 MB.')
+            atomic_write_text(DATA_DIR/'guess-words.txt',text)
             self.guess_words=words
             self.word_source.set(f'{len(self.guess_words)} words · {Path(path).name}')
             self.update_guesses()
