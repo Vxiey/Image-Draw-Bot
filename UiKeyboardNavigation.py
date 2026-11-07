@@ -1,8 +1,9 @@
-"""Local keyboard behavior for application buttons and option selectors.
+"""Local keyboard behavior for application buttons, selectors and switches.
 
 Bindings belong to each button and end with its lifetime. A button is one Tab
 stop; Return, keypad Enter and Space use its existing state-checked invoke().
 Selectors share focus visibility and use their existing variable/command path.
+Switches use CTk's ordinary toggle(), including its on/off values and command.
 """
 from __future__ import annotations
 
@@ -123,7 +124,78 @@ class _KeyboardFocusSupport:
             pass  # Destruction can occur between a focus event and its repaint.
 
 
-class KeyboardButton(_KeyboardFocusSupport, ctk.CTkButton):
+class _KeyboardReleaseSupport(_KeyboardFocusSupport):
+    """One local activation on key release, cancelled when its context changes."""
+
+    def _keyboard_focus_in(self, _event=None):
+        self._keyboard_focus_active = True
+        self._keyboard_reveal_focus()
+        self._keyboard_draw_focus()
+
+    def _keyboard_focus_out(self, _event=None):
+        self._keyboard_focus_active = False
+        self._keyboard_cancel()
+        self._keyboard_draw_focus()
+
+    def _keyboard_pointer_focus(self, _event=None):
+        self._keyboard_cancel()
+        if self._keyboard_focusable():
+            self.focus_set()
+
+    @staticmethod
+    def _keyboard_key(event):
+        symbol = getattr(event, 'keysym', '')
+        if symbol in ('Return', 'KP_Enter'):
+            return 'Return'
+        return 'space' if symbol == 'space' else None
+
+    def _keyboard_key_press(self, event):
+        key = self._keyboard_key(event)
+        # Preserve modified shortcuts instead of treating them as activation.
+        if key is None or (getattr(event, 'state', 0) or 0) & (4 | 8 | 128 | 0x20000):
+            return None
+        if not self._keyboard_has_focus() or not self._keyboard_focusable():
+            return 'break'
+        if self._keyboard_pressed == key:
+            # X11 may deliver a release/press pair for autorepeat. Defer the
+            # release to idle so that pair cannot repeatedly invoke the action.
+            if self._keyboard_job is not None:
+                self.after_cancel(self._keyboard_job)
+                self._keyboard_job = None
+        elif self._keyboard_pressed is None:
+            self._keyboard_pressed = key
+        return 'break'
+
+    def _keyboard_key_release(self, event):
+        key = self._keyboard_key(event)
+        if key is None:
+            return None
+        if key == self._keyboard_pressed and self._keyboard_job is None:
+            self._keyboard_job = self.after_idle(self._keyboard_activate)
+        return 'break'
+
+    def _keyboard_activate(self):
+        self._keyboard_job = None
+        pressed = self._keyboard_pressed
+        self._keyboard_pressed = None
+        if (pressed is not None and self._keyboard_has_focus() and
+                self._keyboard_focusable() and self._keyboard_in_view()):
+            # The original CTk action rechecks its live state; the existing
+            # controller retains all option and drawing-permission decisions.
+            return self._keyboard_invoke()
+        return None
+
+    def _keyboard_cancel(self, _event=None):
+        self._keyboard_pressed = None
+        job, self._keyboard_job = self._keyboard_job, None
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except (tk.TclError, RuntimeError, ValueError):
+                pass
+
+
+class KeyboardButton(_KeyboardReleaseSupport, ctk.CTkButton):
     _focus_tag = 'imagedrawbot_keyboard_focus'
 
     def __init__(self, *args, focus_color='#72e2bd', **kwargs):
@@ -183,72 +255,80 @@ class KeyboardButton(_KeyboardFocusSupport, ctk.CTkButton):
             self._keyboard_draw_focus()
 
 
-    def _keyboard_focus_in(self, _event=None):
-        self._keyboard_focus_active = True
-        self._keyboard_reveal_focus()
-        self._keyboard_draw_focus()
+    def _keyboard_invoke(self):
+        return self.invoke()
 
-    def _keyboard_focus_out(self, _event=None):
-        self._keyboard_focus_active = False
+    def destroy(self):
+        self._keyboard_closed = True
         self._keyboard_cancel()
-        self._keyboard_draw_focus()
+        super().destroy()
 
-    def _keyboard_pointer_focus(self, _event=None):
-        self._keyboard_cancel()
-        if self._keyboard_focusable():
-            self.focus_set()
 
-    @staticmethod
-    def _keyboard_key(event):
-        symbol = getattr(event, 'keysym', '')
-        if symbol in ('Return', 'KP_Enter'):
-            return 'Return'
-        return 'space' if symbol == 'space' else None
+class KeyboardSwitch(_KeyboardReleaseSupport, ctk.CTkSwitch):
+    """One Tab stop and deliberate local toggles through CTk's existing action."""
 
-    def _keyboard_key_press(self, event):
-        key = self._keyboard_key(event)
-        # Preserve modified shortcuts instead of treating them as activation.
-        if key is None or (getattr(event, 'state', 0) or 0) & (4 | 8 | 128 | 0x20000):
-            return None
-        if not self._keyboard_has_focus() or not self._keyboard_focusable():
-            return 'break'
-        if self._keyboard_pressed == key:
-            # X11 may deliver a release/press pair for autorepeat. Defer the
-            # release to idle so that pair cannot repeatedly invoke the action.
-            if self._keyboard_job is not None:
-                self.after_cancel(self._keyboard_job)
-                self._keyboard_job = None
-        elif self._keyboard_pressed is None:
-            self._keyboard_pressed = key
-        return 'break'
-
-    def _keyboard_key_release(self, event):
-        key = self._keyboard_key(event)
-        if key is None:
-            return None
-        if key == self._keyboard_pressed and self._keyboard_job is None:
-            self._keyboard_job = self.after_idle(self._keyboard_activate)
-        return 'break'
-
-    def _keyboard_activate(self):
+    def __init__(self, *args, focus_color='#72e2bd', **kwargs):
+        self._keyboard_ready = False
+        self._keyboard_closed = False
+        self._keyboard_pressed = None
         self._keyboard_job = None
-        pressed = self._keyboard_pressed
-        self._keyboard_pressed = None
-        if (pressed is not None and self._keyboard_has_focus() and
-                self._keyboard_focusable() and self._keyboard_in_view()):
-            # invoke() rechecks CTk's live state too; callbacks and Start/Stop
-            # permissions stay with the existing controller.
-            return self.invoke()
-        return None
+        self._keyboard_focus_active = False
+        self._keyboard_focus_displayed = False
+        self._keyboard_nodes = WeakSet()
+        self._keyboard_focus_color = focus_color
+        super().__init__(*args, **kwargs)
+        self._keyboard_ready = True
+        tk.Frame.configure(self, takefocus=self._keyboard_focusable)
+        for sequence, callback in (
+                ('<FocusIn>', self._keyboard_focus_in),
+                ('<FocusOut>', self._keyboard_focus_out),
+                ('<Unmap>', self._keyboard_cancel),
+                ('<KeyPress-Return>', self._keyboard_key_press),
+                ('<KeyRelease-Return>', self._keyboard_key_release),
+                ('<KeyPress-KP_Enter>', self._keyboard_key_press),
+                ('<KeyRelease-KP_Enter>', self._keyboard_key_release),
+                ('<KeyPress-space>', self._keyboard_key_press),
+                ('<KeyRelease-space>', self._keyboard_key_release)):
+            tk.Misc.bind(self, sequence, callback, add='+')
+        self._keyboard_sync_children()
 
-    def _keyboard_cancel(self):
-        self._keyboard_pressed = None
-        job, self._keyboard_job = self._keyboard_job, None
-        if job is not None:
-            try:
-                self.after_cancel(job)
-            except (tk.TclError, RuntimeError, ValueError):
-                pass
+    def _keyboard_focusable(self, _path=None):
+        try:
+            # A switch can still edit its variable without a command callback.
+            return bool(not self._keyboard_closed and self.winfo_exists()
+                        and self.winfo_ismapped() and self.cget('state') == 'normal')
+        except (tk.TclError, RuntimeError):
+            return False
+
+    def _keyboard_sync_children(self):
+        for child in (self._bg_canvas, self._canvas, self._text_label):
+            if child not in self._keyboard_nodes:
+                child.configure(takefocus=0)
+                self._keyboard_nodes.add(child)
+
+    def _draw(self, *args, **kwargs):
+        super()._draw(*args, **kwargs)
+        if getattr(self, '_keyboard_ready', False) and not self._keyboard_closed:
+            self._keyboard_sync_children()
+            self._keyboard_draw_focus()
+
+    def _keyboard_invoke(self):
+        return self.toggle()
+
+    def toggle(self, event=None):
+        # CTk toggles on ButtonPress, so cancel a pending keyboard release
+        # before that existing callback can run (and possibly pump Tk events).
+        if event is not None:
+            self._keyboard_pointer_focus(event)
+        else:
+            self._keyboard_cancel()
+        return super().toggle(event)
+
+    def configure(self, *args, **kwargs):
+        result = super().configure(*args, **kwargs)
+        if getattr(self, '_keyboard_ready', False) and not self._keyboard_focusable():
+            self._keyboard_cancel()
+        return result
 
     def destroy(self):
         self._keyboard_closed = True

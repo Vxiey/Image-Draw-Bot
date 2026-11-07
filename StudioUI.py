@@ -8,7 +8,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
-from UiKeyboardNavigation import KeyboardButton, KeyboardOptionMenu
+from UiKeyboardNavigation import KeyboardButton, KeyboardOptionMenu, KeyboardSwitch
 from GameProfiles import PROFILES, profile_ui, profile_defaults
 from ProfileEngine import PROFILE_ENGINE_MODES, policy_summary
 from ProfilePortability import (export_profile_dialog, import_profile_dialog, reset_profile_dialog,
@@ -54,7 +54,7 @@ class ToolTip:
         widget.bind('<ButtonPress>', self._leave, add='+')
         widget.bind('<Destroy>', self._leave, add='+')
         for sequence, callback in (('<FocusIn>', self._enter), ('<FocusOut>', self._leave)):
-            if isinstance(widget, (KeyboardButton, KeyboardOptionMenu)):
+            if isinstance(widget, (KeyboardButton, KeyboardOptionMenu, KeyboardSwitch)):
                 tk.Misc.bind(widget, sequence, callback, add='+')
             else:
                 widget.bind(sequence, callback, add='+')
@@ -398,7 +398,7 @@ def build_ui(a, quality, speed):
     profile_guide_tip.pack(anchor='w', padx=10, pady=(2, 4))
     profile_guide_recommend=label(profile_guide, '', size=9, text_color=ACCENT, wraplength=245)
     profile_guide_recommend.pack(anchor='w', padx=10, pady=(0, 9))
-    a.paint_check = control(ctk.CTkSwitch(step1, text='Single-color sketch (current ink)',
+    a.paint_check = control(KeyboardSwitch(step1, text='Single-color sketch (current ink)',
                                          variable=a.paint_simple, command=a.paint_mode_changed,
                                          progress_color=ACCENT_DARK, text_color=TEXT,
                                          font=('Segoe UI', 10)))
@@ -435,7 +435,7 @@ def build_ui(a, quality, speed):
     upscale_row=frame(step2); upscale_row.pack(fill='x',pady=(7,0))
     btn(upscale_row,'Upscale image…',a.upscale_dialog,height=34).pack(side='left',fill='x',expand=True)
     btn(upscale_row,'Undo',a.undo_upscale,width=65,height=34).pack(side='right',padx=(6,0))
-    one_click=control(ctk.CTkSwitch(step2, text='Browser One-Click Mode', variable=a.browser_one_click_enabled, command=a.options_changed, fg_color=ACCENT, progress_color=ACCENT, button_color='#e8fff7', button_hover_color='#ffffff', text_color=TEXT)); one_click.pack(anchor='w', pady=(7,0))
+    one_click=control(KeyboardSwitch(step2, text='Browser One-Click Mode', variable=a.browser_one_click_enabled, command=a.options_changed, fg_color=ACCENT, progress_color=ACCENT, button_color='#e8fff7', button_hover_color='#ffffff', text_color=TEXT)); one_click.pack(anchor='w', pady=(7,0))
     tooltip(one_click,'Supported browser games only: add an image and Image Draw Bot automatically finds/reuses the game window, detects canvas/palette, checks brush controls and runs visual preflight before drawing. Paint is never auto-started.')
     a.browser_one_click_label=label(step2, var=a.browser_one_click_text, muted=True, wraplength=270, size=9)
     a.browser_one_click_label.pack(anchor='w', pady=(3,0))
@@ -447,7 +447,7 @@ def build_ui(a, quality, speed):
     a.smart_drop_button.pack(fill='x', pady=(7, 0))
     tooltip(a.smart_drop_button,'Supported browser games: places a temporary 60-second drop target exactly over the detected drawable canvas. Drag an image from Google Images/Chrome/Edge or File Explorer onto the canvas; Image Draw Bot imports it, re-verifies canvas/palette and starts drawing automatically. CanvasGuard/preflight still apply.')
     label(step2, var=a.smart_drop_in_text, muted=True, wraplength=270, size=9).pack(anchor='w', pady=(4, 0))
-    a.auto_clear_switch=control(ctk.CTkSwitch(step2, text='Auto clear target canvas before full drawing', variable=a.auto_clear_canvas, command=a.canvas_clear_changed, fg_color=ACCENT, progress_color=ACCENT, button_color='#e8fff7', button_hover_color='#ffffff', text_color=TEXT))
+    a.auto_clear_switch=control(KeyboardSwitch(step2, text='Auto clear target canvas before full drawing', variable=a.auto_clear_canvas, command=a.canvas_clear_changed, fg_color=ACCENT, progress_color=ACCENT, button_color='#e8fff7', button_hover_color='#ffffff', text_color=TEXT))
     a.auto_clear_switch.pack(anchor='w', pady=(9,0))
     tooltip(a.auto_clear_switch,'Opt-in destructive prelude. Paint uses Select All/Delete. Drawing games use a calibrated Clear canvas control, or a CanvasGuard-bounded Eraser sweep when Brush + Eraser are calibrated. Never erases during Small Test, never clicks in Dry Run, and never clears a compatible resume.')
     label(step2, var=a.canvas_clear_text, muted=True, wraplength=270, size=9).pack(anchor='w', pady=(3,0))
@@ -505,13 +505,13 @@ def build_ui(a, quality, speed):
     preset_menu.configure(command=a.render_preset_changed)
     style_profile_menu=setting_row(step4,'Drawing style profile',a.drawing_style,DRAWING_STYLES,
         'Auto classifies the source. Pixel Art protects exact pixels; Logo prioritizes Fill + clean regions; Portrait protects faces/details; Photo/Shaded preserves tonal structure; Line Art protects thin contours; Cartoon/Illustration uses flat regions + outlines.',width=178)
-    sketch_switch=control(ctk.CTkSwitch(step4,text='Black contour sketch',variable=a.outline,
+    sketch_switch=control(KeyboardSwitch(step4,text='Black contour sketch',variable=a.outline,
         command=a.sketch_mode_changed,progress_color=ACCENT_DARK,text_color=TEXT))
     sketch_switch.pack(anchor='w',pady=(0,8))
     tooltip(sketch_switch,'Simple black outlines, no shading or colour fills. Uses a calibrated black swatch. For Single-color sketch, select black in the app/game yourself first. Turn off to return to colour drawing.')
     setting_row(step4, 'Sketch detail', a.sketch_detail, ['Auto','Simple','Balanced','Detailed'],
                 'Auto fits detail to the available time. Gartic timer reading runs at Start when enabled; preview before Start uses the manual budget.', width=160)
-    timer_switch=control(ctk.CTkSwitch(step4,text='Read Gartic timer at Start',variable=a.read_gartic_timer,command=a.options_changed,progress_color=ACCENT_DARK,text_color=TEXT))
+    timer_switch=control(KeyboardSwitch(step4,text='Read Gartic timer at Start',variable=a.read_gartic_timer,command=a.options_changed,progress_color=ACCENT_DARK,text_color=TEXT))
     timer_switch.pack(anchor='w',pady=(0,8))
     tooltip(timer_switch,'Gartic Phone only: watch the round pie timer for about 6 seconds at Start to estimate remaining time. Keep it visible. Uncertain readings stop Start; turn this off to use a manual time budget.')
     setting_row(step4, 'Quality preset', a.quality, list(quality), width=160)
@@ -589,7 +589,7 @@ def build_ui(a, quality, speed):
     setting_row(precision_card, 'Speed', a.speed, list(speed))
     setting_row(precision_card, 'Stroke optimizer', a.stroke_optimizer, ['Auto', 'Off', 'Travel only', 'Smart merge'], 'Smart merge reorders paths and joins only exact shared endpoints. It never draws a shortcut through empty canvas.')
     setting_row(precision_card, 'Time target', a.time_budget_mode, list(TIME_BUDGET_MODES), 'Game presets keep a safety reserve and fit the final execution plan to the usable deadline.')
-    deadline_switch=control(ctk.CTkSwitch(precision_card,text='Adaptive deadline renderer',variable=a.adaptive_deadline_renderer,
+    deadline_switch=control(KeyboardSwitch(precision_card,text='Adaptive deadline renderer',variable=a.adaptive_deadline_renderer,
         command=a.options_changed,progress_color=ACCENT_DARK,text_color=TEXT,font=('Segoe UI',10)))
     deadline_switch.pack(anchor='w',pady=(4,5))
     tooltip(deadline_switch,'Chooses the highest-value set of fills/strokes that fits the real render budget. It drops low-value detail before important silhouettes and can enter Panic Mode at runtime.')
@@ -600,7 +600,7 @@ def build_ui(a, quality, speed):
     btn(precision_card, 'Reset learned draw timing', a.reset_draw_time_calibration, height=32).pack(fill='x', pady=(5,2))
 
     smart_card = collapsible(advanced_host, 'Smart tools', 'Fill, background and color scheduling.', False)
-    region_switch=control(ctk.CTkSwitch(
+    region_switch=control(KeyboardSwitch(
         smart_card, text='Use Region Fill Engine', variable=a.use_region_fill_engine,
         command=a.options_changed, progress_color=ACCENT_DARK, text_color=TEXT, font=('Segoe UI',10)))
     region_switch.pack(anchor='w', pady=(3,5))
@@ -614,7 +614,7 @@ def build_ui(a, quality, speed):
     label(smart_card, 'Finish color first paints every path of one color before selecting the next color.', muted=True, wraplength=510, size=9).pack(anchor='w', pady=(0, 4))
     setting_row(smart_card, 'Tool strategy', a.tool_strategy, ['Auto', 'Precision first', 'Speed first', 'Respect selected'])
     for text, var in (('Skip white', a.skip_white), ('Emphasize centered subject', a.portrait_focus)):
-        control(ctk.CTkSwitch(smart_card, text=text, variable=var, command=a.options_changed,
+        control(KeyboardSwitch(smart_card, text=text, variable=var, command=a.options_changed,
                              progress_color=ACCENT_DARK, text_color=TEXT,
                              font=('Segoe UI', 10))).pack(anchor='w', pady=5)
     label(smart_card, 'Contrast', bold=True, size=10).pack(anchor='w', pady=(6, 1))
@@ -796,7 +796,7 @@ def build_ui(a, quality, speed):
     for text, var in (('Show background', a.preview_show_background),
                       ('Show fill regions', a.preview_show_fill),
                       ('Show stroke paths', a.preview_show_strokes)):
-        ctk.CTkSwitch(preview_options, text=text, variable=var,
+        KeyboardSwitch(preview_options, text=text, variable=var,
                       command=lambda: a.schedule_previews(delay=15), progress_color=ACCENT_DARK,
                       text_color=MUTED, font=('Segoe UI', 9)).pack(side='left', padx=(0, 15))
     mobile_btn=btn(preview_options, '📱 Mobile Preview', a.show_mobile_preview, width=132, height=31)

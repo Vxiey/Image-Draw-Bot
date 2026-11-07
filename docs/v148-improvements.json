@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 777,
+  "implemented": 779,
   "release_published": false,
-  "validation": "Batch 11: final frozen-source discovery passed 3,602 tests in 128.751 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for all four behavior groups. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired pack-selection measurements bind the final source and disclose planning overhead separately from modeled drawing cost. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.",
+  "validation": "Batch 12: final frozen-source discovery passed 3,626 tests in 150.380 seconds (45 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for both new behavior groups and the uncounted physical-brush completion. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired full public-planner measurements bind the final source and retain identical results while reducing repeated score preparation. Timing and traced allocations are reported separately; these are not native drawing or GPU benchmarks. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.",
   "improvements": [
     {
       "id": 1,
@@ -6035,6 +6035,22 @@
       "local_id": "S1101",
       "description": "A real Sketch + Auto Fill / Pixel Accurate UI combination executed six Sketch-phase entries while count, groups, safety and motion cost described three inner Pixel paths. Its inherited Pixel Coverage also hid 92 spill pixels. Transfer color geometry and palette into the composed Sketch plan without exporting the inner renderer's competing compiled ownership or diagnostics. Final groups/count/safety/cost follow the unchanged Sketch sequence. Pixel coverage and plan-execution accuracy are explicitly unavailable, with an accurate UI placeholder; fresh source-relative Accuracy and delta-E remain available. Four actual UI/planner/consumer tests preserve shared input resources.",
       "ledger": "v148-batch11-sketch-fill.md"
+    },
+    {
+      "id": 778,
+      "area": "batch12-ui-workflow",
+      "batch": 12,
+      "local_id": "U1201",
+      "description": "Twelve active boolean settings used raw CTkSwitch controls without keyboard activation. Give each existing switch one logical Tab stop, visible local focus and Space/Return release activation through the original CTk toggle path. Preserve exact variable values, trace/command order, programmatic updates, controller busy state and preview-only availability. Cancel repeated, stale, hidden, disabled or destroyed activations. Actual factory/controller/Tcl tests and native Windows fixtures cover the workflow; all twelve call sites, focus integration and shared button regressions form one behavior group.",
+      "ledger": "v148-batch12-ui-workflow.md"
+    },
+    {
+      "id": 779,
+      "area": "batch12-rendering",
+      "batch": 12,
+      "local_id": "R1201",
+      "description": "Pixel Accurate rebuilt the same target and source-edge/protected score data for repeated correction and checkpoint evaluations. Share one lazy context within the public planner operation and release it before final preview analysis; never cache it on mutable PixelMap objects, options or returned plans. Two actual public fixtures retain all six scores while reducing target preparation from eight builds to one and source-edge percentiles from six to one. Independent per-pixel oracles preserve every metric and error map; complete-plan parity preserves correction decisions, phases, geometry, previews and costs. Background changes, separate-call mutations, cancellation, GPU success and CPU fallback retain their contracts. Paired whole-call measurements disclose timing and traced memory for both fixtures without a universal speed claim.",
+      "ledger": "v148-batch12-rendering.md"
     }
   ]
 }

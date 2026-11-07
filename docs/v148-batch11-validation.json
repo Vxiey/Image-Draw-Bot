@@ -39,6 +39,7 @@
     "ok": true
   },
   "exact_raster_fixtures": 8,
-  "checkpoint_native_ci": "pending",
-  "previous_checkpoint_ci": "42325709249: all four jobs and all seven commit checks passed"
+  "checkpoint_native_ci": "42330134079: all four jobs and all seven commit checks passed; Windows self-test, bundle validation and packaged GUI/native drag-and-drop passed",
+  "previous_checkpoint_ci": "42325709249: all four jobs and all seven commit checks passed",
+  "checkpoint_commit": "b0eedca7d8d63fde5c9da6a1cffb394613ff95bf"
 }

@@ -1,6 +1,14 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 777 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08 6 changes in batch 09 8 changes in batch 10 and 4 changes in batch 11. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 779 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11 and 2 changes in batch 12. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 12: accessible switches and shared accuracy preparation
+
+- Use Tab, Space and Enter to operate the twelve existing boolean settings, with visible focus and the same variable/controller behavior as pointer activation. Keep repeat, busy-state, visibility and lifetime checks local to each widget.
+- Prepare Pixel Accurate source-score data once per planning operation and release it before final preview analysis. Keep all metric, correction, checkpoint, geometry and preview results; disclose measured time and memory for both public fixtures.
+- Complete the existing physical-brush contract: Auto quality rescue and Masterpiece/Unlimited rendering preserve the declared or preflight-resolved width. A renderer choice cannot invent a missing 1 px brush control. This correction adds no duplicate improvement ID.
+
+Batch 12: final frozen-source discovery passed 3,626 tests in 150.380 seconds (45 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for both new behavior groups and the uncounted physical-brush completion. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired full public-planner measurements bind the final source and retain identical results while reducing repeated score preparation. Timing and traced allocations are reported separately; these are not native drawing or GPU benchmarks. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
 
 ## Batch 11: coherent replanning, physical coordinates and composed sketches
 
@@ -9,7 +17,7 @@
 - Keep mapped canvas centers consistent when a letterboxed workspace crosses screen coordinate zero, without changing generic interpolation or native authorization.
 - Let the composed Sketch Fill sequence own its groups, count, safety and cost. Mark uncomputed final Pixel coverage honestly and retain current source-relative Accuracy/ΔE views.
 
-Batch 11: final frozen-source discovery passed 3,602 tests in 128.751 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for all four behavior groups. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired pack-selection measurements bind the final source and disclose planning overhead separately from modeled drawing cost. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
+Batch 11: final frozen-source discovery passed 3,602 tests in 128.751 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for all four behavior groups. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired pack-selection measurements bind the final source and disclose planning overhead separately from modeled drawing cost. The published batch11 checkpoint `b0eedca7d8d63fde5c9da6a1cffb394613ff95bf` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42330134079](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42330134079). All four jobs and all seven commit checks succeeded. No 1.0.148 release is published.
 
 ## Batch 10: responsive recovery and faithful physical rendering
 

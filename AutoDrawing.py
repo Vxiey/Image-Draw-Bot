@@ -105,7 +105,10 @@ def resolve_drawing(image,options,*,cancelled=lambda: False):
     if out.get('paint_current_color') or out.get('outline'):
         engine='black contours';out.update(outline=True,subject_focus='Off',sketch_detail='Detailed' if preset=='Masterpiece' else 'Auto')
     elif preset=='Masterpiece' or out.get('unlimited_time') or out.get('time_budget_mode')=='Unlimited':
-        engine='Pixel Accurate';out.update(draw_quality='Pixel Accurate',brush_px=1,profile_engine='Manual settings')
+        # Renderer quality cannot change the target's physical brush. Keep the
+        # declared/preflight width; AdaptiveBrush uses verified controls when
+        # available and otherwise models this same fixed width.
+        engine='Pixel Accurate';out.update(draw_quality='Pixel Accurate',profile_engine='Manual settings')
     elif source_kind=='line art':
         engine='black contours';out.update(outline=True,subject_focus='Off',sketch_detail='Auto')
     elif source_kind=='flat illustration':

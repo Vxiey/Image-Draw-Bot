@@ -1018,7 +1018,7 @@ def make_plan(original, area, options, cancelled=lambda: False):
         # execution to a user timer by phase/importance only. CUDA performs the
         # expensive brush simulation when available; corrections stay inside the
         # same progressive path budget.
-        from PixelAccuracyEngine import (refine_with_corrections, execution_groups_from_sequence,
+        from PixelAccuracyEngine import (PixelScoreContext, refine_with_corrections, execution_groups_from_sequence,
                                          render_coverage_map, render_error_map, progressive_time_budget,
                                          progressive_accuracy_checkpoints)
         progressive_budget=progressive_time_budget(
@@ -1027,13 +1027,15 @@ def make_plan(original, area, options, cancelled=lambda: False):
             profile_key=str(options.get('profile_key') or ''),
             correction_reserve_ratio=(0 if options.get('subject_focus','Off')!='Off' else .12))
         base_sequence=progressive_budget['execution_sequence']
+        _pixel_score_context=PixelScoreContext(pixel_map)
         accuracy_plan=refine_with_corrections(
             pixel_map,base_sequence,picture_plan_colors,
             brush_px=max(1,int(options.get('brush_px',1) or 1)),max_passes=(0 if options.get('subject_focus','Off')!='Off' else 2),
             correction_brush_px=int(adaptive_brush['metadata'].get('detail_brush_px',options.get('brush_px',1)) or 1),
             max_total_paths=(progressive_budget.get('path_budget') if progressive_budget.get('active') else None),
             gpu_mode=options.get('gpu_mode','Auto'),gpu_vram=options.get('gpu_vram','Auto'),
-            gpu_performance=options.get('gpu_performance','High throughput'),cancelled=cancelled)
+            gpu_performance=options.get('gpu_performance','High throughput'),cancelled=cancelled,
+            score_context=_pixel_score_context)
         stroke_plan['execution_sequence']=accuracy_plan['execution_sequence']
         stroke_plan['execution_groups']=execution_groups_from_sequence(
             stroke_plan['execution_sequence'],len(picture_plan_colors))
@@ -1079,7 +1081,9 @@ def make_plan(original, area, options, cancelled=lambda: False):
         plan_options['pixel_stroke_engine']='Block B + C + D + Shadow/Contour + Adaptive Brush v2'
         checkpoints=progressive_accuracy_checkpoints(
             pixel_map,stroke_plan['execution_sequence'],picture_plan_colors,
-            brush_px=max(1,int(options.get('brush_px',1) or 1)),cancelled=cancelled)
+            brush_px=max(1,int(options.get('brush_px',1) or 1)),cancelled=cancelled,
+            score_context=_pixel_score_context)
+        del _pixel_score_context
         accuracy_meta=dict(accuracy_plan['metadata'])
         if subject_brush_meta is not None:
             accuracy_meta['subject_brush_mask']=dict(subject_brush_meta,

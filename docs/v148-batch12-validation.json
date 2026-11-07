@@ -1,0 +1,47 @@
+{
+  "batch": 12,
+  "baseline_commit": "b0eedca7d8d63fde5c9da6a1cffb394613ff95bf",
+  "added_behavior_groups": 2,
+  "implemented": 779,
+  "remaining": 221,
+  "release_published": false,
+  "local_tests": 3626,
+  "skipped": 45,
+  "test_seconds": 150.38,
+  "source_changed": false,
+  "source_hash_manifest_sha256": "bdc1950fb94366d170b37cdad5bc3fb7ef00f1d91cd614bbd2d41ed06f45d948",
+  "source_gate": {
+    "schema": 1,
+    "version": "1.0.148",
+    "file_version": "1.0.148",
+    "channel": "stable",
+    "repository": "Vxiey/Image-Draw-Bot",
+    "soak_cycles": 5000,
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "passed": true
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1092,
+    "missing_required": [],
+    "forbidden_paths": [],
+    "warnings": [],
+    "ok": true
+  },
+  "exact_raster_fixtures": 8,
+  "checkpoint_native_ci": "pending",
+  "previous_checkpoint_ci": "42330134079: all four jobs and all seven commit checks passed",
+  "uncounted_completions": [
+    "R901 physical brush policy in Auto rescue and Masterpiece/Unlimited"
+  ]
+}

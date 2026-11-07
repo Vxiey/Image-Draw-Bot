@@ -642,12 +642,15 @@ def propose_rescue_options(plan: dict[str, Any], acceptance: dict[str, Any] | No
                         and 0 < plan_pixels <= 220_000
                         and (acceptance.get('usable_deadline_seconds') is None or projected <= usable * .32))
         if pixel_rescue:
+            # A quality rescue has no authority to select a new physical brush.
+            # Preserve the declared/preflight width; the Pixel planner assigns
+            # smaller widths only from independently verified target controls.
             out.update({
                 'draw_quality':'Pixel Accurate','planning_resolution':'Extreme',
                 'quality':'Maximum detail','detail':10,'adaptive_detail':'Off',
                 'background_simplification':'Off','color_grouping':'Accurate',
                 'stroke_optimizer':'Travel only','speed':'Balanced','delay':base_delay('Balanced'),
-                'precision':'High','extra_fast':False,'extra_fast_v2':False,'brush_px':1,
+                'precision':'High','extra_fast':False,'extra_fast_v2':False,
             })
             current = max(8, int(_finite(out.get('_auto_tuner_color_ceiling', out.get('exact_color_limit_profile_ceiling')), 16)))
             raised = min(32, max(current + 4, 24))
