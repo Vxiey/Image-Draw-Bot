@@ -11,15 +11,15 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 import re
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
-IMAGE_FILE_PATTERNS = '*.png *.apng *.jpg *.jpeg *.jpe *.jfif *.webp *.bmp *.gif *.tif *.tiff *.ico'
+IMAGE_FILE_PATTERNS = '*.png *.apng *.jpg *.jpeg *.jpe *.jfif *.webp *.bmp *.gif *.tif *.tiff *.ico *.avif'
 _IMAGE_EXTENSIONS = frozenset(pattern[1:] for pattern in IMAGE_FILE_PATTERNS.split())
 MAX_DROP_CHARACTERS = 32_000_000
 MAX_DROP_ITEMS = 256
 _URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
 _DATA_IMAGE_RE = re.compile(
-    r'''(?i:data:image/(?:png|jpe?g|webp|gif);base64,)[A-Za-z0-9+/=_-]+''',
+    r'''(?i:data:image/(?:png|jpe?g|webp|gif|avif);base64,)[A-Za-z0-9+/=_-]+''',
     re.ASCII,
 )
 
@@ -158,6 +158,51 @@ def _is_html(value: str) -> bool:
             not value[:16].lower().startswith(('http://', 'https://', 'data:image/')))
 
 
+def _is_clipboard_html(value: str) -> bool:
+    return value[:8].casefold() == 'version:'
+
+
+def _clipboard_html(value: str) -> tuple[str, str, str] | None:
+    """Read Windows CF_HTML byte offsets without treating its URL as content."""
+    if not _is_clipboard_html(value):
+        return None
+    header_end = value.find('<')
+    if header_end < 0 or header_end > 131072:
+        raise ValueError('The dropped HTML description is missing or too large.')
+    header = value[:header_end]
+    fields = {}
+    for line in header.splitlines():
+        name, separator, content = line.partition(':')
+        name = name.casefold()
+        if not separator or name not in ('version', 'starthtml', 'endhtml', 'startfragment', 'endfragment', 'sourceurl'):
+            continue
+        if name in fields:
+            raise ValueError('The dropped HTML description contains duplicate fields.')
+        fields[name] = content.strip()
+    if fields.get('version') not in ('0.9', '1.0'):
+        raise ValueError('The dropped HTML version is not supported.')
+    try:
+        offsets = []
+        for name in ('starthtml', 'endhtml', 'startfragment', 'endfragment'):
+            number = fields[name]
+            if len(number) > 20 or not re.fullmatch(r'-?[0-9]+', number):
+                raise ValueError()
+            offsets.append(int(number))
+        encoded = value.encode('utf-8')
+        minimum = len(header.encode('utf-8'))
+        start_html, end_html, start, end = offsets
+        start_html = minimum if start_html == -1 else start_html
+        end_html = len(encoded) if end_html == -1 else end_html
+        if not minimum <= start_html <= start <= end <= end_html <= len(encoded):
+            raise ValueError()
+        prefix = encoded[start_html:start].decode('utf-8')
+        fragment = encoded[start:end].decode('utf-8')
+    except (KeyError, ValueError, UnicodeError) as error:
+        raise ValueError('The dropped HTML has invalid image-fragment offsets.') from error
+    base = fields.get('sourceurl', '')
+    return prefix, fragment, base if _is_http_url(base) else ''
+
+
 class _FoundImage(Exception):
     """Stop parsing once the first usable image element is found."""
 
@@ -168,27 +213,56 @@ class _ImageHTMLParser(HTMLParser):
     _INERT = frozenset(('script', 'style', 'template', 'noscript', 'head'))
     _IMAGE_ATTRIBUTES = frozenset(('src', 'data-src', 'data-original'))
 
-    def __init__(self):
+    def __init__(self, base_url=''):
         super().__init__(convert_charrefs=True)
         self.inert = []
+        self.base_url = base_url
+        self.base_seen = False
+        self.collect_sources = True
         self.image = None
         self.inline = None
         self.link = None
         self.link_rank = None
 
-    def _consider_link(self, value):
-        value = _clean_url(value)
+    def _resolve_url(self, value):
+        # Browsers encode literal attribute spaces as %20. Preserve existing
+        # percent escapes and query punctuation; other controls remain invalid.
+        value = _clean_url(value).replace(' ', '%20')
         if _is_http_url(value):
+            return value
+        if (not value or not self.base_url or
+                any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in value)):
+            return None
+        try:
+            if urlparse(value).scheme:
+                return None
+            resolved = urljoin(self.base_url, value)
+        except (TypeError, ValueError):
+            return None
+        return resolved if _is_http_url(resolved) else None
+
+    def _consider_link(self, value):
+        value = self._resolve_url(value)
+        if value is not None:
             rank = (not _looks_like_image_url(value), len(value))
             if self.link_rank is None or rank < self.link_rank:
                 self.link, self.link_rank = value, rank
 
     def handle_starttag(self, tag, attrs):
+        if tag == 'base' and not self.base_seen and all(parent == 'head' for parent in self.inert):
+            for name, value in attrs:
+                if name == 'href':
+                    self.base_seen = True
+                    resolved = self._resolve_url(value) if isinstance(value, str) else None
+                    if resolved is not None:
+                        self.base_url = resolved
+                    break
+            return
         if tag in self._INERT:
             if len(self.inert) >= 256:
                 raise ValueError('The dropped HTML is nested too deeply.')
             self.inert.append(tag)
-        if self.inert:
+        if self.inert or not self.collect_sources:
             return
         seen = set()
         for name, value in attrs:
@@ -201,8 +275,9 @@ class _ImageHTMLParser(HTMLParser):
             if tag == 'img' and name in self._IMAGE_ATTRIBUTES:
                 value = _clean_url(value)
                 source = _data_source(value)
-                if source is None and _is_http_url(value):
-                    source = CanvasDropSource(_unwrap_image_search_url(value), 'Dropped web image', 'url')
+                resolved = self._resolve_url(value) if source is None else None
+                if resolved is not None:
+                    source = CanvasDropSource(_unwrap_image_search_url(resolved), 'Dropped web image', 'url')
                 if source is not None:
                     self.image = source
                     raise _FoundImage()
@@ -214,7 +289,7 @@ class _ImageHTMLParser(HTMLParser):
             self.inert.pop()
 
     def handle_data(self, data):
-        if self.inert:
+        if self.inert or not self.collect_sources:
             return
         if self.inline is None:
             for match in _DATA_IMAGE_RE.finditer(data):
@@ -226,9 +301,22 @@ class _ImageHTMLParser(HTMLParser):
 
 
 def _html_source(value: str) -> CanvasDropSource | None:
-    parser = _ImageHTMLParser()
+    context = _clipboard_html(value)
+    prefix, fragment, base = context if context is not None else ('', value, '')
+    parser = _ImageHTMLParser(base)
     try:
-        parser.feed(value)
+        # Context supplies base URL and inert ancestry, never competing images
+        # or links outside the fragment the user actually selected.
+        parser.collect_sources = False
+        parser.feed(prefix)
+        if parser.rawdata.startswith('<') and parser.cdata_elem is None:
+            raise ValueError('The dropped HTML fragment starts inside an incomplete HTML token.')
+        # feed() may retain preceding text ending in an unfinished entity.
+        # Flush it while context sources are still disabled, keeping the
+        # parsed base URL and inert ancestry for the selected fragment.
+        parser.close()
+        parser.collect_sources = True
+        parser.feed(fragment)
         parser.close()
     except _FoundImage:
         pass
@@ -267,7 +355,10 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
     raw = str(raw_data or '')
     if len(raw) > MAX_DROP_CHARACTERS:
         raise ValueError('The dropped image payload is too large.')
-    raw = raw.strip()
+    # CF_HTML offsets count UTF-8 bytes from the exact beginning, including
+    # trailing newlines. Ordinary text/file payloads still trim their wrappers.
+    if not _is_clipboard_html(raw):
+        raw = raw.strip()
     items = []
     characters = len(raw)
     for index, item in enumerate(split_items or ()):
@@ -283,7 +374,7 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
 
     # Tcl's splitlist is not an HTML parser. Its fragments can contain URLs
     # from comments or scripts, so the complete HTML payload is authoritative.
-    if _is_html(raw):
+    if _is_html(raw) or _is_clipboard_html(raw):
         source = _html_source(raw)
         if source is not None:
             return source
@@ -348,7 +439,7 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
         return CanvasDropSource(_unwrap_image_search_url(best_url), 'Dropped web image', 'url')
 
     if unsupported_file:
-        raise ValueError('Drop an image file (PNG, JPG, WEBP, BMP, GIF, TIFF, ICO or APNG).')
+        raise ValueError('Drop an image file (PNG, JPG, WEBP, BMP, GIF, TIFF, ICO, APNG or AVIF).')
     raise ValueError(
         'No image was found in the drop. Drag the image itself from Chrome/Edge or drop a local image file.'
     )

@@ -79,13 +79,17 @@ class CanvasWebDropV10121Tests(unittest.TestCase):
     def test_forced_one_click_is_consumed_before_draw(self):
         app=SimpleNamespace(
             closing=False,activity=None,original=object(),browser_one_click_force=True,
-            status=Value(),browser_one_click_text=Value(),
+            game=Value('Gartic Phone'),browser_one_click_enabled=Value(False),
+            status=Value(),browser_one_click_text=Value(),root=Root(),
         )
-        with mock.patch.object(DrawBotApp,'_browser_one_click_authorized',return_value=True), \
-             mock.patch.object(DrawBotApp,'_start_guard_ready',return_value=(True,'ok')), \
+        request=DrawBotApp._new_browser_one_click_request(app,force=True)
+        request['phase']='finish'
+        with mock.patch.object(DrawBotApp,'_start_guard_ready',return_value=(True,'ok')), \
              mock.patch.object(DrawBotApp,'draw',return_value=True) as draw:
             self.assertTrue(DrawBotApp._finish_browser_one_click(app))
         self.assertFalse(app.browser_one_click_force)
+        self.assertIsNone(app.browser_one_click_request)
+        self.assertTrue(request['cancelled'].is_set())
         draw.assert_called_once_with(app,user_initiated=True)
 
 

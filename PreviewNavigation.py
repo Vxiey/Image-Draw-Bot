@@ -54,6 +54,22 @@ def begin_pan(canvas,x,y):
     canvas._drag=(float(x),float(y))
 
 
+def pan_by(canvas,dx,dy,zoom):
+    """Move the visible source window by display pixels, clamping at each edge."""
+    image_size=getattr(canvas,'_preview_image_size',None)
+    viewport_size=getattr(canvas,'_preview_viewport_size',None)
+    if zoom<=0 or image_size is None or viewport_size is None:
+        return False
+    dx,dy=float(dx),float(dy)
+    if not math.isfinite(dx) or not math.isfinite(dy):
+        return False
+    previous=viewport_geometry(image_size,viewport_size,zoom,getattr(canvas,'_preview_pan',(0,0)))
+    requested=(previous.pan[0]+dx/previous.scale,previous.pan[1]+dy/previous.scale)
+    pan=viewport_geometry(image_size,viewport_size,zoom,requested).pan
+    canvas._preview_pan=pan
+    return pan!=previous.pan
+
+
 def move_pan(canvas,x,y,zoom):
     """Consume each drag delta, including at an edge, so reversal is immediate."""
     if zoom<=0 or not hasattr(canvas,'_drag'):

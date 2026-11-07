@@ -12,6 +12,7 @@ from contextlib import closing
 from itertools import pairwise, islice
 from pathlib import Path
 from urllib.parse import urlparse
+from WorkerEventQueue import WorkerEventQueue
 
 from Colors import allColors, enable_dpi_awareness, DATA_DIR, load_calibration, reset_palette, CALIBRATION_FILE, normalize_rgb
 from ProfileStorage import profile_palette_file, profile_settings_file, calibration_context_fingerprint
@@ -1002,11 +1003,16 @@ def make_plan(original, area, options, cancelled=lambda: False):
         stroke_plan['metadata']=dict(stroke_plan.get('metadata') or {})
         stroke_plan['metadata']['adaptive_brush']=adaptive_brush['metadata']
         subject_brush_meta=None
+        subject_projection=None
         if options.get('subject_focus')=='Subject only':
             from SubjectFocus import clip_subject_brush_sequence
+            from NativeBrushProjection import NativeBrushProjection
+            subject_projection=NativeBrushProjection.for_scaled_plan(
+                (pixel_map.width,pixel_map.height),fitted,options,cancelled=cancelled)
             stroke_plan['execution_sequence'],subject_brush_meta=clip_subject_brush_sequence(
                 stroke_plan['execution_sequence'],pixel_map.drawable_mask,
-                default_brush_px=max(1,int(options.get('brush_px') or 1)),cancelled=cancelled)
+                default_brush_px=max(1,int(options.get('brush_px') or 1)),
+                projection=subject_projection,cancelled=cancelled)
             stroke_plan['metadata']['subject_brush_mask']=subject_brush_meta
             stroke_plan['metadata']['execution_paths']=subject_brush_meta['retained_paths']
             adaptive_brush['metadata']=dict(adaptive_brush['metadata'],
@@ -1027,96 +1033,127 @@ def make_plan(original, area, options, cancelled=lambda: False):
             profile_key=str(options.get('profile_key') or ''),
             correction_reserve_ratio=(0 if options.get('subject_focus','Off')!='Off' else .12))
         base_sequence=progressive_budget['execution_sequence']
-        _pixel_score_context=PixelScoreContext(pixel_map)
-        accuracy_plan=refine_with_corrections(
-            pixel_map,base_sequence,picture_plan_colors,
-            brush_px=max(1,int(options.get('brush_px',1) or 1)),max_passes=(0 if options.get('subject_focus','Off')!='Off' else 2),
-            correction_brush_px=int(adaptive_brush['metadata'].get('detail_brush_px',options.get('brush_px',1)) or 1),
-            max_total_paths=(progressive_budget.get('path_budget') if progressive_budget.get('active') else None),
-            gpu_mode=options.get('gpu_mode','Auto'),gpu_vram=options.get('gpu_vram','Auto'),
-            gpu_performance=options.get('gpu_performance','High throughput'),cancelled=cancelled,
-            score_context=_pixel_score_context)
-        stroke_plan['execution_sequence']=accuracy_plan['execution_sequence']
-        stroke_plan['execution_groups']=execution_groups_from_sequence(
-            stroke_plan['execution_sequence'],len(picture_plan_colors))
-        groups=stroke_plan['groups']
-        plan_options=dict(options)
-        plan_options['pixel_accurate']=True
-        plan_options['color_selectors']=picture_selectors
-        plan_options['picture_palette_meta']=picture_palette_meta
-        plan_options['pixel_map_meta']=pixel_map.as_meta()
-        plan_options['plan_palette_rgb']=picture_plan_colors
-        # Preserve a distinct quantized-target object for diagnostics/accuracy
-        # separation. This is not used to choose colors or alter stroke planning.
+        native_subject_accuracy=None
         try:
-            import numpy as np
-            _pal_np=np.asarray(plan_options['plan_palette_rgb'],dtype=np.uint8)
-            _idx=np.asarray(pixel_map.palette_index,dtype=np.int32)
-            _drawable=np.asarray(pixel_map.drawable_mask,dtype=bool)
-            _target_rgb=np.full((pixel_map.height,pixel_map.width,3),255,dtype=np.uint8)
-            if _pal_np.ndim==2 and len(_pal_np):
-                _safe_idx=np.clip(_idx,0,len(_pal_np)-1)
-                _target_rgb[_drawable]=_pal_np[_safe_idx[_drawable]]
-                plan_options['_accuracy_quantized_target']=Image.fromarray(_target_rgb,'RGB')
-                plan_options['_accuracy_quantized_target_available']=True
-        except Exception:
-            plan_options['_accuracy_quantized_target_available']=False
-        plan_options['adaptive_detail_effective']='Off'
-        plan_options['adaptive_detail_meta']={
-            'adaptive_detail_requested':'Off','adaptive_detail_effective':'Off',
-            'adaptive_detail_pruned_micro_strokes':0,'adaptive_detail_pruned_micro_pixels':0,
-            'protected_pixels':int(pixel_map.as_meta().get('protected_pixels',0))}
-        plan_options['background_simplification_meta']={
-            'requested':'Off','effective':'Off','pixel_accurate_bypass':True}
-        plan_options['advanced_color_meta']={
-            'mode':'pixel-accurate-map','backend':pixel_map.metadata.get('palette_backend','cpu-numpy'),
-            'edge_backend':pixel_map.metadata.get('edge_backend','cpu-numpy'),
-            'full_resolution':True,'destructive_simplification':False}
-        # v1.0.87 Block B supplies exact component-aware execution paths and a
-        # four-pass sequence. These runtime-only fields are consumed by
-        # finish_plan; they never enter saved settings or mouse calibration.
-        plan_options['_pixel_execution_groups']=stroke_plan['execution_groups']
-        plan_options['_pixel_execution_sequence']=stroke_plan['execution_sequence']
-        plan_options['pixel_stroke_meta']=stroke_plan['metadata']
-        plan_options['pixel_stroke_engine']='Block B + C + D + Shadow/Contour + Adaptive Brush v2'
-        checkpoints=progressive_accuracy_checkpoints(
-            pixel_map,stroke_plan['execution_sequence'],picture_plan_colors,
-            brush_px=max(1,int(options.get('brush_px',1) or 1)),cancelled=cancelled,
-            score_context=_pixel_score_context)
-        del _pixel_score_context
-        accuracy_meta=dict(accuracy_plan['metadata'])
-        if subject_brush_meta is not None:
-            accuracy_meta['subject_brush_mask']=dict(subject_brush_meta,
-                missing_subject_pixels=int(accuracy_meta.get('missing_pixels',0)),
-                subject_coverage_percent=float(accuracy_meta.get('coverage_percent',0)))
-        accuracy_meta['progressive_time_budget']={k:v for k,v in progressive_budget.items() if k!='execution_sequence'}
-        accuracy_meta['accuracy_checkpoints']=checkpoints
-        accuracy_meta['block_d']=True
-        if options.get('subject_focus','Off')!='Off':
-            accuracy_meta['automatic_corrections']=False
-            accuracy_meta['correction_note']='Subject focus preserves the available brush width; Subject only clips its footprint to the selection. Correction passes are disabled to avoid restoring intentionally omitted background.'
-        accuracy_meta['adaptive_brush']=adaptive_brush['metadata']
-        accuracy_meta['draw_motor']='Adaptive Brush Draw Motor v2'
-        plan_options['pixel_accuracy_meta']=accuracy_meta
-        plan_options['_pixel_coverage_preview']=render_coverage_map(pixel_map,accuracy_plan['simulation'])
-        plan_options['_pixel_error_preview']=render_error_map(pixel_map,accuracy_plan['simulation'])
-        plan_options['color_workflow']='Progressive passes'
-        plan_options['progressive_rendering']='On'
-        plan_options['target_stroke_count_resolved']=None
-        plan_options['stroke_optimizer']='Travel only'
-        plan_options['color_grouping']='Accurate'
-        plan_options.pop('real_speed_budget_meta',None)
-        if bool(options.get('use_region_fill_engine',True)):
-            plan_options['region_fill_meta']={
-                'enabled':True,'engine_name':'Region Fill Engine','quality_preset':'Pixel Accurate',
-                'fill_aggressiveness':'Safe','pixel_accurate_protected':True,
-                'reason':'Exact Pixel Accurate stroke simulation preserved; bucket substitution is disabled until the simulator can prove exact fill equivalence.',
-                'total_regions':int(stroke_plan.get('metadata',{}).get('component_count',0) or 0),
-                'fill_safe_regions':0,'fill_actions':0,'outline_paths':0,
-                'fallback_stroke_regions':int(stroke_plan.get('metadata',{}).get('component_count',0) or 0),
-                'fill_coverage_percent':0.0,'stroke_reduction_percent':0.0,'estimated_time_saved_seconds':0.0}
-        profiler_stop(plan_options,'color_planning',_prof_color)
-        return _finalize_auto_tuned_plan(finish_plan(image,fitted,groups,plan_options,cancelled),original,area,cancelled)
+            if subject_projection is not None:
+                from SubjectFocus import evaluate_native_subject_plan
+                native_subject_accuracy=evaluate_native_subject_plan(
+                    pixel_map,base_sequence,picture_plan_colors,subject_projection,
+                    brush_px=max(1,int(options.get('brush_px',1) or 1)),
+                    gpu_mode=options.get('gpu_mode','Auto'),gpu_vram=options.get('gpu_vram','Auto'),
+                    gpu_performance=options.get('gpu_performance','High throughput'),cancelled=cancelled)
+                # Evaluation uses native pixels; execution keeps its source
+                # coordinates so CanvasTransform applies the physical mapping once.
+                accuracy_plan={'execution_sequence':base_sequence,
+                               'metadata':native_subject_accuracy['metadata']}
+            else:
+                _pixel_score_context=PixelScoreContext(pixel_map)
+                accuracy_plan=refine_with_corrections(
+                    pixel_map,base_sequence,picture_plan_colors,
+                    brush_px=max(1,int(options.get('brush_px',1) or 1)),max_passes=(0 if options.get('subject_focus','Off')!='Off' else 2),
+                    correction_brush_px=int(adaptive_brush['metadata'].get('detail_brush_px',options.get('brush_px',1)) or 1),
+                    max_total_paths=(progressive_budget.get('path_budget') if progressive_budget.get('active') else None),
+                    gpu_mode=options.get('gpu_mode','Auto'),gpu_vram=options.get('gpu_vram','Auto'),
+                    gpu_performance=options.get('gpu_performance','High throughput'),cancelled=cancelled,
+                    score_context=_pixel_score_context)
+            stroke_plan['execution_sequence']=accuracy_plan['execution_sequence']
+            stroke_plan['execution_groups']=execution_groups_from_sequence(
+                stroke_plan['execution_sequence'],len(picture_plan_colors))
+            groups=stroke_plan['groups']
+            plan_options=dict(options)
+            plan_options['pixel_accurate']=True
+            plan_options['color_selectors']=picture_selectors
+            plan_options['picture_palette_meta']=picture_palette_meta
+            plan_options['pixel_map_meta']=pixel_map.as_meta()
+            plan_options['plan_palette_rgb']=picture_plan_colors
+            # Preserve a distinct quantized-target object for diagnostics/accuracy
+            # separation. This is not used to choose colors or alter stroke planning.
+            try:
+                import numpy as np
+                _pal_np=np.asarray(plan_options['plan_palette_rgb'],dtype=np.uint8)
+                _idx=np.asarray(pixel_map.palette_index,dtype=np.int32)
+                _drawable=np.asarray(pixel_map.drawable_mask,dtype=bool)
+                _target_rgb=np.full((pixel_map.height,pixel_map.width,3),255,dtype=np.uint8)
+                if _pal_np.ndim==2 and len(_pal_np):
+                    _safe_idx=np.clip(_idx,0,len(_pal_np)-1)
+                    _target_rgb[_drawable]=_pal_np[_safe_idx[_drawable]]
+                    plan_options['_accuracy_quantized_target']=Image.fromarray(_target_rgb,'RGB')
+                    plan_options['_accuracy_quantized_target_available']=True
+            except Exception:
+                plan_options['_accuracy_quantized_target_available']=False
+            plan_options['adaptive_detail_effective']='Off'
+            plan_options['adaptive_detail_meta']={
+                'adaptive_detail_requested':'Off','adaptive_detail_effective':'Off',
+                'adaptive_detail_pruned_micro_strokes':0,'adaptive_detail_pruned_micro_pixels':0,
+                'protected_pixels':int(pixel_map.as_meta().get('protected_pixels',0))}
+            plan_options['background_simplification_meta']={
+                'requested':'Off','effective':'Off','pixel_accurate_bypass':True}
+            plan_options['advanced_color_meta']={
+                'mode':'pixel-accurate-map','backend':pixel_map.metadata.get('palette_backend','cpu-numpy'),
+                'edge_backend':pixel_map.metadata.get('edge_backend','cpu-numpy'),
+                'full_resolution':True,'destructive_simplification':False}
+            # v1.0.87 Block B supplies exact component-aware execution paths and a
+            # four-pass sequence. These runtime-only fields are consumed by
+            # finish_plan; they never enter saved settings or mouse calibration.
+            plan_options['_pixel_execution_groups']=stroke_plan['execution_groups']
+            plan_options['_pixel_execution_sequence']=stroke_plan['execution_sequence']
+            plan_options['pixel_stroke_meta']=stroke_plan['metadata']
+            plan_options['pixel_stroke_engine']='Block B + C + D + Shadow/Contour + Adaptive Brush v2'
+            if native_subject_accuracy is not None:
+                checkpoints=native_subject_accuracy['checkpoints']
+            else:
+                checkpoints=progressive_accuracy_checkpoints(
+                    pixel_map,stroke_plan['execution_sequence'],picture_plan_colors,
+                    brush_px=max(1,int(options.get('brush_px',1) or 1)),cancelled=cancelled,
+                    score_context=_pixel_score_context)
+                del _pixel_score_context
+            accuracy_meta=dict(accuracy_plan['metadata'])
+            if subject_brush_meta is not None:
+                accuracy_meta['subject_brush_mask']=dict(subject_brush_meta,
+                    missing_subject_pixels=int(accuracy_meta.get('missing_pixels',0)),
+                    subject_coverage_percent=float(accuracy_meta.get('coverage_percent',0)))
+            accuracy_meta['progressive_time_budget']={k:v for k,v in progressive_budget.items() if k!='execution_sequence'}
+            accuracy_meta['accuracy_checkpoints']=checkpoints
+            accuracy_meta['block_d']=True
+            if options.get('subject_focus','Off')!='Off':
+                accuracy_meta['automatic_corrections']=False
+                accuracy_meta['correction_note']='Subject focus preserves the available brush width; Subject only clips its footprint to the selection. Correction passes are disabled to avoid restoring intentionally omitted background.'
+            accuracy_meta['adaptive_brush']=adaptive_brush['metadata']
+            accuracy_meta['draw_motor']='Adaptive Brush Draw Motor v2'
+            plan_options['pixel_accuracy_meta']=accuracy_meta
+            if native_subject_accuracy is not None:
+                plan_options['_pixel_coverage_preview']=native_subject_accuracy['coverage_preview']
+                plan_options['_pixel_error_preview']=native_subject_accuracy['error_preview']
+            else:
+                plan_options['_pixel_coverage_preview']=render_coverage_map(pixel_map,accuracy_plan['simulation'])
+                plan_options['_pixel_error_preview']=render_error_map(pixel_map,accuracy_plan['simulation'])
+            plan_options['color_workflow']='Progressive passes'
+            plan_options['progressive_rendering']='On'
+            plan_options['target_stroke_count_resolved']=None
+            plan_options['stroke_optimizer']='Travel only'
+            plan_options['color_grouping']='Accurate'
+            plan_options.pop('real_speed_budget_meta',None)
+            if bool(options.get('use_region_fill_engine',True)):
+                plan_options['region_fill_meta']={
+                    'enabled':True,'engine_name':'Region Fill Engine','quality_preset':'Pixel Accurate',
+                    'fill_aggressiveness':'Safe','pixel_accurate_protected':True,
+                    'reason':'Exact Pixel Accurate stroke simulation preserved; bucket substitution is disabled until the simulator can prove exact fill equivalence.',
+                    'total_regions':int(stroke_plan.get('metadata',{}).get('component_count',0) or 0),
+                    'fill_safe_regions':0,'fill_actions':0,'outline_paths':0,
+                    'fallback_stroke_regions':int(stroke_plan.get('metadata',{}).get('component_count',0) or 0),
+                    'fill_coverage_percent':0.0,'stroke_reduction_percent':0.0,'estimated_time_saved_seconds':0.0}
+            profiler_stop(plan_options,'color_planning',_prof_color)
+            return _finalize_auto_tuned_plan(finish_plan(image,fitted,groups,plan_options,cancelled),original,area,cancelled)
+        except BaseException as failure:
+            # These native diagnostics are owned by this in-progress plan.
+            # A failed finish/finalization must not retain their pixel cores
+            # through a worker exception traceback. Successful plans retain them.
+            if native_subject_accuracy is not None:
+                for key in ('coverage_preview','error_preview'):
+                    try:native_subject_accuracy[key].close()
+                    except Exception as cleanup_error:
+                        failure.add_note(f'Subject diagnostic cleanup also failed: {type(cleanup_error).__name__}.')
+            raise
 
     plan_options=dict(options)
     _prof_color = profiler_start(plan_options, 'color_planning')
@@ -1969,7 +2006,20 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
                                                 execution_sequence=execution_sequence or None)
         options['preview_safety_meta']=preview_safety.as_dict()
         options['_preview_safety_groups']=preview_safety.groups
-        draw_safe_paths(draw,preview_safety,fitted,size,palette_rgb,brush,cancelled)
+        if options.get('subject_focus')=='Subject only':
+            from SubjectFocus import render_native_subject_preview
+            _native_preview=render_native_subject_preview(preview_safety,fitted,size,palette_rgb,cancelled=cancelled)
+            try:_native_draw=ImageDraw.Draw(_native_preview)
+            except BaseException:
+                _native_preview.close()
+                raise
+            # The old ImageDraw also owns the native image core. Release all
+            # its references before replacing the preview with physical ink.
+            draw.draw=None;draw.im=None;draw._image=None
+            preview.close()
+            preview,draw=_native_preview,_native_draw
+        else:
+            draw_safe_paths(draw,preview_safety,fitted,size,palette_rgb,brush,cancelled)
         for paths in preview_safety.groups:
             for path in paths:
                 if len(path)==1:
@@ -2146,14 +2196,14 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     _prof_preview = profiler_start(options, 'preview_rendering')
     try:
         from PreviewLayers import build_auxiliary_previews
-        ui_previews=build_auxiliary_previews(image,size,groups,palette_rgb,point,brush,options,cancelled)
+        ui_previews=build_auxiliary_previews(image,size,groups,palette_rgb,point,brush,options,cancelled,include_color_map=False)
         # Color map represents the executed palette, not a second 20-colour quantization.
         ui_previews['color']=preview
         for _key,_option_key in (('coverage','_pixel_coverage_preview'),('accuracy_error','_pixel_error_preview')):
             _im=options.get(_option_key)
             if isinstance(_im,Image.Image):
-                _full_canvas=(_key=='coverage' and
-                    (options.get('adaptive_hybrid_meta') or {}).get('coverage_coordinate_space')=='full physical canvas')
+                _full_canvas=((options.get('pixel_accuracy_meta') or {}).get('coverage_coordinate_space')=='full physical canvas'
+                    or (_key=='coverage' and (options.get('adaptive_hybrid_meta') or {}).get('coverage_coordinate_space')=='full physical canvas'))
                 # Physical coverage includes letterboxes; fitting it back to
                 # the source aspect can distort or hide real native spill.
                 ui_previews[_key]=_im.copy() if _full_canvas else _im.resize(size,Image.Resampling.NEAREST)
@@ -2299,6 +2349,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
     if not dry_run and not plan['options'].get('unlimited_time') and plan['options'].get('gartic_timer_deadline') is not None:
         deadline_box[0]=min(deadline_box[0],float(plan['options']['gartic_timer_deadline']))
     done=0
+    progress_total=max(0,int(plan.get('count') or 0))
+    progress_resumed=0
+    progress_last=None
     sent_paths=0
     guard_skipped_paths=0
     speed_measure_started=None
@@ -2307,6 +2360,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
     execution_measure_completed_at=None
     runtime_operation_stats={}
     paused_seconds=0.0
+    pause_started_at=None
+    timer_tick=None
     execution_pause_count=0
     def note_runtime_operation(kind, elapsed, count=1):
         if dry_run:return
@@ -2329,6 +2384,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             if dry_run:
                 raise DryRunBudgetComplete('Dry run time budget completed normally.')
             raise InterruptedError('Time limit reached. No automatic restart.')
+        if timer_tick is not None:
+            timer_tick()
+            if stop.is_set():raise InterruptedError()
     def guard_keyboard(modal_point=None):
         wait(0)
         check=getattr(mouse,'check_keyboard',None)
@@ -2354,7 +2412,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
     from AdaptiveColor import method_candidates,method_label,rgb_key,probe_item,confidence_text
     from RenderResume import (resolve_resume, checkpoint_after_batch, checkpoint_before_path,
                               checkpoint_after_path, checkpoint_sequence_progress, items_fingerprint,
-                              sequence_entry_key)
+                              sequence_entry_key, execution_sequence_with_brushes)
     resume_info=resolve_resume(plan,(plan.get('options') or {}).get('render_resume_state'))
     resume_completed=int(resume_info.get('completed_count',0)) if resume_info.get('compatible') else 0
     resume_path_level=bool(resume_info.get('compatible') and resume_info.get('path_level'))
@@ -2833,8 +2891,42 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             # learning pass. Keep the normal Stop and release/disarm contract.
             wait(0)
             runtime_safety.mark_completed()
+            report('progress',(int(resume_info['sequence_total']),int(resume_info['sequence_total'])))
             report('status','Render resume finished: all sequence operations are already complete. No new drawing input was sent.')
             return
+        # Materialize this final schedule once, before input. Display progress
+        # includes verified earlier work; runtime/learning counters below keep
+        # measuring only operations performed by this invocation.
+        prepared_execution_sequence=list(execution_sequence_with_brushes(plan,cancelled=stop.is_set))
+        has_execution_sequence=bool(plan.get('execution_sequence'))
+        if has_execution_sequence:
+            progress_total=len(prepared_execution_sequence)
+            if resume_sequence_level:
+                progress_resumed=min(progress_total,int(resume_info.get('sequence_completed_count',0)))
+        else:
+            _groups=plan['groups'];_execution_groups=plan.get('execution_groups')
+            _order=plan['options'].get('color_order') or range(len(_groups))
+            _counts=[]
+            for _number,_raw in enumerate(_order):
+                if _number%256==0 and stop.is_set():raise InterruptedError()
+                _index=int(_raw)
+                if not 0<=_index<len(_groups):continue
+                _paths=_execution_groups[_index] if _execution_groups is not None and _index<len(_execution_groups) else None
+                if _groups[_index] or _paths:
+                    _counts.append(len(_paths) if _paths is not None else len(_groups[_index]))
+            progress_total=sum(_counts)
+            progress_resumed=sum(_counts[:resume_completed])
+        def report_execution_progress(*,force=False):
+            nonlocal progress_last
+            shown=min(progress_total,progress_resumed+done)
+            value=(shown,progress_total)
+            if value!=progress_last and (force or done%progress_every==0 or shown==progress_total):
+                report('progress',value)
+                progress_last=value
+                # Include initial/final resume reports in the same input gate.
+                wait(0)
+        if progress_resumed:
+            report_execution_progress(force=True)
         precision=plan['options'].get('precision','High')
         if hasattr(mouse,'configure_precision'):mouse.configure_precision(precision)
         if hasattr(mouse,'configure_drag_backend'):mouse.configure_drag_backend(stroke_delivery.drag_backend)
@@ -2860,20 +2952,37 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             if not force and now-_draw_timer_last[0]<.50:return
             _draw_timer_last[0]=now
             elapsed=max(0.0,now-execution_measure_started)
-            total_paths=max(1,int(plan.get('count') or 0))
+            pause_total=paused_seconds+(max(0.0,now-pause_started_at) if pause_started_at is not None else 0.0)
+            active_elapsed=max(0.0,elapsed-pause_total)
+            session_paths=max(0,progress_total-progress_resumed)
+            total_paths=max(1,session_paths)
+            planned_remaining=(_planned_draw_seconds*session_paths/progress_total
+                               if progress_resumed and progress_total else _planned_draw_seconds)
             if completed:
                 predicted=elapsed;remaining=0.0
             else:
-                path_projection=(elapsed*total_paths/max(1,done)) if done>0 else 0.0
+                path_projection=(active_elapsed*total_paths/max(1,done)) if done>0 else 0.0
                 if path_projection>0:
                     weight=min(.65,max(.15,done/total_paths))
-                    predicted=max(elapsed,((_planned_draw_seconds*(1.0-weight)+path_projection*weight) if _planned_draw_seconds>0 else path_projection))
+                    predicted_active=max(active_elapsed,((planned_remaining*(1.0-weight)+path_projection*weight) if planned_remaining>0 else path_projection))
                 else:
-                    predicted=max(elapsed,_planned_draw_seconds)
-                remaining=max(0.0,predicted-elapsed)
+                    predicted_active=max(active_elapsed,planned_remaining)
+                remaining=max(0.0,predicted_active-active_elapsed)
+                predicted=elapsed+remaining
             report('draw_timer',{'elapsed_seconds':elapsed,'remaining_seconds':remaining,
-                                  'predicted_total_seconds':predicted,'done':int(done),'total':int(plan.get('count') or 0),
-                                  'state':'completed' if completed else 'running'})
+                                  'predicted_total_seconds':predicted,'done':min(progress_total,progress_resumed+done),'total':progress_total,
+                                  'session_done':int(done),'session_total':session_paths,'resumed_paths':progress_resumed,
+                                  'active_elapsed_seconds':active_elapsed,'paused_seconds':pause_total,
+                                  'state':'completed' if completed else ('paused' if pause_started_at is not None else 'running')})
+            # The initial and post-path reports also run outside wait(). A
+            # callback may cancel or cross the deadline, including on the last
+            # path; that must not turn into a false completed result.
+            if not completed:
+                if stop.is_set():raise InterruptedError()
+                if deadline_box[0] is not None and clock()>=deadline_box[0]:
+                    raise InterruptedError('Time limit reached. No automatic restart.')
+            return True
+        timer_tick=None if dry_run else report_draw_timer
         report_draw_timer(force=True)
         if (plan['options'].get('paint_profile') or stroke_delivery.profile_key in ('gartic-phone','skribbl','skribbl-fast','sketchheads')) and not dry_run:
             report('status',f'{stroke_delivery.label}: <= {stroke_delivery.step_px:.0f}px interpolation, {stroke_delivery.min_path_delay*1000:.2f}ms path floor, palette settle={stroke_delivery.palette_click_delay*1000:.0f}ms, backend={stroke_delivery.drag_backend}.')
@@ -3113,7 +3222,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         restored_input_generation=0
 
         def pause_guard():
-            nonlocal paused_seconds,resume_input_generation,execution_pause_count
+            nonlocal paused_seconds,pause_started_at,resume_input_generation,execution_pause_count
             if not paused.is_set():
                 return False
             resume_input_generation+=1
@@ -3123,6 +3232,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             for cached_color in (color_session_cache.values() if isinstance(color_session_cache,dict) else ()):
                 if isinstance(cached_color,dict):cached_color.pop('sample',None)
             pause_started=clock()
+            pause_started_at=pause_started
             try:
                 if not dry_run:mouse.release()
                 if hasattr(mouse,'reset_tracking'):mouse.reset_tracking()
@@ -3135,6 +3245,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 return True
             finally:
                 paused_seconds+=max(0.0,clock()-pause_started)
+                pause_started_at=None
 
         def draw_path_item(index,item,smart_group=True,verify_color=True,verification_mode='strict',count_progress=True,slow_probe=False,screen_points=None):
             nonlocal done,sent_paths,guard_skipped_paths,restored_input_generation,_verified_execution_brush
@@ -3184,8 +3295,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 if count_progress:
                     done += 1
                     guard_skipped_paths += 1
-                    if done % progress_every == 0 or done == plan['count']:
-                        report('progress', (done, plan['count']))
+                    if done % progress_every == 0 or progress_resumed+done == progress_total:
+                        report_execution_progress()
                         report_draw_timer()
                 return {'matched': False, 'skipped': True, 'available':False, 'reason': 'outside safe canvas'}
             if (not dry_run and verification_mode!='adaptive' and index not in verified_colors
@@ -3323,8 +3434,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 if not dry_run:sent_paths += 1
                 natural_pause=cadence.boundary_pause(done)
                 if natural_pause:wait(natural_pause)
-                if done % progress_every == 0 or done == plan['count']:
-                    report('progress', (done, plan['count']))
+                report_execution_progress()
+                report_draw_timer()
             return verification
 
         def verify_color_batch(index,item,smart_group,selected_method,color_number,total_colors):
@@ -3696,8 +3807,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             report('status',f'Adaptive brush: {effective}px selected for the current detail pass.')
             return True
 
-        execution_sequence=list(plan.get('execution_sequence') or [])
-        has_execution_sequence=bool(execution_sequence)
+        execution_sequence=prepared_execution_sequence
         sequence_completed_counts={}
         sequence_new_completed=0
         sequence_last_entry=None
@@ -3954,6 +4064,9 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     if expected_fp==actual_fp and expected_count==len(ordered_items):
                         resume_path_start=max(0,min(int(resume_info.get('next_path_index',0) or 0),len(ordered_items)))
                         if resume_path_start:
+                            progress_resumed+=resume_path_start
+                            report_execution_progress(force=True)
+                            report_draw_timer(force=True)
                             report('status',f'Smart Recovery: skipping {resume_path_start} already-completed path(s) in color {color_number}; resuming at path {resume_path_start+1}/{len(ordered_items)}.')
                     else:
                         report('status','Smart Recovery path ordering changed after replanning. No path-level skip was applied; restarting only the current color batch safely.')
@@ -3987,6 +4100,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 if not dry_run and checkpoint is not None:
                     progress=checkpoint_after_batch(plan,color_number,prelude_complete=True)
                     checkpoint(progress)
+        report_execution_progress(force=True)
         execution_measure_completed_at=clock()
         if (not dry_run) and execution_measure_started is not None:
             _initial_elapsed=max(.001,execution_measure_completed_at-execution_measure_started)
@@ -4138,7 +4252,7 @@ class DrawBotApp:
         if keyboard_backend is None:
             import keyboard as keyboard_backend
         self.root, self.mouse, self.keyboard = root, mouse_backend, keyboard_backend
-        self.events = queue.Queue()
+        self.events = WorkerEventQueue()
         self.stop, self.paused = threading.Event(), threading.Event()
         self.worker = None
         self.activity = None
@@ -4238,6 +4352,9 @@ class DrawBotApp:
         self.browser_one_click_pending = False
         self.browser_one_click_source_label = ''
         self.browser_one_click_after = None
+        self.browser_one_click_after_ticket = None
+        self.browser_one_click_request = None
+        self.browser_one_click_worker_request = None
         # v1.0.69: Mobile Preview is opt-in and local-network only. The HTTP
         # server is not created/bound until the user explicitly starts it.
         self.mobile_preview_server = None
@@ -4597,6 +4714,7 @@ class DrawBotApp:
     def _apply_recovery_snapshot(self, state, *, recovered_image=_RECOVERY_IMAGE_UNSET):
         """Restore local work only; every input safety gate remains reset/disarmed."""
         from SessionRecovery import load_cached_image
+        DrawBotApp._cancel_browser_one_click(self,'safe session recovery')
         DrawBotApp._disarm_full_draw(self,'safe session recovery',update_text=True)
         try:
             if hasattr(self.mouse,'disarm_input'):self.mouse.disarm_input()
@@ -5220,6 +5338,12 @@ class DrawBotApp:
         # Diagnostic gates remain available, but no profile requires them.
         return False
 
+    def _automatic_paint_preparation(self):
+        """Only Auto may replace Paint's selected tool and calibration at Start."""
+        profile=getattr(getattr(self,'game',None),'get',lambda:None)()
+        selected=getattr(getattr(self,'paint_tool',None),'get',lambda:'Auto (recommended)')()
+        return profile=='Microsoft Paint' and selected=='Auto (recommended)'
+
     def _start_guard_ready(self, *, require_image=True):
         """Return basic setup readiness without moving or clicking the mouse."""
         if require_image and self.original is None:
@@ -5288,7 +5412,7 @@ class DrawBotApp:
         if getattr(self,'closing',False):
             return
         unlocked = DrawBotApp._full_draw_unlocked(self)
-        start_text = ('▶️  Prepare Paint & draw' if getattr(getattr(self,'game',None),'get',lambda:None)()=='Microsoft Paint' else
+        start_text = ('▶️  Prepare Paint & draw' if DrawBotApp._automatic_paint_preparation(self) else
                       ('▶️  Start Drawing' if unlocked else '🔒  Start locked'))
         unlock_text = '✓  Unlocked for 12s' if unlocked else '🔓  Unlock full drawing'
         for name in ('start', 'start_secondary'):
@@ -5935,7 +6059,7 @@ class DrawBotApp:
         """Start is separate from unlock and refuses to run while locked."""
         if self.activity or self.closing:
             return
-        if self.game.get()=='Microsoft Paint':
+        if DrawBotApp._automatic_paint_preparation(self):
             if self.original is None:
                 self.status.set('Load an image first. Paint will be prepared automatically when you start.');return False
             return self.auto_calibrate_paint_tools(start_after=True)
@@ -5950,10 +6074,10 @@ class DrawBotApp:
         if not DrawBotApp._strict_safety_required(self):
             if not DrawBotApp._full_draw_unlocked(self):
                 self.status.set('Start Drawing is locked. Press Unlock full drawing first, then Start Drawing within 12 seconds.')
-                log_event('Blocked non-Paint Start Drawing because explicit unlock was not active.')
+                log_event('Blocked manual Start Drawing because explicit unlock was not active.')
                 return
             self._disarm_full_draw('start accepted', update_text=True)
-            log_event('Non-Paint Start Drawing accepted after simplified explicit unlock.')
+            log_event('Manual Start Drawing accepted after setup checks and explicit unlock.')
             return DrawBotApp.draw(self,user_initiated=True)
         if not DrawBotApp._target_lock_valid(self):
             self._disarm_full_draw('target lock invalid before start')
@@ -6029,7 +6153,7 @@ class DrawBotApp:
             preflight_valid=target_lock_valid and DrawBotApp._safety_preflight_valid(self)
             dry_run_valid=preflight_valid and DrawBotApp._dry_run_valid(self)
             unlocked=(dry_run_valid if strict else basic_ready) and DrawBotApp._full_draw_unlocked(self)
-            if self.game.get()=='Microsoft Paint':unlocked=self.original is not None
+            if DrawBotApp._automatic_paint_preparation(self):unlocked=self.original is not None
             if hasattr(self,'start'):
                 self._safe_widget_configure(self.start,state='normal' if unlocked else 'disabled')
             if hasattr(self,'start_secondary'):
@@ -6055,7 +6179,7 @@ class DrawBotApp:
             DrawBotApp._refresh_target_lock_text(self)
             DrawBotApp._refresh_start_buttons_text(self)
             if self.original is None:self.next_step.set('Select an image or drag an image file here.')
-            elif self.game.get()=='Microsoft Paint':self.next_step.set('Press Prepare Paint & draw. Canvas, tools and RGB colors are calibrated automatically.')
+            elif DrawBotApp._automatic_paint_preparation(self):self.next_step.set('Press Prepare Paint & draw. Canvas, tools and RGB colors are calibrated automatically.')
             elif len(self.corners)!=2:self.next_step.set('Press Select drawing area and mark only the drawable canvas.')
             elif not palette_ready:self.next_step.set('Read the color palette for the selected profile, or use a supported mode that intentionally bypasses palette clicks.')
             elif not tool_ready:self.next_step.set('Calibrate Paint tools. Auto mode needs Pencil, or Brush + 100% opacity.')
@@ -6240,76 +6364,145 @@ class DrawBotApp:
                 DrawBotApp._browser_one_click_active(self) or bool(getattr(self,'browser_one_click_force',False)))
         except Exception:return False
 
+    def _cancel_browser_one_click(self, reason='', *, request=None):
+        """Revoke an owned deferred start, even if another worker clears Stop."""
+        current=getattr(self,'browser_one_click_request',None)
+        if request is not None and current is not request:return False
+        if isinstance(current,dict):
+            current['cancelled'].set()
+            pending=getattr(self,'one_click_setup_verify_pending',None)
+            if isinstance(pending,dict) and pending.get('_browser_request') is current:
+                DrawBotApp._cancel_after_attr(self,'one_click_setup_after')
+                self.one_click_setup_verify_pending=None
+                self.one_click_setup_verify_payload=None
+        had_request=current is not None or bool(getattr(self,'browser_one_click_pending',False))
+        self.browser_one_click_request=None
+        self.browser_one_click_pending=False
+        self.browser_one_click_force=False
+        self.browser_one_click_after_ticket=None
+        DrawBotApp._cancel_after_attr(self,'browser_one_click_after')
+        if had_request and reason:log_event(f'Browser One-Click request revoked: {reason}.')
+        return had_request
+
+    def _new_browser_one_click_request(self, *, force=False, auto_start=True):
+        DrawBotApp._cancel_browser_one_click(self,'replaced by a new request')
+        profile_name=self.game.get()
+        request={
+            'image':self.original, 'profile_name':profile_name,
+            'profile_key':PROFILES.get(profile_name,('',))[0],
+            'force':bool(force), 'auto_start':bool(auto_start),
+            'cancelled':threading.Event(), 'phase':'queued' if auto_start else 'setup',
+        }
+        self.browser_one_click_request=request
+        self.browser_one_click_force=bool(force)
+        return request
+
+    def _browser_one_click_request_current(self, request):
+        """UI-thread identity check; workers use only the captured cancel event."""
+        if not isinstance(request,dict) or request is not getattr(self,'browser_one_click_request',None):return False
+        if request['cancelled'].is_set() or getattr(self,'closing',False):return False
+        stop=getattr(self,'stop',None)
+        if stop is not None and stop.is_set():return False
+        if (getattr(self,'pending_clear_drawing',None) is not None or
+                getattr(self,'profile_change_after',None) is not None or
+                getattr(self,'profile_change_in_progress',False)):return False
+        if self.original is not request['image']:return False
+        profile_name=self.game.get()
+        if (profile_name!=request['profile_name'] or
+                PROFILES.get(profile_name,('',))[0]!=request['profile_key']):return False
+        return not request['auto_start'] or request['force'] or DrawBotApp._browser_one_click_active(self)
+
+    def _schedule_browser_one_click(self, request, *, finish=False, delay=40):
+        if not DrawBotApp._browser_one_click_request_current(self,request):
+            DrawBotApp._cancel_browser_one_click(self,'request context changed',request=request)
+            return False
+        DrawBotApp._cancel_after_attr(self,'browser_one_click_after')
+        ticket=object();self.browser_one_click_after_ticket=ticket
+        def run():
+            # after_cancel can race with an already dispatched callback. An old
+            # callback must neither start nor clear a newer request's Tk token.
+            if getattr(self,'browser_one_click_after_ticket',None) is not ticket:return False
+            self.browser_one_click_after=None;self.browser_one_click_after_ticket=None
+            callback=DrawBotApp._finish_browser_one_click if finish else DrawBotApp._run_browser_one_click
+            return callback(self,request)
+        try:self.browser_one_click_after=self.root.after(delay,run)
+        except (tk.TclError,RuntimeError,AttributeError,ValueError):
+            DrawBotApp._cancel_browser_one_click(self,'callback could not be scheduled',request=request)
+            return False
+        return True
+
     def _queue_browser_one_click_after_import(self, label='image', *, force=False):
-        if self.original is None:return False
-        if force:
-            if not DrawBotApp._browser_one_click_supported(self):return False
-            self.browser_one_click_force=True
-        if not DrawBotApp._browser_one_click_authorized(self):return False
+        if self.original is None or not DrawBotApp._browser_one_click_supported(self):return False
+        if not force and not DrawBotApp._browser_one_click_active(self):return False
+        request=DrawBotApp._new_browser_one_click_request(self,force=force)
         self.browser_one_click_pending=True;self.browser_one_click_source_label=str(label)
         try:
-            suffix=' · canvas-drop one-shot' if bool(getattr(self,'browser_one_click_force',False)) else ''
+            suffix=' · canvas-drop one-shot' if request['force'] else ''
             self.browser_one_click_text.set('One-Click queued'+suffix+' · waiting for image loader/setup to become idle…')
         except Exception:pass
         log_event(
             f'Browser One-Click queued after image import: profile={self.game.get()!r} label={label!r} '
             f'force={bool(getattr(self,"browser_one_click_force",False))}.')
-        DrawBotApp._cancel_after_attr(self,'browser_one_click_after')
-        try:self.browser_one_click_after=self.root.after(40,self._run_browser_one_click)
-        except Exception:
-            self.browser_one_click_after=None
-            if force:self.browser_one_click_force=False
-            return False
-        return True
+        return DrawBotApp._schedule_browser_one_click(self,request)
 
-    def _run_browser_one_click(self):
-        self.browser_one_click_after=None
-        if not getattr(self,'browser_one_click_pending',False) or self.closing:return False
-        if not DrawBotApp._browser_one_click_authorized(self):
-            self.browser_one_click_pending=False;self.browser_one_click_force=False;return False
+    def _run_browser_one_click(self, request=None):
+        if request is None:request=getattr(self,'browser_one_click_request',None)
+        if not DrawBotApp._browser_one_click_request_current(self,request):
+            DrawBotApp._cancel_browser_one_click(self,'request context changed',request=request)
+            return False
+        if request['phase']!='queued' or not request['auto_start']:return False
         if self.activity:
-            DrawBotApp._cancel_after_attr(self,'browser_one_click_after')
-            try:self.browser_one_click_after=self.root.after(80,self._run_browser_one_click)
-            except Exception:self.browser_one_click_after=None
-            return True
-        profile_name=self.game.get();profile_key=PROFILES.get(profile_name,('',))[0]
+            return DrawBotApp._schedule_browser_one_click(self,request,delay=80)
+        profile_name=request['profile_name'];profile_key=request['profile_key']
         current_handle=(self.target_window[0] if getattr(self,'target_window',None) else None)
         palette_path=Path(self.calibration_path)
         self.browser_one_click_pending=False
+        request['phase']='setup';self.browser_one_click_worker_request=request
         self.drop_in_sync_phase=DROP_SYNC_AUTO_SETUP
         self.browser_auto_calibration_success=False
-        force=bool(getattr(self,'browser_one_click_force',False))
+        force=request['force']
         self.status.set('Canvas-drop verification: checking game window, canvas and palette…' if force else 'One-Click: finding/verifying the game window, canvas and palette…')
         try:self.browser_one_click_text.set(('Canvas-drop one-shot verification' if force else 'One-Click setup')+' running · read-only browser scan · no mouse input.')
         except Exception:pass
         def work():
             from BrowserOneClick import one_click_setup
-            payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,cancelled=self.stop.is_set)
+            cancelled=lambda:request['cancelled'].is_set() or self.stop.is_set()
+            if cancelled():raise InterruptedError('One-Click request cancelled.')
+            payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,cancelled=cancelled)
+            if cancelled():raise InterruptedError('One-Click request cancelled.')
             payload['one_click_force']=force
+            payload['_browser_request']=request
             self.events.put(('browser_one_click_setup_complete',payload))
-        started=bool(self.begin_worker('browser-one-click-setup',work))
-        if not started and force:self.browser_one_click_force=False
+        try:started=bool(self.begin_worker('browser-one-click-setup',work))
+        except Exception:
+            self.browser_one_click_worker_request=None
+            DrawBotApp._cancel_browser_one_click(self,'worker could not start',request=request)
+            raise
+        if not started:
+            self.browser_one_click_worker_request=None
+            DrawBotApp._cancel_browser_one_click(self,'worker refused the request',request=request)
         return started
 
-    def _finish_browser_one_click(self):
-        if self.closing or self.activity:return False
-        force=bool(getattr(self,'browser_one_click_force',False))
-        if not DrawBotApp._browser_one_click_authorized(self) or self.original is None:
-            self.browser_one_click_force=False
+    def _finish_browser_one_click(self, request=None):
+        if request is None:request=getattr(self,'browser_one_click_request',None)
+        if not DrawBotApp._browser_one_click_request_current(self,request) or self.activity:
+            DrawBotApp._cancel_browser_one_click(self,'start context changed',request=request)
             return False
+        if request['phase']!='finish' or not request['auto_start']:return False
+        force=request['force']
         ready,message=DrawBotApp._start_guard_ready(self,require_image=True)
         if not ready:
             self.status.set('Canvas drop blocked safely: '+message.replace('Start locked: ','',1) if force else 'One-Click blocked safely: '+message.replace('Start locked: ','',1))
             try:self.browser_one_click_text.set(('Canvas drop blocked · ' if force else 'One-Click blocked · ')+message.replace('Start locked: ','',1))
             except Exception:pass
-            self.browser_one_click_force=False
+            DrawBotApp._cancel_browser_one_click(self,'preflight requirements changed',request=request)
             return False
         self.status.set('Canvas image verified. Building the drawing plan and starting…' if force else 'One-Click setup ready. Running visual preflight and starting drawing…')
         log_event(('Game Canvas Drop one-shot setup ready' if force else 'Browser One-Click setup ready')+'; entering normal draw preflight. CanvasGuard remains mandatory.')
         # Consume the one-shot authorization before native input begins. draw()
         # still performs Auto-Recalibration, Browser Visual Preflight and brush
         # checks before arming any mouse input.
-        self.browser_one_click_force=False
+        DrawBotApp._cancel_browser_one_click(self,'start authorization consumed',request=request)
         return DrawBotApp.draw(self,user_initiated=True)
 
     def auto_calibrate_browser_profile(self, *, automatic=False):
@@ -6396,6 +6589,7 @@ class DrawBotApp:
             self.one_click_setup_text.set('One-click Setup is unavailable for this target. Use the existing manual canvas/palette calibration controls.')
             self.status.set('This target does not have a verified One-click Setup detector. Manual calibration remains available.')
             return False
+        DrawBotApp._cancel_browser_one_click(self,'read-only Setup + Verify selected')
         mouse=getattr(self,'mouse',None)
         if hasattr(mouse,'disarm_input'):
             try:mouse.disarm_input()
@@ -6413,45 +6607,70 @@ class DrawBotApp:
             return started
         current_handle=(self.target_window[0] if getattr(self,'target_window',None) else None)
         palette_path=Path(self.calibration_path)
+        request=DrawBotApp._new_browser_one_click_request(self,auto_start=False)
+        self.one_click_setup_verify_pending['_browser_request']=request
+        self.browser_one_click_worker_request=request
         def work():
             try:
                 from BrowserOneClick import one_click_setup
-                payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,cancelled=self.stop.is_set)
+                cancelled=lambda:request['cancelled'].is_set() or self.stop.is_set()
+                if cancelled():raise InterruptedError('One-click Setup cancelled.')
+                payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,cancelled=cancelled)
+                if cancelled():raise InterruptedError('One-click Setup cancelled.')
                 payload['one_click_setup_verify_only']=True
+                payload['_browser_request']=request
                 self.events.put(('browser_one_click_setup_complete',payload))
+            except InterruptedError:raise
             except Exception as error:
                 self.events.put(('one_click_setup_verification_complete',{
                     'passed':False,'profile_key':profile_key,'mode':'browser','confidence':0.0,
                     'canvas_ok':False,'palette_ok':False,'palette_verified':0,'palette_tested':0,
                     'tool_ok':False,'reasons':[str(error)],'error':str(error),'profile_name':profile_name,
+                    '_browser_request':request,
                 }))
-        started=bool(self.begin_worker('browser-one-click-setup',work))
-        if not started:self.one_click_setup_verify_pending=None
+        try:started=bool(self.begin_worker('browser-one-click-setup',work))
+        except Exception:
+            self.browser_one_click_worker_request=None
+            DrawBotApp._cancel_browser_one_click(self,'verification worker could not start',request=request)
+            raise
+        if not started:
+            self.browser_one_click_worker_request=None
+            DrawBotApp._cancel_browser_one_click(self,'verification worker refused the request',request=request)
         return started
 
     def _queue_one_click_setup_verification(self, setup_payload):
         pending=getattr(self,'one_click_setup_verify_pending',None)
         if not isinstance(pending,dict):return False
+        request=pending.get('_browser_request')
+        if request is not None and not DrawBotApp._browser_one_click_request_current(self,request):
+            DrawBotApp._cancel_browser_one_click(self,'verification context changed',request=request)
+            return False
         if pending.get('profile_name')!=self.game.get():
             self.one_click_setup_verify_pending=None;self.one_click_setup_verify_payload=None
             return False
         self.one_click_setup_verify_payload=dict(setup_payload or {})
         DrawBotApp._cancel_after_attr(self,'one_click_setup_after')
-        try:self.one_click_setup_after=self.root.after(80,self._start_one_click_setup_verification)
+        try:self.one_click_setup_after=self.root.after(80,lambda:DrawBotApp._start_one_click_setup_verification(self,pending))
         except (tk.TclError,RuntimeError):self.one_click_setup_after=None;return False
         self.one_click_setup_text.set('Initial setup found. Running an independent live canvas/palette verification pass…')
         return True
 
-    def _start_one_click_setup_verification(self):
+    def _start_one_click_setup_verification(self, pending=None):
+        current=getattr(self,'one_click_setup_verify_pending',None)
+        if pending is None:pending=current
+        if pending is not current:return False
         self.one_click_setup_after=None
-        pending=getattr(self,'one_click_setup_verify_pending',None)
         payload=getattr(self,'one_click_setup_verify_payload',None)
         if not isinstance(pending,dict) or not isinstance(payload,dict) or self.closing:return False
+        request=pending.get('_browser_request')
+        if request is not None and not DrawBotApp._browser_one_click_request_current(self,request):
+            DrawBotApp._cancel_browser_one_click(self,'verification context changed',request=request)
+            return False
         if pending.get('profile_name')!=self.game.get():
             self.one_click_setup_verify_pending=None;self.one_click_setup_verify_payload=None
             return False
         if self.activity:
-            try:self.one_click_setup_after=self.root.after(80,self._start_one_click_setup_verification)
+            try:self.one_click_setup_after=self.root.after(80,lambda:DrawBotApp._start_one_click_setup_verification(self,pending))
             except (tk.TclError,RuntimeError):self.one_click_setup_after=None
             return True
         profile_name=str(pending['profile_name']);profile_key=str(pending['profile_key']);mode=str(pending['mode'])
@@ -6461,23 +6680,29 @@ class DrawBotApp:
                 'passed':False,'profile_key':profile_key,'mode':mode,'confidence':0.0,'canvas_ok':False,
                 'palette_ok':False,'palette_verified':0,'palette_tested':0,'tool_ok':False,
                 'reasons':['setup did not return complete target/canvas metadata'],'profile_name':profile_name,
+                '_browser_request':request,
             }))
             return False
         palette_path=Path(self.calibration_path)
+        if request is not None:request['phase']='verifying'
         def work():
             try:
+                cancelled=lambda:self.stop.is_set() or (request is not None and request['cancelled'].is_set())
+                if cancelled():raise InterruptedError('One-click Setup verification cancelled.')
                 from ScreenGuard import WindowMonitor
                 from PIL import ImageGrab
                 monitor=WindowMonitor();handle=int(meta['handle']);target=(handle,tuple(meta['rect']))
                 if not monitor.activate(target):raise ValueError('Windows could not activate the verified target for the second read-only check.')
-                if self.stop.wait(.18):raise InterruptedError('One-click Setup verification cancelled.')
+                if self.stop.wait(.18) or cancelled():raise InterruptedError('One-click Setup verification cancelled.')
                 current_rect=tuple(monitor.rectangle(handle));client=tuple(monitor.client_rectangle(handle));dpi=monitor.dpi(handle)
                 live_meta=dict(meta);live_meta.update({'handle':handle,'rect':current_rect,'client_rect':client,'dpi':dpi})
                 shot=ImageGrab.grab(bbox=client,all_screens=True).convert('RGB')
                 from OneClickSetupVerification import verify_browser_live,verify_paint_live
                 result=(verify_browser_live(profile_key,live_meta,canvas,palette_path,screenshot=shot)
                         if mode=='browser' else verify_paint_live(live_meta,canvas,palette_path,screenshot=shot))
+                if cancelled():raise InterruptedError('One-click Setup verification cancelled.')
                 out=result.as_dict();out['profile_name']=profile_name;out['target_meta']=live_meta
+                out['_browser_request']=request
                 self.events.put(('one_click_setup_verification_complete',out))
             except InterruptedError:raise
             except Exception as error:
@@ -6485,6 +6710,7 @@ class DrawBotApp:
                     'passed':False,'profile_key':profile_key,'mode':mode,'confidence':0.0,'canvas_ok':False,
                     'palette_ok':False,'palette_verified':0,'palette_tested':0,'tool_ok':False,
                     'reasons':[str(error)],'error':str(error),'profile_name':profile_name,
+                    '_browser_request':request,
                 }))
         return bool(self.begin_worker('one-click-verify',work))
 
@@ -6599,9 +6825,9 @@ class DrawBotApp:
                     from ExactColorTools import save as save_exact_colors
                     from CalibrationAnchors import make_anchor
                     save_exact_colors('microsoft-paint',exact_controls,anchor=make_anchor(rect))
-                shot=ImageGrab.grab(bbox=rect,all_screens=True)
-                if shot.size!=(rect[2]-rect[0],rect[3]-rect[1]):raise ValueError('Paint window changed size. Try again.')
-                result=detect_setup(shot,screen_origin=rect[:2],cancelled=self.stop.is_set,canvas_box_override=manual_canvas)
+                with closing(ImageGrab.grab(bbox=rect,all_screens=True)) as shot:
+                    if shot.size!=(rect[2]-rect[0],rect[3]-rect[1]):raise ValueError('Paint window changed size. Try again.')
+                    result=detect_setup(shot,screen_origin=rect[:2],cancelled=self.stop.is_set,canvas_box_override=manual_canvas)
                 if self.stop.is_set():raise InterruptedError()
                 fresh=probe_handle_isolated(int(candidate['handle']),cancelled=self.stop.is_set)
                 if tuple(fresh['client_rect'])!=rect:raise ValueError('Paint moved during calibration. Try again.')
@@ -6611,6 +6837,7 @@ class DrawBotApp:
                 result['exact_colors_bypassed']=bool(_skip_exact_rgb)
                 result['exact_colors_reused']=bool(exact_reused)
                 result['prepared_brush_px']=int(_paint_brush_px)
+                result['brush_px_requested']=_paint_brush_raw
                 result['auto_brush_width_meta']=dict(_paint_brush_meta or {})
                 result['start_request']=request
                 self.events.put(('paint_auto_calibration_complete',result))
@@ -6623,7 +6850,7 @@ class DrawBotApp:
                     self.events.put(('one_click_setup_verification_complete',{
                         'passed':False,'profile_key':'microsoft-paint','mode':'paint','confidence':0.0,
                         'canvas_ok':False,'palette_ok':False,'palette_verified':0,'palette_tested':0,
-                        'tool_ok':False,'reasons':[str(error)],'error':str(error),'profile_name':self.game.get(),
+                        'tool_ok':False,'reasons':[str(error)],'error':str(error),'profile_name':'Microsoft Paint',
                     }))
                     return
                 raise
@@ -6634,7 +6861,7 @@ class DrawBotApp:
 
     def _resume_prepared_paint(self,request):
         if (request is None or getattr(self,'paint_start_request',None) is not request
-                or self.closing or self.stop.is_set() or self.game.get()!='Microsoft Paint'
+                or self.closing or self.stop.is_set() or not DrawBotApp._automatic_paint_preparation(self)
                 or self.original is not request['image']):
             if getattr(self,'paint_start_request',None) is request:self.paint_start_request=None
             return False
@@ -6642,6 +6869,13 @@ class DrawBotApp:
             self.root.after(50,lambda:DrawBotApp._resume_prepared_paint(self,request))
             return False
         self.paint_start_request=None
+        prepared=request.get('prepared_options')
+        if prepared is not None:
+            requested=getattr(getattr(self,'brush_px',None),'get',lambda:None)()
+            if str(requested).casefold()!=str(prepared['brush_px_requested']).casefold():
+                self.status.set('Paint brush settings changed after preparation. Press Start again to prepare the new width.')
+                return False
+            return DrawBotApp.draw(self,user_initiated=True,paint_prepared=True,paint_prepared_options=prepared)
         return DrawBotApp.draw(self,user_initiated=True,paint_prepared=True)
 
 
@@ -6771,6 +7005,7 @@ class DrawBotApp:
             DrawBotApp._cancel_after_attr(self,'profile_change_after')
             self.status.set('Profile change stopped because the current settings could not be saved.')
             return
+        DrawBotApp._cancel_browser_one_click(self,'profile changed')
         DrawBotApp._disarm_manual_drop_in(self,'profile changed')
         DrawBotApp._clear_render_resume(self,'profile changed by user')
         # Profile changes are configuration-only. Explicitly lock native input
@@ -6803,7 +7038,7 @@ class DrawBotApp:
         self.profile_change_in_progress=True
         try:
             DrawBotApp._close_smart_drop_overlay(self,'profile changed')
-            self.browser_one_click_force=False
+            DrawBotApp._cancel_browser_one_click(self,'profile applied')
             self.smart_drop_pending_payload=None
             self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
             from ProfileIsolation import reset_settings
@@ -7641,6 +7876,7 @@ class DrawBotApp:
         if previous is None:
             self.status.set('No background-removal change to undo.')
             return False
+        DrawBotApp._cancel_browser_one_click(self,'background removal undone')
         self.original=previous.copy();self.background_removal_original=None;self.background_removal_meta=None
         self.plan=None;DrawBotApp._clear_render_resume(self,'background removal undone')
         self.file_label.set(image_label(self.original,'Background removal undone'))
@@ -7687,9 +7923,7 @@ class DrawBotApp:
             return
         import customtkinter as ctk
         from ImageUpscale import suggested_factor,upscale_size
-        self.browser_one_click_pending=False
-        self.browser_one_click_force=False
-        DrawBotApp._cancel_after_attr(self,'browser_one_click_after')
+        DrawBotApp._cancel_browser_one_click(self,'image editing')
         DrawBotApp._disarm_manual_drop_in(self,'image editing')
         source=self.original
         dialog=ctk.CTkToplevel(self.root)
@@ -7740,9 +7974,7 @@ class DrawBotApp:
         if previous is None:
             self.status.set('No upscaling to undo for this image.')
             return
-        self.browser_one_click_pending=False
-        self.browser_one_click_force=False
-        DrawBotApp._cancel_after_attr(self,'browser_one_click_after')
+        DrawBotApp._cancel_browser_one_click(self,'undo upscaling')
         DrawBotApp._disarm_manual_drop_in(self,'undo upscaling')
         DrawBotApp._handle_event(self,'upscaled',(previous,None))
 
@@ -7835,6 +8067,7 @@ class DrawBotApp:
         ttk.Label(window,text='Check that the correct drawing area is selected. This is a screenshot, not automatic application recognition.').pack(padx=12)
         def use():
             if not DrawBotApp._profile_action_ready(self):return False
+            DrawBotApp._cancel_browser_one_click(self,'source replaced by screen image')
             self._suppress_recovery=False;self.original=image.convert('RGBA');self.plan=None;self.file_label.set('Image from screen')
             self.subject_region=None;self.upscale_original=None
             self.background_removal_original=None;self.background_removal_meta=None
@@ -7934,6 +8167,16 @@ class DrawBotApp:
         if not DrawBotApp._profile_action_ready(self):
             log_event(f'Worker {activity} not started: busy={self.activity!r} closing={self.closing!r}.')
             return False
+        request=getattr(self,'browser_one_click_request',None)
+        browser_worker_request=None
+        if (activity=='browser-one-click-setup' and isinstance(request,dict) and
+                request is getattr(self,'browser_one_click_worker_request',None) and
+                request['phase']=='setup' and not request['cancelled'].is_set()):
+            browser_worker_request=request
+        elif not (activity=='one-click-verify' and isinstance(request,dict) and
+                  not request['auto_start'] and request['phase']=='verifying' and
+                  not request['cancelled'].is_set()):
+            DrawBotApp._cancel_browser_one_click(self,'another operation started')
         DrawBotApp._cancel_after_attr(self,'preview_after')
         DrawBotApp._cancel_after_attr(self,'preview_render_after')
         from ScreenTaskWindow import ScreenTaskWindow, SCREEN_ACTIVITIES
@@ -7964,7 +8207,8 @@ class DrawBotApp:
             else:
                 log_event(f'Worker {activity} finished in {time.monotonic()-started:.3f} s.')
             finally:
-                self.events.put(('done',activity))
+                completion=(activity,browser_worker_request) if browser_worker_request is not None else activity
+                self.events.put(('done',completion))
         try:
             if activity in SCREEN_ACTIVITIES:screen_window.hide()
             self.screen_task_window=screen_window
@@ -8129,6 +8373,7 @@ class DrawBotApp:
 
     def options_changed(self,*args):
         if self.activity or self.closing or getattr(self,'profile_change_in_progress',False):return
+        DrawBotApp._cancel_browser_one_click(self,'drawing settings changed')
         self._mark_plan_stale('Settings changed. Press Build preview to refresh the preview. Start Drawing builds the final plan manually.')
         if hasattr(self,'recovery_checkpoint_after'):
             DrawBotApp._schedule_recovery_checkpoint(self,delay=300)
@@ -9102,7 +9347,7 @@ class DrawBotApp:
                 raise ValueError(f'Anchor Transform rebased the canvas, but the target lock could not be refreshed: {error}') from error
         return current
 
-    def draw(self,test=False,dry_run=False,user_initiated=False,paint_prepared=False):
+    def draw(self,test=False,dry_run=False,user_initiated=False,paint_prepared=False,paint_prepared_options=None):
         # Loading, dropping, profile switching and background callbacks must
         # never arm the mouse. Only explicit UI controls pass this flag.
         if not user_initiated:
@@ -9111,7 +9356,7 @@ class DrawBotApp:
             return
         if self.activity or self.closing:return
         if (not test and not dry_run and not paint_prepared
-                and getattr(getattr(self,'game',None),'get',lambda:None)()=='Microsoft Paint'):
+                and DrawBotApp._automatic_paint_preparation(self)):
             if self.original is None:
                 self.status.set('Load an image before starting Paint.');return False
             return self.auto_calibrate_paint_tools(start_after=True)
@@ -9152,6 +9397,18 @@ class DrawBotApp:
                 raise ValueError('The color palette overlaps the drawing area. Select only the canvas.')
             options=self.options()
             profile_key=PROFILES[self.game.get()][0]
+            if paint_prepared_options is not None:
+                if not isinstance(paint_prepared_options,dict):
+                    raise ValueError('Prepared Paint brush settings are invalid. Prepare Paint again.')
+                prepared_width=paint_prepared_options.get('brush_px')
+                if (not paint_profile or not paint_prepared or type(prepared_width) is not int
+                        or not 1<=prepared_width<=50):
+                    raise ValueError('Prepared Paint brush width is invalid. Prepare Paint again.')
+                # Auto may resolve differently after discovering a new canvas.
+                # This run must model the width actually selected by preparation.
+                options=dict(options,brush_px=prepared_width,canvas_guard_brush_px=prepared_width,
+                    brush_px_requested=paint_prepared_options['brush_px_requested'],
+                    auto_brush_width_meta=dict(paint_prepared_options.get('auto_brush_width_meta') or {}))
             # v1.0.74: browser brush size is detected read-only from the already
             # verified layout. Only a visually plausible control row produces a
             # click target; otherwise execution leaves the website untouched and
@@ -9500,7 +9757,7 @@ class DrawBotApp:
         now=time.monotonic();last=float(getattr(self,'quick_start_last_monotonic',0.0) or 0.0)
         if now-last<.70:return False
         self.quick_start_last_monotonic=now
-        if self.game.get()=='Microsoft Paint':
+        if DrawBotApp._automatic_paint_preparation(self):
             log_event('F1 Quick Start requested for Paint; using Prepare Paint & draw flow.')
             return DrawBotApp.start_full_drawing(self)
         ready,message=DrawBotApp._start_guard_ready(self,require_image=True)
@@ -9539,9 +9796,7 @@ class DrawBotApp:
         DrawBotApp._disarm_full_draw(self,'cancel/stop pressed')
         DrawBotApp._cancel_after_attr(self,'preview_after')
         DrawBotApp._cancel_after_attr(self,'preview_render_after')
-        DrawBotApp._cancel_after_attr(self,'browser_one_click_after')
-        self.browser_one_click_pending=False
-        self.browser_one_click_force=False
+        DrawBotApp._cancel_browser_one_click(self,'Stop pressed')
         self.stop.set();self.paused.clear()
         process=getattr(self,'mouse_probe_process',None)
         if process is not None:
@@ -9580,8 +9835,10 @@ class DrawBotApp:
         def safe_get(variable, default=''):
             try:return variable.get()
             except Exception:return default
+        profile_name=getattr(self,'_active_profile_name',None) or safe_get(self.game)
         return {
-            'profile': safe_get(self.game), 'activity': str(self.activity or 'idle'),
+            'profile': profile_name, 'profile_key': PROFILES.get(profile_name,('',))[0],
+            'activity': str(self.activity or 'idle'),
             'quality': safe_get(self.quality), 'speed': safe_get(self.speed),
             'precision': safe_get(self.precision), 'render_style': safe_get(self.render_style),
             'draw_quality': safe_get(self.draw_quality), 'human_mode': safe_get(self.human_mode),
@@ -10133,7 +10390,8 @@ class DrawBotApp:
                                   tools_ready=tool_ready,palette_ready=palette_ready,area_ready=area_ready,
                                   small_test_passed=bool(getattr(self,'small_test_passed',False)),
                                   target_locked=locked,preflight_passed=preflight,dry_run_passed=dryrun,
-                                  full_draw_unlocked=unlocked,activity=getattr(self,'activity',None))
+                                  full_draw_unlocked=unlocked,activity=getattr(self,'activity',None),
+                                  prepare_on_start=DrawBotApp._automatic_paint_preparation(self))
 
     def refresh_beginner_setup_wizard(self):
         """Refresh the compact setup-wizard status line."""
@@ -10203,8 +10461,21 @@ class DrawBotApp:
             candidate.close()
 
     def _handle_event(self,kind,value):
+        browser_done_request=None
+        if (kind=='done' and isinstance(value,tuple) and len(value)==2 and
+                value[0]=='browser-one-click-setup'):
+            _,browser_done_request=value
+            if browser_done_request is not getattr(self,'browser_one_click_worker_request',None):
+                log_event('Ignored Browser One-Click completion from an older worker.')
+                return
+            value='browser-one-click-setup'
+        elif (kind=='done' and value=='browser-one-click-setup' and
+                getattr(self,'browser_one_click_worker_request',None) is not None):
+            log_event('Ignored Browser One-Click completion without its worker identity.')
+            return
         if getattr(self,'pending_clear_drawing',None) is not None:
             if kind=='done':
+                if browser_done_request is not None:self.browser_one_click_worker_request=None
                 if value=='performance-auto-tuner':self.hardware_benchmark_running=False
                 if value=='recovery-clear':self._recovery_clear_previous_suppression=None
                 self.activity=None;self.worker=None
@@ -10213,9 +10484,12 @@ class DrawBotApp:
             else:DrawBotApp._discard_worker_result(self,kind,value)
             return
         stop=getattr(self,'stop',None)
-        if stop is not None and stop.is_set() and kind in ('status','progress'):
+        if stop is not None and stop.is_set() and kind in ('status','progress','deadline_telemetry'):
             # Status already queued by a worker must not undo the user's Stop.
             # The matching completion event below confirms when it has exited.
+            return
+        if (stop is not None and stop.is_set() and kind=='draw_timer'
+                and isinstance(value,dict) and value.get('state')!='completed'):
             return
         if (stop is not None and stop.is_set() and kind in
                 ('loaded','pasted','planned','background_removed','screen','recovery_loaded','paint_auto_calibration_complete',
@@ -10250,10 +10524,15 @@ class DrawBotApp:
         elif kind=='paint_auto_calibration_complete':
             if self.game.get()!='Microsoft Paint':return
             meta,canvas=_validated_setup_payload(value,require_canvas=True);l,t,r,b=canvas
+            prepared_width=value.get('prepared_brush_px',1)
+            if type(prepared_width) is not int or not 1<=prepared_width<=50:
+                raise ValueError('Prepared Paint brush width is invalid. Prepare Paint again.')
+            brush_requested=('Auto' if str(value.get('brush_px_requested','')).casefold()=='auto'
+                             else str(prepared_width))
             self.corners=[(l,t),(r,b)];self.saved_area=list(self.corners);self.canvas_anchor_detection=None
             self.target_window=(int(meta['handle']),tuple(meta['rect']))
             self.target_client_rect=tuple(meta['client_rect']);self.target_dpi=meta.get('dpi')
-            self.paint_tool.set('Auto (recommended)');self.brush_px.set('1')
+            self.paint_tool.set('Auto (recommended)');self.brush_px.set(brush_requested)
             self.area_text.set(f'✓ Paint canvas {r-l} × {b-t} px')
             self.color_session_cache.clear();self.refresh_palette();self.refresh_tool_calibration()
             self._mark_plan_stale('Paint setup changed. Build preview when ready.')
@@ -10264,10 +10543,14 @@ class DrawBotApp:
             self.refresh_exact_color_status()
             self.save_settings()
             self.one_click_setup_verify_pending=None;self.one_click_setup_verify_payload=None
-            self.one_click_setup_text.set('Paint ready: canvas, pencil, 1 px, palette and RGB controls calibrated.')
+            self.one_click_setup_text.set(f'Paint ready: canvas, pencil, {prepared_width} px, palette and RGB controls calibrated.')
             self.status.set('Paint ready. Colors are calibrated automatically before each drawing; no test or preview is required.')
             request=value.get('start_request')
             if request is not None:
+                request['prepared_options']={
+                    'brush_px':prepared_width,'brush_px_requested':brush_requested,
+                    'auto_brush_width_meta':dict(value.get('auto_brush_width_meta') or {}),
+                }
                 self.root.after(50,lambda:DrawBotApp._resume_prepared_paint(self,request))
         elif kind=='update_progress':
             self.update_summary.set(str(value))
@@ -10371,33 +10654,47 @@ class DrawBotApp:
                 log_event(f'Game Canvas Drop detection ready: canvas={payload.get("canvas_box")!r} confidence={confidence:.3f}.')
         elif kind=='browser_one_click_setup_complete':
             payload=value if isinstance(value,dict) else {}
-            force=bool(payload.get('one_click_force') or getattr(self,'browser_one_click_force',False))
-            profile_name=str(payload.get('profile_name') or self.game.get())
-            if profile_name!=self.game.get():
-                self.browser_one_click_force=False
-                log_event('Ignored stale Browser One-Click setup result after profile change.')
-            else:
-                self.browser_auto_calibration_success=False
-                meta,canvas=_validated_setup_payload(payload,require_canvas=True)
-                # Preserve the one-shot canvas-drop authorization through the
-                # setup-complete event until _finish_browser_one_click consumes it.
-                if force:self.browser_one_click_force=True
-                if canvas is not None:
-                    l,t,r,b=map(int,canvas);self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)];self.canvas_anchor_detection=None
-                    self.area_text.set(f'✓ Canvas Drop verified {r-l} × {b-t} px' if force else f'✓ One-Click canvas {r-l} × {b-t} px')
-                if meta.get('handle') and meta.get('rect') and meta.get('client_rect'):
-                    self.target_window=(int(meta['handle']),tuple(meta['rect']));self.target_client_rect=tuple(meta['client_rect']);self.target_dpi=meta.get('dpi')
-                self.color_session_cache.clear();self.refresh_palette();self.small_test_passed=False
-                self._mark_plan_stale('Game Canvas Drop refreshed canvas/palette.' if force else 'Browser One-Click refreshed canvas/palette.')
-                count=int(payload.get('palette_count',0) or 0);confidence=float(payload.get('confidence',0) or 0)
-                self.browser_auto_calibration_success=True;self.drop_in_sync_phase=DROP_SYNC_READY
-                self.browser_auto_text.set(f'✓ Canvas-drop verification · {count} colors · confidence {confidence*100:.0f}%' if force else f'✓ One-Click auto setup · {count} colors · confidence {confidence*100:.0f}%')
-                self.browser_one_click_text.set('✓ Canvas image verified · starting drawing…' if force else '✓ One-Click setup ready · visual preflight + auto brush will run before drawing.')
-                log_event(f'Browser One-Click setup completed: profile={profile_name!r} colors={count} confidence={confidence:.3f} canvas={canvas!r} force={force}.')
-                if isinstance(getattr(self,'one_click_setup_verify_pending',None),dict):
-                    DrawBotApp._queue_one_click_setup_verification(self,payload)
+            request=payload.get('_browser_request')
+            if not DrawBotApp._browser_one_click_request_current(self,request):
+                if request is not None:DrawBotApp._cancel_browser_one_click(self,'setup context changed',request=request)
+                log_event('Ignored Browser One-Click setup result without its current image/profile request.')
+                return
+            if request['phase']!='setup':return
+            profile_name=str(payload.get('profile_name') or request['profile_name'])
+            if profile_name!=request['profile_name']:
+                DrawBotApp._cancel_browser_one_click(self,'setup returned a different profile',request=request)
+                return
+            force=request['force']
+            self.browser_auto_calibration_success=False
+            meta,canvas=_validated_setup_payload(payload,require_canvas=True)
+            # Preserve only this image's one-shot permission until its owned
+            # finish callback consumes it. A global switch cannot replace it.
+            self.browser_one_click_force=force
+            if canvas is not None:
+                l,t,r,b=map(int,canvas);self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)];self.canvas_anchor_detection=None
+                self.area_text.set(f'✓ Canvas Drop verified {r-l} × {b-t} px' if force else f'✓ One-Click canvas {r-l} × {b-t} px')
+            if meta.get('handle') and meta.get('rect') and meta.get('client_rect'):
+                self.target_window=(int(meta['handle']),tuple(meta['rect']));self.target_client_rect=tuple(meta['client_rect']);self.target_dpi=meta.get('dpi')
+            self.color_session_cache.clear();self.refresh_palette();self.small_test_passed=False
+            self._mark_plan_stale('Game Canvas Drop refreshed canvas/palette.' if force else 'Browser One-Click refreshed canvas/palette.')
+            count=int(payload.get('palette_count',0) or 0);confidence=float(payload.get('confidence',0) or 0)
+            request['phase']='ready'
+            self.browser_auto_calibration_success=True;self.drop_in_sync_phase=DROP_SYNC_READY
+            self.browser_auto_text.set(f'✓ Canvas-drop verification · {count} colors · confidence {confidence*100:.0f}%' if force else f'✓ One-Click auto setup · {count} colors · confidence {confidence*100:.0f}%')
+            self.browser_one_click_text.set(('✓ Canvas image verified · starting drawing…' if force else '✓ One-Click setup ready · visual preflight + auto brush will run before drawing.')
+                                            if request['auto_start'] else 'Initial setup found · independent read-only verification pending.')
+            log_event(f'Browser One-Click setup completed: profile={profile_name!r} colors={count} confidence={confidence:.3f} canvas={canvas!r} force={force}.')
+            pending=getattr(self,'one_click_setup_verify_pending',None)
+            if not request['auto_start'] and isinstance(pending,dict) and pending.get('_browser_request') is request:
+                DrawBotApp._queue_one_click_setup_verification(self,payload)
         elif kind=='one_click_setup_verification_complete':
             payload=value if isinstance(value,dict) else {}
+            request=payload.get('_browser_request')
+            if str(payload.get('mode'))=='browser':
+                if (not DrawBotApp._browser_one_click_request_current(self,request) or request['auto_start']):
+                    if request is not None:DrawBotApp._cancel_browser_one_click(self,'verification context changed',request=request)
+                    log_event('Ignored Browser One-click verification result from an older request.')
+                    return
             profile_name=str(payload.get('profile_name') or self.game.get())
             pending=getattr(self,'one_click_setup_verify_pending',None)
             if profile_name!=self.game.get() or (isinstance(pending,dict) and pending.get('profile_name')!=profile_name):
@@ -10418,6 +10715,7 @@ class DrawBotApp:
                     self.status.set(f'One-click Setup blocked safely: {reason} Use manual calibration if the target layout changed.')
                     log_event(f'Step 27.5 One-click Setup BLOCKED: profile={profile_name!r} reason={reason!r}. No drawing input was sent.')
             self.one_click_setup_verify_pending=None;self.one_click_setup_verify_payload=None
+            if request is not None:DrawBotApp._cancel_browser_one_click(self,'read-only verification finished',request=request)
         elif kind=='browser_auto_calibration_complete':
             payload=value if isinstance(value,dict) else {}
             profile_name=str(payload.get('profile_name') or self.game.get())
@@ -10547,8 +10845,9 @@ class DrawBotApp:
                 if str(data.get('state') or '')=='completed':
                     self.draw_live_time_text.set(f'Drawing timer: {format_duration(elapsed)} elapsed · complete')
                 else:
-                    self.draw_live_time_text.set(f'Drawing timer: {format_duration(elapsed)} elapsed · ≈ {format_duration(remaining)} remaining · ≈ {format_duration(predicted)} total')
-                    self.total_draw_time_text.set('Total draw time: drawing…')
+                    paused_note=' · paused' if data.get('state')=='paused' else ''
+                    self.draw_live_time_text.set(f'Drawing timer: {format_duration(elapsed)} elapsed{paused_note} · ≈ {format_duration(remaining)} remaining · ≈ {format_duration(predicted)} total')
+                    self.total_draw_time_text.set('Total draw time: paused…' if paused_note else 'Total draw time: drawing…')
             except (TypeError,ValueError,tk.TclError,AttributeError):
                 pass
         elif kind=='draw_time_actual':
@@ -10564,6 +10863,7 @@ class DrawBotApp:
             if value[1] is not None and (self.stop.is_set() or self.original is not value[1]):
                 DrawBotApp._discard_worker_result(self,kind,value)
                 return
+            DrawBotApp._cancel_browser_one_click(self,'source image resized')
             self._suppress_recovery=False
             self.original,previous=value
             self.upscale_original=previous
@@ -10592,6 +10892,7 @@ class DrawBotApp:
                     self.status.set(f'Background remover kept the original: {reason}.')
                     return
                 prepared=image if image.mode=='RGBA' else image.convert('RGBA')
+                DrawBotApp._cancel_browser_one_click(self,'source background changed')
                 if self.background_removal_original is None:
                     self.background_removal_original=self.original.copy()
                 self.original=prepared;self.background_removal_meta=dict(meta);self.plan=None
@@ -10609,6 +10910,7 @@ class DrawBotApp:
             self.status.set(f'PNG saved: {value}')
             log_event(f'PNG export saved: {value!r}.')
         elif kind=='pasted':
+            DrawBotApp._cancel_browser_one_click(self,'source replaced by pasted image')
             self._suppress_recovery=False;self.original,action=value;self.plan=None
             self.upscale_original=None
             self.background_removal_original=None;self.background_removal_meta=None
@@ -10629,6 +10931,7 @@ class DrawBotApp:
             if not queued and action is None:
                 DrawBotApp._queue_browser_one_click_after_import(self,'pasted image')
         elif kind=='loaded':
+            DrawBotApp._cancel_browser_one_click(self,'source image replaced')
             self._suppress_recovery=False
             self.background_removal_original=None;self.background_removal_meta=None
             self.upscale_original=None
@@ -10992,6 +11295,7 @@ class DrawBotApp:
             from StabilityRC import current_completion
             if current_completion(self.activity,value):
                 finished=self.activity
+                if browser_done_request is not None:self.browser_one_click_worker_request=None
                 if finished=='recovery-clear':
                     previous=getattr(self,'_recovery_clear_previous_suppression',None)
                     self._recovery_clear_previous_suppression=None
@@ -11043,12 +11347,15 @@ class DrawBotApp:
                 if finished=='load' and not self.closing:
                     DrawBotApp._schedule_pending_drop_in_start(self)
                 if finished=='browser-one-click-setup' and not self.closing:
-                    if bool(getattr(self,'browser_auto_calibration_success',False)):
-                        try:self.root.after(40,self._finish_browser_one_click)
-                        except Exception:DrawBotApp._finish_browser_one_click(self)
-                    else:
-                        force=bool(getattr(self,'browser_one_click_force',False))
-                        self.browser_one_click_force=False
+                    request=browser_done_request
+                    if (DrawBotApp._browser_one_click_request_current(self,request) and
+                            request['phase']=='ready' and request['auto_start']):
+                        request['phase']='finish'
+                        DrawBotApp._schedule_browser_one_click(self,request,finish=True)
+                    elif (request is not None and request is getattr(self,'browser_one_click_request',None) and
+                          request['phase']!='ready'):
+                        force=request['force']
+                        DrawBotApp._cancel_browser_one_click(self,'setup did not finish successfully',request=request)
                         self.drop_in_sync_phase=DROP_SYNC_IDLE
                         try:self.browser_one_click_text.set(('Canvas-drop verification failed safely. The image is loaded, but drawing was not started.' if force else 'One-Click setup failed safely. Bring the game window into view or use Auto setup browser manually.'))
                         except Exception:pass
@@ -11135,8 +11442,7 @@ class DrawBotApp:
         # a queued One-Click request is re-scheduled as soon as the UI is idle.
         if (getattr(self,'browser_one_click_pending',False) and not self.activity and
                 not self.closing and getattr(self,'browser_one_click_after',None) is None):
-            try:self.browser_one_click_after=self.root.after(40,self._run_browser_one_click)
-            except (tk.TclError,RuntimeError,AttributeError):self.browser_one_click_after=None
+            DrawBotApp._schedule_browser_one_click(self,getattr(self,'browser_one_click_request',None))
         if self.needs_plan and not self.activity and not self.closing:
             self.needs_plan=False
             if hasattr(self,'_maybe_auto_preview'):

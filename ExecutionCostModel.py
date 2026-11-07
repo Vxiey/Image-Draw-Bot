@@ -11,7 +11,7 @@ otherwise conservative deterministic defaults remain authoritative.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 import math
 from typing import Any, Iterable, Sequence
 
@@ -80,6 +80,40 @@ class CostBreakdown:
             if isinstance(value, float):
                 out[key] = round(value, 6)
         return out
+
+
+@dataclass(frozen=True)
+class PreparedPathCost:
+    """One immutable path/model snapshot for repeated cursor comparisons.
+
+    Keep the original ``(travel_base + distance + body) * multiplier``
+    evaluation order. Adding a travel delta to an already rounded total can
+    change a close candidate tie, even when the formulas are algebraically
+    equivalent. No path, options or persistent model cache is retained here.
+    """
+    baseline: CostBreakdown
+    start: Point | None
+    scale_x: float
+    scale_y: float
+    travel_base: float
+    body: float
+    multiplier: float
+
+    def _travel(self, cursor: Point | None) -> float:
+        pixels=0.0 if cursor is None else math.hypot(
+            (self.start[0]-cursor[0])*self.scale_x,
+            (self.start[1]-cursor[1])*self.scale_y)
+        return self.travel_base+min(.10,pixels*.000045)
+
+    def seconds(self, *, cursor: Point | None = None) -> float:
+        if self.start is None:return 0.0
+        return (self._travel(cursor)+self.body)*self.multiplier
+
+    def cost(self, *, cursor: Point | None = None) -> CostBreakdown:
+        if self.start is None:return self.baseline
+        travel=self._travel(cursor)
+        return replace(self.baseline,total_seconds=(travel+self.body)*self.multiplier,
+                       travel_seconds=travel*self.multiplier)
 
 
 class ExecutionCostModel:
@@ -193,6 +227,28 @@ class ExecutionCostModel:
 
     def path_seconds(self,path: Sequence[Point],*,cursor: Point|None=None,brush_px: int|None=None) -> float:
         return float(self.path_cost(path,cursor=cursor,brush_px=brush_px).total_seconds)
+
+    def prepare_path_cost(self, path: Sequence[Point], *, brush_px: int | None = None,
+                          cancelled=lambda: False) -> PreparedPathCost:
+        """Resolve invariant geometry once for an operation-local comparison."""
+        if cancelled():raise InterruptedError()
+        path=tuple((int(point[0]),int(point[1])) for point in (path or ()))
+        baseline=self.path_cost(path,brush_px=brush_px)
+        if cancelled():raise InterruptedError()
+        if not path:
+            return PreparedPathCost(baseline,None,self.sx,self.sy,self.travel_wait,0.0,1.0)
+        kind=_operation_type(path,_path_length(path,self.sx,self.sy))
+        target=max(.012,self.boundary_wait) if len(path)<=1 else self.boundary_wait+.0015
+        press_release=float(self.delivery.press_settle+self.delivery.release_settle)
+        body=(press_release+target if len(path)<=1
+              else press_release+baseline.moves*self.path_wait+target)
+        learned=self._learned_average(kind,0.0)
+        if learned>0.0:
+            body=max(.001,learned-self.travel_wait);multiplier=1.0
+        else:
+            multiplier=self.multiplier
+        if cancelled():raise InterruptedError()
+        return PreparedPathCost(baseline,path[0],self.sx,self.sy,self.travel_wait,body,multiplier)
 
     def paths_seconds(self,paths: Iterable[Sequence[Point]],*,cursor: Point|None=None,brush_px: int|None=None) -> float:
         total=0.0;current=cursor

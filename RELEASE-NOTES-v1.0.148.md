@@ -1,6 +1,28 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 781 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11 2 changes in batch 12 and 2 in resumed maintenance. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 796 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 14: reliable execution, physical subject previews and responsive inspection
+
+- Preserve manual Paint tool choices and calibration at Start. Auto preparation carries its verified physical brush width into the final plan.
+- Keep worker status/progress queues current and update drawing time during real strokes. Long pauses no longer inflate the estimated remaining work; interrupted timer callbacks cannot report completion.
+- Speed up lossless Pixel path attachment and repeated cursor-cost comparisons without changing their ordered output. Preserve fractional alpha when palette matching falls back to the last CPU route.
+- Make all twelve previews accessible by keyboard, release failed auxiliary image buffers and avoid the color raster that the planner immediately replaced.
+- Import the selected browser image using its HTML fragment and original URL context. Complete existing AVIF admission across file selection, drag-and-drop and data URLs.
+- Bind deferred Browser One-Click starts to their exact image/profile request, revoke stale callbacks after Stop and keep Setup + Verify read-only.
+- Show verified saved progress during resumed drawing without adding it to new runtime or learning counters.
+- Resume repeated color batches and inherited brush widths accurately. Serialize source Start/Update through application exit and include the active profile in bounded diagnostic exports.
+- Complete the existing Subject-only contract for signed/half-pixel canvas placement, physical brush footprints, actual coverage and guarded preview pixels. These corrections add no extra improvement IDs.
+
+Fifteen new behavior groups bring the register to **796**, leaving **204**
+before the requested release target. Final local discovery passed **3,768 tests**
+(46 platform/hardware skips), with unchanged source hashes. Independent reviews,
+the 5,000-cycle source gate, source-package hygiene and eight exact-raster
+fixtures passed. Six balanced paired CPU measurements preserve complete results;
+the four full-planning fixtures take 24.2–66.3% less CPU time. Exact native Windows
+and packaged GUI checks belong to the published commit linked from PR46.
+[Complete batch validation](docs/v148-batch14-validation.json) records the scope.
+No 1.0.148 release has been published.
 
 ## Resumed maintenance: faster routes and completed behavior
 
@@ -16,7 +38,7 @@
   local verification logs from source packages, and correct download/status docs.
 - Retain Python 3.11 support through the compatible NumPy range.
 
-The registry contains **781 entries, with 219 remaining**. Local integration
+That maintenance checkpoint contains **781 entries, with 219 remaining**. Local integration
 passed **3,649 tests**, with **45 platform/hardware skips**, and unchanged source
 hashes. [Maintenance evidence](docs/v148-improvement-progress.md#resumed-maintenance-r1301-and-p1301),
 [paired measurements](docs/v148-maintenance-stroke-benchmarks.json) and

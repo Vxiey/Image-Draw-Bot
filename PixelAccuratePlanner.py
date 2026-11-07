@@ -110,8 +110,21 @@ def _palette_tiles(height: int, width: int, palette_count: int, row_chunk: int):
                    slice(x0, min(width, x0 + tile_width)))
 
 
+def _matching_rgb_tile(rgb, alpha, rows, columns):
+    if alpha is None:return rgb[rows,columns]
+    # Preserve the routed float32 arithmetic without retaining a full-image
+    # float RGB composite in the last-resort matcher.
+    pixels=rgb[rows,columns].astype(np.float32)
+    opacity=alpha[rows,columns].astype(np.float32)
+    pixels *= opacity[...,None]
+    pixels += (255.0*(255.0-opacity))[...,None]
+    pixels /= 255.0
+    return pixels
+
+
 def _cpu_palette_map(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
                      color_fidelity: str = "Faithful", row_chunk: int = 96,
+                     alpha: np.ndarray | None = None,
                      cancelled=lambda: False) -> np.ndarray:
     if cancelled():raise InterruptedError()
     validate_palette_count(len(palette))
@@ -124,7 +137,7 @@ def _cpu_palette_map(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
         pal_chroma, pal_hue = _oklab_chroma_hue(pal_ok)
         for rows, columns in _palette_tiles(h, w, len(pal), row_chunk):
             if cancelled():raise InterruptedError()
-            src_ok = _to_oklab(rgb[rows, columns])
+            src_ok = _to_oklab(_matching_rgb_tile(rgb,alpha,rows,columns))
             diff = src_ok[:, :, None, :] - pal_ok[None, None, :, :]
             dist = np.sqrt(np.sum(diff * diff, axis=3, dtype=np.float32), dtype=np.float32) * 100.0
             if color_fidelity in ("Balanced", "Faithful"):
@@ -155,7 +168,7 @@ def _cpu_palette_map(rgb: np.ndarray, palette: np.ndarray, *, perceptual: bool,
     else:
         for rows, columns in _palette_tiles(h, w, len(pal), row_chunk):
             if cancelled():raise InterruptedError()
-            src = rgb[rows, columns].astype(np.float32)
+            src = np.asarray(_matching_rgb_tile(rgb,alpha,rows,columns),dtype=np.float32)
             diff = src[:, :, None, :] - pal[None, None, :, :]
             dist = np.sum(diff * diff, axis=3)
             out[rows, columns] = np.argmin(dist, axis=2).astype(np.int16)
@@ -184,10 +197,6 @@ def exact_palette_map(image: Image.Image, palette_rgb: Sequence[Sequence[int]], 
 def _exact_palette_map_visible(rgba, rgb, palette, *, color_rendering, color_fidelity, skip_white, gpu_mode, cancelled):
     if cancelled():raise InterruptedError()
 
-    drawable = np.any(np.asarray(rgba, dtype=np.uint8)[..., 3:4] > 0, axis=2)
-    if skip_white:
-        drawable &= np.min(rgb, axis=2) < 245
-
     # Step 23: Auto is vendor-neutral. The saved Step 22 profile may select
     # CUDA, OpenCL (AMD/Intel/NVIDIA) or CPU independently for palette matching.
     try:
@@ -214,8 +223,25 @@ def _exact_palette_map_visible(rgba, rgb, palette, *, color_rendering, color_fid
     except Exception as exc:
         # Last-resort deterministic path. UniversalGpuAcceleration already
         # falls back internally, but this protects imports/corrupt profiles too.
+        # Matching uses the unrounded visible RGB in every routed backend.
+        # The byte RGB retained by PixelMap is for image/feature analysis, not
+        # a substitute matching input: rounding can cross a palette midpoint
+        # or the strict Skip-white boundary at 245.
+        if cancelled():raise InterruptedError()
+        raw=np.asarray(rgba,dtype=np.uint8);alpha=raw[...,3]
+        drawable=alpha>0
+        if skip_white:
+            for rows,columns in _palette_tiles(*alpha.shape,len(palette),96):
+                if cancelled():raise InterruptedError()
+                opacity=alpha[rows,columns].astype(np.uint16)
+                minimum=np.min(raw[rows,columns,:3],axis=2).astype(np.uint16)
+                # All products fit uint16 (maximum 65,025). This exact
+                # numerator preserves the strict unrounded boundary at 245.
+                drawable[rows,columns] &= minimum*opacity+255*(255-opacity)<245*255
+        if cancelled():raise InterruptedError()
         perceptual = color_rendering != "RGB nearest"
-        index_map = _cpu_palette_map(rgb, palette, perceptual=perceptual, color_fidelity=color_fidelity,cancelled=cancelled)
+        index_map = _cpu_palette_map(raw[...,:3],palette,perceptual=perceptual,
+            color_fidelity=color_fidelity,alpha=alpha,cancelled=cancelled)
         return index_map, drawable.astype(np.bool_), rgb, {
             "palette_backend": "cpu-numpy", "palette_backend_id": "cpu:numpy",
             "palette_route": {"fallback_reason": f"{type(exc).__name__}: {exc}"},

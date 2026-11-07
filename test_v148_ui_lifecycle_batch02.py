@@ -60,8 +60,13 @@ class IncomingStateTests(unittest.TestCase):
         for event in ('browser_auto_calibration_complete','browser_one_click_setup_complete'):
             with self.subTest(event=event):
                 app=ui_app();before=(list(app.corners),app.target_window)
+                payload=self.payload(canvas_box=(0,0,300,180))
+                if event=='browser_one_click_setup_complete':
+                    request=DrawBotApp._new_browser_one_click_request(app,force=True)
+                    request['phase']='setup'
+                    payload['_browser_request']=request
                 with self.assertRaises(ValueError):
-                    DrawBotApp._handle_event(app,event,self.payload(canvas_box=(0,0,300,180)))
+                    DrawBotApp._handle_event(app,event,payload)
                 self.assertEqual((app.corners,app.target_window),before)
                 self.assertFalse(app.browser_auto_calibration_success)
                 app.refresh_palette.assert_not_called()

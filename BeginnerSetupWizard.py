@@ -37,8 +37,9 @@ def build_setup_wizard(*, profile_name: str = "Other drawing app", image_loaded:
                        tools_ready: bool = False, palette_ready: bool = False, area_ready: bool = False,
                        small_test_passed: bool = False, target_locked: bool = False,
                        preflight_passed: bool = False, dry_run_passed: bool = False,
-                       full_draw_unlocked: bool = False, activity: str | None = None) -> tuple[WizardStep, ...]:
-    if profile_name == "Microsoft Paint":
+                       full_draw_unlocked: bool = False, activity: str | None = None,
+                       prepare_on_start: bool = True) -> tuple[WizardStep, ...]:
+    if profile_name == "Microsoft Paint" and prepare_on_start:
         return (
             WizardStep("image", "Load image", _state(image_loaded), "Select, paste or drop an image.", blocks_start=not image_loaded),
             WizardStep("prepare", "Automatic Paint preparation", "optional", "Start finds Paint, canvas, pencil size, palette and RGB controls automatically."),
@@ -47,6 +48,7 @@ def build_setup_wizard(*, profile_name: str = "Other drawing app", image_loaded:
                        detail="Another operation is running." if activity else "", blocks_start=not image_loaded or bool(activity)),
         )
     strict = False
+    manual_paint = profile_name == 'Microsoft Paint'
     profile_key=str(PROFILES.get(profile_name,('generic',))[0])
     capability=capability_for_key(profile_key)
     browser=capability.kind.startswith('browser-')
@@ -54,6 +56,9 @@ def build_setup_wizard(*, profile_name: str = "Other drawing app", image_loaded:
     calibration_action=("Run Auto setup browser to verify the visible canvas, palette and brush controls."
                         if auto_browser else
                         "Use Calibrate Brush / Fill and Read colors for this profile. Keep the target layout fixed.")
+    if manual_paint:
+        calibration_action = ("Keep the selected Paint tool and size. Use Calibrate Paint tools and Read colors "
+                              "for the controls required by that tool; select only the drawable canvas.")
     steps = [
         WizardStep("profile", "Choose target profile", "done" if profile_name else "next",
                    "Choose Paint, Gartic Phone, Skribbl.io or another drawing target.",
@@ -61,10 +66,11 @@ def build_setup_wizard(*, profile_name: str = "Other drawing app", image_loaded:
         WizardStep("image", "Load image", _state(image_loaded),
                    "Select, paste or drop an image.",
                    detail="Source image is loaded." if image_loaded else "No source image is loaded.", blocks_start=not image_loaded),
-        WizardStep("calibration", "Calibrate tools and colors", _state(tools_ready and palette_ready, optional=palette_ready),
+        WizardStep("calibration", "Calibrate tools and colors", _state(tools_ready and palette_ready,
+                   optional=palette_ready and not manual_paint),
                    calibration_action,
                    detail=("Tools and palette are ready." if tools_ready and palette_ready else "Tool or palette setup is still missing."),
-                   blocks_start=not palette_ready),
+                   blocks_start=not palette_ready or (manual_paint and not tools_ready)),
         WizardStep("canvas", "Select drawing area", _state(area_ready, blocked=not image_loaded),
                    "Select only the drawable canvas, not the toolbar or browser chrome.",
                    detail="Drawing area is selected." if area_ready else "Canvas bounds are missing.", blocks_start=not area_ready),
@@ -85,8 +91,9 @@ def build_setup_wizard(*, profile_name: str = "Other drawing app", image_loaded:
         ])
     else:
         steps.extend([
-            WizardStep("auto_setup", "Browser/game setup" if auto_browser else "Manual target setup", _state(tools_ready and palette_ready and area_ready, optional=not auto_browser),
+            WizardStep("auto_setup", "Browser/game setup" if auto_browser else "Manual Paint setup" if manual_paint else "Manual target setup", _state(tools_ready and palette_ready and area_ready, optional=not auto_browser),
                        "Use Auto setup browser; manual setup is fallback." if auto_browser else
+                       "Start preserves your selected manual Paint tool. Finish calibration, then Unlock full drawing and Start." if manual_paint else
                        "This target uses manual calibration. Read its colors and select only the drawable canvas.",
                        blocks_start=False),
             WizardStep("diagnostics", "Optional diagnostics", "optional",

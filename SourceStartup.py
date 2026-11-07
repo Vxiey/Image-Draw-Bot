@@ -14,7 +14,7 @@ import sys
 
 from GpuSetupRuntime import (SetupEnvironmentError, checked_requirements,
                              pip_command, pip_environment, require_private_environment)
-from RuntimePaths import atomic_write_text
+from RuntimePaths import atomic_write_text, file_transaction
 
 
 ROOT = Path(__file__).resolve().parent
@@ -38,7 +38,29 @@ def _run(command, *, root, environment, check=False, capture=False, timeout=None
 
 
 def start_source(root=ROOT, *, update=False, gpu=False):
+    """Own the private environment through setup and the launched app's exit.
+
+    A second Start/Update must not run pip against an environment currently
+    being created, repaired or used by the first source application. The
+    stable lock lives in the already excluded build directory, outside .venv
+    so it also protects first-time environment creation.
+    """
     root = Path(root).resolve()
+    acquired = False
+    try:
+        with file_transaction(root / 'build' / '.source-startup', timeout=0.):
+            acquired = True
+            return _start_source(root, update=update, gpu=gpu)
+    except TimeoutError as error:
+        if acquired:
+            raise
+        raise SetupEnvironmentError(
+            'Another source startup or application is already using this environment. '
+            'Close it before starting or updating this checkout again.'
+        ) from error
+
+
+def _start_source(root, *, update=False, gpu=False):
     if not (root/'DrawBot.py').is_file():
         raise SetupEnvironmentError('Required source files are missing. Extract the entire source ZIP before starting.')
     try:

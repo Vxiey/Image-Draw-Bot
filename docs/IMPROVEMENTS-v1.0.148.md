@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 781 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **219 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 796 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **204 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -59,7 +59,14 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 780 | R1301 | Resumed maintenance: reuse 2-opt route-boundary costs | 1 | [Maintenance evidence](v148-improvement-progress.md#resumed-maintenance-r1301-and-p1301); independent parity review and [paired measurements](v148-maintenance-stroke-benchmarks.json). |
 | 781 | P1301 | Resumed maintenance: bounded Windows full-suite verification | 1 | [Maintenance evidence](v148-improvement-progress.md#resumed-maintenance-r1301-and-p1301); actual CLI subprocess-boundary regressions and independent review. |
 
+| 782–786 | A1401–A1405 | Batch 14 display events, Paint, live/resumed progress and browser start ownership | 5 | [Application ledger](v148-batch14-application.md), [browser start ledger](v148-batch14-browser-start.md); independent controller and actual-executor review. |
+| 787–789 | R1401–R1403 | Batch 14 lossless attachment, translucent fallback and prepared path costs | 3 | [Rendering ledger](v148-batch14-rendering.md); independent source and exact raster review. |
+| 790–792 | U1401–U1403 | Batch 14 preview ownership, keyboard inspection and selected browser images | 3 | [UI ledger](v148-batch14-ui-workflow.md); independent renderer review. |
+| 793–796 | P1401–P1404 | Batch 14 ordered resume, physical widths, source ownership and active diagnostics | 4 | [Platform ledger](v148-batch14-platform.md); independent root and native-execution review. |
+
 ## Integration evidence
+
+- Batch 14: final frozen-source discovery passed **3,768 tests in 98.292 seconds**, with 46 platform/hardware skips and unchanged hashes for 806 source/configuration files. All fifteen groups have closed independent source reviews. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. [Final validation](v148-batch14-validation.json), [paired CPU measurements](v148-batch14-rendering-benchmarks.json) and [raster fixtures](v148-batch14-engine-benchmarks.json) bind the tested source. Six balanced AB/BA pairs preserve complete outputs across 942 helper/scheduler cases and four public planners; the measured complete-planning CPU reductions are 24.2–66.3%, with allocation scope reported separately. These results do not measure native drawing or GPU speed. Exact-commit Windows/Linux, dependency, CodeQL and packaged GUI checks are linked from PR46 after publication. This checkpoint adds fifteen groups and leaves 204 toward the requested target. Subject native footprint/preview and ownership, AVIF admission and late Stop status complete existing contracts with zero additional IDs.
 
 - Resumed maintenance: whole-program discovery passed 3,649 tests in 100.304 seconds with 45 platform/hardware skips and unchanged hashes for 787 Python, batch, workflow and requirements files. Independent source reviews closed for preview, physical brush policy, route optimization, Windows verification and source packaging. The source gate passed 5,000 cycles. Exact-raster and source-package results are recorded in v148-maintenance-validation.json. GitHub checks for the exact published commit are linked from PR46. Version 1.0.148 is not released. [Validation report](v148-maintenance-validation.json). Preview/brush completions, package exclusions, version updates and documentation add no duplicate IDs.
 

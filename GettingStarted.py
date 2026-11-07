@@ -148,11 +148,15 @@ def explain(title, fallback=''):
     return title + '\n\n' + (fallback or 'Leave the default for your first drawing. Change one setting at a time and rebuild the preview to compare.')
 
 
-def guide_pages(profile):
+def guide_pages(profile, *, prepare_on_start=True):
     pages = [(title, list(cards)) for title, cards in PAGES]
-    if profile == 'Microsoft Paint':
+    if profile == 'Microsoft Paint' and prepare_on_start:
         pages[1][1][1] = ('Prepare Paint', 'Open Paint with an empty canvas and keep its toolbar visible. Choose the Microsoft Paint profile. Prepare Paint & draw prepares the canvas, pencil size and RGB controls before drawing.')
         pages[4][1][0] = ('Start in Paint', 'Load an image, then press Prepare Paint & draw. This performs setup and then draws; it is not just a calibration button. Preview and small tests are optional but useful for a first attempt.')
+    elif profile == 'Microsoft Paint':
+        pages[1][1][1] = ('Manual Paint tool', 'Keep your selected Paint tool and size. Calibrate its required controls, read colors when needed and select only the drawable canvas. Start preserves this manual tool choice.')
+        pages[2][1][1] = ('Setup and drawing area', 'Use Calibrate Paint tools for the selected tool, Read colors when the tool uses palette colors, and Select drawing area around only the canvas. Auto (recommended) is the separate automatic Paint preparation mode.')
+        pages[4][1][0] = ('Start with the selected Paint tool', 'Complete the manual setup, then use Unlock full drawing and Start drawing. Keep the target visible and follow the countdown. Tests and previews remain optional. Start does not switch your manual tool to Pencil.')
     else:
         from GameProfiles import PROFILES
         from TargetCapabilities import requires_manual_setup
@@ -197,7 +201,7 @@ def show_guide(app):
             pass
     window = None
     state = {'page': 0, 'closed': False, 'resize_job': None,
-             'profile_job': None, 'trace': None, 'last_wrap': None}
+             'profile_job': None, 'traces': [], 'last_wrap': None}
     labels = []
 
     def cleanup(event=None):
@@ -212,11 +216,10 @@ def show_guide(app):
                     window.after_cancel(job)
                 except (tk.TclError, RuntimeError):
                     pass
-        trace = state['trace']
-        state['trace'] = None
-        if trace is not None:
+        traces, state['traces'] = state['traces'], []
+        for variable, trace in traces:
             try:
-                app.game.trace_remove('write', trace)
+                variable.trace_remove('write', trace)
             except (tk.TclError, RuntimeError):
                 pass
         if getattr(app, '_getting_started_window', None) is window:
@@ -244,7 +247,9 @@ def show_guide(app):
         if state['closed']:
             return
         profile = app.game.get()
-        title, cards = guide_pages(profile)[index]
+        prepare_on_start = bool(getattr(app, '_automatic_paint_preparation',
+            lambda: profile == 'Microsoft Paint')())
+        title, cards = guide_pages(profile, prepare_on_start=prepare_on_start)[index]
         old_children = body.winfo_children()
         page = ctk.CTkFrame(body, fg_color='transparent')
         new_labels = []
@@ -336,7 +341,10 @@ def show_guide(app):
         window.bind('<Escape>', done)
         window.bind('<Destroy>', cleanup, add='+')
         window.protocol('WM_DELETE_WINDOW', done)
-        state['trace'] = app.game.trace_add('write', profile_changed)
+        variables = (app.game, getattr(app, 'paint_tool', None))
+        for variable in variables:
+            if variable is not None and all(variable is not prior for prior, _ in state['traces']):
+                state['traces'].append((variable, variable.trace_add('write', profile_changed)))
         render(0)
         return window
     except BaseException:

@@ -763,7 +763,7 @@ def build_ui(a, quality, speed):
 
     full_preview_row=frame(workspace_center);full_preview_row.pack(fill='x',padx=16,pady=(0,5))
     btn(full_preview_row,'Full detail preview',a.request_full_preview,height=32).pack(side='left')
-    fit_label(label(full_preview_row,'Native target pixels · 1:1 to inspect · drag to pan',muted=True,size=10,wraplength=300),300).pack(side='left',fill='x',expand=True,padx=8)
+    fit_label(label(full_preview_row,'Drag or arrow keys: pan · +/−: zoom · 0: Fit · 1: 1:1',muted=True,size=10,wraplength=300),300).pack(side='left',fill='x',expand=True,padx=8)
     from PreviewDeck import PreviewDeck
     a.preview_tabs = PreviewDeck(workspace_center, fg_color=PREVIEW, corner_radius=13,
                                  command=lambda:a.schedule_previews(delay=20))
@@ -777,9 +777,12 @@ def build_ui(a, quality, speed):
         ('Safety map', 'safety_canvas'), ('Debug overlay', 'safety_debug_canvas'),
         ('Stroke plan', 'stroke_canvas'), ('Fill regions', 'fill_canvas'),
         ('Color map', 'color_canvas'))
+    from UiKeyboardNavigation import KeyboardPreviewCanvas
     for tab_name, attr in preview_specs:
         tab = a.preview_tabs.add(tab_name)
-        canvas = tk.Canvas(tab, bg=PREVIEW, height=260, highlightthickness=0)
+        canvas = KeyboardPreviewCanvas(tab, bg=PREVIEW, height=260,
+            get_zoom=a.preview_zoom.get, set_zoom=set_zoom, step_zoom=step_zoom,
+            on_pan=lambda:a.schedule_previews(delay=30), available=lambda:not a.closing)
         canvas.pack(fill='both', expand=True, padx=4, pady=4)
         setattr(a, attr, canvas)
         preview_canvases.append(canvas)
@@ -787,7 +790,7 @@ def build_ui(a, quality, speed):
         def pan_start(event,c=canvas):begin_pan(c,event.x,event.y)
         def pan_move(event,c=canvas):
             if move_pan(c,event.x,event.y,a.preview_zoom.get()):a.schedule_previews(delay=30)
-        canvas.bind('<ButtonPress-1>',pan_start)
+        canvas.bind('<ButtonPress-1>',pan_start,add='+')
         canvas.bind('<B1-Motion>',pan_move)
     a.original_canvas.bind('<Button-1>', lambda _e: a.open_file() if a.original is None and not a.activity else None,add='+')
 
@@ -1001,6 +1004,9 @@ def build_ui(a, quality, speed):
             dry_run_passed = bool(a._dry_run_valid())
             full_draw_unlocked = bool(a._full_draw_unlocked())
             palette_ready = palette_ready_now()
+            prepare_on_start = bool(getattr(a, '_automatic_paint_preparation',
+                lambda: a.game.get() == 'Microsoft Paint')())
+            strict_safety = bool(getattr(a, '_strict_safety_required', lambda: False)())
             state = compute_workspace_state(
                 image_loaded=a.original is not None,
                 target_name=a.game.get(),
@@ -1011,15 +1017,16 @@ def build_ui(a, quality, speed):
                 target_locked=target_locked,
                 preflight_passed=preflight_passed,
                 dry_run_passed=dry_run_passed,
-                gpu_text=gpu_summary(), strict_safety=(a.game.get() == 'Microsoft Paint'),
-                prepare_on_start=(a.game.get() == 'Microsoft Paint'), activity=a.activity, status=a.status.get())
+                gpu_text=gpu_summary(), strict_safety=strict_safety,
+                prepare_on_start=prepare_on_start, activity=a.activity, status=a.status.get())
             try:
                 from BeginnerSetupWizard import build_setup_wizard, format_setup_status
                 steps_for_wizard = build_setup_wizard(profile_name=a.game.get(), image_loaded=a.original is not None,
                     tools_ready=tool_ready, palette_ready=palette_ready, area_ready=len(a.corners) == 2,
                     small_test_passed=bool(getattr(a, 'small_test_passed', False)),
                     target_locked=target_locked, preflight_passed=preflight_passed,
-                    dry_run_passed=dry_run_passed, full_draw_unlocked=full_draw_unlocked, activity=a.activity)
+                    dry_run_passed=dry_run_passed, full_draw_unlocked=full_draw_unlocked,
+                    prepare_on_start=prepare_on_start, activity=a.activity)
                 a.setup_wizard_text.set(format_setup_status(steps_for_wizard))
             except Exception:
                 pass

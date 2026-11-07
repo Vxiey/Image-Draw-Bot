@@ -6,6 +6,15 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 14 implements **796 total distinct improvements, with 204 remaining**.
+Final local integration passed **3,768 tests**, with 46 platform/hardware skips
+and unchanged hashes for 806 source/configuration files. Independent reviews,
+the 5,000-cycle source gate and eight exact-raster fixtures passed. [Batch 14
+validation](v148-batch14-validation.json) and [paired CPU measurements](v148-batch14-rendering-benchmarks.json)
+record the source-specific evidence. Exact-commit GitHub checks are linked from
+PR46 after publication. The release condition remains 1,000 independently
+verified behavior changes.
+
 - The first 100 improvements are merged on `main` at `eb9804560c8648a92aabe2688e362a6b4a1d28b5`; Windows and Linux CI passed for their reviewed source head.
 - Version 1.0.147's promotion PR was closed unmerged after the target changed. The RC4 release run was cancelled before publication.
 - Development continues on `improve/v1.0.148`, based on `94a748ec7690eebb542c70311c594aa835434a98`. No 1.0.148 release has been published.
@@ -135,7 +144,7 @@ measurements of a real target application or new feature counts.
 
 ## Resumed maintenance: R1301 and P1301
 
-The current recorded total is **781**, with **219 remaining**. Two new behavior
+That maintenance checkpoint recorded **781**, with **219 remaining**. Two new behavior
 groups are counted; the correctness completions and maintenance do not add IDs.
 
 ### R1301 — reuse adjacent-link costs in the existing 2-opt search
@@ -264,3 +273,12 @@ The signed-in GitHub security pages showed:
 These are observations of the repository dashboards, not antivirus results for
 a new installer and not proof that every possible vulnerability is absent.
 The new source checkpoint must still pass its own dependency and CodeQL checks.
+
+## Confirmed next work after batch 14
+
+- Reuse the immutable sequence checkpoint catalog within one execution. Actual 201-path execution currently rebuilds it nine times, hashing 1,809 catalog entries; Stop can still wait for redundant catalog/context work. Preserve exact schema, occurrence identity and verified completion boundaries, and measure retained memory as well as work/time.
+- Reduce the lifetime of large RGB-gradient scratch arrays in `Sketch2Planner.structure_map`, with complete mask/metadata and real Paint/SketchFill plan parity. This is separate from the existing component-list optimization.
+- Route clipboard text containing an already supported data-image URI, local image path or file URI through the shared bounded importer. Preserve asynchronous ownership and explicitly armed start behavior.
+
+These are reproduced or source-identified candidates, not additional completed
+improvements. New counts require implementation, regression evidence and review.

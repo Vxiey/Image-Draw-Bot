@@ -464,3 +464,77 @@ class KeyboardOptionMenu(_KeyboardFocusSupport, ctk.CTkOptionMenu):
         self._keyboard_closed = True
         self._keyboard_close_popup()
         super().destroy()
+
+
+class KeyboardPreviewCanvas(_KeyboardFocusSupport, tk.Canvas):
+    """Inspect the local preview with one Tab stop and bounded keyboard panning."""
+
+    def __init__(self, *args, get_zoom, set_zoom, step_zoom, on_pan,
+                 available=lambda: True, focus_color='#72e2bd', **kwargs):
+        self._keyboard_closed = False
+        self._get_preview_zoom = get_zoom
+        self._set_preview_zoom = set_zoom
+        self._step_preview_zoom = step_zoom
+        self._preview_pan_changed = on_pan
+        self._preview_available = available
+        kwargs.setdefault('highlightthickness', 2)
+        kwargs.setdefault('highlightbackground', kwargs.get('bg', '#101319'))
+        kwargs.setdefault('highlightcolor', focus_color)
+        super().__init__(*args, **kwargs)
+        self.configure(takefocus=self._keyboard_focusable)
+        self.bind('<FocusIn>', self._keyboard_focus_in, add='+')
+        self.bind('<ButtonPress-1>', self._keyboard_pointer_focus, add='+')
+        self.bind('<KeyPress>', self._keyboard_key_press, add='+')
+
+    def _keyboard_focusable(self, _path=None):
+        try:
+            return bool(not self._keyboard_closed and self.winfo_exists()
+                        and self.winfo_ismapped() and self.cget('state') == 'normal'
+                        and getattr(self, '_preview_image_size', None)
+                        and self._preview_available())
+        except (tk.TclError, RuntimeError):
+            return False
+
+    def _keyboard_focus_in(self, _event=None):
+        if self._keyboard_focusable():
+            self._keyboard_reveal_focus()
+
+    def _keyboard_pointer_focus(self, _event=None):
+        if self._keyboard_focusable():
+            self.focus_set()
+
+    def _keyboard_key_press(self, event):
+        from PreviewNavigation import pan_by, reset_pan
+        key = getattr(event, 'keysym', '')
+        state = getattr(event, 'state', 0) or 0
+        if state & (4 | 8 | 128 | 0x20000):
+            return None
+        if key not in ('Left', 'Right', 'Up', 'Down', 'Prior', 'Next', 'Home',
+                       'plus', 'equal', 'KP_Add', 'minus', 'KP_Subtract', '0', 'KP_0', '1', 'KP_1'):
+            return None
+        if not self._keyboard_focusable() or not self._keyboard_has_focus() or not self._keyboard_in_view():
+            return 'break'
+        if key in ('plus', 'equal', 'KP_Add'):
+            self._step_preview_zoom(.25)
+        elif key in ('minus', 'KP_Subtract'):
+            self._step_preview_zoom(-.25)
+        elif key in ('0', 'KP_0', '1', 'KP_1'):
+            self._set_preview_zoom(0.0 if key in ('0', 'KP_0') else 1.0)
+        elif key == 'Home':
+            changed = getattr(self, '_preview_pan', (0, 0)) != (0, 0)
+            reset_pan(self)
+            if changed:
+                self._preview_pan_changed()
+        else:
+            step = 160 if state & 1 else 32
+            dx, dy = {'Left': (-step, 0), 'Right': (step, 0),
+                      'Up': (0, -step), 'Down': (0, step),
+                      'Prior': (0, -self._preview_viewport_size[1] * .8),
+                      'Next': (0, self._preview_viewport_size[1] * .8)}[key]
+            if pan_by(self, dx, dy, self._get_preview_zoom()):
+                self._preview_pan_changed()
+        return 'break'
+
+    def destroy(self):
+        self._keyboard_closed = True
+        super().destroy()

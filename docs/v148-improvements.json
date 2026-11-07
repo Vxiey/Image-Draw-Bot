@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 781,
+  "implemented": 796,
   "release_published": false,
-  "validation": "Resumed maintenance: whole-program discovery passed 3,649 tests in 100.304 seconds with 45 platform/hardware skips and unchanged hashes for 787 Python, batch, workflow and requirements files. Independent source reviews closed for preview, physical brush policy, route optimization, Windows verification and source packaging. The source gate passed 5,000 cycles. Exact-raster and source-package results are recorded in v148-maintenance-validation.json. GitHub checks for the exact published commit are linked from PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 14: all fifteen behavior groups and existing-contract completions have closed independent source reviews. Whole-program discovery passed 3,768 tests in 98.292 seconds with 46 platform/hardware skips and unchanged hashes for 806 Python, batch, workflow and requirements files. The 5,000-cycle source gate and eight exact-raster fixtures passed. Paired CPU measurements preserve complete outputs across 942 helper/scheduler cases and four public plans. Final local evidence is in v148-batch14-validation.json. Exact published-commit GitHub checks are linked from PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6067,6 +6067,126 @@
       "local_id": "P1301",
       "description": "The Windows verification command imposed a 60-second diagnostic timeout on complete unittest discovery, shorter than the established suite runtime. Give discovery a bounded 1,800-second budget while retaining 60-second startup/GUI/mouse diagnostics. Preserve command order, interpreter, cwd, first-failure logging, report location and exit status. Make imports inert so actual CLI behavior is independently testable without starting checks.",
       "ledger": "v148-improvement-progress.md"
+    },
+    {
+      "id": 782,
+      "area": "batch14-application",
+      "batch": 14,
+      "local_id": "A1401",
+      "description": "Keep bounded latest status, progress and timer values between lossless event barriers, so Tk reaches current results instead of draining obsolete worker display updates. Preserve Queue locking, task accounting, commands, checkpoints, failures and completion; actual 6,000-path execution and concurrent producer tests verify ordering and responsiveness.",
+      "ledger": "v148-batch14-application.md"
+    },
+    {
+      "id": 783,
+      "area": "batch14-application",
+      "batch": 14,
+      "local_id": "A1402",
+      "description": "Honor explicit manual Paint tools through Start/F1, readiness and setup guides. Automatic preparation runs for Auto, validates and reports the actual physical width, and carries that width into final planning without overwriting the Auto preference or manual calibration. Changed source/profile/tool/width revokes a delayed prepared start.",
+      "ledger": "v148-batch14-application.md"
+    },
+    {
+      "id": 784,
+      "area": "batch14-application",
+      "batch": 14,
+      "local_id": "A1403",
+      "description": "Publish throttled live drawing time during ordinary strokes, including long held strokes. Estimate remaining work from active time while retaining wall-clock elapsed time and explicit paused state. Recheck Stop and deadlines after initial, intermediate and final-path callbacks so interrupted draws cannot publish false completion.",
+      "ledger": "v148-batch14-application.md"
+    },
+    {
+      "area": "batch14-application",
+      "batch": 14,
+      "local_id": "A1404",
+      "description": "Present verified completed batches, sequence operations and matching ordered path prefixes as saved-work progress, while preserving this invocation's native path counters, timing, checkpoints and learning. Count repeated color visits, publish resume/final progress and estimate the remaining session rather than the full old plan. Reuse one materialized sequence and retain Stop/deadline and explicit-empty-schedule behavior.",
+      "ledger": "v148-batch14-application.md",
+      "id": 785
+    },
+    {
+      "area": "batch14-application",
+      "batch": 14,
+      "local_id": "A1405",
+      "description": "Own each deferred Browser One-Click start from import through read-only setup, result, worker completion and the scheduled finish. Bind it to the exact source/profile/request and a private cancellation event. Revoke Stop, replaced work, edits and stale callbacks even when a later operation clears global Stop. Consume authorization once before normal draw/preflight; Setup+Verify remains read-only.",
+      "ledger": "v148-batch14-browser-start.md",
+      "id": 786
+    },
+    {
+      "id": 787,
+      "area": "batch14-rendering",
+      "batch": 14,
+      "local_id": "R1401",
+      "description": "Index preceding-row intervals during lossless Pixel path attachment instead of scanning every active path for every incoming run. Preserve complete ordered paths, overlap/distance/index ties and cancellation. Seeded historical-function parity, independent rasters and paired public-planner measurements verify the reduced work.",
+      "ledger": "v148-batch14-rendering.md"
+    },
+    {
+      "id": 788,
+      "area": "batch14-rendering",
+      "batch": 14,
+      "local_id": "R1402",
+      "description": "Preserve unrounded fractional source-over-white alpha values in the emergency CPU Pixel palette matcher and use exact bounded integer white-skip comparisons. Match the ordinary backend without allocating a full float RGB image. Independent and public planner tests verify colors, drawable pixels, ownership and Stop.",
+      "ledger": "v148-batch14-rendering.md"
+    },
+    {
+      "id": 789,
+      "area": "batch14-rendering",
+      "batch": 14,
+      "local_id": "R1403",
+      "description": "Prepare immutable first-path geometry and scalar cost snapshots once per Pixel component, then reuse them for bounded cursor candidate comparisons. Preserve exact floating-point addition order, learned/default pricing, path schedule, metadata and Stop while avoiding repeated full geometry preparation.",
+      "ledger": "v148-batch14-rendering.md"
+    },
+    {
+      "id": 790,
+      "area": "batch14-ui",
+      "batch": 14,
+      "local_id": "U1401",
+      "description": "Omit the auxiliary color raster that finish_plan immediately replaced with its executed-color preview. Explicitly release owned unpublished layer images and Pillow drawing cores on failure or Stop while retaining live independent successful outputs. Exact pixels, operation counts and retained-traceback regressions cover the shared ownership flow.",
+      "ledger": "v148-batch14-ui-workflow.md"
+    },
+    {
+      "id": 791,
+      "area": "batch14-ui",
+      "batch": 14,
+      "local_id": "U1402",
+      "description": "Make all twelve real preview canvases locally keyboard accessible through one visible focus stop. Reuse existing bounded zoom and viewport policies for arrows, page movement, centering, Fit and 1:1 while preserving mouse dragging, application shortcuts and widget lifetime guards.",
+      "ledger": "v148-batch14-ui-workflow.md"
+    },
+    {
+      "id": 792,
+      "area": "batch14-ui",
+      "batch": 14,
+      "local_id": "U1403",
+      "description": "Interpret Windows CF_HTML selected fragments at UTF-8 byte offsets with their SourceURL/base context, and resolve relative image references without importing unselected page content. Preserve signed URL bytes, inert-content boundaries, bounded parsing and the actual import-only drop workflow.",
+      "ledger": "v148-batch14-ui-workflow.md"
+    },
+    {
+      "id": 793,
+      "area": "batch14-platform",
+      "batch": 14,
+      "local_id": "P1401",
+      "description": "Identify repeated color-batch occurrences in resume checkpoints rather than deduplicating the actual requested order. Preserve legacy first-visit keys and distinguish later visits, allowing exact path resume in a repeated batch while rejecting incompatible old schedules.",
+      "ledger": "v148-batch14-platform.md"
+    },
+    {
+      "id": 794,
+      "area": "batch14-platform",
+      "batch": 14,
+      "local_id": "P1402",
+      "description": "Resolve inherited physical brush widths before sequence resume filtering or deadline reordering and hash the same effective operations. Preserve source rows and explicit legacy checkpoints; reject ambiguous inherited catalogs and keep an explicit empty normalized schedule from resurrecting legacy groups.",
+      "ledger": "v148-batch14-platform.md"
+    },
+    {
+      "id": 795,
+      "area": "batch14-platform",
+      "batch": 14,
+      "local_id": "P1403",
+      "description": "Hold a cooperative source-startup environment lock through private venv setup, dependency installation, optional GPU setup and application exit. Reject competing source Start/Update before any external process, release on ordinary exit/failure and canonicalize checkout aliases.",
+      "ledger": "v148-batch14-platform.md"
+    },
+    {
+      "id": 796,
+      "area": "batch14-platform",
+      "batch": 14,
+      "local_id": "P1404",
+      "description": "Prioritize the applied active profile within bounded settings/calibration diagnostic summaries. Add an opaque record-selection map without exposing storage keys, filenames or coordinates; retain existing cancellation, file validation, privacy and candidate limits.",
+      "ledger": "v148-batch14-platform.md"
     }
   ]
 }

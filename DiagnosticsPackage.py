@@ -218,11 +218,36 @@ def _read_text(path: Path, limit=MAX_LOG_CHARS, *, cancelled=lambda: False):
     return ('[older content omitted]\n' if omitted else '')+text
 
 
-def _settings_summary(*, cancelled=lambda: False):
+def _summary_profile_key(context):
+    value = context.get('profile_key') if isinstance(context, dict) else None
+    if not isinstance(value, str) or not value.strip() or len(value) > 200:
+        return None
+    from ProfileStorage import safe_profile_key
+    try:
+        return safe_profile_key(value)
+    except UnicodeError:
+        return None
+
+
+def _summary_paths(base, kind, profile_key, cancelled):
+    preferred = None
+    if profile_key:
+        preferred = base / (f'{kind}.json' if profile_key == 'generic' else f'{kind}-{profile_key}.json')
+    candidates = _cancellable_items(base.glob(f'{kind}*.json'), cancelled)
+    # Reserve the first candidate for the active profile without increasing
+    # the cap or retaining all paths. Ordinary standalone selection preserves
+    # its existing lexical order. Every selected input still passes link/read
+    # validation before it receives an opaque archive label.
+    key = (lambda path: (path != preferred, path)) if preferred is not None else None
+    return nsmallest(MAX_SUMMARY_FILES, candidates, key=key), preferred
+
+
+def _settings_summary(*, profile_key=None, selection=None, cancelled=lambda: False):
     _check_cancelled(cancelled)
     result={}
     base=data_dir()
-    for path in nsmallest(MAX_SUMMARY_FILES, _cancellable_items(base.glob('settings*.json'), cancelled)):
+    paths, preferred = _summary_paths(base, 'settings', profile_key, cancelled)
+    for path in paths:
         loaded = _json_input(path, base, cancelled=cancelled)
         if loaded is None:
             continue
@@ -233,16 +258,20 @@ def _settings_summary(*, cancelled=lambda: False):
         # Filenames can contain the same local credentials as settings values.
         # Opaque labels also preserve separate records when redaction would
         # collapse two secret-bearing names to the same dictionary key.
-        result[f'settings-{len(result)+1:03d}.json']=safe_context(raw)
+        label = f'settings-{len(result)+1:03d}.json'
+        result[label] = safe_context(raw)
+        if selection is not None and path == preferred:
+            selection['settings'] = label
     _check_cancelled(cancelled)
     return result
 
 
-def _calibration_summary(*, cancelled=lambda: False):
+def _calibration_summary(*, profile_key=None, selection=None, cancelled=lambda: False):
     _check_cancelled(cancelled)
     result={}
     base=data_dir()
-    for path in nsmallest(MAX_SUMMARY_FILES, _cancellable_items(base.glob('calibration*.json'), cancelled)):
+    paths, preferred = _summary_paths(base, 'calibration', profile_key, cancelled)
+    for path in paths:
         loaded = _json_input(path, base, cancelled=cancelled)
         if loaded is None:
             continue
@@ -258,7 +287,10 @@ def _calibration_summary(*, cancelled=lambda: False):
             summary['version']=version
             summary['color_count']=len(colors) if isinstance(colors,list) else None
             summary['has_anchor']=bool(raw.get('anchor') or raw.get('client_rect'))
-        result[f'calibration-{len(result)+1:03d}.json']=summary
+        label = f'calibration-{len(result)+1:03d}.json'
+        result[label] = summary
+        if selection is not None and path == preferred:
+            selection['calibration'] = label
     _check_cancelled(cancelled)
     return result
 
@@ -269,17 +301,25 @@ def create_diagnostics_package(context=None, *, cancelled=lambda: False) -> Path
     DIAGNOSTICS_DIR.mkdir(parents=True,exist_ok=True)
     stamp=time.strftime('%Y%m%d-%H%M%S')
     path=DIAGNOSTICS_DIR/f'ImageDrawBot-Diagnostics-{stamp}-{uuid.uuid4().hex[:8]}.zip'
+    profile_key = _summary_profile_key(context)
+    selection = {'active_profile_requested': profile_key is not None,
+                 'settings': None, 'calibration': None, 'candidate_limit_per_kind': MAX_SUMMARY_FILES}
     with _atomic_archive(path, cancelled=cancelled) as archive:
         # JSON escapes also represent an isolated surrogate from a damaged
         # local record without making UTF-8 ZIP serialization fail.
         archive.writestr('system.json',json.dumps(_technical_info(context,cancelled=cancelled),indent=2,ensure_ascii=True))
         _check_cancelled(cancelled)
-        archive.writestr('settings-summary.json',json.dumps(_settings_summary(cancelled=cancelled),indent=2,ensure_ascii=True))
+        archive.writestr('settings-summary.json',json.dumps(_settings_summary(
+            profile_key=profile_key, selection=selection, cancelled=cancelled),indent=2,ensure_ascii=True))
         _check_cancelled(cancelled)
-        archive.writestr('calibration-summary.json',json.dumps(_calibration_summary(cancelled=cancelled),indent=2,ensure_ascii=True))
+        archive.writestr('calibration-summary.json',json.dumps(_calibration_summary(
+            profile_key=profile_key, selection=selection, cancelled=cancelled),indent=2,ensure_ascii=True))
+        _check_cancelled(cancelled)
+        archive.writestr('profile-summary-selection.json',json.dumps(selection,indent=2,ensure_ascii=True))
         _check_cancelled(cancelled)
         archive.writestr('README.txt',
             'Image Draw Bot diagnostics package.\n\n'
+            'profile-summary-selection.json identifies the active profile by opaque keys in the settings/calibration summaries, when its files were available. '
             'Privacy: source images, the local recovery image cache, clipboard contents and raw palette/tool screen coordinates are not included. '
             'Logs are sanitized for user-home paths and credential-like strings.\n')
         log_dir=data_dir()/'logs'

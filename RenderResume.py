@@ -33,16 +33,18 @@ def active_color_order(plan):
     for raw in requested:
         try:index = int(raw)
         except (TypeError, ValueError, OverflowError):continue
-        if not 0 <= index < count or index in result:continue
+        if not 0 <= index < count:continue
         has_strokes = bool(index < len(groups) and groups[index])
         has_paths = bool(execution_groups is not None and index < len(execution_groups) and execution_groups[index])
         if has_strokes or has_paths:result.append(index)
     return result
 
 
-def batch_key(plan, index):
+def batch_key(plan, index, *, occurrence=1):
     if type(index) is not int or index < 0:
         raise ValueError('Invalid color batch index.')
+    if type(occurrence) is not int or occurrence < 1:
+        raise ValueError('Invalid color batch occurrence.')
     colors = plan.get('colors') or ()
     selectors = plan.get('color_selectors') or ()
     rgb = _clean_rgb(colors[index] if index < len(colors) else (0, 0, 0))
@@ -51,8 +53,21 @@ def batch_key(plan, index):
         'index': int(index), 'rgb': rgb, 'kind': str(selector.get('kind') or 'palette'),
         'palette_index': selector.get('palette_index'), 'fallback_palette_index': selector.get('fallback_palette_index'),
     }
+    # Keep historical keys for ordinary single visits. A later visit to the
+    # same colour is a different batch even when its geometry is identical.
+    if occurrence > 1:
+        payload['occurrence'] = occurrence
     raw = json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode('utf-8')
     return hashlib.sha256(raw).hexdigest()[:20]
+
+
+def _batch_keys(plan, order):
+    seen = Counter()
+    keys = []
+    for index in order:
+        seen[index] += 1
+        keys.append(batch_key(plan, index, occurrence=seen[index]))
+    return keys
 
 
 def items_fingerprint(items) -> str:
@@ -118,7 +133,7 @@ def _base(plan, completed_count, *, prelude_complete=True, fingerprint=None):
     completed = completed_count
     return {
         'schema':SCHEMA,'plan_fingerprint':fingerprint if fingerprint is not None else plan_fingerprint(plan),'total_colors':len(order),
-        'completed_count':completed,'completed_keys':[batch_key(plan,index) for index in order[:completed]],
+        'completed_count':completed,'completed_keys':_batch_keys(plan,order[:completed]),
         'next_color':completed+1 if completed < len(order) else 0,'prelude_complete':bool(prelude_complete),
         'active_color_number':0,'active_color_index':None,'active_batch_key':'','next_path_index':0,
         'active_path_count':0,'active_items_fingerprint':'','path_level':False,
@@ -146,7 +161,7 @@ def checkpoint_before_path(plan, color_number, path_index, path_count, *, ordere
     out=_base(plan,color_number-1,prelude_complete=prelude_complete)
     out.update({
         'next_color':color_number,'active_color_number':color_number,'active_color_index':int(color_index),
-        'active_batch_key':batch_key(plan,color_index),'next_path_index':path_index,
+        'active_batch_key':_batch_keys(plan,order[:color_number])[-1],'next_path_index':path_index,
         'active_path_count':path_count,'active_items_fingerprint':items_fingerprint(ordered_items),
         'path_level':True,
     })
@@ -168,6 +183,9 @@ def sequence_entry_key(entry) -> str:
     Runtime replanning may reorder entries, so resume identity deliberately does
     not depend on list position. Identical duplicate operations are interchangeable
     and are tracked by occurrence count in the compact canonical bitset.
+    For rows with inherited brush widths, checkpoint creation resolves this raw
+    key against the plan. Use materialized rows when one raw key occurs at
+    different physical widths and therefore cannot identify completed work.
     """
     if not isinstance(entry, dict):
         payload=entry
@@ -177,11 +195,46 @@ def sequence_entry_key(entry) -> str:
     return hashlib.sha256(raw).hexdigest()[:20]
 
 
+def execution_sequence_with_brushes(plan, *, cancelled=lambda: False):
+    """Resolve physical brush inheritance before skip/reorder decisions.
+
+    A skipped completed path or a deadline-trimmed path must not remove the
+    brush context of the following operation. Explicit widths also make the
+    resume catalogue independent of order only when that order preserves the
+    same actual operations. The caller's entries are never modified.
+    """
+    for _raw, operation in _execution_sequence_pairs(plan, cancelled=cancelled):
+        yield operation
+
+
+def _execution_sequence_pairs(plan, *, cancelled=lambda: False):
+    """Share the same raw-to-physical mapping with checkpoint key translation."""
+    sequence = plan.get('execution_sequence') or ()
+    brush = max(1, int((plan.get('options') or {}).get('brush_px', 1) or 1))
+    for number, entry in enumerate(sequence):
+        if number % 256 == 0 and cancelled():
+            raise InterruptedError('Execution sequence preparation cancelled.')
+        if not isinstance(entry, dict) or not entry.get('path'):
+            # An empty row is not a drawing operation or a brush command.
+            continue
+        try:
+            int(entry['color_index'])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+        brush = max(1, int(entry.get('brush_px', brush) or brush))
+        if type(entry.get('brush_px')) is int and entry['brush_px'] == brush:
+            yield entry, entry
+        else:
+            yield entry, dict(entry, brush_px=brush)
+    if cancelled():
+        raise InterruptedError('Execution sequence preparation cancelled.')
+
+
 def _sequence_catalog(plan):
     sequence = plan.get('execution_sequence') or ()
     if len(sequence) > MAX_SEQUENCE_OPERATIONS:
         raise ValueError('Execution sequence exceeds the supported resume limit.')
-    keys=sorted(sequence_entry_key(row) for row in sequence if isinstance(row,dict))
+    keys=sorted(sequence_entry_key(row) for row in execution_sequence_with_brushes(plan))
     digest=hashlib.sha256('|'.join(keys).encode('ascii')).hexdigest()
     return keys,digest
 
@@ -234,20 +287,50 @@ def _sequence_counts_from_bits(keys, bits):
     return dict(out)
 
 
+def _completed_sequence_counts(plan, available, completed_counts):
+    """Accept public raw keys only when they identify one physical operation."""
+    supplied = Counter()
+    for key, value in dict(completed_counts or {}).items():
+        if not isinstance(key, str) or len(key) != 20:
+            continue
+        try:
+            count = max(0, int(value or 0))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if count:
+            supplied[key] = count
+    requested = Counter({key: min(count, available[key]) for key, count in supplied.items()
+                         if key in available})
+    unknown = supplied.keys() - available.keys()
+    if not unknown:
+        return requested  # Normal execution already supplies materialized keys.
+
+    aliases = {}
+    for raw, operation in _execution_sequence_pairs(plan):
+        if raw is operation:
+            continue
+        raw_key = sequence_entry_key(raw)
+        if raw_key not in unknown:
+            continue
+        key = sequence_entry_key(operation)
+        if aliases.setdefault(raw_key, key) != key:
+            raise ValueError('Completed operation has ambiguous inherited brush widths; use materialized sequence keys.')
+    for raw_key, key in aliases.items():
+        requested[key] = min(available[key], requested[key] + supplied[raw_key])
+    return requested
+
+
 def checkpoint_sequence_progress(plan, completed_counts, *, prelude_complete=True, last_entry=None):
     """Persist completed operations for progressive/Pixel Accurate execution.
 
     The checkpoint stores a bitset over a sorted multiset of operation hashes.
     This is both compact and order-independent, so a Dynamic Replanner reorder
     cannot invalidate safe already-completed work.
+    Raw public entry keys are translated only when the current plan gives them
+    one effective brush identity; stored legacy catalogues are never promoted.
     """
     keys,catalog_fp=_sequence_catalog(plan)
-    available=Counter(keys);requested=Counter()
-    for key,value in dict(completed_counts or {}).items():
-        if not isinstance(key,str) or len(key)!=20:continue
-        try:n=max(0,int(value or 0))
-        except (TypeError,ValueError,OverflowError):continue
-        if key in available:requested[key]=min(n,available[key])
+    requested = _completed_sequence_counts(plan, Counter(keys), completed_counts)
     seen = Counter()
     def flags():
         for key in keys:
@@ -371,7 +454,7 @@ def resolve_resume(plan,state):
         return {'compatible':False,'completed_count':0,'total_colors':len(order),'reason':'final plan fingerprint changed'}
     if clean['total_colors'] != len(order):
         return {'compatible':False,'completed_count':0,'total_colors':len(order),'reason':'color batch count changed'}
-    expected=[batch_key(plan,index) for index in order[:clean['completed_count']]]
+    expected=_batch_keys(plan,order[:clean['completed_count']])
     if expected != clean['completed_keys']:
         return {'compatible':False,'completed_count':0,'total_colors':len(order),'reason':'completed color sequence changed'}
     result={
@@ -382,7 +465,7 @@ def resolve_resume(plan,state):
     }
     if clean.get('path_level'):
         n=clean['active_color_number'];index=order[n-1]
-        if index != clean['active_color_index'] or batch_key(plan,index)!=clean['active_batch_key']:
+        if index != clean['active_color_index'] or _batch_keys(plan,order[:n])[-1]!=clean['active_batch_key']:
             return {'compatible':False,'completed_count':0,'total_colors':len(order),'reason':'active color batch changed'}
         result.update({'path_level':True,'active_color_number':n,'active_color_index':index,
                        'next_path_index':clean['next_path_index'],'active_path_count':clean['active_path_count'],

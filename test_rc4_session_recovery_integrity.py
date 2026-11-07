@@ -238,7 +238,10 @@ class RenderResumeIntegrityTests(unittest.TestCase):
         row = plan['execution_sequence'][0]
         state = RR.checkpoint_sequence_progress(plan, {RR.sequence_entry_key(row): 1}, last_entry=row)
         self.assertEqual(RR.validate_progress(state)['sequence_last_color_index'], 0)
-        self.assertEqual(RR.resolve_resume(plan, state)['sequence_last_color_index'], 0)
+        resolved = RR.resolve_resume(plan, state)
+        self.assertTrue(resolved['compatible'])
+        self.assertEqual(resolved['sequence_completed_count'], 1)
+        self.assertEqual(resolved['sequence_last_color_index'], 0)
 
     def test_conflicting_resume_modes_are_rejected(self):
         self.assertIsNone(RR.validate_progress(dict(self.progress(), path_level=True)))

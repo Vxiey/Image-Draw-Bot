@@ -1,5 +1,6 @@
 """Additional lightweight preview layers generated in the planning worker."""
 from __future__ import annotations
+from contextlib import ExitStack, closing
 from PIL import Image, ImageDraw
 import math
 
@@ -22,7 +23,38 @@ def _visible(rgb):
     return (r, g, b)
 
 
-def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, options, cancelled=lambda: False):
+def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, options, cancelled=lambda: False,
+                             *, include_color_map=True):
+    """Build owned UI layers and release every incomplete/temporary bitmap.
+
+    Final planning supplies its executed color map separately, so it can omit
+    the source-color copy. The default retains the standalone helper's layers.
+    The source image is borrowed and is never closed or changed here.
+    """
+    retained = set()
+    with ExitStack() as owned:
+        def keep(image):
+            owned.callback(lambda: image.close() if id(image) not in retained else None)
+            return image
+
+        def draw(image):
+            handle = ImageDraw.Draw(image)
+            def release():
+                # ImageDraw owns native core references independently of the
+                # Image wrapper. A retained error traceback must not keep those
+                # pixels alive after Image.close() has cleared the wrapper.
+                handle.draw = handle.im = handle._image = None
+            owned.callback(release)
+            return handle
+
+        result = _build_auxiliary_previews(source, size, groups, palette_rgb, point,
+            brush, options, cancelled, include_color_map=include_color_map, own=keep, draw=draw)
+        retained.update(map(id, result.values()))
+        return result
+
+
+def _build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, options, cancelled,
+                              *, include_color_map, own, draw):
     """Create Stroke plan, Fill regions and Color map images.
 
     Called from the background planning worker; no Tk or screen APIs are used.
@@ -33,8 +65,8 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
     if cancelled():
         raise InterruptedError()
 
-    stroke = Image.new("RGB", (w, h), (15, 20, 29))
-    sd = ImageDraw.Draw(stroke)
+    stroke = own(Image.new("RGB", (w, h), (15, 20, 29)))
+    sd = draw(stroke)
     line_width = max(1, min(4, int(brush)))
     safety_groups = options.get("_preview_safety_groups") or None
     if safety_groups:
@@ -99,17 +131,22 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
     if cancelled():
         raise InterruptedError()
     def bounded_source(resampling):
-        small = (source if source.size == (w, h) else source.resize((w, h), resampling)).convert("RGBA")
-        background = Image.new("RGBA", (w, h), "white")
-        background.alpha_composite(small)
-        return background.convert("RGB")
+        with ExitStack() as temporary:
+            resized = (source if source.size == (w, h) else
+                       temporary.enter_context(closing(source.resize((w, h), resampling))))
+            small = temporary.enter_context(closing(resized.convert("RGBA")))
+            background = temporary.enter_context(closing(Image.new("RGBA", (w, h), "white")))
+            background.alpha_composite(small)
+            return own(background.convert("RGB"))
     src = bounded_source(Image.Resampling.LANCZOS)
     # v1.0.120: preview layers must preserve source sRGB tone. The old 0.68
     # brightness multiplier made the Fill Regions preview look artificially
     # dark/dull even when the executable palette plan was correct.
-    fill = src.convert("RGBA")
-    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    od = ImageDraw.Draw(overlay)
+    fill = own(src.convert("RGBA"))
+    if not (include_color_map and source.size == (w, h)):
+        src.close()
+    overlay = own(Image.new("RGBA", (w, h), (0, 0, 0, 0)))
+    od = draw(overlay)
     fill_meta = options.get("background_fill_plan") or {}
     if fill_meta.get("enabled") and w >= 3 and h >= 3:
         color_index = fill_meta.get("color_index")
@@ -126,9 +163,14 @@ def build_auxiliary_previews(source, size, groups, palette_rgb, point, brush, op
             od.rectangle((p0[0], p0[1], p1[0], p1[1]), fill=(*rgb, 68), outline=(*_visible(rgb), 240), width=max(2, line_width))
         except (KeyError, TypeError, ValueError, IndexError, OverflowError):
             continue
-    fill = Image.alpha_composite(fill, overlay).convert("RGB")
+    with closing(Image.alpha_composite(fill, overlay)) as composite:
+        completed_fill = own(composite.convert("RGB"))
+    fill.close()
+    overlay.close()
 
-    color_map = src if source.size == (w, h) else bounded_source(Image.Resampling.NEAREST)
+    result = {"stroke": stroke, "fill": completed_fill}
+    if include_color_map:
+        result["color"] = src if source.size == (w, h) else bounded_source(Image.Resampling.NEAREST)
     if cancelled():
         raise InterruptedError()
-    return {"stroke": stroke, "fill": fill, "color": color_map}
+    return result

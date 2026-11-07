@@ -9,6 +9,7 @@ components on CPU, and emits four quality-first passes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from bisect import bisect_left, bisect_right
 import math
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -407,11 +408,25 @@ def _merge_horizontal_runs_lossless(runs: Sequence[Segment], *, cancelled=lambda
             if st.last_y==y-1:fresh.append(st)
             else:completed.append(tuple(st.points))
         active=fresh
+        # Active paths are in the preceding row's sorted run order. Keep a
+        # snapshot of those intervals while attachments mutate the selected
+        # path in place. Prefix maxima also handle overlapping/nested input
+        # runs: no interval that can intersect a new run may be skipped.
+        starts=[];prefix_ends=[]
+        for i,st in enumerate(active):
+            if i%256==0 and cancelled():raise InterruptedError()
+            starts.append(st.x0)
+            prefix_ends.append(max(prefix_ends[-1],st.x1) if prefix_ends else st.x1)
         used=set();next_active=[]
-        for run in sorted(rows[y],key=lambda r:(r[0],r[2])):
+        for run_number,run in enumerate(sorted(rows[y],key=lambda r:(r[0],r[2]))):
+            if run_number%128==0 and cancelled():raise InterruptedError()
             x0,_,x1,_=run
             candidates=[]
-            for i,st in enumerate(active):
+            first=bisect_left(prefix_ends,x0)
+            last=bisect_right(starts,x1)
+            for i in range(first,last):
+                if (i-first)%256==0 and cancelled():raise InterruptedError()
+                st=active[i]
                 if i in used or st.rows>=max_rows_per_path or len(st.points)>=max_points_per_path:continue
                 lo,hi=max(st.x0,x0),min(st.x1,x1)
                 if lo<=hi:
@@ -661,8 +676,15 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
     serial = 0
     # Geometry is immutable while scheduling. Only entry travel and colour cost
     # change; do not walk every point again for all 72 candidates at each step.
-    intrinsic = ({c.component_id: float(cost_model.paths_seconds(c.paths))
-                  for c in components if c.paths} if cost_model is not None else {})
+    intrinsic={};entry_costs={}
+    prepare=getattr(cost_model,'prepare_path_cost',None)
+    if cost_model is not None:
+        for c in components:
+            if cancelled():raise InterruptedError()
+            if not c.paths:continue
+            intrinsic[c.component_id]=float(cost_model.paths_seconds(c.paths))
+            if callable(prepare):
+                entry_costs[c.component_id]=prepare(c.paths[0],cancelled=cancelled)
     estimated_total = 0.0
 
     for phase in PHASES:
@@ -689,8 +711,13 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
                         first=comp.paths[0]
                         # paths_seconds() already includes the first path's base
                         # travel/settle term. Add only the real stateful entry delta.
-                        moved=float(cost_model.path_seconds(first,cursor=cursor))
-                        base=float(cost_model.path_seconds(first,cursor=None))
+                        prepared=entry_costs.get(comp.component_id)
+                        if prepared is None:
+                            moved=float(cost_model.path_seconds(first,cursor=cursor))
+                            base=float(cost_model.path_seconds(first,cursor=None))
+                        else:
+                            moved=prepared.seconds(cursor=cursor)
+                            base=prepared.seconds()
                         seconds+=max(0.0,moved-base)
                     if current_color != comp.color_index:
                         seconds+=sum(cost_model.color_selection_cost(comp.color_index))
@@ -734,7 +761,10 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
         try:
             _initial_brush=max(1,int(getattr(cost_model,'options',{}).get('brush_px',1) or 1))
             estimated_total=float(cost_model.sequence_cost(
-                sequence,initial_brush=_initial_brush,include_color_verification=True).total_seconds)
+                sequence,initial_brush=_initial_brush,include_color_verification=True,
+                cancelled=cancelled).total_seconds)
+        except InterruptedError:
+            raise
         except Exception:
             # The geometry/order remains valid even if diagnostics cannot be costed.
             estimated_total=sum(float(cost_model.paths_seconds(c.paths)) for c in components if c.paths)

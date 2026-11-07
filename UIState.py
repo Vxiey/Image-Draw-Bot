@@ -63,7 +63,7 @@ def compute_workspace_state(*, image_loaded: bool, target_name: str,
     target_selected = bool((target_name or "").strip())
     target_label = f"{target_name} profile selected" if target_selected else "Target profile selected"
     tools_label = "Paint drawing tool ready" if paint_selected else "Drawing controls ready"
-    tools_detail = ("Tool preflight is ready." if paint_tools_ready else "Calibrate Pencil/Brush and 100% opacity.") if paint_selected else \
+    tools_detail = ("Tool preflight is ready." if paint_tools_ready else "Calibrate the selected Paint tool and its required controls.") if paint_selected else \
                    "Current brush can be used; optional Brush/Fill controls can be calibrated for this profile."
     items = (
         ChecklistItem("image", "Image loaded", "ready" if image_loaded else "blocked",
