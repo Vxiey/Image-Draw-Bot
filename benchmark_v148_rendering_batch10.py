@@ -3,6 +3,7 @@ import argparse
 import ast
 from contextlib import closing
 import hashlib
+import inspect
 import json
 from pathlib import Path
 import platform
@@ -60,6 +61,13 @@ def measure(revision=BASELINE,repeats=5):
     import DrawBot
     import AdaptiveRegionHybrid as regional
     from ExecutionCostModel import build_cost_model
+    if 'maximize_gain' in inspect.signature(regional._candidate_paths_for_brush).parameters:
+        raise RuntimeError(
+            'This historical retention benchmark requires the frozen batch10 caller '
+            'at a8fabbc811029a8bfcbe8a5af2a848b034e5cd89. The current caller also '
+            'evaluates maximum-gain packs, which the substituted historical helper '
+            'does not implement. Run the recorded checkpoint to reproduce batch10; '
+            'use benchmark_v148_rendering_batch11.py for the new complete-pack policy.')
     old_plan,old_plan_hash=previous_function(DrawBot,'make_plan',revision)
     old_candidates,old_candidates_hash=previous_function(regional,'_candidate_paths_for_brush',revision)
     new_candidates=regional._candidate_paths_for_brush

@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 773,
+  "implemented": 777,
   "release_published": false,
-  "validation": "Batch 10: final frozen-source discovery passed 3,579 tests in 125.869 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. Paired rendering and recovery measurements bind the final source snapshot and disclose unchanged or slower total-work results. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.",
+  "validation": "Batch 11: final frozen-source discovery passed 3,602 tests in 128.751 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for all four behavior groups. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired pack-selection measurements bind the final source and disclose planning overhead separately from modeled drawing cost. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.",
   "improvements": [
     {
       "id": 1,
@@ -6003,6 +6003,38 @@
       "local_id": "P1001",
       "description": "Concurrent source builders could mutate the same private environment and output directory, allowing a CPU-named package to contain another GPU build while checksums still passed. Own a canonical workspace for the complete environment/build/verify/publication session with a thread/process identity and OS file lock. Reject competing builders before tool side effects; keep the lock inode stable and release on normal and failing paths. Actual public builder and process/event regressions verify isolation. Forced parent death can still leave an external tool child alive; no child-termination or power-loss-atomic guarantee is claimed.",
       "ledger": "v148-batch10-platform.md"
+    },
+    {
+      "id": 774,
+      "area": "batch11-application",
+      "batch": 11,
+      "local_id": "A1101",
+      "description": "Assess completed Sketch Fill/regional wrappers through the actual AutoTuner finalizer, and rebuild a bounded rescue without the previous plan's compiled geometry, palette, private ownership flags or diagnostic caches. A real Paint plan previously returned unassessed final geometry, while invoking its finalizer reused 301 entries on a changed 67x45-to-96x64 grid. The fresh 387-entry plan matches an independent clean-policy replan. Seven actual public/finalizer/browser/failure/Stop regressions preserve prepared palettes, calibration, safety inputs, first-plan image ownership and at most one rescue. Published acceptance describes the exact returned plan.",
+      "ledger": "v148-batch11-application.md"
+    },
+    {
+      "id": 775,
+      "area": "batch11-rendering",
+      "batch": 11,
+      "local_id": "R1101",
+      "description": "Local gain-per-cost brush choices could leave expensive cleanup with narrower brushes. Compare that complete exact pack with one bounded maximum-gain policy across the existing verified brush ladders, price complete transitions/cleanup and retain the cheapest result. The original wins equal-cost ties; cancellation cannot publish a partial alternative. Actual executor replay proves identical pixels for a 47-to-12-path improvement and a counterexample where the original 32 paths beat the alternative 54. Paired source-bound measurements disclose extra planning time and traced allocation separately from modeled drawing cost. Historical benchmark compatibility and truthful fallback metadata add no IDs.",
+      "ledger": "v148-batch11-rendering.md"
+    },
+    {
+      "id": 776,
+      "area": "batch11-native-input",
+      "batch": 11,
+      "local_id": "N1101",
+      "description": "CanvasTransform rounded half-pixel centers away from zero, leaving a row or column gap when the same letterboxed canvas crossed screen coordinate zero. Map canvas centers with a consistent higher-integer tie rule and compare the fraction directly. Six tests include 18 actual planner/executor replay scenarios, exact/adjacent ties, both axes and signed origins. Generic round_screen/interpolation and native authorization, guard and mouse-release behavior remain unchanged. Updated R1004 fixtures preserve physical-raster and public Coverage parity without duplicate counts.",
+      "ledger": "v148-batch11-native-input.md"
+    },
+    {
+      "id": 777,
+      "area": "batch11-sketch-fill",
+      "batch": 11,
+      "local_id": "S1101",
+      "description": "A real Sketch + Auto Fill / Pixel Accurate UI combination executed six Sketch-phase entries while count, groups, safety and motion cost described three inner Pixel paths. Its inherited Pixel Coverage also hid 92 spill pixels. Transfer color geometry and palette into the composed Sketch plan without exporting the inner renderer's competing compiled ownership or diagnostics. Final groups/count/safety/cost follow the unchanged Sketch sequence. Pixel coverage and plan-execution accuracy are explicitly unavailable, with an accurate UI placeholder; fresh source-relative Accuracy and delta-E remain available. Four actual UI/planner/consumer tests preserve shared input resources.",
+      "ledger": "v148-batch11-sketch-fill.md"
     }
   ]
 }

@@ -93,7 +93,12 @@ class CanvasTransform:
 
     def point(self, x: float, y: float):
         px, py = self.float_point(x, y)
-        return round_screen(px), round_screen(py)
+        # A canvas pixel grid must not acquire a gap when an integer desktop
+        # translation crosses zero. Give half ties one direction on both sides
+        # of zero; the generic round_screen policy remains separate. Comparing
+        # the fraction also avoids rounding a nearby value into a tie via +.5.
+        ix, iy = math.floor(px), math.floor(py)
+        return ix + int(px - ix >= .5), iy + int(py - iy >= .5)
 
 
 def effective_step(precision: str, requested_step_px: float | int = 8) -> float:

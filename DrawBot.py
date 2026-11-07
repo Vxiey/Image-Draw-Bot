@@ -690,7 +690,8 @@ def make_plan(original, area, options, cancelled=lambda: False):
     # Route it before AutoDrawing so Auto cannot replace the user's selected
     # renderer. The recursive colour sub-plan is marked _sketch_fill_inner.
     if is_sketch_fill(options):
-        return build_sketch_fill_plan(original,area,options,make_plan,finish_plan,cancelled)
+        plan=build_sketch_fill_plan(original,area,options,make_plan,finish_plan,cancelled)
+        return _finalize_auto_tuned_plan(plan,original,area,cancelled)
     # Step 29: Hybrid Renderer 3.0 resolves specialised deterministic policy
     # before the generic AutoDrawing selector. It only changes renderer/planner
     # fields; CanvasGuard, calibration and input authorisation remain separate.
@@ -730,7 +731,10 @@ def make_plan(original, area, options, cancelled=lambda: False):
             # runs (the user's failing Gartic case) and fully calibrated Fill runs.
             and (not options.get('fill_tool_available') or bool(options.get('fill_tool_actions')))):
         from AdaptiveRegionHybrid import build_adaptive_hybrid_plan
-        return build_adaptive_hybrid_plan(original,area,options,make_plan,finish_plan,cancelled)
+        plan=build_adaptive_hybrid_plan(original,area,options,make_plan,finish_plan,cancelled)
+        # The wrapper changes geometry and cost after its inner color planner
+        # returns. Acceptance and a bounded rescue must use this actual result.
+        return _finalize_auto_tuned_plan(plan,original,area,cancelled)
     if options.get('outline') and options.get('sketch_detail')=='Auto':
         from AutoSketchBudget import choose_sketch
         return choose_sketch(original,area,options,make_plan,finish_plan,cancelled)
@@ -8300,6 +8304,8 @@ class DrawBotApp:
             from PreviewViews import VIEW_SPECS,view_images
             photos=[]
             images=view_images(self);pairs=[]
+            _shown_plan=self.plan if isinstance(getattr(self,'plan',None),dict) else {}
+            _sketch_metrics=((_shown_plan.get('options') or {}).get('sketch_fill_meta') or {})
             for name,attr,_,_ in VIEW_SPECS:
                 canvas=getattr(self,attr,None)
                 if canvas is not None:pairs.append((canvas,images[name]))
@@ -8328,6 +8334,10 @@ class DrawBotApp:
                             title='Safety map';hint='CanvasGuard/Edge Behavior clipped, skipped and edge-follow paths will appear here.'
                         elif canvas is getattr(self,'safety_debug_canvas',None):
                             title='Safety debug overlay';hint='Exact drawn, clipped, skipped and edge-follow reasons will appear here.'
+                        elif (canvas is getattr(self,'coverage_canvas',None)
+                                and _sketch_metrics.get('pixel_metrics_status')=='not_calculated'):
+                            title='Coverage not calculated'
+                            hint='Final Sketch + Auto Fill coverage and plan-execution accuracy are not calculated. Simulated final, source-relative Accuracy error and ΔE still describe the final sequence.'
                         elif canvas in (getattr(self,'coverage_canvas',None),getattr(self,'accuracy_error_canvas',None)):
                             title='Available with Pixel Accurate'
                             hint='Choose Masterpiece for colour drawing, then build preview. This metric is not calculated for sketch mode.'

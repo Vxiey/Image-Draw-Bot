@@ -530,12 +530,37 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
 
 
 def _clear_plan_transients(out: dict[str, Any]) -> None:
+    # A rescue starts from the original image and can change its planning grid,
+    # palette and renderer. A finished plan's geometry is not input policy: if
+    # copied through, finish_plan can execute old coordinates against the new
+    # raster. Drop only known derived outputs. In particular, keep prepared
+    # picture_palette_rgb, calibration/tool actions, preview/safety inputs and
+    # the tuner's bounded-attempt state. Popping references must not mutate or
+    # close resources still owned by the usable first plan.
     for key in (
         'pixel_accuracy_meta', 'adaptive_accuracy_meta', 'preview_delta_e_meta', 'preview_diagnostics_meta',
         'region_fill_meta', 'fill_regions', 'fill_timing_meta', 'extra_fast_meta', 'extra_fast_v2_meta',
         'operation_timing_meta', 'performance_profile', 'resource_scheduler_plan', 'deadline_runtime_meta',
         '_pixel_coverage_preview', '_pixel_error_preview', '_preview_quantized_target',
         '_accuracy_quantized_target_available', 'color_render_meta', 'adaptive_color_count_meta',
+        # Compiled renderer results and their private recursion/ownership flags.
+        '_pixel_execution_groups', '_pixel_execution_sequence', 'pixel_accurate',
+        'pixel_map_meta', 'pixel_stroke_meta', 'pixel_stroke_engine',
+        '_adaptive_hybrid_execution_groups', '_adaptive_hybrid_execution_sequence',
+        '_adaptive_hybrid_inner', 'adaptive_hybrid_active', 'adaptive_hybrid_meta', 'adaptive_hybrid_version',
+        '_sketch_fill_execution_groups', '_sketch_fill_execution_sequence', '_sketch_fill_inner',
+        'sketch_fill_active', 'sketch_fill_meta', 'sketch_fill_version',
+        'sketch_execution_groups', 'gartic_sketch_meta', 'sketch2_meta',
+        'skribbl_fast_direct_paths', 'skribbl_fast_meta', 'gartic_phone_direct_paths', 'gartic_phone_fast_meta',
+        # These describe the old palette, grid or retained executable geometry.
+        'plan_palette_rgb', 'color_selectors', 'color_order', 'color_grouping_meta', 'picture_palette_meta',
+        'background_fill_plan', 'fill_engine_meta', 'safe_fill_mask_margin_px',
+        '_hybrid_scale_x', '_hybrid_scale_y', '_preview_safety_groups', '_visual_importance_map',
+        'adaptive_brush_meta', 'adaptive_deadline_meta', 'detail_zoom_meta',
+        'real_speed_budget_meta', 'real_speed_color_meta', 'source_transparency_meta',
+        # A replacement plan owns its own diagnostic images and profiler state.
+        '_accuracy_original_source', '_accuracy_quantized_target', '_accuracy_normalized_source_cache',
+        '_performance_profile',
     ):
         out.pop(key, None)
 

@@ -26,7 +26,7 @@ def component(shape):
 
 
 def scalar_candidate_oracle(target,residual,brush_px,*,model,comp,phase,final_size,
-                            origin=(0,0),cancelled=lambda:False):
+                            origin=(0,0),cancelled=lambda:False,maximize_gain=False):
     """Literal footprint tests and Pillow axis sweeps, independent of NumPy morphology."""
     h,w=target.shape;brush=max(1,int(brush_px));before,after=(brush-1)//2,brush//2
     centers=np.zeros((h,w),bool)
@@ -65,7 +65,8 @@ def scalar_candidate_oracle(target,residual,brush_px,*,model,comp,phase,final_si
                 cost=max(.000001,float(model.sequence_cost(sequence,initial_color=comp.color_index,initial_brush=brush).total_seconds))
                 rows.append((gain,cost,len(paths),stride,orientation,offset,paths,painted))
     if not rows:return [],np.zeros_like(target),0.
-    minimum_gain=max(1,int(max(row[0] for row in rows)*.90))
+    maximum_gain=max(row[0] for row in rows)
+    minimum_gain=maximum_gain if maximize_gain else max(1,int(maximum_gain*.90))
     chosen=min((row for row in rows if row[0]>=minimum_gain),
                key=lambda row:(row[1]/row[0],row[1],row[2],-row[0],row[3],row[4],row[5]))
     return chosen[6],chosen[7],chosen[1]

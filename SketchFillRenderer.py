@@ -128,6 +128,26 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
         sequence.append({'color_index':black_index,'path':path,'phase':'reoutline','phase_label':'final re-outline','serial':serial});serial+=1
 
     outer=dict(color_plan.get('options') or {})
+    # The colour sub-plan deliberately supplies its palette and paths, but it
+    # no longer owns execution after contours/re-outline have been added. In
+    # particular, stale Pixel groups otherwise win finish_plan's group/count
+    # dispatch while the Sketch sequence wins its separate sequence dispatch.
+    # Keep pixel_accurate: the executor also uses that policy hint for its
+    # existing small-brush interpolation. It is not a measurement or a compiled
+    # sequence. Drop references only; the inner plan may own these buffers.
+    for key in (
+        '_pixel_execution_groups','_pixel_execution_sequence',
+        'pixel_map_meta','pixel_stroke_meta','pixel_stroke_engine','pixel_accuracy_meta',
+        '_adaptive_hybrid_execution_groups','_adaptive_hybrid_execution_sequence',
+        'adaptive_hybrid_active','adaptive_hybrid_meta','adaptive_hybrid_version',
+        'sketch_execution_groups','gartic_sketch_meta',
+        '_pixel_coverage_preview','_pixel_error_preview',
+        '_preview_safety_groups','preview_safety_meta','adaptive_accuracy_meta',
+        'preview_delta_e_meta','preview_diagnostics_meta','accuracy_buffer_meta',
+        'adaptive_deadline_meta','detail_zoom_meta','operation_timing_meta',
+        'region_fill_meta','fill_timing_meta','auto_tuner_acceptance_meta',
+    ):
+        outer.pop(key,None)
     outer.update({
         'render_style':SKETCH_FILL_RENDER_STYLE,'sketch_fill_active':True,'sketch_fill_version':SKETCH_FILL_VERSION,
         'sketch2_meta':dict(sketch_meta),'fill_regions':[],'background_fill':'Off','use_region_fill_engine':False,
@@ -142,6 +162,8 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
         'phase_order':'Sketch -> Color Fill -> Re-outline','sketch_paths':len(sketch_paths),
         'color_fill_paths':color_paths,'reoutline_paths':len(reoutline),'total_paths':len(sequence),
         'native_bucket_prelude':False,'fill_method':'connected color runs','custom_colors_reused':bool(outer.get('exact_color_available')),
+        'pixel_metrics_status':'not_calculated',
+        'pixel_metrics_reason':'The composed Sketch Fill sequence has no final Pixel coverage or plan-execution measurement; color sub-plan metrics do not describe its added contours.',
         'browser_policy_changed':False,'ai_ml_ocr':False,
     }
     groups=_strokes_from_paths(combined)

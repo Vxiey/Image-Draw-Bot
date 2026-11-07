@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 773 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **227 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 777 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **223 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -52,9 +52,17 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 771–772 | U1001–U1002 | Batch 10 numeric commits and profile color limits | 2 | [UI ledger](v148-batch10-ui-workflow.md); independent root review. |
 | 773 | P1001 | Batch 10 complete workspace build-session ownership | 1 | [Platform ledger](v148-batch10-platform.md); independent root review. |
 
+| 774 | A1101 | Batch 11 complete automatic rescue ownership | 1 | [Application ledger](v148-batch11-application.md); independent actual-flow review. |
+| 775 | R1101 | Batch 11 compare complete exact brush-pack costs | 1 | [Rendering ledger](v148-batch11-rendering.md); independent root review and paired measurements. |
+| 776 | N1101 | Batch 11 consistent canvas centers across screen zero | 1 | [Native-input ledger](v148-batch11-native-input.md); independent rendering review. |
+| 777 | S1101 | Batch 11 composed Sketch Fill plan ownership | 1 | [Sketch Fill ledger](v148-batch11-sketch-fill.md); independent consumer and UI review. |
+
 ## Integration evidence
 
-- Batch 10: final frozen-source discovery passed 3,579 tests in 125.869 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. Paired rendering and recovery measurements bind the final source snapshot and disclose unchanged or slower total-work results. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
+- Batch 11: final frozen-source discovery passed 3,602 tests in 128.751 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. Independent source reviews are closed for all four behavior groups. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Paired pack-selection measurements bind the final source and disclose planning overhead separately from modeled drawing cost. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
+- Batch11 baseline: `a8fabbc811029a8bfcbe8a5af2a848b034e5cd89`. [Frozen validation](v148-batch11-validation.json), [exact-raster fixtures](v148-batch11-engine-benchmarks.json) and [paired pack-selection measurements](v148-batch11-rendering-benchmarks.json). Physical fallback metadata, existing raster fixtures and historical benchmark compatibility add no new IDs.
+
+- Batch 10: final frozen-source discovery passed 3,579 tests in 125.869 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. Paired rendering and recovery measurements bind the final source snapshot and disclose unchanged or slower total-work results. The published batch10 checkpoint `a8fabbc811029a8bfcbe8a5af2a848b034e5cd89` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42325709249](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42325709249). All four jobs and all seven commit checks succeeded. No 1.0.148 release is published.
 - Batch10 baseline: `3c5fe8fc27ec3b503e2affa6f3ed00cb7856f973`. [Frozen validation](v148-batch10-validation.json), [eight exact-raster results](v148-batch10-engine-benchmarks.json), [rendering measurements](v148-batch10-rendering-benchmarks.json) and [recovery measurements](v148-batch10-recovery-benchmarks.json). Profile-import identity and owned-image conversion completions add no new IDs.
 
 - Batch 09: final frozen-source discovery passed 3,514 tests in 190.952 seconds (42 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. The published batch09 checkpoint `3c5fe8fc27ec3b503e2affa6f3ed00cb7856f973` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42320087469](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42320087469). All four jobs and all seven commit checks succeeded. No 1.0.148 release is published.

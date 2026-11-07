@@ -330,7 +330,7 @@ def _offset_paths(paths, origin):
 
 def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:int,*,
                                model,comp,phase:str,final_size:bool,origin=(0,0),cancelled=lambda:False,
-                               projection=None):
+                               projection=None,maximize_gain:bool=False):
     """Choose a safe, cost-efficient run layout inside one component ROI.
 
     Extra Fast tests the native brush stride and one denser half-stride for wide
@@ -338,6 +338,8 @@ def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:in
     calibrated execution seconds per newly covered pixel instead of raw gain
     alone.  This avoids accepting a much slower layout for a negligible coverage
     increase while keeping every simulated brush footprint inside the component.
+    The optional maximum-gain policy supplies a second complete packing for the
+    caller's final cost comparison; it does not replace the default greedy rule.
     """
     _cancel(cancelled)
     brush=max(1,int(brush_px))
@@ -382,7 +384,7 @@ def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:in
                 del local_paths,paths,seq,trial
     if not candidates:return [],np.zeros_like(target,dtype=np.bool_),0.0
     max_gain=max(row[0] for row in candidates)
-    gain_floor=max(1,int(max_gain*.90))
+    gain_floor=max_gain if maximize_gain else max(1,int(max_gain*.90))
     eligible=[row for row in candidates if row[0]>=gain_floor]
     best=min(eligible,key=lambda row:(row[1]/max(1,row[0]),row[1],row[2],-row[0],row[3],row[4],row[5]))
     _cancel(cancelled)
@@ -411,7 +413,9 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
     are rejected before erosion. A bounded set of verified brush ladders is then
     evaluated so an expensive intermediate brush switch is never mandatory just
     because the target exposes five controls. A ladder may need only one of its
-    available sizes to finish the region.
+    available sizes to finish the region. The original gain-per-cost packing and
+    a maximum-gain alternative compete by their complete exact execution cost;
+    the original wins ties. Only the best completed packing remains retained.
     """
     default=max(1,int(options.get("brush_px") or 1))
     verified,dynamic=verified_brush_sizes(str(options.get("profile_key") or ""),
@@ -461,49 +465,64 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
 
     total_drawable=int(np.count_nonzero(component_map>=0))
     base_phase=_phase(comp,total_drawable)
-    exact_candidates=[];best_residual=None
-    for ladder in ladders:
-        _cancel(cancelled)
-        painted=np.zeros_like(target,dtype=np.bool_)
-        sequence=[];flat_paths=[];used=[];per_size=[]
-        for brush in ladder:
+    best=None;best_key=None;best_residual=None;exact_count=0;exact_ladders=set()
+    policy_stats={name:{'evaluated':0,'exact':0,'best_seconds':None}
+                  for name in ('gain-per-cost','maximum-gain')}
+    for policy_index,policy in enumerate(policy_stats):
+        for ladder_index,ladder in enumerate(ladders):
             _cancel(cancelled)
-            residual=target & ~painted
-            if not np.any(residual):break
-            extra={'projection':native_roi} if native_roi is not None else {}
-            paths,trial,local_cost=_candidate_paths_for_brush(
-                target,residual,brush,model=model,comp=comp,
-                phase=("detail" if brush==smallest else base_phase),
-                final_size=(brush==smallest),origin=(x0,y0),cancelled=cancelled,**extra)
-            if not paths:continue
-            newly=int(np.count_nonzero(trial & residual))
-            if newly<=0:continue
-            painted |= trial
-            used.append(brush);flat_paths.extend(paths)
-            sequence.extend(_entry_sequence(
-                comp.color_index,paths,phase=("detail" if brush==smallest else base_phase),
-                comp=comp,brush_px=brush,method=f"region-brush-pack-{brush}px"))
-            per_size.append({"brush_px":brush,"paths":len(paths),"new_pixels":newly,
-                             "local_cost_seconds":round(local_cost,6)})
-        if np.any(painted & ~target):continue
-        missing=int(np.count_nonzero(target & ~painted))
-        best_residual=missing if best_residual is None else min(best_residual,missing)
-        if missing or not np.array_equal(painted,target):continue
-        # One verified size can already cover the region exactly. It is still
-        # a physically selectable candidate and must compete on actual cost;
-        # requiring two used sizes rejected the simplest successful pack.
-        cost=model.sequence_cost(
-            sequence,initial_color=int(comp.color_index),initial_brush=default).total_seconds
-        exact_candidates.append({"sequence":sequence,"paths":flat_paths,"cost":float(cost),
-            "brush_px":max(used),"method":"region-brush-pack","exact":True,
-            "used_brush_sizes":tuple(used),"packing":per_size,
-            "requested_ladder":tuple(ladder),"covered_pixels":int(np.count_nonzero(painted))})
+            policy_stats[policy]['evaluated']+=1
+            painted=np.zeros_like(target,dtype=np.bool_)
+            sequence=[];flat_paths=[];used=[];per_size=[]
+            for brush in ladder:
+                _cancel(cancelled)
+                residual=target & ~painted
+                if not np.any(residual):break
+                extra={'projection':native_roi} if native_roi is not None else {}
+                if policy_index:extra['maximize_gain']=True
+                paths,trial,local_cost=_candidate_paths_for_brush(
+                    target,residual,brush,model=model,comp=comp,
+                    phase=("detail" if brush==smallest else base_phase),
+                    final_size=(brush==smallest),origin=(x0,y0),cancelled=cancelled,**extra)
+                if not paths:continue
+                newly=int(np.count_nonzero(trial & residual))
+                if newly<=0:continue
+                painted |= trial
+                used.append(brush);flat_paths.extend(paths)
+                sequence.extend(_entry_sequence(
+                    comp.color_index,paths,phase=("detail" if brush==smallest else base_phase),
+                    comp=comp,brush_px=brush,method=f"region-brush-pack-{brush}px"))
+                per_size.append({"brush_px":brush,"paths":len(paths),"new_pixels":newly,
+                                 "local_cost_seconds":round(local_cost,6)})
+            if np.any(painted & ~target):continue
+            missing=int(np.count_nonzero(target & ~painted))
+            best_residual=missing if best_residual is None else min(best_residual,missing)
+            if missing or not np.array_equal(painted,target):continue
+            # Compare complete exact results, including narrower cleanup and
+            # brush/phase transitions. Local gain-per-cost can otherwise buy a
+            # cheap first layout whose cleanup makes the finished pack dearer.
+            cost=float(model.sequence_cost(sequence,initial_color=int(comp.color_index),
+                                           initial_brush=default).total_seconds)
+            _cancel(cancelled)
+            exact_count+=1;exact_ladders.add(ladder)
+            stats=policy_stats[policy];stats['exact']+=1
+            stats['best_seconds']=cost if stats['best_seconds'] is None else min(stats['best_seconds'],cost)
+            key=(cost,policy_index,len(sequence),-len(set(used)),ladder_index)
+            if best_key is None or key<best_key:
+                # Retain only the winning pack; two bounded policies must not
+                # double the lifetime of every complete path/sequence result.
+                best_key=key
+                best={"sequence":sequence,"paths":flat_paths,"cost":cost,
+                    "brush_px":max(used),"method":"region-brush-pack","exact":True,
+                    "used_brush_sizes":tuple(used),"packing":per_size,
+                    "requested_ladder":tuple(ladder),"covered_pixels":int(np.count_nonzero(painted)),
+                    'packing_policy':policy}
 
-    if not exact_candidates:
+    _cancel(cancelled)
+    if best is None:
         residual_text="unknown" if best_residual is None else str(int(best_residual))
         return None,(f"smallest verified brush cannot exactly repair residual pixels "
                      f"(best residual={residual_text}); eligible={sizes} pruned={pruned}")
-    best=min(exact_candidates,key=lambda row:(row["cost"],len(row["sequence"]),-len(set(row["used_brush_sizes"]))))
     roi_pixels=int(target.size)
     canvas_pixels=(int(projection.canvas_size[0]*projection.canvas_size[1])
                    if projection is not None else int(component_map.size))
@@ -513,14 +532,16 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
         "packing_canvas_pixels":canvas_pixels,
         "packing_workspace_reduction_percent":round(reduction*100.0,4),
         "verified_brush_sizes":verified,"eligible_brush_sizes":sizes,"pruned_brush_sizes":pruned,
-        "ladder_candidates_evaluated":len(ladders),"exact_ladder_candidates":len(exact_candidates),
+        "ladder_candidates_evaluated":len(ladders),"exact_ladder_candidates":len(exact_ladders),
+        'packing_candidates_evaluated':sum(row['evaluated'] for row in policy_stats.values()),
+        'exact_packing_candidates':exact_count,'packing_policy_candidates':policy_stats,
     })
     if native_roi is not None:
         best['packing_native_origin']=native_roi.native_origin
         best['packing_coordinate_space']='physical canvas pixels'
     return best,(
         f"exact verified brush packing chose ladder {best['requested_ladder']} using {best['used_brush_sizes']} "
-        f"from {len(exact_candidates)}/{len(ladders)} exact candidates; pruned={pruned}")
+        f"with {best['packing_policy']} from {exact_count}/{best['packing_candidates_evaluated']} exact candidates; pruned={pruned}")
 
 
 def _choose_component(comp,component_map,total_drawable,model,options,cancelled=lambda:False,*,projection=None):
@@ -560,10 +581,11 @@ def _choose_component(comp,component_map,total_drawable,model,options,cancelled=
                         float(comp.importance_mean),float(comp.edge_mean),comp.protected_pixels,
                         cost,gain,gain/(cost*1000.0),best[1],best[5],True,
                         f"minimum calibrated execution cost among {len(candidates)} exact candidate(s); {pack_reason}")
-    if projection is not None:
+    if projection is not None or best[5]>1:
         # The legacy connected-run proof describes source centerlines. A
-        # scaled fallback may leave native gaps or paint beyond a source cell;
-        # only the fully checked native packing earns an exact-footprint claim.
+        # scaled fallback may leave native gaps; a thick fixed brush can also
+        # spill at unit scale. Only the fully checked brush packing proves
+        # the physical footprint exact in either case.
         choice.exact=best[2]=='region-brush-pack'
         choice.reason=(f'minimum calibrated execution cost among {len(candidates)} candidate(s); '
                        f'native exact packing={choice.exact}; {pack_reason}')
@@ -575,7 +597,9 @@ def _choose_component(comp,component_map,total_drawable,model,options,cancelled=
         "roi_bbox":packed.get("packing_roi_bbox"),
         "workspace_pixels":int(packed.get("packing_workspace_pixels",0) or 0),
         "canvas_pixels":int(packed.get("packing_canvas_pixels",0) or 0),
-        "workspace_reduction_percent":float(packed.get("packing_workspace_reduction_percent",0.0) or 0.0)}
+        "workspace_reduction_percent":float(packed.get("packing_workspace_reduction_percent",0.0) or 0.0),
+        'packing_policy':packed.get('packing_policy'),
+        'policy_candidates':packed.get('packing_policy_candidates') or {}}
     if packed and projection is not None:
         diagnostics['brush_packing'].update(coordinate_space='physical canvas pixels',
             native_origin=packed.get('packing_native_origin'))

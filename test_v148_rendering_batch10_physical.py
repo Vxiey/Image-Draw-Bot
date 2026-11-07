@@ -218,18 +218,18 @@ class PhysicalBrushProjectionTests(unittest.TestCase):
             self.assertTrue(all((right-left)*(bottom-top)<=plan['options']['planner_max_pixels']
                 for left,top,right,bottom in projection.tiles()))
 
-    def test_half_pixel_letterbox_uses_signed_native_rounding_even_at_unit_scale(self):
+    def test_half_pixel_letterbox_uses_contiguous_native_centers_at_unit_scale(self):
         settings={'_planning_canvas_size':(11,10),'corners':((-6,-5),(5,5)),'planner_max_pixels':100}
         projection=NativeBrushProjection.for_scaled_plan((10,10),(10,10),settings)
         self.assertIsNotNone(projection)
         self.assertEqual(projection.native_path(tuple((x,5) for x in range(10))),
-                         tuple((x,5) for x in (0,1,2,3,4,5,7,8,9,10)))
+                         tuple((x,5) for x in range(1,11)))
         self.assertIsNotNone(NativeBrushProjection.for_scaled_plan((10,10),(10,10),
             dict(settings,_planning_canvas_size=(12,10),corners=((-6,-5),(6,5)))))
         self.assertIsNone(NativeBrushProjection.for_scaled_plan((10,10),(10,10),
             dict(settings,_planning_canvas_size=(10,10),corners=((-6,-5),(4,5)))))
 
-    def test_actual_unit_scale_signed_half_tie_gap_remains_visible_in_native_quality(self):
+    def test_actual_unit_scale_signed_half_ties_deliver_contiguously_with_truthful_quality(self):
         with ExitStack() as stack:
             stack.enter_context(patch('DrawTimeCalibration.load_profile',return_value=None))
             source=stack.enter_context(closing(Image.new('RGB',(130,130),'white')))
@@ -242,7 +242,9 @@ class PhysicalBrushProjectionTests(unittest.TestCase):
             actual,_=replay_executor(plan,origin,area)
             target=self.assert_report_matches_native_actions(plan,reference,actual,area)
             self.assertTrue(np.all(target[65,50:81]>=0))
-            self.assertLess(np.count_nonzero(actual[65,50:81]>=0),31)
+            expected=np.zeros((area[1],area[0]),dtype=np.bool_)
+            expected[61:71,50:81]=True
+            np.testing.assert_array_equal(actual>=0,expected)
             self.assertGreater(plan['options']['adaptive_hybrid_meta']['quality']['missing_pixels'],0)
 
     def test_reachable_roi_centers_match_literal_native_footprints_around_a_hole(self):

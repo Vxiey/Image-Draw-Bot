@@ -40,6 +40,7 @@ class SingleBrushAdmissionTests(unittest.TestCase):
             try:
                 metadata=plan['options']['adaptive_hybrid_meta']
                 self.assertEqual(metadata['methods'],{'region-brush-pack':1})
+                self.assertTrue(metadata['region_choices'][0]['exact'])
                 self.assertEqual({entry['brush_px'] for entry in plan['execution_sequence']},{16})
                 packing=metadata['candidate_diagnostics'][0]['brush_packing']
                 self.assertEqual(packing['used_brush_sizes'],[16])
@@ -60,6 +61,16 @@ class SingleBrushAdmissionTests(unittest.TestCase):
                 metadata=plan['options']['adaptive_hybrid_meta']
                 self.assertNotIn('region-brush-pack',metadata['methods'])
                 self.assertEqual({entry['brush_px'] for entry in plan['execution_sequence']},{2})
+                choice=metadata['region_choices'][0]
+                self.assertEqual(choice['method'],'horizontal')
+                self.assertFalse(choice['exact'])
+                self.assertIn('native exact packing=False',choice['reason'])
+                self.assertEqual((metadata['quality']['coverage_percent'],metadata['quality']['missing_pixels'],
+                                  metadata['quality']['spill_pixels']),(100.,0,81))
+                target=np.zeros((48,64),bool);target[8:40,8:56]=True
+                actual=sequence_raster(plan['execution_sequence'],source.size)
+                self.assertEqual(np.count_nonzero(actual&~target),81)
+                self.assertFalse(np.any(target&~actual))
                 candidates=metadata['candidate_diagnostics'][0]['candidates']
                 packed=next(row for row in candidates if row['method']=='region-brush-pack')
                 self.assertGreater(packed['estimated_seconds'],min(row['estimated_seconds'] for row in candidates))
