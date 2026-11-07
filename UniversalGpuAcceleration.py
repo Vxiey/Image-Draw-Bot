@@ -104,15 +104,52 @@ def _cancel(cancelled: Callable[[], bool]) -> None:
 
 
 def _check_completed(function):
-    """Do not publish a finished numeric result after the caller pressed Stop."""
+    """Withhold cancelled results without retaining their private array owners."""
     @wraps(function)
     def checked(*args, **kwargs):
-        result = function(*args, **kwargs)
-        cancelled = kwargs.get('cancelled')
-        if cancelled is not None:
-            _cancel(cancelled)
-        return result
+        result = None
+        try:
+            result = function(*args, **kwargs)
+            cancelled = kwargs.get('cancelled')
+            if cancelled is not None:
+                _cancel(cancelled)
+            return result
+        except BaseException as error:
+            # A retained worker exception keeps its traceback alive. Clear only
+            # our references; borrowed source arrays and contexts stay usable.
+            result = args = kwargs = cancelled = None
+            _release_failed_frames(error)
+            raise
     return checked
+
+
+def _release_failed_frames(error):
+    """Release failed scopes, preserving exception identity and stack locations."""
+    import traceback
+    pending = [error]
+    seen = set()
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        traceback.clear_frames(current.__traceback__)
+        pending.extend((current.__cause__, current.__context__))
+
+
+def _run_accelerated(route, operation, cpu_fallback, cancelled):
+    """Finish the native attempt's ownership before allocating CPU fallback."""
+    try:
+        return operation()
+    except InterruptedError:
+        raise
+    except Exception as error:
+        _release_failed_frames(error)
+        fallback = _mark_failed(route, error)
+    # Leave the native exception scope before CPU work. Stop must not start a
+    # second heavy attempt merely because the first one failed concurrently.
+    _cancel(cancelled)
+    return cpu_fallback(fallback)
 
 
 def _cpu_route(workload: str, pixels: int, reason: str = "CPU/NumPy fallback") -> RouteInfo:
@@ -475,7 +512,7 @@ def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInpu
     route = select_route("oklab", pixels=pixels, gpu_mode=gpu_mode, profile=profile)
     if not route.accelerated:
         return _oklab_cpu(arr), route.as_dict()
-    try:
+    def accelerated():
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
             with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
@@ -500,11 +537,8 @@ def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInpu
                 sink=np.empty_like(host4);cl.enqueue_copy(queue,sink,dst);queue.finish()
                 return sink[:,:3].reshape(shape).astype(np.float32,copy=False),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
-    except InterruptedError:
-        raise
-    except Exception as exc:
-        fallback=_mark_failed(route,exc)
-        return _oklab_cpu(arr),fallback.as_dict()
+    return _run_accelerated(route, accelerated,
+        lambda fallback: (_oklab_cpu(arr), fallback.as_dict()), cancelled)
 
 
 @_check_completed
@@ -521,10 +555,12 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
     if src.shape!=dst.shape or src.ndim < 1 or src.shape[-1]!=3:
         raise ValueError("perceptual_pair requires matching RGB arrays")
     pixels=int(np.prod(src.shape[:-1])); route=select_route("delta_e",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
-    if not route.accelerated:
+    def cpu(fallback):
         sl=_oklab_cpu(src);dl=_oklab_cpu(dst);de=np.linalg.norm(sl-dl,axis=-1).astype(np.float32,copy=False)
-        return sl,dl,de,route.as_dict()
-    try:
+        return sl,dl,de,fallback.as_dict()
+    if not route.accelerated:
+        return cpu(route)
+    def accelerated():
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
             with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
@@ -548,11 +584,7 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
                 target=src.shape
                 return sa[:,:3].reshape(target),sb[:,:3].reshape(target),de.reshape(target[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
-    except InterruptedError:
-        raise
-    except Exception as exc:
-        fallback=_mark_failed(route,exc);sl=_oklab_cpu(src);dl=_oklab_cpu(dst);de=np.linalg.norm(sl-dl,axis=-1).astype(np.float32,copy=False)
-        return sl,dl,de,fallback.as_dict()
+    return _run_accelerated(route, accelerated, cpu, cancelled)
 
 
 @_check_completed
@@ -568,7 +600,7 @@ def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: Pr
         return luminance_edges(lum)
     if not pixels:return cpu(),_cpu_route("edge_map",0,"Empty luminance grid").as_dict()
     if not route.accelerated:return cpu(),route.as_dict()
-    try:
+    def accelerated():
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
             with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
@@ -579,10 +611,8 @@ def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: Pr
                 mf=cl.mem_flags
                 flat=np.ascontiguousarray(lum.reshape(-1),dtype=np.float32);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=flat);dst=cl.Buffer(ctx,mf.WRITE_ONLY,flat.nbytes);program.ds_edge_kernel(queue,(pixels,),None,src,dst,np.int32(w),np.int32(h));sink=np.empty_like(flat);cl.enqueue_copy(queue,sink,dst);queue.finish();return sink.reshape(h,w),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
-    except InterruptedError:
-        raise
-    except Exception as exc:
-        fallback=_mark_failed(route,exc);return cpu(),fallback.as_dict()
+    return _run_accelerated(route, accelerated,
+        lambda fallback: (cpu(), fallback.as_dict()), cancelled)
 
 
 @_check_completed
@@ -594,7 +624,7 @@ def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: s
     if a.shape!=b.shape or a.ndim < 1 or a.shape[-1]!=3:raise ValueError("pixel_channel_error requires matching RGB arrays")
     pixels=int(np.prod(a.shape[:-1]));route=select_route("pixel_math",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     if not route.accelerated:return np.mean(np.abs(a-b),axis=-1,dtype=np.float32),route.as_dict()
-    try:
+    def accelerated():
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
             with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
@@ -604,10 +634,8 @@ def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: s
             with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
                 mf=cl.mem_flags;a4=_float4_host(a);b4=_float4_host(b);ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4);bo=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4);program.ds_absdiff_kernel(queue,(pixels,),None,ba,bb,bo,np.int32(pixels));sink=np.empty((pixels,),dtype=np.float32);cl.enqueue_copy(queue,sink,bo);queue.finish();return sink.reshape(a.shape[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
-    except InterruptedError:
-        raise
-    except Exception as exc:
-        fallback=_mark_failed(route,exc);return np.mean(np.abs(a-b),axis=-1,dtype=np.float32),fallback.as_dict()
+    return _run_accelerated(route, accelerated,
+        lambda fallback: (np.mean(np.abs(a-b),axis=-1,dtype=np.float32), fallback.as_dict()), cancelled)
 
 
 def _palette_features(lab):
@@ -733,7 +761,7 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
         return out.reshape(h,w), visible.astype(np.bool_,copy=False)
     if not route.accelerated:
         result=cpu();return result,route.as_dict()
-    try:
+    def accelerated():
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
             with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
@@ -771,9 +799,8 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
                     cl.enqueue_copy(queue,om[start:end],bm,is_blocking=True)
                 return (oi.reshape(h,w),om.reshape(h,w).astype(np.bool_)),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
-    except InterruptedError:raise
-    except Exception as exc:
-        fallback=_mark_failed(route,exc);result=cpu();return result,fallback.as_dict()
+    return _run_accelerated(route, accelerated,
+        lambda fallback: (cpu(), fallback.as_dict()), cancelled)
 
 
 def _pairwise_lab_distance(lab, *, xp=np, cancelled=lambda: False):
@@ -813,7 +840,7 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
     # already returns CPU below the measured crossover.
     if not route.accelerated:
         return _pairwise_lab_distance(_oklab_cpu(arr),cancelled=cancelled),route.as_dict()
-    try:
+    def accelerated():
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
             with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
@@ -824,7 +851,5 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
             with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
                 mf=cl.mem_flags;host4=_float4_host(arr);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4);lab=cl.Buffer(ctx,mf.READ_WRITE,host4.nbytes);outb=cl.Buffer(ctx,mf.WRITE_ONLY,n*n*4);program.ds_oklab_kernel(queue,(n,),None,src,lab,np.int32(n));program.ds_pairwise_lab(queue,(n*n,),None,lab,outb,np.int32(n));sink=np.empty((n*n,),dtype=np.float32);cl.enqueue_copy(queue,sink,outb);queue.finish();return sink.reshape(n,n),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
-    except InterruptedError:
-        raise
-    except Exception as exc:
-        fallback=_mark_failed(route,exc);return _pairwise_lab_distance(_oklab_cpu(arr),cancelled=cancelled),fallback.as_dict()
+    return _run_accelerated(route, accelerated,
+        lambda fallback: (_pairwise_lab_distance(_oklab_cpu(arr),cancelled=cancelled), fallback.as_dict()), cancelled)

@@ -8,6 +8,7 @@ improves.  No screen capture, mouse input, telemetry or native calls occur here.
 """
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import dataclass
 from typing import Sequence
 import math
@@ -426,6 +427,96 @@ def _correction_runs(pixel_map: PixelMap, result: SimulationResult, background_i
     return entries
 
 
+def _protected_correction_losses(pixel_map, current, candidate, desired, *, cancelled):
+    """Count lost *individual* correct details, not a net feature-score change."""
+    losses = 0
+    protected = np.asarray(pixel_map.protected_mask, dtype=bool)
+    drawable = np.asarray(pixel_map.drawable_mask, dtype=bool)
+    height, width = desired.shape
+    for y in range(0, height, 64):
+        for x in range(0, width, 4096):
+            if cancelled():raise InterruptedError()
+            tile = (slice(y, y + 64), slice(x, x + 4096))
+            keep = protected[tile] & drawable[tile]
+            if not np.any(keep):continue
+            keep &= current.simulated_index[tile] == desired[tile]
+            losses += int(np.count_nonzero(keep & (candidate.simulated_index[tile] != desired[tile])))
+    if cancelled():raise InterruptedError()
+    return losses
+
+
+def _detail_safe_correction_spans(pixel_map, current, desired, color, y, x0, x1, brush, *, cancelled):
+    """Yield horizontal centers whose actual square brush preserves old detail.
+
+    A protected pixel at x forbids centers x-after .. x+before when its current
+    correct color differs from the correction. Difference arrays union those
+    intervals in bounded center blocks. No full-canvas erosion mask or one
+    full-canvas mask per palette color is retained.
+    """
+    before, after = _brush_extents(brush)
+    height, width = desired.shape
+    protected = np.asarray(pixel_map.protected_mask, dtype=bool)
+    drawable = np.asarray(pixel_map.drawable_mask, dtype=bool)
+    top, bottom = max(0, y - before), min(height, y + after + 1)
+    pending = None
+    for left in range(x0, x1 + 1, 4096):
+        if cancelled():raise InterruptedError()
+        right = min(x1, left + 4095)
+        changes = np.zeros(right - left + 2, dtype=np.int64)
+        first, last = max(0, left - before), min(width, right + after + 1)
+        for row in range(top, bottom, 64):
+            for column in range(first, last, 4096):
+                if cancelled():raise InterruptedError()
+                tile = (slice(row, min(bottom, row + 64)),
+                        slice(column, min(last, column + 4096)))
+                blocked = protected[tile] & drawable[tile]
+                if not np.any(blocked):continue
+                blocked &= current.simulated_index[tile] == desired[tile]
+                blocked &= desired[tile] != color
+                columns = np.flatnonzero(np.any(blocked, axis=0)) + column
+                starts = np.maximum(left, columns - after) - left
+                ends = np.minimum(right, columns + before) - left + 1
+                np.add.at(changes, starts, 1)
+                np.add.at(changes, ends, -1)
+        safe = np.cumsum(changes[:-1]) == 0
+        boundaries = np.flatnonzero(np.diff(np.r_[False, safe, False]))
+        for start, stop in zip(boundaries[::2], boundaries[1::2]):
+            span = (left + int(start), left + int(stop) - 1)
+            if pending is not None and pending[1] + 1 == span[0]:
+                pending = (pending[0], span[1])
+            else:
+                if pending is not None:yield pending
+                pending = span
+    if cancelled():raise InterruptedError()
+    if pending is not None:yield pending
+
+
+def _detail_safe_corrections(pixel_map, current, corrections, desired, *, max_paths, cancelled):
+    """Keep the original priority and brush, splitting only unsafe retry runs."""
+    safe = []
+    for entry in corrections:
+        if cancelled():raise InterruptedError()
+        path = entry['path']
+        x0, y = path[0]
+        x1, last_y = path[-1]
+        if y != last_y or len(path) > 2:
+            raise ValueError('Accuracy corrections must be horizontal runs.')
+        x0, x1 = sorted((x0, x1))
+        spans = _detail_safe_correction_spans(pixel_map, current, desired,
+            entry['color_index'], y, x0, x1, entry['brush_px'], cancelled=cancelled)
+        with closing(spans):
+            for left, right in spans:
+                row = dict(entry)
+                row['path'] = ((left, y),) if left == right else ((left, y), (right, y))
+                row['serial'] = len(safe)
+                safe.append(row)
+                if max_paths is not None and len(safe) >= max_paths:
+                    if cancelled():raise InterruptedError()
+                    return safe
+    if cancelled():raise InterruptedError()
+    return safe
+
+
 def region_accuracy_scores(pixel_map: PixelMap, result: SimulationResult, *, max_regions: int = 64,
                            cancelled=lambda: False) -> dict:
     """Measure planned execution accuracy per exact connected target region."""
@@ -501,6 +592,23 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
                              gpu_performance=gpu_performance,score_context=score_context,cancelled=cancelled)
     initial=dict(current.metrics)
     pass_meta=[];accepted_entries=[]
+
+    def simulate_candidate(corrections):
+        if gpu_mode!='CPU':
+            return simulate_strokes(pixel_map,sequence+corrections,palette_rgb,brush_px=brush_px,
+                                    gpu_mode=gpu_mode,gpu_vram=gpu_vram,
+                                    gpu_performance=gpu_performance,score_context=score_context,cancelled=cancelled)
+        sim=current.simulated_index.copy();counts=current.coverage_count.copy()
+        _apply_sequence(sim,counts,corrections,max(1,int(brush_px)),cancelled=cancelled)
+        error,metrics=_score(pixel_map,sim,counts,background_index,
+                             score_context=score_context,cancelled=cancelled)
+        from itertools import chain
+        _sizes=brush_sizes_for_sequence(chain(sequence,corrections),brush_px)
+        metrics.update({'simulation_backend':'cpu-numpy-raster','brush_model':'adaptive-square-swept-footprint',
+                        'brush_px':max(1,int(brush_px)),'brush_sizes_used':_sizes,
+                        'adaptive_brush':len(_sizes)>1,'correction_brush_px':correction_brush_px})
+        return SimulationResult(sim,counts,counts>0,error,metrics)
+
     for pass_number in range(1,max(0,int(max_passes))+1):
         if cancelled():raise InterruptedError()
         if int(current.metrics.get('error_pixels',0))<=0:break
@@ -510,40 +618,73 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
             correction_brush_px=correction_brush_px,score_context=score_context,cancelled=cancelled)
         if remaining is not None:corrections=corrections[:remaining]
         if not corrections:break
-        if gpu_mode!='CPU':
-            candidate=simulate_strokes(pixel_map,sequence+corrections,palette_rgb,brush_px=brush_px,
-                                       gpu_mode=gpu_mode,gpu_vram=gpu_vram,
-                                       gpu_performance=gpu_performance,score_context=score_context,cancelled=cancelled)
-        else:
-            sim=current.simulated_index.copy();counts=current.coverage_count.copy()
-            _apply_sequence(sim,counts,corrections,max(1,int(brush_px)),cancelled=cancelled)
-            error,metrics=_score(pixel_map,sim,counts,background_index,
-                                 score_context=score_context,cancelled=cancelled)
-            from itertools import chain
-            _sizes=brush_sizes_for_sequence(chain(sequence,corrections),brush_px)
-            metrics.update({'simulation_backend':'cpu-numpy-raster','brush_model':'adaptive-square-swept-footprint',
-                            'brush_px':max(1,int(brush_px)),'brush_sizes_used':_sizes,
-                            'adaptive_brush':len(_sizes)>1,'correction_brush_px':correction_brush_px})
-            candidate=SimulationResult(sim,counts,counts>0,error,metrics)
+        candidate=simulate_candidate(corrections)
+        proposed_paths=len(corrections)
+        generated_paths=proposed_paths
+        protected_losses=0
+        attempted_protected_losses=0
+        safe_paths=None
+        resource_stop=None
+        detail_stage='protected-pixel comparison'
+        try:
+            if int(current.metrics.get('protected_pixels',0)):
+                desired=score_context.desired(background_index,cancelled)
+                protected_losses=_protected_correction_losses(pixel_map,current,candidate,desired,cancelled=cancelled)
+            attempted_protected_losses=protected_losses
+            if protected_losses:
+                detail_stage='protected-detail span filtering'
+                safe_corrections=_detail_safe_corrections(pixel_map,current,corrections,desired,
+                                                         max_paths=remaining,cancelled=cancelled)
+                safe_paths=len(safe_corrections)
+                if safe_corrections:
+                    # Release the rejected private raster before allocating the retry.
+                    # The accepted state is unchanged until every gate below passes.
+                    candidate=None
+                    corrections=safe_corrections
+                    generated_paths=len(corrections)
+                    detail_stage='protected-detail retry simulation'
+                    candidate=simulate_candidate(corrections)
+                    detail_stage='protected-detail retry comparison'
+                    protected_losses=_protected_correction_losses(pixel_map,current,candidate,desired,cancelled=cancelled)
+        except MemoryError:
+            # This additional quality check/retry is optional. Its allocation
+            # failure must not discard the already accepted, complete plan or
+            # authorize an unverified proposal. Do not retain the failed private
+            # candidate or exception traceback in diagnostics.
+            candidate=None
+            corrections=[]
+            safe_corrections=None
+            candidate=current
+            protected_losses=0
+            if detail_stage=='protected-pixel comparison':attempted_protected_losses=None
+            resource_stop=f'MemoryError during {detail_stage}; kept accepted plan'
+            if cancelled():raise InterruptedError()
         before=float(current.metrics['pixel_accuracy_percent']);after=float(candidate.metrics['pixel_accuracy_percent'])
         before_errors=int(current.metrics['error_pixels']);after_errors=int(candidate.metrics['error_pixels'])
         accuracy_gain=after-before
         errors_repaired=max(0,before_errors-after_errors)
-        path_count=max(1,len(corrections))
+        path_count=max(1,generated_paths)
         repaired_per_path=errors_repaired/path_count
         gain_per_path=max(0.0,accuracy_gain)/path_count
-        accepted=(after>before+float(min_improvement)) or (after>=before and after_errors<before_errors)
+        accepted=((after>before+float(min_improvement)) or
+                  (after>=before and after_errors<before_errors)) and protected_losses == 0 and resource_stop is None
         efficiency_floor=max(0.0,float(min_repaired_pixels_per_path))
         inefficient=(pass_number>1 and len(corrections)>=8 and errors_repaired>0 and
                      repaired_per_path<efficiency_floor and accuracy_gain<max(.005,float(min_improvement)*4.0))
         if inefficient:accepted=False
-        pass_meta.append({'pass':pass_number,'generated_paths':len(corrections),'accepted':bool(accepted),
+        pass_meta.append({'pass':pass_number,'generated_paths':generated_paths,'accepted':bool(accepted),
+                          'proposed_paths':proposed_paths,'attempted_protected_pixels_lost':attempted_protected_losses,
+                          'protected_pixels_lost':protected_losses,'detail_preserving_retry_paths':safe_paths,
+                          'correction_resource_stop':resource_stop,
                           'before_accuracy':round(before,4),'after_accuracy':round(after,4),
                           'accuracy_gain':round(accuracy_gain,6),'accuracy_gain_per_path':round(gain_per_path,8),
                           'before_errors':before_errors,'after_errors':after_errors,
                           'errors_repaired':int(errors_repaired),'repaired_pixels_per_path':round(repaired_per_path,6),
                           'efficiency_floor':round(efficiency_floor,6),
-                          'stop_reason':'low marginal correction gain' if inefficient else ('accepted' if accepted else 'no accuracy improvement')})
+                          'stop_reason':(resource_stop or ('no safe protected-detail correction' if safe_paths == 0 else
+                            'protected detail regression' if protected_losses else
+                            'low marginal correction gain' if inefficient else
+                            ('accepted' if accepted else 'no accuracy improvement')))})
         if not accepted:break
         sequence.extend(corrections);accepted_entries.extend(corrections);current=candidate
     final=dict(current.metrics)

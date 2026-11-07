@@ -1,0 +1,343 @@
+{
+  "baseline_commit": "be30fa54a0c58a8d2b6535d31cb6672727f4e6cc",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "balanced_pairs_per_workload": 6,
+  "source_sha256": {
+    "ScreenGuard.py": "9440244d1c2618db1f91472500a39081c981e86de565be53f9299b85623155f0",
+    "DpiSupport.py": "ccaf2befe09a53e185a21270652785b3d6747c3f623a1ea87b98459e9deabbcd",
+    "WindowsSystem.py": "ef7dd721e0af940df96d6e62af2415538c65ccbdadaa980cacda5d39207ad460",
+    "benchmark_v148_spectrum.py": "7a22ff021492127156875b2b4b26bf94d00dcd7cf0ae66ae3a281d695e184294",
+    "benchmark_v148_image_workflow.py": "ccba17da2b50a22c3c967e51994121bc23a95a7c4b2a496dc3eb1b2918346da5",
+    "test_v148_native_batch22_spectrum.py": "8209ce96605396dc60cb04354817afb1def7943752b7c5f47ae495762449c3ea"
+  },
+  "scope": "Complete public GuardedMouse spectrum analysis including capture-copy ownership, geometry checks and refinement. Existing repository pixels only; no new image files. Capture and Win32 monitor boundaries are substituted; no native input, Windows/Paint/GPU throughput or total draw-time claim.",
+  "allocation_scope": "Separate Python/NumPy tracemalloc observations. Excludes most native Pillow cores and process RSS. Numeric strips intentionally add bounded scratch memory.",
+  "workloads": {
+    "app_capture_720x393": {
+      "orders": [
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ],
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ],
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ]
+      ],
+      "exact_output_parity": true,
+      "output": [
+        [
+          -78,
+          49
+        ],
+        [
+          95,
+          103,
+          137
+        ],
+        31.515075757484702
+      ],
+      "output_sha256": "0b13234f93f04f3e761035e9af400faad995b63e718b615a535351011c88c6c5",
+      "before_samples_ms": [
+        30.20947999903001,
+        31.978574003005633,
+        33.601020000787685,
+        30.520442000124604,
+        29.671481999685057,
+        30.378421000932576
+      ],
+      "before_median_ms": 30.44943150052859,
+      "before_getpixel_calls": 31521,
+      "before_traced_peak_bytes": 29116,
+      "after_samples_ms": [
+        1.5642899998056237,
+        1.288900999497855,
+        1.7455779998272192,
+        1.287458999286173,
+        1.6626649994577747,
+        1.1956939997617155
+      ],
+      "after_median_ms": 1.4265954996517394,
+      "after_getpixel_calls": 81,
+      "after_traced_peak_bytes": 512220,
+      "source": "assets/image-draw-bot-app-screenshot.webp",
+      "crop": null,
+      "size": [
+        720,
+        393
+      ],
+      "requested_rgb": [
+        121,
+        79,
+        201
+      ],
+      "max_samples": 70000,
+      "source_file_sha256": "88888ee0bfb43a65723bf0a1a4492002088360d49b6ed8140bb76ec41e405621",
+      "source_rgb_sha256": "c4364825f29c508f483e674eb318362133a643ed3a8493510724c40a31982d54"
+    },
+    "large_capture_1600x1000": {
+      "orders": [
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ],
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ],
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ]
+      ],
+      "exact_output_parity": true,
+      "output": [
+        [
+          -30,
+          93
+        ],
+        [
+          43,
+          147,
+          145
+        ],
+        26.891634386924125
+      ],
+      "output_sha256": "b505df7e174d6cd47a43e24cd8fa2e40212855596e051ac6773dcf55ea1f6b1a",
+      "before_samples_ms": [
+        62.64920800094842,
+        61.13289900167729,
+        64.85118400087231,
+        61.866828000347596,
+        61.306386000069324,
+        57.84808300086297
+      ],
+      "before_median_ms": 61.58660700020846,
+      "before_getpixel_calls": 64169,
+      "before_traced_peak_bytes": 29116,
+      "after_samples_ms": [
+        4.260858000634471,
+        3.4403620011289604,
+        5.331838001438882,
+        3.762839998671552,
+        4.026782000437379,
+        3.704154001752613
+      ],
+      "after_median_ms": 3.8948109995544655,
+      "after_getpixel_calls": 169,
+      "after_traced_peak_bytes": 901262,
+      "source": "assets/image-draw-bot-app-screenshot.png",
+      "crop": [
+        0,
+        40,
+        1600,
+        1040
+      ],
+      "size": [
+        1600,
+        1000
+      ],
+      "requested_rgb": [
+        20,
+        160,
+        80
+      ],
+      "max_samples": 70000,
+      "source_file_sha256": "286e03e9eb7ae809a2cf37a443ca52e858a22fd8851aa3486f7cdf8d92c104fa",
+      "source_rgb_sha256": "a8dfc36e5dbf80ae5cd4002e18e32989da3ea7a3df9ff01e844a304221bb045c"
+    },
+    "paint_reference_76x76": {
+      "orders": [
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ],
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ],
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ]
+      ],
+      "exact_output_parity": true,
+      "output": [
+        [
+          -88,
+          41
+        ],
+        [
+          151,
+          131,
+          83
+        ],
+        22.958222927744213
+      ],
+      "output_sha256": "e4c514562c3f153ebf035064b43b6a61314c322883ef6e4c47a1935d7930953e",
+      "before_samples_ms": [
+        5.215253997448599,
+        5.2063809998799115,
+        5.179781997867394,
+        10.261146999255288,
+        5.767792998085497,
+        5.175295002118219
+      ],
+      "before_median_ms": 5.210817498664255,
+      "before_getpixel_calls": 5801,
+      "before_traced_peak_bytes": 29116,
+      "after_samples_ms": [
+        0.38002399742254056,
+        0.30815699938102625,
+        0.4607330010912847,
+        0.4766669990203809,
+        0.47846899906289764,
+        0.45045799924992025
+      ],
+      "after_median_ms": 0.45559550017060246,
+      "after_getpixel_calls": 25,
+      "after_traced_peak_bytes": 184341,
+      "source": "assets/paint-tools-reference.png",
+      "crop": null,
+      "size": [
+        76,
+        76
+      ],
+      "requested_rgb": [
+        180,
+        120,
+        40
+      ],
+      "max_samples": 70000,
+      "source_file_sha256": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+      "source_rgb_sha256": "41e002acc5b13d71be752935e32557879aa06d27407e161c9747c5682ef80bfc"
+    },
+    "tiny_control_8x8": {
+      "orders": [
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ],
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ],
+        [
+          "before",
+          "after"
+        ],
+        [
+          "after",
+          "before"
+        ]
+      ],
+      "exact_output_parity": true,
+      "output": [
+        [
+          -100,
+          26
+        ],
+        [
+          76,
+          90,
+          113
+        ],
+        27.906809204923444
+      ],
+      "output_sha256": "70cc2ffcd21203e9ae53f355ff58841407616328cdd10c2c404257165ac6dcbf",
+      "before_samples_ms": [
+        0.30288899870356545,
+        0.4069930000696331,
+        0.32812599965836853,
+        0.3018469978997018,
+        0.27561900060391054,
+        0.4568570002447814
+      ],
+      "before_median_ms": 0.315507499180967,
+      "before_getpixel_calls": 76,
+      "before_traced_peak_bytes": 29116,
+      "after_samples_ms": [
+        0.32360000113840215,
+        0.28853799813077785,
+        0.2901700026995968,
+        0.2679680001165252,
+        0.24033699810388498,
+        0.23122299899114296
+      ],
+      "after_median_ms": 0.27825299912365153,
+      "after_getpixel_calls": 76,
+      "after_traced_peak_bytes": 29116,
+      "source": "assets/image-draw-bot-app-screenshot.webp",
+      "crop": [
+        10,
+        10,
+        18,
+        18
+      ],
+      "size": [
+        8,
+        8
+      ],
+      "requested_rgb": [
+        80,
+        120,
+        160
+      ],
+      "max_samples": 70000,
+      "source_file_sha256": "88888ee0bfb43a65723bf0a1a4492002088360d49b6ed8140bb76ec41e405621",
+      "source_rgb_sha256": "aa137ce42d3b209ca595aaf8e2341b39e580d8cb873a67c993971aac62acf192"
+    }
+  },
+  "source_unchanged": true
+}

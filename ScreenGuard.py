@@ -61,6 +61,75 @@ def _box_probes(box):
             (right - 1, bottom - 1), ((left + right) // 2, (top + bottom) // 2))
 
 
+def _nearest_rgb_scalar(image, bounds, stride, expected, rgb_error, best):
+    left, top, right, bottom = bounds
+    for y in range(top, bottom, stride):
+        for x in range(left, right, stride):
+            rgb = image.getpixel((x, y))
+            error = rgb_error(rgb, expected)
+            if best is None or error < best[0]:
+                best = (error, x, y, rgb)
+    return best
+
+
+def _nearest_rgb_grid(image, bounds, stride, expected, rgb_error, best=None):
+    """Search the existing sample grid in bounded strips, preserving scalar ties.
+
+    Byte RGB distances have exact integer weights 30/59/11. Only colours tied
+    at that minimum need the original floating-point metric: its rounding can
+    distinguish mathematical ties. Preserve their first row-major occurrence,
+    including the coarse winner supplied to the refinement pass.
+    """
+    left, top, right, bottom = bounds
+    columns = len(range(left, right, stride))
+    sample_rows = len(range(top, bottom, stride))
+    if not columns or not sample_rows:
+        return best
+    if (columns * sample_rows <= 256 or len(expected) != 3
+            or any(value < 0 or value > 255 for value in expected)):
+        # Small fields/refinement patches need no NumPy allocation. Keep the
+        # legacy behaviour for non-byte callers too; Paint uses validated RGB.
+        return _nearest_rgb_scalar(image, bounds, stride, expected, rgb_error, best)
+
+    import numpy as np
+    # Bound both the native crop and NumPy scratch arrays, including very narrow
+    # grids and a caller-requested stride larger than the capture itself.
+    rows = max(1, min(64 // stride, 16384 // columns))
+    pixels = samples = delta = scores = indices = tied = packed = first = None
+    try:
+        for y in range(top, bottom, rows * stride):
+            end = min(bottom, y + (rows - 1) * stride + 1)
+            with image.crop((left, y, right, end)) as strip:
+                pixels = np.asarray(strip, dtype=np.uint8)
+                samples = pixels[::stride, ::stride].reshape(-1, 3)
+                delta = samples.astype(np.int32) - np.asarray(expected, dtype=np.int32)
+                scores = (delta[:, 0] * delta[:, 0] * 30
+                          + delta[:, 1] * delta[:, 1] * 59
+                          + delta[:, 2] * delta[:, 2] * 11)
+                indices = np.flatnonzero(scores == scores.min())
+                tied = samples[indices]
+                packed = (tied[:, 0].astype(np.uint32) << 16
+                          | tied[:, 1].astype(np.uint32) << 8
+                          | tied[:, 2].astype(np.uint32))
+                first = np.unique(packed, return_index=True)[1]
+                for candidate in np.sort(first):
+                    index = int(indices[candidate])
+                    rgb = tuple(map(int, samples[index]))
+                    error = rgb_error(rgb, expected)
+                    if best is None or error < best[0]:
+                        best = (error, left + (index % columns) * stride,
+                                y + (index // columns) * stride, rgb)
+        return best
+    except MemoryError:
+        # This numeric fast path is optional. Its already captured pixels can
+        # still be searched exactly by the constant-space scalar implementation.
+        pass
+    finally:
+        # Diagnostic tracebacks must not retain the private screen-pixel exports.
+        pixels = samples = delta = scores = indices = tied = packed = first = None
+    return _nearest_rgb_scalar(image, bounds, stride, expected, rgb_error, best)
+
+
 class WindowMonitor:
     def __init__(self):
         # Explicit signatures reduce the chance of ctypes using an incorrect
@@ -409,17 +478,13 @@ class GuardedMouse:
         stride=max(1,int(math.ceil(math.sqrt((width*height)/max(1,int(max_samples))))))
         best=None
         with _sample_rgb(box) as shot:
-            for y in range(0,height,stride):
-                for x in range(0,width,stride):
-                    rgb=shot.getpixel((x,y));err=self._rgb_error(rgb,expected)
-                    if best is None or err<best[0]:best=(err,x,y,rgb)
+            best=_nearest_rgb_grid(shot,(0,0,width,height),stride,expected,self._rgb_error)
             if best is None:raise ValueError('Could not read the calibrated color spectrum.')
             _,bx,by,_=best
             radius=max(2,stride+1)
-            for y in range(max(0,by-radius),min(height,by+radius+1)):
-                for x in range(max(0,bx-radius),min(width,bx+radius+1)):
-                    rgb=shot.getpixel((x,y));err=self._rgb_error(rgb,expected)
-                    if err<best[0]:best=(err,x,y,rgb)
+            best=_nearest_rgb_grid(shot,(max(0,bx-radius),max(0,by-radius),
+                min(width,bx+radius+1),min(height,by+radius+1)),1,
+                expected,self._rgb_error,best)
         err,bx,by,rgb=best
         return (left+bx,top+by),tuple(map(int,rgb)),float(err)
 

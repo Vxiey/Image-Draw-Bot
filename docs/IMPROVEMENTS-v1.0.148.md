@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 823 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **177 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 826 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **174 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -88,8 +88,13 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 821 | U2001 | Batch 20 prepared preview-estimate handoff | 1 | [Evidence](v148-batch20-ui-estimate.md); independent source/actual-flow review. |
 | 822 | R2101 | Batch 21 one timing database observation per public plan | 1 | [Evidence](v148-batch21-rendering-calibration.md); independent source/actual-flow review. |
 | 823 | R2102 | Batch 21 prepared generic polygon clipping and projection | 1 | [Evidence](v148-batch21-clipping.md); independent source/actual-flow review. |
+| 824 | R2201 | Batch 22 individually protected correction quality | 1 | [Rendering ledger](v148-batch22-rendering.md); independent numeric, public-planner and executor review. |
+| 825 | P2201 | Batch 22 consistent portrait tile processing | 1 | [Platform ledger](v148-batch22-platform.md); exact kernel-body oracle and independent runtime review. |
+| 826 | N2201 | Batch 22 bounded exact Paint spectrum search | 1 | [Spectrum ledger](v148-batch22-native-spectrum.md); independent scalar/tie/ownership review and paired measurements. |
 
 ## Integration evidence
+
+- Batch 22: 4,246 tests completed in 197.237 seconds: 4,187 passed and 59 platform/hardware cases skipped. All 892 source/configuration hashes stayed unchanged and the runtime Paint cache was absent before and after the suite. Three independently reviewed groups bring the total to 826; existing cancellation, teardown, numeric ownership and allocation completions add no IDs. The 5,000-cycle source gate, 1,235-file package hygiene and eight existing-raster exact-geometry fixtures passed. Seven paired workloads bind final source and disclose quality costs and bounded spectrum scratch. Concurrent checkpoints 92d5a867 and be30fa54 are preserved. Published-commit Windows/CI results are recorded separately in PR46. Version 1.0.148 is not released. [Final local validation](v148-batch22-validation.json).
 
 - Batch 21: two independently reviewed behavior groups bring the total to **823**, with **177 remaining**. Frozen-source integration completed **4,198 tests: 4,140 passed, 58 skipped**, with all 876 source/configuration hashes unchanged. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Sixteen paired workloads share 826 unchanged root Python hashes. Retained-image Undo, actual profile warnings and source-archive privacy complete existing contracts with zero IDs. [Final local validation](v148-batch21-validation.json). New exact-commit CI results belong to PR46.
 

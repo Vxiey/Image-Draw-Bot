@@ -26,6 +26,12 @@ GPU_PERFORMANCE_MODES = ("Balanced", "High throughput", "Maximum")
 MIN_GPU_PIXELS = 16_384
 _MIB = 1024 * 1024
 _GPU_LOCK = threading.RLock()
+_SALIENCY_SIGMA = 1.2
+_SALIENCY_TRUNCATE = 4.0
+# ndimage's Gaussian support includes round(truncate * sigma) rows per side.
+# The whole support must be present before a tile's core can match full-frame
+# saliency, even when the last Gaussian coefficient is small.
+_SALIENCY_OVERLAP = int(_SALIENCY_SIGMA * _SALIENCY_TRUNCATE + .5)
 
 
 def _cancel(cancelled):
@@ -477,9 +483,18 @@ def resize_gray_advanced(gray: Image.Image, size: tuple[int,int], mode: str="Aut
         if ratio>4.0:
             interim=(max(target[0],min(gray.width,target[0]*4)),max(target[1],min(gray.height,target[1]*4)))
             work=gray.resize(interim,Image.Resampling.LANCZOS)
-        plan=plan_vram_allocation(info,work.width,work.height,arrays=5,overlap=4)
+        # Cubic resampling, blur and sharpening also allocate destination-size
+        # arrays. Keep the existing conservative plane/headroom estimate, using
+        # the larger pixel footprint rather than only the uploaded source.
+        workspace_size=max((work.size,target),key=lambda shape:shape[0]*shape[1])
+        plan=plan_vram_allocation(info,*workspace_size,arrays=5,overlap=4)
+        _cancel(cancelled)
         if plan["mode"]!="full":
-            return gray.resize(target,Image.Resampling.LANCZOS), replace(info,scaler="CPU Lanczos (GPU resize VRAM fallback)",tile_rows=plan["tile_rows"],workspace_estimate_mb=plan["workspace_mb"])
+            return gray.resize(target,Image.Resampling.LANCZOS), replace(info,
+                backend="CPU",accelerated=False,cuda_execution="",
+                reason="CUDA resize workspace exceeds available VRAM.",
+                scaler="CPU Lanczos (GPU resize VRAM fallback)",
+                tile_rows=plan["tile_rows"],workspace_estimate_mb=plan["workspace_mb"])
         with _GPU_LOCK:
             _relieve_pool_pressure(cp,int(info.vram_budget_mb or 256))
             arr=_upload_gray(cp,work,performance)
@@ -504,6 +519,7 @@ def resize_gray_advanced(gray: Image.Image, size: tuple[int,int], mode: str="Aut
         raise
     except Exception as exc:
         # Resizing is never allowed to disable the entire drawing workflow.
+        _cancel(cancelled)
         return gray.resize(target,Image.Resampling.LANCZOS),replace(_fallback_info(mode,f"CUDA scaler fallback: {type(exc).__name__}: {exc}",performance),scaler="CPU Lanczos fallback")
 
 def clear_gpu_cache(mode: str = "Auto", *, cancelled=lambda: False) -> dict:
@@ -712,7 +728,8 @@ def _kernels(cp):
     extern "C" __global__
     void portrait_enhance(const float* src, const float* blur, float* out,
                           int w, int h, float strength, float gamma,
-                          int subject_focus, float background_lift) {
+                          int subject_focus, float background_lift,
+                          int tile_y0, int canvas_w, int canvas_h) {
         int i = blockDim.x * blockIdx.x + threadIdx.x;
         int n = w * h;
         if (i >= n) return;
@@ -722,10 +739,10 @@ def _kernels(cp):
         v = fminf(255.0f, fmaxf(0.0f, v));
         float norm = v / 255.0f;
         v = 255.0f * powf(norm, gamma);
-        if (subject_focus && w >= 24 && h >= 24) {
-            float cx = (w - 1) * 0.5f, cy = (h - 1) * 0.5f;
-            float sx = fmaxf(1.0f, w * 0.62f), sy = fmaxf(1.0f, h * 0.72f);
-            float dx = (x - cx) / sx, dy = (y - cy) / sy;
+        if (subject_focus && canvas_w >= 24 && canvas_h >= 24) {
+            float cx = (canvas_w - 1) * 0.5f, cy = (canvas_h - 1) * 0.5f;
+            float sx = fmaxf(1.0f, canvas_w * 0.62f), sy = fmaxf(1.0f, canvas_h * 0.72f);
+            float dx = (x - cx) / sx, dy = (y + tile_y0 - cy) / sy;
             float radial = sqrtf(dx * dx + dy * dy);
             float amount = fminf(1.0f, fmaxf(0.0f, (radial - 0.42f) / 0.62f));
             v = fminf(255.0f, v + background_lift * amount);
@@ -743,7 +760,8 @@ def _kernels(cp):
     void saliency_sobel(const float* src, const float* blur,
                         float* saliency, float* gx_out, float* gy_out,
                         int w, int h, int subject_focus,
-                        float structure_weight, float dark_weight, float centre_bias) {
+                        float structure_weight, float dark_weight, float centre_bias,
+                        int tile_y0, int canvas_w, int canvas_h) {
         int i = blockDim.x * blockIdx.x + threadIdx.x;
         int n = w * h;
         if (i >= n) return;
@@ -759,9 +777,9 @@ def _kernels(cp):
         float darkness = (255.0f - c) / 255.0f;
         float centre = 0.0f;
         if (subject_focus) {
-            float cx = (w - 1) * 0.5f, cy = (h - 1) * 0.5f;
+            float cx = (canvas_w - 1) * 0.5f, cy = (canvas_h - 1) * 0.5f;
             float radius = fmaxf(1.0f, sqrtf(cx*cx + cy*cy));
-            float dx = x - cx, dy = y - cy;
+            float dx = x - cx, dy = y + tile_y0 - cy;
             centre = fmaxf(0.0f, 1.0f - sqrtf(dx*dx + dy*dy) / radius);
         }
         saliency[i] = 1.0f + structure_weight * (0.72f*gradient + 0.28f*local)
@@ -820,7 +838,8 @@ def enhance_portrait(gray: Image.Image, strength: float, gamma: float,
                 out = cp.empty_like(arr)
                 grid, block = _launch_shape(arr.size, performance)
                 enhance_kernel(grid, block, (arr, blur, out, np.int32(gray.width), np.int32(gray.height),
-                                              np.float32(strength), np.float32(gamma), np.int32(bool(subject_focus)), np.float32(background_lift)))
+                                              np.float32(strength), np.float32(gamma), np.int32(bool(subject_focus)), np.float32(background_lift),
+                                              np.int32(0), np.int32(gray.width), np.int32(gray.height)))
                 host_u8 = cp.asnumpy(cp.clip(cp.rint(out), 0, 255).astype(cp.uint8))
                 info = replace(_refresh_info(info, cp), tile_rows=gray.height, workspace_estimate_mb=plan["workspace_mb"])
                 session = GpuAnalysisSession(cp, cnd, out, info, gray.width, gray.height)
@@ -831,25 +850,19 @@ def enhance_portrait(gray: Image.Image, strength: float, gamma: float,
             host_u8=np.empty_like(source)
             for start,end,read0,read1,core0,core1 in _tile_ranges(gray.height,plan["tile_rows"],8):
                 _cancel(cancelled)
-                tile=Image.fromarray(source[read0:read1])
-                arr=_upload_gray(cp,tile,performance)
+                with Image.fromarray(source[read0:read1]) as tile:
+                    arr=_upload_gray(cp,tile,performance)
                 blur=cnd.gaussian_filter(arr,sigma=1.35,mode="nearest")
                 out=cp.empty_like(arr)
                 grid,block=_launch_shape(arr.size,performance)
-                # Kernel uses tile-local geometry. Subject-focus weighting is
-                # disabled per tile to avoid moving its visual centre; the CPU
-                # post-pass can still apply focus if needed.
-                enhance_kernel(grid,block,(arr,blur,out,np.int32(tile.width),np.int32(tile.height),np.float32(strength),np.float32(gamma),np.int32(0),np.float32(background_lift)))
+                # Apply focus at the original canvas position while the result
+                # is still float32, then round exactly once as in the full path.
+                enhance_kernel(grid,block,(arr,blur,out,np.int32(gray.width),np.int32(read1-read0),
+                    np.float32(strength),np.float32(gamma),np.int32(bool(subject_focus)),np.float32(background_lift),
+                    np.int32(read0),np.int32(gray.width),np.int32(gray.height)))
                 tile_host=cp.asnumpy(cp.clip(cp.rint(out),0,255).astype(cp.uint8))
                 host_u8[start:end]=tile_host[core0:core1]
                 del arr,blur,out
-            if subject_focus and gray.width>=24 and gray.height>=24:
-                yy,xx=np.mgrid[0:gray.height,0:gray.width]
-                cx=(gray.width-1)*.5;cy=(gray.height-1)*.5
-                sx=max(1.0,gray.width*.62);sy=max(1.0,gray.height*.72)
-                radial=np.sqrt(((xx-cx)/sx)**2+((yy-cy)/sy)**2)
-                amount=np.clip((radial-.42)/.62,0.0,1.0)
-                host_u8=np.clip(host_u8.astype(np.float32)+float(background_lift)*amount,0,255).astype(np.uint8)
             info=replace(_refresh_info(info,cp),tile_rows=plan["tile_rows"],workspace_estimate_mb=plan["workspace_mb"],allocation_mode="Adaptive tiled")
             return Image.fromarray(host_u8),info,None
     except Exception as exc:
@@ -870,13 +883,14 @@ def _session_analysis(session: GpuAnalysisSession, subject_focus: bool, profile:
     cp, cnd, arr = session.cp, session.cnd, session.arr
     if session.saliency_map is not None and session.gx is not None and session.gy is not None:
         return
-    blur = cnd.gaussian_filter(arr, sigma=1.2, mode="nearest")
+    blur = cnd.gaussian_filter(arr, sigma=_SALIENCY_SIGMA, mode="nearest", truncate=_SALIENCY_TRUNCATE)
     sal = cp.empty_like(arr); gx = cp.empty_like(arr); gy = cp.empty_like(arr)
     _, analysis_kernel = _kernels(cp)
     grid, block = _launch_shape(arr.size, performance)
     analysis_kernel(grid, block, (arr, blur, sal, gx, gy, np.int32(session.width), np.int32(session.height),
                                   np.int32(bool(subject_focus)), np.float32(profile["structure_weight"]),
-                                  np.float32(profile["dark_weight"]), np.float32(profile["centre_bias"])))
+                                  np.float32(profile["dark_weight"]), np.float32(profile["centre_bias"]),
+                                  np.int32(0), np.int32(session.width), np.int32(session.height)))
     session.saliency_map, session.gx, session.gy = sal, gx, gy
 
 
@@ -898,7 +912,7 @@ def saliency(gray: Image.Image, subject_focus: bool, profile: dict, mode: str = 
         info = acceleration_info(mode, vram_budget, performance)
         if not info.accelerated:
             return None, info
-        plan=plan_vram_allocation(info,gray.width,gray.height,arrays=9,overlap=4)
+        plan=plan_vram_allocation(info,gray.width,gray.height,arrays=9,overlap=_SALIENCY_OVERLAP)
         with _GPU_LOCK:
             _relieve_pool_pressure(cp,int(info.vram_budget_mb or 256))
             if plan["mode"]=="full":
@@ -914,19 +928,19 @@ def saliency(gray: Image.Image, subject_focus: bool, profile: dict, mode: str = 
             source=np.frombuffer(gray.tobytes(),dtype=np.uint8).reshape(gray.height,gray.width)
             host=np.empty((gray.height,gray.width),dtype=np.float32)
             _,analysis_kernel=_kernels(cp)
-            for start,end,read0,read1,core0,core1 in _tile_ranges(gray.height,plan["tile_rows"],4):
+            for start,end,read0,read1,core0,core1 in _tile_ranges(gray.height,plan["tile_rows"],_SALIENCY_OVERLAP):
                 _cancel(cancelled)
-                tile=Image.fromarray(source[read0:read1]); arr=_upload_gray(cp,tile,performance)
-                blur=cnd.gaussian_filter(arr,sigma=1.2,mode="nearest"); sal=cp.empty_like(arr);gx=cp.empty_like(arr);gy=cp.empty_like(arr)
+                with Image.fromarray(source[read0:read1]) as tile:
+                    arr=_upload_gray(cp,tile,performance)
+                blur=cnd.gaussian_filter(arr,sigma=_SALIENCY_SIGMA,mode="nearest",truncate=_SALIENCY_TRUNCATE)
+                sal=cp.empty_like(arr);gx=cp.empty_like(arr);gy=cp.empty_like(arr)
                 grid,block=_launch_shape(arr.size,performance)
-                analysis_kernel(grid,block,(arr,blur,sal,gx,gy,np.int32(tile.width),np.int32(tile.height),np.int32(0),np.float32(profile["structure_weight"]),np.float32(profile["dark_weight"]),np.float32(0.0)))
+                analysis_kernel(grid,block,(arr,blur,sal,gx,gy,np.int32(gray.width),np.int32(read1-read0),
+                    np.int32(bool(subject_focus)),np.float32(profile["structure_weight"]),
+                    np.float32(profile["dark_weight"]),np.float32(profile["centre_bias"]),
+                    np.int32(read0),np.int32(gray.width),np.int32(gray.height)))
                 h=cp.asnumpy(sal).astype("float32",copy=False);host[start:end]=h[core0:core1]
                 del arr,blur,sal,gx,gy
-            if subject_focus and float(profile.get("centre_bias",0)):
-                yy,xx=np.mgrid[0:gray.height,0:gray.width]
-                cx=(gray.width-1)*.5;cy=(gray.height-1)*.5;radius=max(1.0,(cx*cx+cy*cy)**.5)
-                centre=np.clip(1.0-np.sqrt((xx-cx)**2+(yy-cy)**2)/radius,0.0,1.0)
-                host += float(profile.get("centre_bias",0))*centre.astype(np.float32)
             info=replace(_refresh_info(info,cp),tile_rows=plan["tile_rows"],workspace_estimate_mb=plan["workspace_mb"],allocation_mode="Adaptive tiled")
             return host.ravel(),info
     except Exception as exc:

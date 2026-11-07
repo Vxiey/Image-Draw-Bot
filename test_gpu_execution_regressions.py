@@ -159,19 +159,25 @@ class CudaExecutionRegressionTests(unittest.TestCase):
                 calls = []
 
                 def enhance(_grid, _block, args):
-                    arr, _blur, out, width, height, strength, gamma, focus, lift = args
-                    for scalar in (width, height, focus):
+                    arr, _blur, out, width, height, strength, gamma, focus, lift, tile_y0, canvas_w, canvas_h = args
+                    for scalar in (width, height, focus, tile_y0, canvas_w, canvas_h):
                         self.assertIsInstance(scalar, np.int32)
                     for scalar in (strength, gamma, lift):
                         self.assertIsInstance(scalar, np.float32)
                     self.assertEqual(arr.shape, (height, width))
+                    self.assertEqual((canvas_w, canvas_h), image.size)
+                    self.assertGreaterEqual(tile_y0, 0)
+                    self.assertLessEqual(tile_y0 + height, canvas_h)
                     out[...] = 255.0 * (arr / 255.0)**gamma
                     calls.append("enhance")
 
                 def analyze(_grid, _block, args):
-                    arr, _blur, saliency, gx, gy, width, height, focus, structure, dark, centre = args
-                    for scalar in (width, height, focus):
+                    arr, _blur, saliency, gx, gy, width, height, focus, structure, dark, centre, tile_y0, canvas_w, canvas_h = args
+                    for scalar in (width, height, focus, tile_y0, canvas_w, canvas_h):
                         self.assertIsInstance(scalar, np.int32)
+                    self.assertEqual((canvas_w, canvas_h), image.size)
+                    self.assertGreaterEqual(tile_y0, 0)
+                    self.assertLessEqual(tile_y0 + height, canvas_h)
                     for scalar in (structure, dark, centre):
                         self.assertIsInstance(scalar, np.float32)
                     self.assertAlmostEqual(float(structure), .42, places=6)

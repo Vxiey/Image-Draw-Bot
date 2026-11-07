@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 823,
+  "implemented": 826,
   "release_published": false,
-  "validation": "Batch 21: 4,198 tests completed in 199.785 seconds: 4,140 passed and 58 platform/hardware cases skipped, with all 876 source/configuration hashes unchanged. Two independently reviewed behavior groups bring the total to 823; retained-image Undo, source-archive privacy and profile-warning completions add zero IDs. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Sixteen workloads have six balanced AB/BA pairs, the same 826 root Python hashes, and separate traced-allocation observations. Complete historical comparisons cover 84 public plan/file pairs and 3,386 geometry cases. The preceding ec22fd8 checkpoint passed all seven CI checks, including 4,162 Windows tests. New exact-commit CI results are recorded separately in PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 22: 4,246 tests completed in 197.237 seconds: 4,187 passed and 59 platform/hardware cases skipped. All 892 source/configuration hashes stayed unchanged and the runtime Paint cache was absent before and after the suite. Three independently reviewed groups bring the total to 826; existing cancellation, teardown, numeric ownership and allocation completions add no IDs. The 5,000-cycle source gate, 1,235-file package hygiene and eight existing-raster exact-geometry fixtures passed. Seven paired workloads bind final source and disclose quality costs and bounded spectrum scratch. Concurrent checkpoints 92d5a867 and be30fa54 are preserved. Published-commit Windows/CI results are recorded separately in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6403,6 +6403,30 @@
       "description": "Prepare finite immutable polygon vertices once per public segment/polyline operation and reuse them through intersection membership and integer-safe projection. Preserve arithmetic, edge ties, rounding, split gaps, Stop and exceptions while removing repeated vertex and already validated segment conversions. Existing full-canvas/source checks, safe-output checks and FinalMouseGuard remain authoritative. Complete historical clipping, real PreviewSafety/public-plan output and actual executor actions/probes are identical; this addresses the generic clipping path left outside the earlier SafePolygon membership preparation.",
       "batch": 21,
       "id": 823
+    },
+    {
+      "local_id": "R2201",
+      "area": "batch22-rendering",
+      "ledger": "v148-batch22-rendering.md",
+      "description": "Preserve every individually correct protected pixel during Pixel Accurate correction passes. Compare proposed physical-brush coverage in bounded tiles, retry only safe correction intervals, and accept only when the original overall quality rule also passes. Preserve caller data, cancellation and the accepted plan on optional allocation failure; record exact loss/retry diagnostics.",
+      "batch": 22,
+      "id": 824
+    },
+    {
+      "local_id": "P2201",
+      "area": "batch22-platform",
+      "ledger": "v148-batch22-platform.md",
+      "description": "Make tiled portrait enhancement and saliency match their full-frame operations for identical input samples. Use original canvas coordinates and complete Gaussian support inside the actual fused kernels, apply focus before rounding, and remove redundant full-frame host focus maps. Preserve typed CUDA calls, Stop and CPU fallback; no complete float-session/byte-reupload pipeline equivalence or physical GPU performance is claimed.",
+      "batch": 22,
+      "id": 825
+    },
+    {
+      "local_id": "N2201",
+      "area": "batch22-native",
+      "ledger": "v148-batch22-native-spectrum.md",
+      "description": "Search the same guarded Paint custom-color sample grids in bounded numeric strips while preserving the exact chosen coordinate, RGB and floating-point error, including rounding-sensitive ties and retained coarse winners. Keep small/non-byte scalar controls and recover through the original scalar search on numeric allocation failure; native ownership, verification, clicks and UI delays remain unchanged.",
+      "batch": 22,
+      "id": 826
     }
   ]
 }

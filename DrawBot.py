@@ -8641,7 +8641,7 @@ class DrawBotApp:
 
     def update_plan(self, user_initiated=False, reason='automatic',full_detail=False):
         self.preview_after=None
-        if self.activity or self.closing:
+        if not DrawBotApp._profile_action_ready(self):
             return
         stop=getattr(self,'stop',None)
         if not user_initiated and stop is not None and stop.is_set():return
@@ -8653,6 +8653,10 @@ class DrawBotApp:
         if not user_initiated and not self._auto_preview_enabled():
             log_event(f'Preview planning blocked in Manual mode. reason={reason!r}')
             return
+        # A new explicit request can follow an earlier Stop, but any Esc
+        # arriving during options/source preparation belongs to this request.
+        # Clear the old signal here, never again at the worker handoff.
+        if user_initiated:self.stop.clear()
         target_area=self.area()[2:] if len(self.corners)==2 else (640,400)
         preview_area=preview_area_for(target_area)
         try:
@@ -8784,9 +8788,9 @@ class DrawBotApp:
         self.status.set('Building preview…' if user_initiated else 'Planning lightweight auto preview…')
         started=False
         try:
-            # Automatic work must not clear an Esc received during options or
-            # snapshot preparation. An explicit Build preview is a new request.
-            started=bool(self.begin_worker('preview',work,reset_stop=bool(user_initiated),cleanup=original.close))
+            # Both automatic and explicit work preserve Esc received during
+            # options/snapshot preparation or native worker setup.
+            started=bool(self.begin_worker('preview',work,reset_stop=False,cleanup=original.close))
         finally:
             if not started:
                 original.close()
@@ -12011,7 +12015,7 @@ class DrawBotApp:
         self.hotkeys.clear()
 
     def _finish_shutdown(self):
-        if self.shutdown_complete:return
+        if self.shutdown_complete or getattr(self,'_shutdown_finishing',False):return
         job=DrawBotApp._cancel_recovery_image_job(self)
         if job is not None and job.is_alive():
             if getattr(self,'recovery_shutdown_after',None) is None:
@@ -12024,20 +12028,35 @@ class DrawBotApp:
             return
         self._recovery_image_job=None
         DrawBotApp._cancel_after_attr(self,'recovery_shutdown_after')
-        self.shutdown_complete=True
-        DrawBotApp._finish_result_recheck(self)
-        DrawBotApp._cancel_after_attr(self,'poll_after')
-        DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
-        self._remove_hotkeys()
-        self.stop_mobile_preview(quiet=True)
+        self._shutdown_finishing=True
         try:
-            from SessionRecovery import clear_snapshot
-            clear_snapshot()
-            log_event('Clean shutdown: recovery checkpoint cleared.')
-        except Exception as error:log_event(f'Could not clear recovery checkpoint on clean shutdown: {error!r}')
-        clean_exit()
-        try:self.root.destroy()
-        except (tk.TclError,RuntimeError):pass
+            DrawBotApp._finish_result_recheck(self)
+            DrawBotApp._cancel_after_attr(self,'poll_after')
+            DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
+            self._remove_hotkeys()
+            self.stop_mobile_preview(quiet=True)
+            try:
+                self.root.destroy()
+            except (tk.TclError,RuntimeError) as error:
+                from AppBranding import _already_destroyed_tcl_error
+                if not (isinstance(error,tk.TclError) and _already_destroyed_tcl_error(error)):
+                    log_error(f'Window shutdown failed and remains retryable: {error!r}',
+                              category='shutdown',exc_info=True)
+                    try:self.status.set('Could not close the window. Close again to retry; recovery data is preserved.')
+                    except (tk.TclError,RuntimeError,AttributeError):pass
+                    return
+            # Native destruction can invoke converging Close/Destroy callbacks.
+            # The in-progress guard prevents recursion; success and recovery
+            # deletion belong only to the completed outer destruction.
+            self.shutdown_complete=True
+            try:
+                from SessionRecovery import clear_snapshot
+                clear_snapshot()
+                log_event('Clean shutdown: recovery checkpoint cleared.')
+            except Exception as error:log_event(f'Could not clear recovery checkpoint on clean shutdown: {error!r}')
+            clean_exit()
+        finally:
+            self._shutdown_finishing=False
 
     def poll(self):
         self.poll_after=None
@@ -12085,7 +12104,12 @@ class DrawBotApp:
         DrawBotApp._schedule_poll(self)
 
     def close(self):
-        if self.closing or self.shutdown_complete:return
+        if self.shutdown_complete:return
+        if self.closing:
+            # Keep a failed native teardown retryable without re-saving settings
+            # or restarting workers that were already stopped for this close.
+            if self.worker is None or not self.worker.is_alive():self._finish_shutdown()
+            return
         DrawBotApp._close_smart_drop_overlay(self,'application shutdown')
         self.smart_drop_pending_payload=None
         self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1

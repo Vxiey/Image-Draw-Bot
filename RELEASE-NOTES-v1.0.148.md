@@ -1,6 +1,16 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 823 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19, three in batch 20 and two in batch 21. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 826 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19, three in batch 20, two in batch 21 and three in batch 22. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 22: preserve small details and complete safe fallbacks
+
+- Preserve every already-correct protected pixel during Pixel Accurate correction; try bounded safe runs using the real physical brush before accepting a repair.
+- Keep individual portrait enhancement and saliency operations consistent between full-frame and tiled processing for identical samples, including global subject-focus coordinates and Gaussian support.
+- Search Paint's custom-color spectrum in bounded numeric strips with the same exact coordinate, RGB and floating-point error; retain scalar recovery when optional allocation fails.
+- Complete explicit preview Stop, retryable native shutdown, native numeric ownership and source/destination resize allocation. These finish existing contracts and add no IDs.
+- Retain the concurrent exact-fixture Windows checkout and isolated Paint test-storage corrections without changing product cache behavior.
+
+Three new groups bring the registry to **826**, leaving **174**. Frozen-source discovery completed **4,246 tests: 4,187 passed and 59 skipped**, with all 892 source/configuration hashes unchanged and the runtime Paint cache absent before and after the suite. The 5,000-cycle source gate, 1,235-file package hygiene and eight exact-raster existing-asset cases passed. Seven paired workloads disclose the protected-detail quality gain, its planning cost, and exact spectrum-search speed/memory tradeoffs. [Final local validation](docs/v148-batch22-validation.json) is separate from the published commit's Windows/package checks in PR46. Version 1.0.148 remains under development.
 
 ## Batch 21: shared timing observations and polygon clipping
 
