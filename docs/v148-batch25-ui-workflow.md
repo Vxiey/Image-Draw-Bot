@@ -261,3 +261,40 @@ the one-file fixture hashes and initial CI observations are preserved in
 [v148-batch25-validation.json](v148-batch25-validation.json).
 The repaired exact commit must pass its own Windows/package gates, recorded
 in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
+
+## Bounded delivery across real GUI poll slices
+
+The calibration fixture then passed on Windows at `5b0c22a`, as did native
+screen sampling. That run completed 4,372 tests in 482.580 seconds with two
+failures in older batch21 edit-history cases and three hardware skips. Linux,
+dependencies and CodeQL passed. The failures left a cached background-edit
+plan uncleared, or rejected a new upscale after a later completed load.
+[Second Windows job](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42411930802/job/128521730990).
+
+The shared `AutoPreviewHandoffTests.take_worker_events` already joins and
+checks the real worker, so thread exit is not the cause. Its `deliver` helper
+queues the real result and `done`, disables recurring poll scheduling, then
+calls the real poll only once. Production polling yields after 15 ms to keep
+Tk responsive. Slow result adoption can therefore leave `done` queued and
+the application busy; Clear correctly defers, and a new edit correctly rejects.
+
+Advancing only the delivery clock by 20 ms per read reproduced both reported
+assertion sites with dead workers. The fixture now drains its finite queue
+through successive real poll calls, requiring each nonempty remainder to
+strictly shrink. Split result-only delivery still stays busy. It runs no
+scheduled preview, clear or unrelated callback. Two existing stopped/failed
+preview checks use the same helper.
+
+A new regression loads the shipped icon through the real loader and worker,
+forces the poll-slice boundary, and checks ordered `loaded` then `done`, exact
+image adoption, idle/worker state, an empty queue and preservation of an
+unrelated scheduled callback. It fails before the repair and passes after it.
+Both original failure reproductions also pass, including all four Stop/clear/
+load combinations. The focused gate passed all 24 methods in 2.665 seconds.
+
+Independent review verified all 127 previous assertion calls remain intact.
+No product code, busy/Stop/history guard, timeout, skip condition or improvement
+ID changes. Full discovery now has one additional regression (4,373 expected).
+The source-bound initial local/benchmark evidence remains attached to `e669376`;
+repair hashes and both initial Windows outcomes are in the validation report.
+The new exact-commit Windows/package results are maintained in PR46.

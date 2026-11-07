@@ -130,8 +130,17 @@ class AutoPreviewHandoffTests(PlanStatusFixture):
     def deliver(self, app, *events):
         for event in events:
             app.events.put(event)
-        DrawBot.DrawBotApp.poll(app)
-        self.assertNotIn('UI event error contained:', app.status.get())
+        # A real poll yields after 15 ms; adopting one image may use that slice
+        # before its queued done. Workers are joined before delivery, so drain
+        # only this finite queue without running scheduled preview/clear jobs.
+        remaining = app.events.qsize()
+        while True:
+            DrawBot.DrawBotApp.poll(app)
+            self.assertNotIn('UI event error contained:', app.status.get())
+            pending = app.events.qsize()
+            if not pending:break
+            self.assertLess(pending, remaining, 'Each poll must consume a queued fixture event')
+            remaining = pending
 
     def assert_preview(self, app):
         token = app.preview_after
@@ -173,6 +182,45 @@ class AutoPreviewHandoffTests(PlanStatusFixture):
                 self.assertFalse(app.root.jobs)
                 self.deliver(app, events[1])
                 self.assert_preview(app)
+
+    def test_completed_load_delivery_crosses_poll_slices_without_running_other_jobs(self):
+        app = self.app('Manual')
+        asset = Path(__file__).with_name('assets') / 'image-draw-bot-icon.png'
+        self.assertTrue(app.load_source(str(asset), asset.name))
+        events = self.take_worker_events(app, 'loaded')
+        self.assertFalse(app.worker.is_alive())
+        received = []
+        handle = app._handle_event
+
+        def consume(kind, value):
+            received.append(kind)
+            return handle(kind, value)
+
+        app._handle_event = consume
+        unrelated = app.root.after(0, lambda: received.append('unrelated scheduled action'))
+        real_time = DrawBot.time
+
+        class PollSliceClock:
+            """Advance only the poll's clock boundary, not worker execution."""
+            instant = 0.
+
+            def monotonic(self):
+                self.instant += .020
+                return self.instant
+
+            def __getattr__(self, name):
+                return getattr(real_time, name)
+
+        # The real poll must yield after each event when its 15 ms budget is
+        # exhausted. A joined worker's result and done still arrive in order.
+        with patch.object(DrawBot, 'time', PollSliceClock()):
+            self.deliver(app, *events)
+        self.assertEqual(received, ['loaded', 'done'])
+        self.assertIs(app.original, events[0][1][0])
+        self.assertIsNone(app.activity)
+        self.assertIsNone(app.worker)
+        self.assertTrue(app.events.empty())
+        self.assertEqual(set(app.root.jobs), {unrelated})
 
     def test_background_removal_hands_changed_alpha_to_real_preview_after_done(self):
         app = self.app()
@@ -365,7 +413,7 @@ class AutoPreviewHandoffTests(PlanStatusFixture):
         with self.assertRaises(ValueError):
             copies[0].getpixel((0, 0))
         self.assertEqual(source.getpixel((12, 10)), (24, 73, 159, 255))
-        DrawBot.DrawBotApp.poll(app)
+        self.deliver(app)
         self.assertIsNone(app.activity)
         self.assertFalse(app.root.jobs)
 
@@ -403,7 +451,7 @@ class AutoPreviewHandoffTests(PlanStatusFixture):
         self.assertIsNotNone(failure.__traceback__)
         with self.assertRaises(ValueError):
             snapshot.getpixel((0, 0))
-        DrawBot.DrawBotApp.poll(app)
+        self.deliver(app)
         self.assertIsNone(app.activity)
         self.assertIsNone(app.plan)
         self.assertFalse(app.root.jobs)

@@ -1194,7 +1194,7 @@
     "scope": "Observed parent checkpoint only; new exact-commit checks belong to PR46."
   },
   "source_snapshot_commit": "e669376de8083975074f0ec079dd7a393657cf64",
-  "source_hashes_scope": "The frozen local tests, source gate and paired rendering measurements describe this exact published source snapshot. The later native-fixture sequencing repair below changes one test file and no product code.",
+  "source_hashes_scope": "The frozen local tests, source gate and paired rendering measurements describe source snapshot e669376de8083975074f0ec079dd7a393657cf64. The later fixture corrections below change tests and documentation only; all product code remains identical.",
   "published_initial_attempt": {
     "commit": "e669376de8083975074f0ec079dd7a393657cf64",
     "application_run": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42410649217",
@@ -1320,6 +1320,51 @@
     "focused_local_skipped": 3,
     "focused_local_seconds": 1.196,
     "independent_review": "Runtime reviewer checked installed CTk source, exact AST assertion sequence, skip and timeout against the published snapshot; no blocker.",
-    "exact_commit_acceptance": "The repaired commit is verified separately in PR46; no native success is inferred from skipped local cases."
+    "exact_commit_acceptance": "The repaired commit is verified separately in PR46; no native success is inferred from skipped local cases.",
+    "native_acceptance_commit": "5b0c22ac5dc620a911fa2a1f6216e272f644f7db",
+    "native_acceptance_passed": true
+  },
+  "published_followup_attempts": [
+    {
+      "commit": "5b0c22ac5dc620a911fa2a1f6216e272f644f7db",
+      "application_run": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42411930802",
+      "windows_job": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42411930802/job/128521730990",
+      "windows_tests": 4372,
+      "windows_seconds": 482.58,
+      "windows_failures": 2,
+      "windows_skipped": 3,
+      "windows_packaging_ran": false,
+      "native_calibration_fixture_passed": true,
+      "native_screen_sampling_passed": true,
+      "invalid_command_diagnostics": 0,
+      "tcl_lifetime_diagnostics": 0,
+      "linux_tests": 4372,
+      "linux_seconds": 273.684,
+      "linux_skipped": 70,
+      "linux_passed": true,
+      "dependency_and_codeql_checks_passed": true,
+      "failed_contracts": [
+        "background plan clear after source-edit completion",
+        "new upscale after Stop/clear and a later loaded source"
+      ]
+    }
+  ],
+  "poll_fixture_repair": {
+    "path": "test_v148_ui_batch20_auto_preview.py",
+    "before_sha256": "022754723f55d2fd71982006ab7266295c05718316d7607eafdae31159e0cc62",
+    "after_sha256": "a5b6463af08df58cfc933e6deb1238b308b234727ca6234e4f6c33feac505ec7",
+    "reason": "The shared fixture already joins the real worker, but disables recurring polling and invokes only one real poll. A result handler can exhaust the unchanged 15 ms UI slice before done is consumed. Drain the finite fixture queue across real poll calls with a strict progress assertion, without running scheduled callbacks.",
+    "reproduction": "Advancing only the delivery clock by 20 ms per read reproduced both Windows assertion sites while proving the actual workers were dead. The new regression uses the shipped icon and real loader.",
+    "original_assertions_preserved": 127,
+    "product_code_changed": false,
+    "added_improvement_ids": 0,
+    "timeouts_and_skip_conditions_changed": false,
+    "focused_local_tests": 24,
+    "focused_local_passed": 24,
+    "focused_local_skipped": 0,
+    "focused_local_seconds": 2.665,
+    "expected_full_suite_tests": 4373,
+    "independent_review": "Engine reviewer verified queue shrink, split result delivery, exact event order, unchanged Stop/busy/history guards, preservation of all existing assertions and unrelated scheduled callbacks.",
+    "exact_commit_acceptance": "The subsequent exact commit and package gates are recorded in PR46; targeted local evidence does not substitute for them."
   }
 }
