@@ -237,6 +237,10 @@ class NativeToolCalibrationLifetimeTests(unittest.TestCase):
                     helper = helpers[0]; window = getattr(app, route[2])
                     self.assertIs(helper.root, window)
                     self.assertEqual(app.activity, 'tool-calibration')
+                    # CTk's Windows titlebar setup presents the dialog asynchronously.
+                    # A user can start Capture only after that dialog is visible.
+                    if not window.winfo_viewable():window.wait_visibility()
+                    self.assertTrue(window.winfo_viewable())
                     helper.capture('Fill', 3)
                     self.assertIsNotNone(helper.job)
                     original_destroy = tk.Toplevel.destroy

@@ -227,3 +227,37 @@ belongs to the earlier candidate. Full merged-suite validation and exact-commit
 Windows/native checks are separate integration gates and remain pending at
 this review. No local native pass or physical drawing result is inferred from
 the skipped cases.
+
+## Published Windows fixture sequencing correction
+
+The first published snapshot, `e669376de8083975074f0ec079dd7a393657cf64`,
+completed 4,372 Windows tests in 475.089 seconds with one failed test and
+three hardware skips. In the native calibration-lifetime test, the Paint
+subcase found its dialog still withdrawn; that aborted subcase left the later
+Gartic case busy. Packaging did not run. The full Linux gate, dependencies,
+CodeQL, native screen-sampling check and all other Windows tests passed.
+[Initial Windows job](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42410649217/job/128517831680).
+
+Installed CustomTkinter 6.0.0 temporarily withdraws a new Windows
+`CTkToplevel` while applying its native titlebar, then schedules restoration
+after 5 ms. The fixture called Capture synchronously before the first native
+presentation. `ScreenTaskWindow` could therefore correctly remember
+`withdrawn`; failed teardown then cancelled the pending presentation callback
+and preserved that prior state. A real user cannot press Capture in an
+unpresented dialog.
+
+The fixture now waits for the actual Visibility event when needed and asserts
+that the dialog is viewable before Capture. It does not force presentation or
+add an arbitrary sleep. All 17 original lifetime/visibility assertions remain
+unchanged and in order, with one initial-viewability assertion added. The
+existing platform gate and 20-second isolated-subprocess timeout are unchanged.
+No product code or improvement ID changes.
+
+The focused local gate passed 12 methods with three existing native skips
+(15 total) in 1.196 seconds. An independent reviewer verified the native CTk
+cause, exact assertion preservation and unchanged timeout. The published
+source-bound local/benchmark evidence remains attached to `e669376`;
+the one-file fixture hashes and initial CI observations are preserved in
+[v148-batch25-validation.json](v148-batch25-validation.json).
+The repaired exact commit must pass its own Windows/package gates, recorded
+in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).

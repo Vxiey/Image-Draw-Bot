@@ -1192,5 +1192,134 @@
     "application_run": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42407814245",
     "codeql_run": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42407810364",
     "scope": "Observed parent checkpoint only; new exact-commit checks belong to PR46."
+  },
+  "source_snapshot_commit": "e669376de8083975074f0ec079dd7a393657cf64",
+  "source_hashes_scope": "The frozen local tests, source gate and paired rendering measurements describe this exact published source snapshot. The later native-fixture sequencing repair below changes one test file and no product code.",
+  "published_initial_attempt": {
+    "commit": "e669376de8083975074f0ec079dd7a393657cf64",
+    "application_run": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42410649217",
+    "windows_job": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42410649217/job/128517831680",
+    "windows_tests": 4372,
+    "windows_seconds": 475.089,
+    "windows_failures": 1,
+    "windows_skipped": 3,
+    "windows_packaging_ran": false,
+    "linux_tests": 4372,
+    "linux_seconds": 332.602,
+    "linux_skipped": 70,
+    "linux_passed": true,
+    "dependency_and_codeql_checks_passed": true,
+    "invalid_command_diagnostics": 0,
+    "tcl_lifetime_diagnostics": 0,
+    "native_screen_sampling_passed": true,
+    "native_screen_sampling": {
+      "points": 169,
+      "gdi_before": 31,
+      "gdi_after": 31,
+      "measurements": [
+        {
+          "points": 8,
+          "paired_ms": {
+            "scalar": [
+              126.39569999998912,
+              158.37240000001884,
+              126.74809999998615,
+              126.54940000004444,
+              127.93630000004441,
+              141.79139999998824
+            ],
+            "public": [
+              142.16010000001233,
+              126.41250000001492,
+              126.46200000000363,
+              126.7917000000125,
+              140.66400000001522,
+              157.7733999999964
+            ]
+          }
+        },
+        {
+          "points": 25,
+          "paired_ms": {
+            "scalar": [
+              395.4789000000005,
+              395.5027999999743,
+              427.25330000001804,
+              410.8105999999907,
+              395.6931999999824,
+              427.1018999999683
+            ],
+            "public": [
+              15.941200000042954,
+              15.63260000000355,
+              15.797600000041712,
+              15.73719999998957,
+              31.588399999975536,
+              16.104699999971217
+            ]
+          }
+        },
+        {
+          "points": 81,
+          "paired_ms": {
+            "scalar": [
+              1344.6716999999921,
+              1344.2639999999528,
+              1344.4240000000036,
+              1359.871700000042,
+              1345.8471999999801,
+              1313.4991000000014
+            ],
+            "public": [
+              16.354300000045896,
+              15.317499999980555,
+              15.731600000037815,
+              15.812999999980093,
+              15.974700000015218,
+              15.917899999976726
+            ]
+          }
+        },
+        {
+          "points": 169,
+          "paired_ms": {
+            "scalar": [
+              2782.986400000027,
+              2830.6665000000066,
+              2769.303700000023,
+              2816.4272999999866,
+              2816.901900000005,
+              2798.4576999999717
+            ],
+            "public": [
+              16.199599999993097,
+              15.825100000029124,
+              15.761499999996431,
+              15.811900000016976,
+              16.13750000001346,
+              15.947600000004059
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "native_fixture_repair": {
+    "path": "test_v148_ui_batch25_calibration_lifetime.py",
+    "before_sha256": "60e243a4e2727bf4374ffbad2e87b9b5a110adb821da8e769994025ed105442b",
+    "after_sha256": "969d2ef41723cba30986a8ea575509365870c28ff2f0536217b5ffef69dbfaac",
+    "reason": "CustomTkinter Windows construction temporarily withdraws the native dialog and schedules presentation. The fixture invoked Capture before that presentation, correctly preserving withdrawn as its prior state; its first assertion failure left the next profile busy. Await the real Visibility event and assert initial viewability before Capture.",
+    "original_assertions_preserved": 17,
+    "assertions_after": 18,
+    "isolated_subprocess_timeout_seconds": 20,
+    "platform_gate_unchanged": true,
+    "product_code_changed": false,
+    "added_improvement_ids": 0,
+    "focused_local_tests": 15,
+    "focused_local_passed": 12,
+    "focused_local_skipped": 3,
+    "focused_local_seconds": 1.196,
+    "independent_review": "Runtime reviewer checked installed CTk source, exact AST assertion sequence, skip and timeout against the published snapshot; no blocker.",
+    "exact_commit_acceptance": "The repaired commit is verified separately in PR46; no native success is inferred from skipped local cases."
   }
 }
