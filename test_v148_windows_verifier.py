@@ -14,7 +14,7 @@ class WindowsVerifierTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.base = Path(temporary.name)
+        self.base = Path(temporary.name).resolve()
         self.script = self.base / "verify_windows.py"
         source = Path(__file__).resolve().with_name("verify_windows.py")
         self.script.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
