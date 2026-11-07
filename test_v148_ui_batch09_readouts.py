@@ -70,7 +70,8 @@ class LiveReadoutTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'win32', 'Actual Windows Tk live readout binding')
 class WindowsLiveReadoutTests(unittest.TestCase):
     def test_readouts_show_initial_and_updated_values_without_recreating_widgets(self):
-        root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        root = scoped_window_class(ctk.CTk)()
         self.addCleanup(root.destroy)
         root.geometry('500x320')
         errors = []

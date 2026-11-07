@@ -238,7 +238,8 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
             stack.enter_context(patch.object(DrawBotApp,'report_tk_callback_exception',side_effect=lambda *args:errors.append(args)))
             stack.enter_context(patch('DrawBot.previous_run_unclean',return_value=False))
             stack.enter_context(patch('ReleaseState.should_show_welcome',return_value=False))
-            root=ctk.CTk()
+            from UiCompatibility import scoped_window_class
+            root=scoped_window_class(ctk.CTk)()
             try:
                 app=DrawBotApp(root,NoInput(),NoInput());root.minsize(500,400)
                 root.update()

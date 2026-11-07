@@ -148,15 +148,26 @@ def _best_layer_cached(rgb: tuple[int, int, int], palette: tuple[tuple[int, int,
     ranked = sorted(allowed, key=lambda i: palette_match_cost(rgb, palette[i], color_rendering="Perceptual match", fidelity=color_fidelity))[:max_candidates]
     ratios = (0.25,) if layer_mode == "Light shading" else ((0.25, 0.50) if layer_mode == "Dual-color mix" else (0.20, 0.35, 0.50, 0.65))
     best = (base, None, 0.0, base_distance)
-    for primary in ranked:
-        for secondary in ranked:
-            if primary == secondary:
-                continue
-            for ratio in ratios:
-                mixed = _mix(palette[primary], palette[secondary], ratio)
-                distance = palette_match_cost(rgb, mixed, color_rendering="Perceptual match", fidelity=color_fidelity)
-                if distance < best[3]:
-                    best = (primary, secondary, ratio, distance)
+    # Different ordered pairs/ratios can produce byte-identical mixed RGB.
+    # Keep their original order and strict tie rule, but score each resulting
+    # colour only once for this source. At most 26 * 25 * 4 entries are possible;
+    # no table entries survive in the cached winner or a failing traceback.
+    mixed_costs = {}
+    try:
+        for primary in ranked:
+            for secondary in ranked:
+                if primary == secondary:
+                    continue
+                for ratio in ratios:
+                    mixed = _mix(palette[primary], palette[secondary], ratio)
+                    distance = mixed_costs.get(mixed)
+                    if distance is None:
+                        distance = palette_match_cost(rgb, mixed, color_rendering="Perceptual match", fidelity=color_fidelity)
+                        mixed_costs[mixed] = distance
+                    if distance < best[3]:
+                        best = (primary, secondary, ratio, distance)
+    finally:
+        mixed_costs.clear()
     improvement = max(0.0, (base_distance - best[3]) / max(base_distance, 1e-9))
     threshold = {"Light shading": 0.20, "Dual-color mix": 0.14, "Full color mix": 0.10}[layer_mode]
     if best[1] is None or improvement < threshold:

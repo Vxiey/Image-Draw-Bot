@@ -1,0 +1,1047 @@
+{
+  "baseline_commit": "5c32b6883c454268e06e199a8f15264ca9ec26e9",
+  "historical_product_baseline": "5c32b6883c454268e06e199a8f15264ca9ec26e9",
+  "implemented": 828,
+  "target": 1000,
+  "remaining": 172,
+  "added_behavior_groups": [
+    "C2301",
+    "P2301"
+  ],
+  "release_published": false,
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 4270,
+    "runner_seconds": 206.108,
+    "wall_seconds": 208.621,
+    "status": "OK (skipped=59)",
+    "skipped": 59,
+    "source_files": 891,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "c5266e27eff72e884da7799779878e22d293a0922ac43958e97c7ee77d3e1078"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1248,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "comparisons": {
+    "colour": {
+      "artifact": "v148-batch23-colour-mixed-benchmarks.json",
+      "sha256": "070e810ac5462a2b71bccb97b918f097ee5a1ceba3cfa77e73d27cbfe8650dab",
+      "workloads": 10,
+      "balanced_pairs_per_workload": 6,
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 841,
+      "source_hash_manifest_sha256": "da8476e1df16766ea79af307b38077622a637f960fcdad22a851fb06e92c2c82",
+      "historical_parity": {
+        "all_exact": true,
+        "cases": 582,
+        "complete_builder_and_public_plan_pairs": 30,
+        "sha256": "e3a2be0a4bad02b2c6bd829454dbe843f553c7aa97202aa2c8b84f46b8233b91",
+        "single_color_queries": 552
+      },
+      "timing_scope": "Actual CPU build_color_strokes or complete public make_plan only. Synthetic calibrated fixtures; no native drawing/input, GPU performance, GUI adoption, network or target-application throughput claim.",
+      "memory_scope": "One traced invocation per side, including retained result and existing scalar winner caches. Python tracing is not process RSS or most native Pillow/GPU memory."
+    },
+    "json_reader": {
+      "artifact": "v148-batch23-json-reader-benchmarks.json",
+      "sha256": "d112a988335bc2f79009d08ef6de6bf3e8e86708b78edda85956d85e467d1385",
+      "workloads": 11,
+      "balanced_pairs_per_workload": 6,
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 841,
+      "source_hash_manifest_sha256": "da8476e1df16766ea79af307b38077622a637f960fcdad22a851fb06e92c2c82",
+      "historical_parity": {
+        "cases": [
+          {
+            "case": "value-0-bom-False",
+            "input_bytes": 4,
+            "input_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+            "output_sha256": "1e218bb3e50f09ea2cae21500e502797da24a24150abe950b992962336b645db",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-0-bom-True",
+            "input_bytes": 7,
+            "input_sha256": "63047947e10336a5ce5e61416c05aaed41f995a7437049af440ffacebd9f04b8",
+            "output_sha256": "1e218bb3e50f09ea2cae21500e502797da24a24150abe950b992962336b645db",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-1-bom-False",
+            "input_bytes": 4,
+            "input_sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+            "output_sha256": "f70f6fbc6395368d8d6fbe5532a136e011f0a1a4265c649fee52b7291591e3ba",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-1-bom-True",
+            "input_bytes": 7,
+            "input_sha256": "87c9558ef1e4a3ebcb621da65852506546ee0b23e3d16d716b11b49e8a1ce69d",
+            "output_sha256": "f70f6fbc6395368d8d6fbe5532a136e011f0a1a4265c649fee52b7291591e3ba",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-2-bom-False",
+            "input_bytes": 5,
+            "input_sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+            "output_sha256": "83c23bc9d2cc4351fdb608a3fc3e759ac08e1ae8e8637252075758ad030f2941",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-2-bom-True",
+            "input_bytes": 8,
+            "input_sha256": "426e1dd405b288e3ff6a3750a569977692b6dd1b0320355dd70baa60e61d2189",
+            "output_sha256": "83c23bc9d2cc4351fdb608a3fc3e759ac08e1ae8e8637252075758ad030f2941",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-3-bom-False",
+            "input_bytes": 1,
+            "input_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-3-bom-True",
+            "input_bytes": 4,
+            "input_sha256": "e45825471ed10290785b62676dc5f453d228a1e1d933c45a733e9bb239c9e083",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-4-bom-False",
+            "input_bytes": 4,
+            "input_sha256": "c26617c7ccbcaa6631b45d851b8cf56e21d2ca624bdb1193afdbd4b560702cec",
+            "output_sha256": "5914245ddc7b7db43ea84704bc629254532d828b4740b1162f5376e120bde620",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-4-bom-True",
+            "input_bytes": 7,
+            "input_sha256": "2cc14d8f946cd36e710ac9d3f29954a5facf5b815431f0001b971ad04e4236b2",
+            "output_sha256": "5914245ddc7b7db43ea84704bc629254532d828b4740b1162f5376e120bde620",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-5-bom-False",
+            "input_bytes": 30,
+            "input_sha256": "f54e5c8f810648e7638d25eb7ed6d24b7e5999d588e88826f2aa837d2ee52ecd",
+            "output_sha256": "3dc92793c52a3a473dd35fad3bb417f34d67f6fe57efe3536a24f14ae68e90eb",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-5-bom-True",
+            "input_bytes": 33,
+            "input_sha256": "c0f4eb35e8781871c6a8987909ac563f29f08287eb8812a75e1fb26f9ead7340",
+            "output_sha256": "3dc92793c52a3a473dd35fad3bb417f34d67f6fe57efe3536a24f14ae68e90eb",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-6-bom-False",
+            "input_bytes": 11,
+            "input_sha256": "f5d538ec2ba112b141080f5a5cfb000308dbb138e8fc3328da001912f7775c95",
+            "output_sha256": "67022f0451f6e32f687f60b080da544063f56aa6160f4d2ac8148232a9552b9e",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-6-bom-True",
+            "input_bytes": 14,
+            "input_sha256": "b78e5627719814409ed0d7fee703ba3d3579f40bf0b9b539c8a32f3292259436",
+            "output_sha256": "67022f0451f6e32f687f60b080da544063f56aa6160f4d2ac8148232a9552b9e",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-7-bom-False",
+            "input_bytes": 46,
+            "input_sha256": "515d6948d33cd57e176b540b924c7db88d826503322c6a726ad61c8f737a2cd8",
+            "output_sha256": "7ffadc80a8e8b5404394fc053d75b741ed36287034e505d1f7c4b0cf0176bd6b",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "value-7-bom-True",
+            "input_bytes": 49,
+            "input_sha256": "e1715d2f9e697f21b6286355f01e3b92c73e1f97eb2a9024be8411ed0c759d8b",
+            "output_sha256": "7ffadc80a8e8b5404394fc053d75b741ed36287034e505d1f7c4b0cf0176bd6b",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "limit-0-delta--1",
+            "input_bytes": 0,
+            "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "output_sha256": "d8f775b2afbb799dab9e746b6d152cf324d06030aabb40e78b0318dbc4672239",
+            "parameters": {
+              "max_bytes": 0
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-0-delta-0",
+            "input_bytes": 0,
+            "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "output_sha256": "d8f775b2afbb799dab9e746b6d152cf324d06030aabb40e78b0318dbc4672239",
+            "parameters": {
+              "max_bytes": 0
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-0-delta-1",
+            "input_bytes": 1,
+            "input_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+            "output_sha256": "6689fdf5e98a0ff0214e23490742f08d468dd84b9ef74d7229b977b5eae01ecc",
+            "parameters": {
+              "max_bytes": 0
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-1-delta--1",
+            "input_bytes": 0,
+            "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "output_sha256": "d8f775b2afbb799dab9e746b6d152cf324d06030aabb40e78b0318dbc4672239",
+            "parameters": {
+              "max_bytes": 1
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-1-delta-0",
+            "input_bytes": 1,
+            "input_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 1
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-1-delta-1",
+            "input_bytes": 2,
+            "input_sha256": "7daed43814b633951fa277cd01695574df6e05a9cb10523f1763e842b06be0ff",
+            "output_sha256": "6689fdf5e98a0ff0214e23490742f08d468dd84b9ef74d7229b977b5eae01ecc",
+            "parameters": {
+              "max_bytes": 1
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-2-delta--1",
+            "input_bytes": 1,
+            "input_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 2
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-2-delta-0",
+            "input_bytes": 2,
+            "input_sha256": "7daed43814b633951fa277cd01695574df6e05a9cb10523f1763e842b06be0ff",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 2
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-2-delta-1",
+            "input_bytes": 3,
+            "input_sha256": "a0a16d12a5ea4bb25a3c7a4c54aa74e64058dad675cb4e31629e408b5541945c",
+            "output_sha256": "6689fdf5e98a0ff0214e23490742f08d468dd84b9ef74d7229b977b5eae01ecc",
+            "parameters": {
+              "max_bytes": 2
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-7-delta--1",
+            "input_bytes": 6,
+            "input_sha256": "bc879d66bb4b499377a780326d271118fc49e112c7527606a8014784448db4d7",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 7
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-7-delta-0",
+            "input_bytes": 7,
+            "input_sha256": "0708b7c3fcde6e6ebeb1248c8ed166b7277790e7ca917093e70c0900e2dc5b58",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 7
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-7-delta-1",
+            "input_bytes": 8,
+            "input_sha256": "3067a05f9751f2ab522d49622a184ee43c328c92a7053c82aba0ed5ada7f06d7",
+            "output_sha256": "6689fdf5e98a0ff0214e23490742f08d468dd84b9ef74d7229b977b5eae01ecc",
+            "parameters": {
+              "max_bytes": 7
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-65535-delta--1",
+            "input_bytes": 65534,
+            "input_sha256": "d3786c349ccc931d6bc8d6090837ea9a282092ef9714ffdc335a518c661877b6",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 65535
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-65535-delta-0",
+            "input_bytes": 65535,
+            "input_sha256": "4d436c38de4d0236ad2b605610708f382da0003a2cba5f2b74bc8639d0eae8ca",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 65535
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-65535-delta-1",
+            "input_bytes": 65536,
+            "input_sha256": "fbbc59aebfd88b18afbfba3fa08d8c4aba57a7afd8e526e9d9aa6aaec620a895",
+            "output_sha256": "6689fdf5e98a0ff0214e23490742f08d468dd84b9ef74d7229b977b5eae01ecc",
+            "parameters": {
+              "max_bytes": 65535
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-65536-delta--1",
+            "input_bytes": 65535,
+            "input_sha256": "4d436c38de4d0236ad2b605610708f382da0003a2cba5f2b74bc8639d0eae8ca",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 65536
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-65536-delta-0",
+            "input_bytes": 65536,
+            "input_sha256": "fbbc59aebfd88b18afbfba3fa08d8c4aba57a7afd8e526e9d9aa6aaec620a895",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 65536
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-65536-delta-1",
+            "input_bytes": 65537,
+            "input_sha256": "040b8510bebea231a1b745677cd5bb73a6ee31665f1dd16f0a92c6749f983f00",
+            "output_sha256": "6689fdf5e98a0ff0214e23490742f08d468dd84b9ef74d7229b977b5eae01ecc",
+            "parameters": {
+              "max_bytes": 65536
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-65537-delta--1",
+            "input_bytes": 65536,
+            "input_sha256": "fbbc59aebfd88b18afbfba3fa08d8c4aba57a7afd8e526e9d9aa6aaec620a895",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 65537
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-65537-delta-0",
+            "input_bytes": 65537,
+            "input_sha256": "040b8510bebea231a1b745677cd5bb73a6ee31665f1dd16f0a92c6749f983f00",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 65537
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-65537-delta-1",
+            "input_bytes": 65538,
+            "input_sha256": "c1e999d89ee70139c1cd49a643f4e645905b516d60acfd9e3a05868ee7b6b5d0",
+            "output_sha256": "6689fdf5e98a0ff0214e23490742f08d468dd84b9ef74d7229b977b5eae01ecc",
+            "parameters": {
+              "max_bytes": 65537
+            },
+            "status": "error"
+          },
+          {
+            "case": "limit-131072-delta--1",
+            "input_bytes": 131071,
+            "input_sha256": "46111e3adb3704a8d2083f1f28b3f70635778d0fb1142ebfd7f66b4bd346523e",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 131072
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-131072-delta-0",
+            "input_bytes": 131072,
+            "input_sha256": "a1e0b04f42859473955a313c29c78e438dbdd42ff4a92ceda2bdadc65e1a536c",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {
+              "max_bytes": 131072
+            },
+            "status": "value"
+          },
+          {
+            "case": "limit-131072-delta-1",
+            "input_bytes": 131073,
+            "input_sha256": "6c698a6308297d95bb7d129ea4d19687bc32f94d8ab7bda941e59a6b9c694142",
+            "output_sha256": "6689fdf5e98a0ff0214e23490742f08d468dd84b9ef74d7229b977b5eae01ecc",
+            "parameters": {
+              "max_bytes": 131072
+            },
+            "status": "error"
+          },
+          {
+            "case": "utf8-boundary-233-bom-False",
+            "input_bytes": 65539,
+            "input_sha256": "dbf41d827704e80ba076dd9b784abc5e563bb6f35f6de5986ad57fed49363e14",
+            "output_sha256": "fd3b6ae760dacdd313d1a11e4e90bbaed1d34c4a0cef5cee1c07ed50d8a60411",
+            "parameters": {
+              "max_bytes": 65539
+            },
+            "status": "value"
+          },
+          {
+            "case": "utf8-boundary-233-bom-True",
+            "input_bytes": 65539,
+            "input_sha256": "ebcb44127e34c9836a0c27f01a11b509781aa2f846c77efc25b1cf4c1e619888",
+            "output_sha256": "dadcb1068f8ebc0e4f38d6928c8ba1115caf9810750496135f1927be60095797",
+            "parameters": {
+              "max_bytes": 65539
+            },
+            "status": "value"
+          },
+          {
+            "case": "utf8-boundary-28450-bom-False",
+            "input_bytes": 65540,
+            "input_sha256": "27f0e0fad9d5d11426b82cc6c85065093f81b60171d5b4b98973cfec8860a39e",
+            "output_sha256": "787e15a4dbf57700158539b0260fad8c56a03c916230747c29c6f92157647081",
+            "parameters": {
+              "max_bytes": 65540
+            },
+            "status": "value"
+          },
+          {
+            "case": "utf8-boundary-28450-bom-True",
+            "input_bytes": 65540,
+            "input_sha256": "d1b0996f9399592295d2936a35b0d853e246c249d8f6dc6241be9abb415ef9e2",
+            "output_sha256": "0f885afd4bf46a949abf4651882117f35847fd3fea3088e03d26c3e7d4058901",
+            "parameters": {
+              "max_bytes": 65540
+            },
+            "status": "value"
+          },
+          {
+            "case": "utf8-boundary-128008-bom-False",
+            "input_bytes": 65541,
+            "input_sha256": "04dce2e9c54d73170a15119879dde6ae5ab8480d0a328a5683950cce86dab527",
+            "output_sha256": "22362c9bfce19ac6e9a5cca943e8eb533ddbb2c73f54b89418d41d0ef3ccc19e",
+            "parameters": {
+              "max_bytes": 65541
+            },
+            "status": "value"
+          },
+          {
+            "case": "utf8-boundary-128008-bom-True",
+            "input_bytes": 65541,
+            "input_sha256": "26f5062dd342c9cba04cae7a94e937021545b0d611887de83ec6b4ce72f90e83",
+            "output_sha256": "12cac8d4e50043abd2c88ac9d7743ef418572f6bf397c76b658204859a87bd0d",
+            "parameters": {
+              "max_bytes": 65541
+            },
+            "status": "value"
+          },
+          {
+            "case": "invalid-0",
+            "input_bytes": 0,
+            "input_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "output_sha256": "d8f775b2afbb799dab9e746b6d152cf324d06030aabb40e78b0318dbc4672239",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-1",
+            "input_bytes": 1,
+            "input_sha256": "021fb596db81e6d02bf3d2586ee3981fe519f275c0ac9ca76bbcf2ebb4097d96",
+            "output_sha256": "b36b56e9d387aa7cf9a0d49b392cbb2d9531e59a23177162fcfe0ff1990157d8",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-2",
+            "input_bytes": 13,
+            "input_sha256": "272cd2c973af66eec32f5b6f1b8e1f5fc204f4862b990de97302596561678b63",
+            "output_sha256": "eceb14ed2416b56bdb623e68a9dfaae8f8ab5cec186ab3290e44fad74e8d9a8d",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-3",
+            "input_bytes": 9,
+            "input_sha256": "c238cb6e9ac5407491b0988102620ab9445290d2ed7713c516a2b28bd2388968",
+            "output_sha256": "3d18ed413e98bc26edb41f87a3ac5ac79b5d1a0915f2324abab73f5791ca4fdc",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-4",
+            "input_bytes": 14,
+            "input_sha256": "504a7fad8d7687a0ca0c9eace25c99c63e8e3cf1ad8f4945644c781e4605c02d",
+            "output_sha256": "3d18ed413e98bc26edb41f87a3ac5ac79b5d1a0915f2324abab73f5791ca4fdc",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-5",
+            "input_bytes": 11,
+            "input_sha256": "5a4dbbf06c5613c1e0be4d93477fbb2617daeda0f8c0bf63b7e237d99584df79",
+            "output_sha256": "3d18ed413e98bc26edb41f87a3ac5ac79b5d1a0915f2324abab73f5791ca4fdc",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-6",
+            "input_bytes": 2,
+            "input_sha256": "e4f60d0aa6d7f3d3b6a6494b1c861b99f649c6f9ec51abaf201b20f297327c95",
+            "output_sha256": "d63b4173c1167e19c602732f2600f4da2ad83dd82b38f27906528ff47c22a269",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-7",
+            "input_bytes": 10,
+            "input_sha256": "3a7c727bd4adf18de59c2a907d3a45906e9b8780266ae4aa2f3340f3ac04dd3d",
+            "output_sha256": "24a402a011147e444cd4cfd87ffb3ca8321285ae033f19e5cb7c2ebcf24c26c8",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-8",
+            "input_bytes": 1,
+            "input_sha256": "a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89",
+            "output_sha256": "60d0862790d4898bbffd7049b007fd72682adde0250e84585927c620204a3501",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-9",
+            "input_bytes": 6,
+            "input_sha256": "83cd1053851a5a4b965a3272c63ffa0155543e74fc1dd91f7efca55bd7d899df",
+            "output_sha256": "4369ebe5bef5296fa359a26c7aa21dfa692cdf7ccbbfad51e0b3755ea2e04828",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-10",
+            "input_bytes": 65539,
+            "input_sha256": "e66d8662db8c90a343cb0c37f5beff7368c4f2ae59528a0990c8db0d8c83f338",
+            "output_sha256": "9f562a0c26ce730843bef28e763c569acb4ad0513e4c430b3e90ce5a46e05f84",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-11",
+            "input_bytes": 10,
+            "input_sha256": "acd7d92a69d561ff8e9c6633af4eceb81d4b28786d4ddcc24d9bd3b0b0089211",
+            "output_sha256": "6f5f2e98211f007d1f656227a02cfe346d37344ecb97a4e79fe944accf0820c9",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "invalid-12",
+            "input_bytes": 6001,
+            "input_sha256": "e7d48e0c6ad5b942af605ddccec592b9f4c620eea282ecda3a28e02571d4132c",
+            "output_sha256": "2eb68e3da1e780490a94803b215e3465e66db25acf592a76f2d615b0ee2f2099",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "default-depth-0",
+            "input_bytes": 1,
+            "input_sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+            "output_sha256": "f97487bbb9d1521f264f28034b1992ee6e2cb82179d24224a9b459eb1c466823",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "default-depth-1",
+            "input_bytes": 3,
+            "input_sha256": "d0bca111f8628137adc4c16f123496dcdd1d590d06cb5d9acd68b39fe656fb97",
+            "output_sha256": "ae8fb5d82a063b18684a39a54298bc8288b056aefd7639eadbf48a3cf5f51803",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "default-depth-2",
+            "input_bytes": 5,
+            "input_sha256": "db407f11d7ede59abaab0e98e097ff2dae10a048207b801745d7199ef19c2387",
+            "output_sha256": "8bd7332f0b06317e8e21d9597c813eed800b444e43dfbf4269ff6b6c3d256218",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "default-depth-31",
+            "input_bytes": 63,
+            "input_sha256": "aa6b4827b4b9b0503263d3a0f1b0cc38801d46f505e7899a109d8210c34fd537",
+            "output_sha256": "cad96f851f0adc80957b7ac5f44a0159d33d339aba261829c825869fe4294237",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "default-depth-32",
+            "input_bytes": 65,
+            "input_sha256": "4e04cac422d9ecd4a5f6221653eeb4eaf29077cf3f588cd36bf6dc8ead76971f",
+            "output_sha256": "53f76c6b70cdcad160a0a81bb402041e32217e8568cd111fc369e52cf044778a",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "default-depth-33",
+            "input_bytes": 67,
+            "input_sha256": "eac9bf029c22e177c74309fb891e3351dccfb04f055127ea82dc2dc3136cd899",
+            "output_sha256": "2eb68e3da1e780490a94803b215e3465e66db25acf592a76f2d615b0ee2f2099",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "default-depth-40",
+            "input_bytes": 81,
+            "input_sha256": "99504c2fc383bb51580b268e33309910b3de0d51d3eb6be7511ce3a3664f5868",
+            "output_sha256": "2eb68e3da1e780490a94803b215e3465e66db25acf592a76f2d615b0ee2f2099",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "nodes-0",
+            "input_bytes": 13,
+            "input_sha256": "c682124147e4589c5358750c6c82223a560b65accbc49e571026e596ed760e65",
+            "output_sha256": "2eb68e3da1e780490a94803b215e3465e66db25acf592a76f2d615b0ee2f2099",
+            "parameters": {
+              "max_items": 0
+            },
+            "status": "error"
+          },
+          {
+            "case": "nodes-1",
+            "input_bytes": 13,
+            "input_sha256": "c682124147e4589c5358750c6c82223a560b65accbc49e571026e596ed760e65",
+            "output_sha256": "97bd3c460a0ab71cac8ba9898c80cb6c9a807c289ad38fb4df1f7c0442e1e78c",
+            "parameters": {
+              "max_items": 1
+            },
+            "status": "error"
+          },
+          {
+            "case": "nodes-2",
+            "input_bytes": 13,
+            "input_sha256": "c682124147e4589c5358750c6c82223a560b65accbc49e571026e596ed760e65",
+            "output_sha256": "97bd3c460a0ab71cac8ba9898c80cb6c9a807c289ad38fb4df1f7c0442e1e78c",
+            "parameters": {
+              "max_items": 2
+            },
+            "status": "error"
+          },
+          {
+            "case": "nodes-4",
+            "input_bytes": 13,
+            "input_sha256": "c682124147e4589c5358750c6c82223a560b65accbc49e571026e596ed760e65",
+            "output_sha256": "97bd3c460a0ab71cac8ba9898c80cb6c9a807c289ad38fb4df1f7c0442e1e78c",
+            "parameters": {
+              "max_items": 4
+            },
+            "status": "error"
+          },
+          {
+            "case": "nodes-5",
+            "input_bytes": 13,
+            "input_sha256": "c682124147e4589c5358750c6c82223a560b65accbc49e571026e596ed760e65",
+            "output_sha256": "d74c42f0e02576f7a827433de1cbaa6ef40f16b63d340d56105eaf0b6b3b160b",
+            "parameters": {
+              "max_items": 5
+            },
+            "status": "value"
+          },
+          {
+            "case": "nodes-6",
+            "input_bytes": 13,
+            "input_sha256": "c682124147e4589c5358750c6c82223a560b65accbc49e571026e596ed760e65",
+            "output_sha256": "d74c42f0e02576f7a827433de1cbaa6ef40f16b63d340d56105eaf0b6b3b160b",
+            "parameters": {
+              "max_items": 6
+            },
+            "status": "value"
+          },
+          {
+            "case": "explicit-depth-0",
+            "input_bytes": 9,
+            "input_sha256": "1a21eb98104bbacebc876c8de01e474ad8d2520871aec7f74f0bbdf0eb21d6a1",
+            "output_sha256": "2eb68e3da1e780490a94803b215e3465e66db25acf592a76f2d615b0ee2f2099",
+            "parameters": {
+              "max_depth": 0
+            },
+            "status": "error"
+          },
+          {
+            "case": "explicit-depth-1",
+            "input_bytes": 9,
+            "input_sha256": "1a21eb98104bbacebc876c8de01e474ad8d2520871aec7f74f0bbdf0eb21d6a1",
+            "output_sha256": "2eb68e3da1e780490a94803b215e3465e66db25acf592a76f2d615b0ee2f2099",
+            "parameters": {
+              "max_depth": 1
+            },
+            "status": "error"
+          },
+          {
+            "case": "explicit-depth-2",
+            "input_bytes": 9,
+            "input_sha256": "1a21eb98104bbacebc876c8de01e474ad8d2520871aec7f74f0bbdf0eb21d6a1",
+            "output_sha256": "490f7bc6e3aa1d1fe24b7002c4f7a846054859a0c04728f2cc7955db264f8a2b",
+            "parameters": {
+              "max_depth": 2
+            },
+            "status": "value"
+          },
+          {
+            "case": "explicit-depth-3",
+            "input_bytes": 9,
+            "input_sha256": "1a21eb98104bbacebc876c8de01e474ad8d2520871aec7f74f0bbdf0eb21d6a1",
+            "output_sha256": "490f7bc6e3aa1d1fe24b7002c4f7a846054859a0c04728f2cc7955db264f8a2b",
+            "parameters": {
+              "max_depth": 3
+            },
+            "status": "value"
+          },
+          {
+            "case": "nodes-accepted-100000",
+            "input_bytes": 199999,
+            "input_sha256": "fd18bb2cd9307008f7452a4e66ac5826ec85248f1cf75b6ae242b231e718697e",
+            "output_sha256": "0fecf50c4f9fb323d988e7805b829a6ae6cff91db5d4aeeaecae1f741cdfce0c",
+            "parameters": {},
+            "status": "value"
+          },
+          {
+            "case": "nodes-rejected-100001",
+            "input_bytes": 200001,
+            "input_sha256": "af223ca49bd199ac08a094020440480511d32a352b2fcf8497475603211ca454",
+            "output_sha256": "97bd3c460a0ab71cac8ba9898c80cb6c9a807c289ad38fb4df1f7c0442e1e78c",
+            "parameters": {},
+            "status": "error"
+          },
+          {
+            "case": "missing-file",
+            "output_sha256": "fcb351e3733c95bf3cab33307b28bcc00379ca9057b31dec9d80c4cba6df191d",
+            "status": "error"
+          }
+        ],
+        "complete_reader_pairs": 79,
+        "exact_output_and_error_parity": true
+      },
+      "timing_scope": "One actual reader, public consumer or complete make_plan invocation per sample. Files are already in the operating system cache. No disk-throughput, startup, native-input, GPU or whole-application speed claim.",
+      "memory_scope": "Separate Python traced peak and retained-with-result of one complete call. This is not total process RSS or most native Pillow memory. Large near-limit files explicitly measure growing-accumulator overhead; no universal peak reduction is assumed."
+    }
+  },
+  "independent_reviews": {
+    "all_closed": true,
+    "source_hash_manifest_sha256": "da8476e1df16766ea79af307b38077622a637f960fcdad22a851fb06e92c2c82",
+    "source_hash_serialization": "sha256(json.dumps(source_map, sort_keys=True, separators=(',', ':')).encode())",
+    "root_python_files": 841,
+    "colour": {
+      "reviewer": "completion_audit",
+      "source_and_actual_flow_review": "closed",
+      "raw_result_review": "closed",
+      "raw_sha256": "070e810ac5462a2b71bccb97b918f097ee5a1ceba3cfa77e73d27cbfe8650dab",
+      "cases": 582,
+      "workloads": 10,
+      "pairs_each": 6,
+      "all_complete_outputs_exact": true,
+      "notes": "All medians, percentages, shorter-pair counts and cold work observations independently checked. Light/warm controls and Full builder +56,768-byte peak remain explicit."
+    },
+    "reader": {
+      "reviewer": "github_status",
+      "source_and_actual_flow_review": "closed",
+      "raw_result_review": "closed",
+      "raw_sha256": "d112a988335bc2f79009d08ef6de6bf3e8e86708b78edda85956d85e467d1385",
+      "historical_reader_cases": 79,
+      "workloads": 11,
+      "pairs_each": 6,
+      "all_complete_outputs_and_errors_exact": true,
+      "notes": "All medians, read counts/bytes/bounds, peak and retained values independently checked. Six consumer aliases and whole-call comparison reviewed; public file counter means targeted timing file only. Slower public/large/overflow cases retained."
+    },
+    "profile_reload": {
+      "reviewer": "github_status",
+      "status": "closed",
+      "new_test_methods": 5,
+      "focused_original_gate": 99,
+      "notes": "Actual import/copy/reset and Stop/stale selection behavior. Integrated controller is exactly remote plus the reviewed accepted-profile disarm call."
+    },
+    "native_test_lifetime": {
+      "reviewer": "github_status",
+      "status": "closed",
+      "notes": "Twelve existing CTk fixtures use the existing owned root. The 25-case Linux/Xorg original snapshot is disclosed; Windows/titlebar proof requires new exact-commit CI."
+    },
+    "integration": {
+      "reviewer": "preview_fix",
+      "status": "closed",
+      "notes": "27 remote paths were byteidentical at handoff; DrawBot exactly remote plus one reviewed line. Remaining local product/fixture bytes unchanged; new benchmark changes limited to names/baseline. Finalizer accounting and preservation reviewed."
+    },
+    "concurrent_batch22": {
+      "status": "closed",
+      "platform_and_spectrum_reviewer": "github_status",
+      "pixel_correction_reviewer": "completion_audit",
+      "preview_shutdown_reviewer": "preview_fix",
+      "notes": "Independent read-only reviews of complete changed functions, callers, ledgers and regressions found no concrete integration blocker. No duplicate group between remote three and local two."
+    }
+  },
+  "integration": {
+    "concurrent_commit_preserved": "5c32b6883c454268e06e199a8f15264ca9ec26e9",
+    "preceding_registry_entries_preserved": 826,
+    "changed_paths_checked": 28,
+    "remote_batch22_ledgers_and_artifacts_unchanged": true,
+    "application_change": "Only accepted profile reload also revokes the preceding Manual Drop-In request.",
+    "preintegration_evidence": "The earlier 4222-test be30 working-tree gate and C2201 timings are exploratory history. This batch repeats complete gates and timings against the integrated 5c32 baseline."
+  },
+  "uncounted_completions": [
+    "Accepted profile import/copy/reset retires the preceding Manual Drop-In arm, timers and pending requests. Existing target guards already blocked stale native dispatch; this completes Step27/RT34/RT35/UW805 without another behavior ID.",
+    "Twelve older native CTk fixtures use the existing scoped root factory. Original assertions/skips remain; one existing scaling case verifies exact owned timers through real destroy and a later interpreter event loop.",
+    "Regression tests, historical comparison tooling, fixed resource-input fixtures, documentation and version metadata add no improvement IDs."
+  ],
+  "exact_raster_results": {
+    "artifact": "v148-batch23-engine-benchmarks.json",
+    "fixtures": 8,
+    "mismatched_plan_pixels": {
+      "red-bananas": 0,
+      "yellow-banana": 0,
+      "small-details": 0,
+      "dominant-hues": 0,
+      "icon-crop": 0,
+      "paint-reference": 0,
+      "application-webp": 0,
+      "application-png-crop": 0
+    },
+    "all_exact_palette_geometry": true,
+    "existing_tracked_assets": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "native_fixture_evidence": {
+    "platform": "Linux/Xorg/Tk9.0.4",
+    "original_snapshot": "be30fa54a0c58a8d2b6535d31cb6672727f4e6cc plus the unchanged local fixture edits",
+    "native_cases": 25,
+    "passed": 25,
+    "same_two_flow_probe_before_owned_timers_remaining": 5,
+    "after_owned_timers_remaining": 0,
+    "before_background_errors": 5,
+    "after_background_errors": 0,
+    "new_skip_conditions": 0,
+    "no_product_window_changes": true,
+    "integration_scope": "The exact fixture/product bytes were preserved. New Windows/titlebar verification belongs to the new published commit."
+  },
+  "source_test_isolation": {
+    "root_verified_color_runtime_file_absent_after_fullsuite": true
+  },
+  "prior_checkpoint_validation": {
+    "commit": "5c32b6883c454268e06e199a8f15264ca9ec26e9",
+    "all_seven_checks_passed": true,
+    "windows_tests": 4246,
+    "windows_runner_seconds": 312.123,
+    "windows_skipped": 3,
+    "windows_passed": 4243,
+    "windows_selftest_passed": true,
+    "bundle_validation_passed": true,
+    "packaged_gui_and_native_drop_passed": true,
+    "run_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401939021",
+    "windows_job_id": 128491405282,
+    "codeql_run": 42401935596,
+    "zip_sha256": "49718d7c117882d6b33f82cb452a5593a6a45f879869204d361fc53f82373513",
+    "nonfatal_invalid_command_lines": 25,
+    "checks": [
+      {
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/Vxiey/Image-Draw-Bot/runs/128491542728"
+      },
+      {
+        "name": "core-windows-latest-py312",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401939021/job/128491405282"
+      },
+      {
+        "name": "core-ubuntu-latest-py312",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401939021/job/128491405231"
+      },
+      {
+        "name": "dependencies-ubuntu-latest-py3.11",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401939021/job/128491405180"
+      },
+      {
+        "name": "dependencies-windows-latest-py3.12",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401939021/job/128491404982"
+      },
+      {
+        "name": "Analyze (python)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401935596/job/128491397912"
+      },
+      {
+        "name": "Analyze (actions)",
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401935596/job/128491397752"
+      }
+    ],
+    "steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1
+      },
+      {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2
+      },
+      {
+        "name": "Set up Python",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3
+      },
+      {
+        "name": "Install application and test dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4
+      },
+      {
+        "name": "Validate source package hygiene",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5
+      },
+      {
+        "name": "Run exact raster and portable planner regressions",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6
+      },
+      {
+        "name": "Run Extra Fast benchmark smoke",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7
+      },
+      {
+        "name": "Run complete regressions",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8
+      },
+      {
+        "name": "Run Image Draw Bot Windows self-test",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9
+      },
+      {
+        "name": "Build and validate the Windows bundle",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10
+      },
+      {
+        "name": "Verify packaged GUI and native drag and drop",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11
+      },
+      {
+        "name": "Post Set up Python",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 21
+      },
+      {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 22
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23
+      }
+    ]
+  },
+  "remote_validation": "The preceding 5c32b68 checkpoint is green. The new commit receives separate Windows/Linux, dependency, CodeQL and packaged Windows GUI/native-drop checks.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46"
+}

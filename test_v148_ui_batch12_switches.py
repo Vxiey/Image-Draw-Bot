@@ -446,7 +446,8 @@ class SwitchKeyboardTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'win32', 'Actual Windows Tk switch key delivery')
 class WindowsSwitchKeyboardTests(unittest.TestCase):
     def setUp(self):
-        self.root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        self.root = scoped_window_class(ctk.CTk)()
         self.factory_scopes = []
         self.root.geometry('760x680+50+50')
         self.errors = []

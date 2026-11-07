@@ -270,7 +270,8 @@ class ButtonKeyboardTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'win32', 'Actual Windows Tk button key delivery')
 class WindowsButtonKeyboardTests(unittest.TestCase):
     def setUp(self):
-        self.root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        self.root = scoped_window_class(ctk.CTk)()
         self.root.geometry('480x360')
         self.errors = []
         self.root.report_callback_exception = lambda *args: self.errors.append(args)

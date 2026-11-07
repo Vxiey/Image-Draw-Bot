@@ -1,6 +1,15 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 826 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19, three in batch 20, two in batch 21 and three in batch 22. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 828 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19, three in batch 20, two in batch 21, three in batch 22 and two in batch 23. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 23: mixed-colour scoring and local JSON allocation
+
+- Reuse identical rounded mixture distances within one bounded colour search while preserving candidate order, ties, native colour ownership and complete drawing plans.
+- Read small local JSON files without reserving their complete byte allowance. Keep one descriptor, bounded blocks and the existing complete decoder/size/structure rules.
+- Revoke the preceding Manual Drop-In request on an accepted profile import/reset, and use the existing owned window lifetime in older native tests. These completions add zero IDs.
+- Preserve all concurrently published batch22 changes and their original evidence.
+
+Two new groups bring the registry to **828**, leaving **172**. Frozen-source discovery completed **4,270 tests: 4,211 passed and 59 skipped**. The 5,000-cycle source gate, package hygiene, eight existing-raster fixtures and complete historical comparisons passed. Twenty-one paired workloads disclose workload-specific timings and Python allocations, including warm/unchanged controls and bounded table/large-file overhead. No general physical drawing, GPU or total-RSS benefit is inferred. See [final local validation](docs/v148-batch23-validation.json). The new exact-commit Windows/CI gate is recorded separately in PR46.
 
 ## Batch 22: preserve small details and complete safe fallbacks
 

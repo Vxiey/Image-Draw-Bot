@@ -376,7 +376,8 @@ class ContrastKeyboardTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'win32', 'Native CTk contrast interaction runs on Windows CI.')
 class NativeContrastKeyboardTests(unittest.TestCase):
     def setUp(self):
-        self.root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        self.root = scoped_window_class(ctk.CTk)()
         self.factory_scopes = []
         self.root.geometry('680x460+50+50')
         self.errors = []

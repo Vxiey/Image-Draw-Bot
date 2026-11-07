@@ -254,7 +254,8 @@ class NumericCommitTests(unittest.TestCase):
 class WindowsNumericCommitTests(unittest.TestCase):
     def test_native_entry_change_and_focus_events_preserve_existing_class_bindings(self):
         with ExitStack() as stack:
-            root = ctk.CTk()
+            from UiCompatibility import scoped_window_class
+            root = scoped_window_class(ctk.CTk)()
             scopes = []
             stack.callback(release_factory_scopes, scopes)
             stack.callback(root.destroy)

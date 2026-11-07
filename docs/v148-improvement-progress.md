@@ -6,12 +6,26 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 23 implements **828 total distinct improvements, with 172 remaining**.
+
+Final frozen-source integration completed **4,270 tests**: **4,211 passed and 59 platform/hardware cases skipped**, with all 891 source/configuration hashes unchanged. The two new groups reduce repeated mixed-colour scoring and oversized input allocation when reading small local JSON files. Accepted profile import/reset revokes the old Drop-In request, and older native CTk tests use the existing owned window lifetime; those completions add zero IDs.
+
+The concurrently published `5c32b6883c454268e06e199a8f15264ca9ec26e9` batch22 is preserved, including all 826 preceding registry entries and its detail-protection, portrait-tile, spectrum-search and UI changes. The 5,000-cycle source gate, package hygiene, eight existing-raster geometry fixtures and independent reviews passed. Complete historical comparisons cover 582 colour cases, 79 reader cases and eleven full reader/consumer workloads. Twenty-one workloads share 841 root Python hashes and have six balanced timing pairs each, with separate traced-allocation evidence and slower controls retained. [Final local evidence](v148-batch23-validation.json) is separate from the new exact-commit Windows/CI gate in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
+
+The preceding `5c32b68` checkpoint passed all seven checks, including Windows tests, source/packaged self-tests, bundle validation and packaged GUI/native drag-and-drop. [Exact prior run](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401939021). No 1.0.148 release has been published; the release condition remains 1,000 independently verified behavior changes.
+
+<details>
+<summary>Previous batch22 checkpoint</summary>
+
 Batch 22 implements **826 total distinct improvements, with 174 remaining**.
 Final frozen-source integration completed **4,246 tests: 4,187 passed and 59 platform/hardware cases skipped**, in 197.237 seconds. All 892 checked source/configuration hashes stayed unchanged, and the runtime Paint cache was absent before and after the suite. The 5,000-cycle source gate, 1,235-file package hygiene and eight exact-raster cases using existing assets passed. [Final local evidence](v148-batch22-validation.json) records exact source and measurement bindings; the published commit's Windows/package checks remain separately recorded in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
 
 The three new groups preserve individually correct protected details during correction, keep portrait operations consistent across GPU tile sizes, and reduce Python work in Paint spectrum search with exact chosen-color parity. Explicit preview Stop, recoverable shutdown, native numeric ownership and destination resize allocation complete existing contracts with zero additional IDs. [Rendering](v148-batch22-rendering.md), [platform](v148-batch22-platform.md), [spectrum](v148-batch22-native-spectrum.md) and [UI](v148-batch22-ui-workflow.md) ledgers disclose evidence and limits.
 
 Integration retains concurrent checkpoint `92d5a86709a61802821780f5866409da6cd8cf2e` and its follow-up `be30fa54a0c58a8d2b6535d31cb6672727f4e6cc`. The latter fixes the demonstrated Windows fixture newline failure and isolates the older Paint recovery tests' actual storage. The original 823 registry entries remain unchanged. No release has been published; the release condition remains 1,000 independently verified behavior changes.
+
+
+</details>
 
 - The first 100 improvements are merged on `main` at `eb9804560c8648a92aabe2688e362a6b4a1d28b5`; Windows and Linux CI passed for their reviewed source head.
 - Version 1.0.147's promotion PR was closed unmerged after the target changed. The RC4 release run was cancelled before publication.

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import errno
+from io import BytesIO
 import json
 import math
+from operator import index
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -234,6 +236,47 @@ def is_finite_number(value) -> bool:
         return False
 
 
+def _read_json_bytes(stream, max_bytes):
+    """Grow from actual input instead of reserving the entire file allowance.
+
+    Keep one open stream, consume at most the overflow sentinel, and continue
+    after positive short reads. The common small-file path needs no accumulator.
+    """
+    first = block = buffer = None
+    try:
+        limit = index(max_bytes + 1)
+        if limit < -sys.maxsize - 1 or limit > sys.maxsize:
+            raise OverflowError('Local state byte limit exceeds the supported read size.')
+        if limit < -1:
+            raise ValueError('read length must be non-negative or -1')
+        if limit <= 0:
+            # The caller retains the existing negative-limit size error, without
+            # accidentally turning read(-1) into an unbounded allocation.
+            return b''
+        first = stream.read(min(65536, limit))
+        total = len(first)
+        if not first or total >= limit:
+            return first
+        block = stream.read(min(65536, limit - total))
+        if not block:
+            return first
+        with BytesIO() as buffer:
+            buffer.write(first)
+            first = None
+            while block:
+                total += len(block)
+                buffer.write(block)
+                block = None
+                if total >= limit:
+                    break
+                block = stream.read(min(65536, limit - total))
+            return buffer.getvalue()
+    finally:
+        # Close precedes decoder work; a retained read/append failure does not
+        # retain the accumulator or the already copied block through this frame.
+        first = block = buffer = stream = None
+
+
 def read_json(path: Path, *, max_bytes: int = 4 * 1024 * 1024,
               max_depth: int = 32, max_items: int = 100000):
     """Read a bounded local JSON document without ambiguous or nonfinite data."""
@@ -246,7 +289,7 @@ def read_json(path: Path, *, max_bytes: int = 4 * 1024 * 1024,
         return result
 
     with Path(path).open('rb') as stream:
-        raw = stream.read(max_bytes + 1)
+        raw = _read_json_bytes(stream, max_bytes)
     if len(raw) > max_bytes:
         raise ValueError('Local state exceeds the supported file size.')
     try:

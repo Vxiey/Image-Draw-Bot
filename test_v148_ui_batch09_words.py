@@ -167,7 +167,8 @@ class CompleteWordResultsTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'win32', 'Actual Windows Tk word-result navigation')
 class WindowsWordResultsTests(unittest.TestCase):
     def test_actual_filter_native_list_and_keyboard_buttons_reach_later_words(self):
-        root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        root = scoped_window_class(ctk.CTk)()
         self.addCleanup(root.destroy)
         root.geometry('500x350')
         errors = []

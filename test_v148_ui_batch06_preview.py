@@ -223,7 +223,8 @@ class ResponsiveTests(unittest.TestCase):
 class WindowsWorkspaceLayoutTests(unittest.TestCase):
     def test_all_preview_pages_remain_selectable_in_a_narrow_native_deck(self):
         import customtkinter as ctk
-        root=ctk.CTk();root.geometry('420x340');changed=Mock()
+        from UiCompatibility import scoped_window_class
+        root=scoped_window_class(ctk.CTk)();root.geometry('420x340');changed=Mock()
         try:
             deck=PreviewDeck(root,command=changed);deck.pack(fill='both',expand=True)
             source=ast.parse(Path('StudioUI.py').read_text(encoding='utf-8'))
@@ -247,8 +248,9 @@ class WindowsWorkspaceLayoutTests(unittest.TestCase):
 
     def test_nine_tool_actions_wrap_inside_the_native_row_at_both_scales(self):
         import customtkinter as ctk
+        from UiCompatibility import scoped_window_class
         for scale in (1.0,1.5):
-            root=ctk.CTk();root.geometry('430x400')
+            root=scoped_window_class(ctk.CTk)();root.geometry('430x400')
             try:
                 ctk.set_widget_scaling(scale)
                 row=ctk.CTkFrame(root);row.pack(fill='x',padx=8)

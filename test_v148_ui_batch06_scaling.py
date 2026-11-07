@@ -122,7 +122,10 @@ class ScalingReplayTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'win32', 'Actual Windows CTk DPI replay')
 class WindowsScalingReplayTests(unittest.TestCase):
     def test_native_pack_order_survives_hiding_its_anchor_and_repeated_scaling(self):
-        root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        root = scoped_window_class(ctk.CTk)()
+        background_errors = []
+        root.tk.createcommand('bgerror', background_errors.append)
         try:
             first, anchor, last, child = [ctk.CTkFrame(root, height=25) for _ in range(4)]
             for widget in (first, anchor, last):
@@ -139,8 +142,35 @@ class WindowsScalingReplayTests(unittest.TestCase):
                 self.assertEqual(child._last_geometry_manager_call['kwargs']['padx'], 6)
                 self.assertEqual(child.pack_info()['padx'], round(6 * child._get_widget_scaling()))
         finally:
-            root.destroy()
-            ctk.set_widget_scaling(1.0)
+            # Exact commands owned by this real root, not all interpreters'
+            # timers or callbacks whose names happen to resemble its methods.
+            owned_commands = set(root._tclCommands or ())
+            owned_jobs = set()
+            for job in root.tk.call('after', 'info'):
+                script = root.tk.call('after', 'info', job)[0]
+                command = root.tk.splitlist(script)
+                if len(command) == 1 and command[0] in owned_commands:
+                    owned_jobs.add(job)
+            try:
+                root.destroy()
+                self.assertTrue(owned_jobs, 'Actual CTk scaling/polls must reach teardown')
+                remaining = set(root.tk.call('after', 'info'))
+                self.assertFalse(owned_jobs & remaining, 'Destroyed fixture left native timers')
+                # Keep the closed interpreter alive while another real root
+                # services the shared native event loop beyond the 1 s delay.
+                import time
+                observer = tk.Tk()
+                try:
+                    deadline = time.monotonic() + 1.1
+                    while time.monotonic() < deadline:
+                        observer.update()
+                        time.sleep(.01)
+                finally:
+                    observer.destroy()
+                self.assertFalse(background_errors, background_errors)
+            finally:
+                root.tk.deletecommand('bgerror')
+                ctk.set_widget_scaling(1.0)
 
 
 if __name__ == '__main__':

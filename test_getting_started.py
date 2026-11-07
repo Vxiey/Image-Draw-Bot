@@ -22,7 +22,8 @@ class GettingStartedTests(unittest.TestCase):
     def test_guide_navigation_profile_change_and_close_are_read_only(self):
         import tkinter as tk
         import customtkinter as ctk
-        root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        root = scoped_window_class(ctk.CTk)()
         app = SimpleNamespace(root=root, game=tk.StringVar(root, 'Microsoft Paint'))
         try:
             with patch('ReleaseState.mark_welcome_seen') as seen:
@@ -51,7 +52,8 @@ class GettingStartedTests(unittest.TestCase):
     def test_tooltip_closes_when_its_control_is_destroyed(self):
         import customtkinter as ctk
         from StudioUI import ToolTip
-        root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        root = scoped_window_class(ctk.CTk)()
         try:
             button = ctk.CTkButton(root, text='Setting')
             button.pack()

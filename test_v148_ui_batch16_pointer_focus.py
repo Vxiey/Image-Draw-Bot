@@ -216,7 +216,8 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
         if self._testMethodName == _SELECTOR_CASE and os.environ.get(_MENU_CHILD) != '1':
             self.root = None
             return
-        self.root = ctk.CTk()
+        from UiCompatibility import scoped_window_class
+        self.root = scoped_window_class(ctk.CTk)()
         self.factory_scopes = []
         self.root.geometry('740x620+30+30')
         self.errors = []
@@ -233,10 +234,7 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
     def tearDown(self):
         if self.root is None:
             return
-        # CTk's process-wide appearance/scaling pollers can outlive a destroyed
-        # test root. Cancel its remaining Tcl timers before the next case starts.
-        for token in self.root.tk.call('after', 'info'):
-            self.root.tk.call('after', 'cancel', token)
+        # Use the same owned callback/shared-service teardown as the app root.
         self.root.destroy()
         release_factory_scopes(self.factory_scopes)
         for image in self.images:

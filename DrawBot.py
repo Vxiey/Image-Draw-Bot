@@ -7227,6 +7227,7 @@ class DrawBotApp:
         try:
             DrawBotApp._close_smart_drop_overlay(self,'profile changed')
             DrawBotApp._cancel_browser_one_click(self,'profile applied')
+            DrawBotApp._disarm_manual_drop_in(self,'profile applied')
             self.smart_drop_pending_payload=None
             self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
             from ProfileIsolation import reset_settings
