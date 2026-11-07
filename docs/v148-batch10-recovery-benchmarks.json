@@ -1,0 +1,490 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "3c5fe8fc27ec3b503e2affa6f3ed00cb7856f973",
+  "baseline_DrawBot_py_sha256": "e1191da0849b3d7cd625a0be82d64e9312ea99a16ce45dd404d615da09cb84e5",
+  "baseline_input": "git-show",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "pillow": "13.0.0",
+  "numpy": "2.5.4",
+  "image_size": [
+    2048,
+    1536
+  ],
+  "image_mode": "RGBA",
+  "opaque": true,
+  "seed": 1001,
+  "source_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+  "candidate_extra_owned_rgba_payload_bytes": 12582912,
+  "pair_count": 5,
+  "warmup_pairs": 0,
+  "scope": "Actual recovery after callback and actual worker event handler; headless timer/value stubs. Both variants call the same current SessionRecovery in fresh temporary directories. Timing starts at callback invocation, excludes the configured 40 ms timer delay, and delivers the actual completed worker event immediately without Tk polling delay. The benchmark waits for the worker only to measure completion, never as UI guidance. UI dispatch includes the private source copy; final rename and metadata/fsync remain UI work. PNG verification, image decoding, source generation and final directory deletion are untimed. The same lightweight save/copy observers and no-op diagnostic logger are used for both variants.",
+  "memory_scope": "Additional owned RGBA source payload only: width*height*4 bytes, one snapshot per candidate trial and no concurrent trial. Excludes the shared borrowed source, Python/native allocator overhead, encoder/hash buffers and all other temporary objects. Process RSS is not measured. Repeated-request coalescing and cancellation are separately covered by lifecycle regressions.",
+  "source_hashes": {
+    "DrawBot.py": "0ae9a90f823d06d24aa4ac2c67ebc32789235592dd8bbc5390dfb6efb04d4cef",
+    "RecoveryImagePreparation.py": "74c065a36a9bd9cc7a164c401f906c8fd1f338a4eb3bd5973d59d98d31ee527e",
+    "SessionRecovery.py": "f3fd7287b9b50dadceab9411a49600c458a3cd1a984ae45d344585eb4ce40804",
+    "RuntimePaths.py": "ab1bba9cb165e134f2f3197ca99ddaea4dbbd9fbf3414737ab8383f70c06d1e7",
+    "SubjectFocus.py": "6016c6746c8da7764868054ac1cb1ab4cfd8f4395f8862fd3e23836051182d08",
+    "benchmark_v148_recovery_preparation.py": "fe7d18bf04c74270144ff443e2118e36debe9876226ff8376342baafb0cae334"
+  },
+  "selected_method_hashes": {
+    "baseline": {
+      "_save_recovery_checkpoint": {
+        "source_sha256": "093bfd29f0b7e585c023df25582f94c0a4fede88d911cdb364bf5002f0a3a3f2",
+        "ast_sha256": "4c259b185b9a3984b26ee45c16f44a0260e55a3766e7528c872cc07b61962f58"
+      },
+      "_schedule_recovery_checkpoint": {
+        "source_sha256": "999a44de418d8e402dfd87242121fdc13b9de7b6d582003acaf4b57935cc12cc",
+        "ast_sha256": "6e602f95f09b47e168527202eaa2704325491938819d2d04cdcc7dc3001d5fab"
+      }
+    },
+    "candidate": {
+      "_save_recovery_checkpoint": {
+        "source_sha256": "fd26ab386a5562ebc6559801b2642b60dd8cfbb4331ac7020a81e2b782c89621",
+        "ast_sha256": "3bae695ef8941a0feb2a7e9869a3b1f18c69f2d5bc7994610d1dd27ab796b627"
+      },
+      "_schedule_recovery_checkpoint": {
+        "source_sha256": "68d21894c8141b0bc725974bb08940c2df40543458901564ac2efb1b28255727",
+        "ast_sha256": "065b6e4cb133d7cc72a6a3985bb26e77a1e215f25d35c0bb1de0d4dfbc60a9bc"
+      },
+      "_queue_recovery_checkpoint": {
+        "source_sha256": "53ef278e6cf99b49ddd5493baa232baa6e0b3ee80445d2d61f92fea80efd8cc3",
+        "ast_sha256": "58954df59f6048c7951502c473ab6be94960af81e5f908ba228aa475d2d70186"
+      },
+      "_finish_recovery_image_job": {
+        "source_sha256": "4d963defeab8405e6cc28fc0418a2ce2d173c62abe817a6caffee66756976f98",
+        "ast_sha256": "73244e6bc9a9a499eec567ac54bfa1f364d4e30ffd5a5bae3c8ab426883a14d1"
+      },
+      "_handle_event": {
+        "source_sha256": "bfb9bf9f3beeb3af604651cae7a25c5ac8e772d00a848d43ceb82344507bbf46",
+        "ast_sha256": "4c63eb390f89a2e42ab2ffdde0f712a77a1d78e7af19a03cdeeac1e3a599984d"
+      },
+      "_recovery_option_snapshot": {
+        "source_sha256": "c6f120c32946e298ffa5908510514a510e2018a9b902dd6600ed88e631b235cf",
+        "ast_sha256": "97eb8773f50762d402ea543dd0e6a7dddb780e30e9ba3f53c8c3a30a18e42e17"
+      },
+      "_cancel_after_attr": {
+        "source_sha256": "49b5d09978ca743fc906542736cfd29e403b44392f74c7602fd22bf73285acfd",
+        "ast_sha256": "04ec3a5713693431ac92e2a7e4617188b07577d89c17b80b69fe36a3f4bd3e9b"
+      }
+    }
+  },
+  "checkpoint_without_timestamp": {
+    "schema": 3,
+    "profile": "Other drawing app",
+    "options": {
+      "brush_px": "2",
+      "skip_white": true,
+      "gpu_mode": "CPU"
+    },
+    "saved_area": [
+      [
+        40,
+        60
+      ],
+      [
+        1064,
+        828
+      ]
+    ],
+    "has_image": true,
+    "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+    "target_lock_hint": null,
+    "subject_selection": {
+      "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+      "mode": "Subject only",
+      "region": [
+        0.15,
+        0.2,
+        0.55,
+        0.8
+      ]
+    },
+    "safety": {
+      "drawing_armed": false,
+      "target_lock_restored": false,
+      "preflight_restored": false,
+      "dry_run_restored": false,
+      "small_test_restored": false
+    }
+  },
+  "parity": {
+    "png_bytes_identical": true,
+    "pixels_identical": true,
+    "subject_state_identical": true,
+    "borrowed_source_unchanged": true
+  },
+  "pairs": [
+    {
+      "index": 1,
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline": {
+        "ui_dispatch_ms": 911.236383,
+        "ui_final_publication_ms": null,
+        "ui_total_ms": 911.236383,
+        "completion_wall_ms": 911.236383,
+        "png_encode_threads": [
+          {
+            "thread": "MainThread",
+            "on_ui_thread": true,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 0,
+        "extra_owned_rgba_payload_bytes": 0,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      },
+      "candidate": {
+        "ui_dispatch_ms": 7.934856,
+        "ui_final_publication_ms": 1.447491,
+        "ui_total_ms": 9.382347,
+        "completion_wall_ms": 1084.028089,
+        "png_encode_threads": [
+          {
+            "thread": "recovery-image-encoder",
+            "on_ui_thread": false,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 1,
+        "extra_owned_rgba_payload_bytes": 12582912,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      }
+    },
+    {
+      "index": 2,
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "candidate": {
+        "ui_dispatch_ms": 2.840962,
+        "ui_final_publication_ms": 0.881251,
+        "ui_total_ms": 3.722213,
+        "completion_wall_ms": 962.888532,
+        "png_encode_threads": [
+          {
+            "thread": "recovery-image-encoder",
+            "on_ui_thread": false,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 1,
+        "extra_owned_rgba_payload_bytes": 12582912,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      },
+      "baseline": {
+        "ui_dispatch_ms": 1000.023036,
+        "ui_final_publication_ms": null,
+        "ui_total_ms": 1000.023036,
+        "completion_wall_ms": 1000.023036,
+        "png_encode_threads": [
+          {
+            "thread": "MainThread",
+            "on_ui_thread": true,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 0,
+        "extra_owned_rgba_payload_bytes": 0,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      }
+    },
+    {
+      "index": 3,
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline": {
+        "ui_dispatch_ms": 816.403436,
+        "ui_final_publication_ms": null,
+        "ui_total_ms": 816.403436,
+        "completion_wall_ms": 816.403436,
+        "png_encode_threads": [
+          {
+            "thread": "MainThread",
+            "on_ui_thread": true,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 0,
+        "extra_owned_rgba_payload_bytes": 0,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      },
+      "candidate": {
+        "ui_dispatch_ms": 3.483942,
+        "ui_final_publication_ms": 0.834677,
+        "ui_total_ms": 4.318619,
+        "completion_wall_ms": 821.836163,
+        "png_encode_threads": [
+          {
+            "thread": "recovery-image-encoder",
+            "on_ui_thread": false,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 1,
+        "extra_owned_rgba_payload_bytes": 12582912,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      }
+    },
+    {
+      "index": 4,
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "candidate": {
+        "ui_dispatch_ms": 3.777788,
+        "ui_final_publication_ms": 0.945609,
+        "ui_total_ms": 4.723397,
+        "completion_wall_ms": 833.812494,
+        "png_encode_threads": [
+          {
+            "thread": "recovery-image-encoder",
+            "on_ui_thread": false,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 1,
+        "extra_owned_rgba_payload_bytes": 12582912,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      },
+      "baseline": {
+        "ui_dispatch_ms": 841.214202,
+        "ui_final_publication_ms": null,
+        "ui_total_ms": 841.214202,
+        "completion_wall_ms": 841.214202,
+        "png_encode_threads": [
+          {
+            "thread": "MainThread",
+            "on_ui_thread": true,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 0,
+        "extra_owned_rgba_payload_bytes": 0,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      }
+    },
+    {
+      "index": 5,
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "baseline": {
+        "ui_dispatch_ms": 805.101123,
+        "ui_final_publication_ms": null,
+        "ui_total_ms": 805.101123,
+        "completion_wall_ms": 805.101123,
+        "png_encode_threads": [
+          {
+            "thread": "MainThread",
+            "on_ui_thread": true,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 0,
+        "extra_owned_rgba_payload_bytes": 0,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      },
+      "candidate": {
+        "ui_dispatch_ms": 3.237429,
+        "ui_final_publication_ms": 1.146114,
+        "ui_total_ms": 4.383543,
+        "completion_wall_ms": 1027.942931,
+        "png_encode_threads": [
+          {
+            "thread": "recovery-image-encoder",
+            "on_ui_thread": false,
+            "format": "PNG"
+          }
+        ],
+        "ui_value_read_threads": [
+          "MainThread"
+        ],
+        "owned_source_snapshots": 1,
+        "extra_owned_rgba_payload_bytes": 12582912,
+        "png_bytes": 10913971,
+        "png_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+        "decoded_pixels_sha256": "ba013f233c11112f0b42f96763ae80423c4558679bbfad7cd4dfea7f6bad9a8b",
+        "checkpoint_without_timestamp_sha256": "a5be9b9de386a9909cac64ada8e3c73fe395cfb5595f5fc0325b1aa0dabf8abe",
+        "subject_selection": {
+          "image_sha256": "3868bb6a631bed0b90104c4c82a77c043982a3fe05e672bfd2b4ec73e62a6a78",
+          "mode": "Subject only",
+          "region": [
+            0.15,
+            0.2,
+            0.55,
+            0.8
+          ]
+        }
+      }
+    }
+  ],
+  "medians": {
+    "baseline": {
+      "ui_dispatch_ms": 841.214202,
+      "ui_total_ms": 841.214202,
+      "completion_wall_ms": 841.214202,
+      "ui_final_publication_ms": null
+    },
+    "candidate": {
+      "ui_dispatch_ms": 3.483942,
+      "ui_total_ms": 4.383543,
+      "completion_wall_ms": 962.888532,
+      "ui_final_publication_ms": 0.945609
+    }
+  },
+  "interpretation": "This measures one deterministic 3 MP image on this machine and filesystem. Reduced UI occupancy is distinct from total completion time; asynchronous preparation need not improve CPU throughput, total wall time or every image workload."
+}

@@ -20,6 +20,7 @@ from UIState import compute_workspace_state, classify_error
 from TimeBudget import TIME_BUDGET_MODES, TARGET_STROKE_COUNTS
 from ProgressiveRenderer import PROGRESSIVE_RENDERING_MODES
 from ProgressiveSummary import progressive_summary
+from NumericEntryCommit import bind_numeric_commit
 from PlanningWatchdog import PLANNING_WATCHDOG_MODES
 from ShapePaths import SHAPE_MODEL_MODES
 from QuickSketchFillContour import QUICK_SKETCH_RENDER_STYLE, QUICK_SKETCH_STYLES, QUICK_SKETCH_FILL_PREFERENCES
@@ -246,8 +247,7 @@ def build_ui(a, quality, speed):
             label(text, help_text, muted=True, size=10, wraplength=190).pack(anchor='w', pady=(2, 0))
         field = entry(row, var, width)
         field.pack(side='right', padx=(8, 0))
-        field.bind('<FocusOut>', a.options_changed)
-        field.bind('<Return>', a.options_changed)
+        bind_numeric_commit(field, var, a.options_changed, owner=a)
         tooltip(field, explanation)
         return field
 

@@ -1,6 +1,17 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 765 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08 and 6 changes in batch 09. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 773 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08 6 changes in batch 09 and 8 changes in batch 10. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 10: responsive recovery and faithful physical rendering
+
+- Prepare recovery PNGs on one owned encoder thread, coalesce changes and prevent stale checkpoints after clear or shutdown. Preserve failed/cancelled clear retries and current draw-resume data.
+- Keep resolved Pixel/Subject plans under their actual renderer, retain scalar brush-layout scores, and admit an exact pack using one verified brush size.
+- Calculate scaled regional brush coverage in physical canvas pixels, including letterbox spill and reachable-center limits. Use bounded ROIs and streamed quality reporting with the existing native coordinate contract.
+- Preserve accepted plans when numeric controls are unchanged, and carry profile-specific automatic-color ceilings through the actual planner options.
+- Own the entire build workspace session so concurrent builders cannot mix dependency environments, binaries and release assets.
+- Complete existing case-insensitive profile-import confirmation and owned-image cleanup contracts without duplicate improvement IDs.
+
+Batch 10: final frozen-source discovery passed 3,579 tests in 125.869 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. Paired rendering and recovery measurements bind the final source snapshot and disclose unchanged or slower total-work results. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
 
 ## Batch 09: complete UI results and actual drawing boundaries
 
@@ -10,7 +21,7 @@
 - Honor Stop during diagnostics collection and before ZIP publication, preserving prior exports and suppressing stale success presentation.
 - Complete existing profile-confirmation identity, custom-selector costing and isolated source-helper launch contracts without counting them again.
 
-Batch 09: final frozen-source discovery passed 3,514 tests in 190.952 seconds (42 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
+Batch 09: final frozen-source discovery passed 3,514 tests in 190.952 seconds (42 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. The published batch09 checkpoint `3c5fe8fc27ec3b503e2affa6f3ed00cb7856f973` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42320087469](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42320087469). All four jobs and all seven commit checks succeeded. No 1.0.148 release is published.
 
 ## Batch 08: executable Fill, consistent controls and reliable release builds
 

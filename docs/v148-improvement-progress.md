@@ -51,7 +51,9 @@ Batch 07 adds 16 independently reviewed groups: application 3, rendering/plannin
 
 Batch 08 adds 14 independently reviewed groups: application 2, rendering/planning 4, UI/workflow 6 and platform/build 2. The total is **759**, with **241 remaining**. Batch 08: final frozen-source discovery passed 3,462 tests in 81.280 seconds (39 platform/hardware skips), with unchanged source hashes. All four counted-area source reviews are closed; review findings were corrected with regressions. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. The earlier full-suite failure was an outdated fake cost-model interface; its swap-selection assertions are preserved. The batch08 checkpoint plus its native keyboard-test fixture repair at `ab2a59bd1432aac7528d378cef2c4ebcf689a47b` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42309898941](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42309898941). The repair starts Tab traversal from the actually focused native entry and adds no improvement ID. No 1.0.148 release is published.
 
-Batch 09 adds **6 distinct groups**: application 1, rendering 1, UI/workflow 3 and platform 1. The implemented total is **765**, with **235 remaining**. Batch 09: final frozen-source discovery passed 3,514 tests in 190.952 seconds (42 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
+Batch 09 adds **6 distinct groups**: application 1, rendering 1, UI/workflow 3 and platform 1. The implemented total is **765**, with **235 remaining**. Batch 09: final frozen-source discovery passed 3,514 tests in 190.952 seconds (42 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. The published batch09 checkpoint `3c5fe8fc27ec3b503e2affa6f3ed00cb7856f973` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42320087469](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42320087469). All four jobs and all seven commit checks succeeded. No 1.0.148 release is published.
+
+Batch 10 adds **8 distinct groups**: application 1, rendering 4, UI/workflow 2 and platform 1. The implemented total is **773**, with **227 remaining**. Batch 10: final frozen-source discovery passed 3,579 tests in 125.869 seconds (43 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. Paired rendering and recovery measurements bind the final source snapshot and disclose unchanged or slower total-work results. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
 
 ## Review method
 
@@ -81,6 +83,8 @@ Batch 09 adds **6 distinct groups**: application 1, rendering 1, UI/workflow 3 a
 - `benchmark_v148_ui.py` reproduces UI helper workload comparisons. It does not exercise real Windows input or physical GPU hardware.
 
 - Batch 09: [application](v148-batch09-application.md), [rendering](v148-batch09-rendering.md), [UI/workflow](v148-batch09-ui-workflow.md) and [platform](v148-batch09-platform.md).
+
+- Batch 10: [application](v148-batch10-application.md), [rendering](v148-batch10-rendering.md), [UI/workflow](v148-batch10-ui-workflow.md) and [platform](v148-batch10-platform.md).
 
 ## Release condition
 

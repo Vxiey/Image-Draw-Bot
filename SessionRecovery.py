@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 import warnings
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 from RuntimePaths import atomic_write_text, data_dir, file_transaction, read_json
@@ -201,7 +201,7 @@ def _store_image(image=None, *, legacy_path=None):
                 if image.mode=='RGBA':
                     image.save(stream,format='PNG')
                 else:
-                    with image.convert('RGBA') as rgba:
+                    with closing(image.convert('RGBA')) as rgba:
                         rgba.save(stream, format='PNG')
             else:
                 with Path(legacy_path).open('rb') as source:
@@ -253,15 +253,17 @@ def _clean_old_images(keep, *, strict=False):
         raise OSError(f'Could not remove cached recovery files: {names}') from failures[0][1]
 
 
-def save_snapshot(*, profile: str, options: dict, saved_area=None, image=None, clear_render_resume=False, target_lock=None, subject_selection=None) -> Path:
+def save_snapshot(*, profile: str, options: dict, saved_area=None, image=None, clear_render_resume=False, target_lock=None, subject_selection=None, prepared_image=None) -> Path:
     """Write a bounded local checkpoint. ``image=None`` preserves any old cache."""
     with _snapshot_guard():
+        if image is not None and prepared_image is not None:
+            raise ValueError('Supply either an image or its prepared PNG, not both.')
         return _save_snapshot(profile=profile, options=options, saved_area=saved_area, image=image,
                               clear_render_resume=clear_render_resume, target_lock=target_lock,
-                              subject_selection=subject_selection)
+                              subject_selection=subject_selection, prepared_image=prepared_image)
 
 
-def _save_snapshot(*, profile, options, saved_area, image, clear_render_resume, target_lock, subject_selection=None):
+def _save_snapshot(*, profile, options, saved_area, image, clear_render_resume, target_lock, subject_selection=None, prepared_image=None):
     RECOVERY_DIR.mkdir(parents=True, exist_ok=True)
     cleaned = {}
     for key in _OPTION_KEYS:
@@ -273,7 +275,13 @@ def _save_snapshot(*, profile, options, saved_area, image, clear_render_resume, 
     previous = _read_state()
     old_path, old_digest = _image_reference(previous)
     digest = old_digest if old_path is not None and old_path.is_file() else None
-    if image is not None:
+    if prepared_image is not None:
+        from RecoveryImagePreparation import PreparedImage
+        if not isinstance(prepared_image, PreparedImage) or not _valid_digest(prepared_image.digest):
+            raise ValueError('Invalid prepared recovery image.')
+        digest = prepared_image.digest
+        prepared_image.path.replace(_image_path(digest))
+    elif image is not None:
         digest = _store_image(image)
     elif old_path is not None and old_path.is_file() and old_digest is None:
         digest = _store_image(legacy_path=old_path)
@@ -426,6 +434,24 @@ def clear_snapshot() -> None:
             _clean_old_images(set(), strict=True)
         except OSError as error:
             failures.append(str(error))
+        # A clean/explicit shutdown of the controller waits for its cancelled
+        # image encoder. This also removes private PNG staging left by a crash.
+        # Never recursively remove unexpected contents or follow a job symlink.
+        try:
+            with os.scandir(RECOVERY_DIR) as entries:
+                for entry in entries:
+                    if not entry.name.startswith('.recovery-pending-') or not entry.is_dir(follow_symlinks=False):
+                        continue
+                    path = Path(entry.path)
+                    try:
+                        (path / 'image.png').unlink(missing_ok=True)
+                        path.rmdir()
+                    except OSError as error:
+                        failures.append(f'{path.name}: {error}')
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            failures.append(f'Recovery staging: {error}')
         if failures:
             raise OSError('Recovery data could not be completely removed: ' + '; '.join(failures))
 

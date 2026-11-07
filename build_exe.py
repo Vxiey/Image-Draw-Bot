@@ -13,7 +13,8 @@ import subprocess
 import sys
 import tempfile
 from Version import APP_VERSION, FILE_VERSION
-from BuildEnvironment import BuildEnvironmentError, Builder, prepare_builder
+from BuildEnvironment import (BuildEnvironmentError, Builder, build_workspace,
+                              prepare_builder, require_build_workspace)
 
 
 def documentation_data(base: Path) -> list[tuple[Path, str]]:
@@ -57,10 +58,11 @@ def main(argv=None):
     base = Path(__file__).resolve().parent
     _validate_version_info(base)
     try:
-        builder = prepare_builder(base, gpu=args.gpu)
+        with build_workspace(base):
+            builder = prepare_builder(base, gpu=args.gpu)
+            build_application(base, builder, onefile=args.onefile, gpu_build=args.gpu)
     except BuildEnvironmentError as error:
         raise SystemExit(str(error)) from error
-    build_application(base, builder, onefile=args.onefile, gpu_build=args.gpu)
 
 
 def _validate_version_info(base):
@@ -72,6 +74,9 @@ def _validate_version_info(base):
 def build_application(base: Path, builder: Builder, *, onefile=False, gpu_build=False):
     """Package with the same prepared environment used by release tests."""
     base = Path(base).resolve()
+    require_build_workspace(base)
+    if builder.root.resolve() != base:
+        raise BuildEnvironmentError('The prepared builder belongs to a different source workspace.')
     _validate_version_info(base)
     mode = '--onefile' if onefile else '--onedir'
     command = [

@@ -118,6 +118,27 @@ def _profile_identity(name: str):
     return name, key
 
 
+def _matching_profile_identity(name: str):
+    """Resolve the same name equivalence used by custom-profile registration."""
+    folded = name.casefold()
+    with CUSTOM_PROFILE_LOCK:
+        matches = [(label, str(value[0])) for label, value in PROFILES.items()
+                   if label.casefold() == folded]
+    if len(matches) > 1:
+        raise ProfilePortabilityError('Conflicting profile names must be resolved before import.')
+    return matches[0] if matches else None
+
+
+def _checked_import_identity(name, expected_name=None, expected_key=None, *, expected_absent=False):
+    identity = _matching_profile_identity(name)
+    if expected_absent and identity is not None:
+        raise ProfilePortabilityError('A profile with this name appeared. Open Import again to choose Replace or Copy.')
+    if ((expected_name is not None and (identity is None or identity[0] != expected_name)) or
+            (expected_key is not None and (identity is None or identity[1] != expected_key))):
+        raise ProfilePortabilityError('The existing profile changed. Open Import again before replacing or copying it.')
+    return identity
+
+
 def _unique_json_object(pairs):
     result = {}
     for key, value in pairs:
@@ -314,8 +335,8 @@ def validate_package(data: dict) -> dict:
     if not isinstance(key, str):
         raise ProfilePortabilityError("Profile target key is missing.")
     _validate_source_key(key)
-    existing = PROFILES.get(name.strip())
-    if existing is not None and not str(existing[0]).startswith("custom-") and key != str(existing[0]):
+    existing = _matching_profile_identity(name)
+    if existing is not None and not existing[1].startswith("custom-") and key != existing[1]:
         raise ProfilePortabilityError("Built-in profile name does not match its Image Draw Bot target key.")
 
     for section in ("canvas", "settings", "calibration", "safety"):
@@ -577,12 +598,14 @@ def _reload_profile(app, name: str):
         app.change_profile()
 
 
-def import_package_into_app(app, package: dict, *, action: str = "replace", copy_name: str | None = None):
+def import_package_into_app(app, package: dict, *, action: str = "replace", copy_name: str | None = None,
+                            expected_name=None, expected_key=None, expected_absent=False):
     _require_idle_profile(app)
     package = validate_package(package)
     source_name = package["profile"]["name"]
     if action not in ("replace", "copy"):
         raise ProfilePortabilityError("Import action must be Replace or Import as copy.")
+    _checked_import_identity(source_name, expected_name, expected_key, expected_absent=expected_absent)
 
     try:
         if hasattr(app, "save_settings"):
@@ -591,17 +614,20 @@ def import_package_into_app(app, package: dict, *, action: str = "replace", copy
     except Exception as error:
         raise ProfilePortabilityError(f"Could not save the current profile before import: {error}") from error
 
-    destination_name = source_name if action == 'replace' else (copy_name or unique_copy_name(source_name))
     with CUSTOM_PROFILE_LOCK:
+        _require_idle_profile(app)
+        existing = _checked_import_identity(source_name, expected_name, expected_key,
+                                           expected_absent=expected_absent)
+        destination_name = source_name if action == 'replace' else (copy_name or unique_copy_name(source_name))
         registry = None
-        if action == 'copy' or destination_name not in PROFILES:
+        if action == 'copy' or existing is None:
             try:
                 destination_name, destination_key, registry = prepare_custom_profile(
                     destination_name, data_dir() / 'profiles.json')
             except (OSError, ValueError) as error:
                 raise ProfilePortabilityError(str(error)) from error
         else:
-            destination_key = PROFILES[destination_name][0]
+            destination_name, destination_key = existing
         _paths, changes = _package_file_changes(package, destination_key)
         if registry is not None:
             changes[data_dir() / 'profiles.json'] = json.dumps(registry, ensure_ascii=False)
@@ -782,18 +808,22 @@ def export_profile_dialog(app):
 
 def import_profile_dialog(app):
     from tkinter import filedialog, messagebox, simpledialog
-    selected = filedialog.askopenfilename(
-        parent=getattr(app, "root", None), title="Import Image Draw Bot profile",
-        filetypes=(("Image Draw Bot profile", "*.drawprofile *.json"), ("All files", "*.*")),
-    )
-    if not selected:
-        return None
     try:
+        _require_idle_profile(app)
+        selected = filedialog.askopenfilename(
+            parent=getattr(app, "root", None), title="Import Image Draw Bot profile",
+            filetypes=(("Image Draw Bot profile", "*.drawprofile *.json"), ("All files", "*.*")),
+        )
+        if not selected:
+            return None
+        _require_idle_profile(app)
         package = read_profile_file(Path(selected))
         name = package["profile"]["name"]
+        existing = _matching_profile_identity(name)
         action = "replace"
         copy_name = None
-        if name in PROFILES:
+        if existing is not None:
+            name = existing[0]
             answer = messagebox.askyesnocancel(
                 "Profile already exists",
                 f"A profile named '{name}' already exists.\n\nYes = Replace this profile\nNo = Import as copy\nCancel = Do nothing",
@@ -801,6 +831,8 @@ def import_profile_dialog(app):
             )
             if answer is None:
                 return None
+            _require_idle_profile(app)
+            _checked_import_identity(package['profile']['name'], *existing)
             if answer is False:
                 action = "copy"
                 suggestion = unique_copy_name(name)
@@ -810,15 +842,20 @@ def import_profile_dialog(app):
                 )
                 if not copy_name:
                     return None
-        destination = import_package_into_app(app, package, action=action, copy_name=copy_name)
-        messagebox.showinfo(
-            "Profile imported",
-            f"Imported '{destination}'.\n\nFor safety, imported canvas/palette calibration is not trusted as a completed setup. Verify the target and run the normal tests before drawing.",
-            parent=getattr(app, "root", None),
-        )
+        destination = import_package_into_app(app, package, action=action, copy_name=copy_name,
+            expected_name=existing[0] if existing is not None else None,
+            expected_key=existing[1] if existing is not None else None,
+            expected_absent=existing is None)
+        if not getattr(app, 'closing', False):
+            messagebox.showinfo(
+                "Profile imported",
+                f"Imported '{destination}'.\n\nFor safety, imported canvas/palette calibration is not trusted as a completed setup. Verify the target and run the normal tests before drawing.",
+                parent=getattr(app, "root", None),
+            )
         return destination
     except (ProfilePortabilityError, OSError) as error:
-        messagebox.showerror("Could not import profile", str(error), parent=getattr(app, "root", None))
+        if not getattr(app, 'closing', False):
+            messagebox.showerror("Could not import profile", str(error), parent=getattr(app, "root", None))
         return None
 
 

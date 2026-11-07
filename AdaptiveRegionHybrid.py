@@ -329,7 +329,8 @@ def _offset_paths(paths, origin):
 
 
 def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:int,*,
-                               model,comp,phase:str,final_size:bool,origin=(0,0),cancelled=lambda:False):
+                               model,comp,phase:str,final_size:bool,origin=(0,0),cancelled=lambda:False,
+                               projection=None):
     """Choose a safe, cost-efficient run layout inside one component ROI.
 
     Extra Fast tests the native brush stride and one denser half-stride for wide
@@ -342,21 +343,29 @@ def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:in
     brush=max(1,int(brush_px))
     safe=_eroded_centers(target,brush,cancelled=cancelled)
     useful=safe & _centers_touching_mask(residual,brush,cancelled=cancelled)
+    if projection is not None:
+        useful=projection.source_centers(useful)
     if not np.any(useful):return [],np.zeros_like(target,dtype=np.bool_),0.0
-    if final_size:
-        strides=(1,)
-    else:
-        strides=tuple(dict.fromkeys((brush,max(1,brush//2))))
+    stride_sets={}
+    for orientation in ('horizontal','vertical'):
+        scale=(projection.scale_y if orientation=='horizontal' else projection.scale_x) if projection is not None else 1.
+        stride_sets[orientation]=((1,) if final_size else
+            tuple(dict.fromkeys((max(1,int(brush/scale)),max(1,int((brush//2)/scale))))))
+    strides=tuple(dict.fromkeys(stride for values in stride_sets.values() for stride in values))
+    def paint(mask,path,*,cancelled=cancelled):
+        native=projection.native_path(path) if projection is not None else path
+        _paint_path(mask,native,brush,cancelled=cancelled)
     candidates=[]
     for stride in strides:
         offsets=(0,) if stride==1 else tuple(range(stride))
         for orientation in ("horizontal","vertical"):
+            if stride not in stride_sets[orientation]:continue
             for offset in offsets:
                 _cancel(cancelled)
                 local_paths=_runs_from_mask(useful,row_stride=stride,row_offset=offset,orientation=orientation)
                 if not local_paths:continue
                 trial=np.zeros_like(target,dtype=np.bool_)
-                for path in local_paths:_paint_path(trial,path,brush)
+                for path in local_paths:paint(trial,path)
                 if np.any(trial & ~target):continue
                 gained=int(np.count_nonzero(trial & residual))
                 if gained<=0:continue
@@ -365,13 +374,24 @@ def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:in
                                     method=f"region-brush-pack-{brush}px")
                 cost=max(.000001,float(model.sequence_cost(
                     seq,initial_color=int(comp.color_index),initial_brush=brush).total_seconds))
-                candidates.append((gained,cost,len(paths),stride,orientation,offset,paths,trial))
+                # Selection needs only scalar scores and the deterministic
+                # layout descriptor. Retaining every candidate's full ROI
+                # bitmap and path lists multiplied the live workspace by all
+                # stride offsets; only the winning geometry is returned.
+                candidates.append((gained,cost,len(paths),stride,orientation,offset))
+                del local_paths,paths,seq,trial
     if not candidates:return [],np.zeros_like(target,dtype=np.bool_),0.0
     max_gain=max(row[0] for row in candidates)
     gain_floor=max(1,int(max_gain*.90))
     eligible=[row for row in candidates if row[0]>=gain_floor]
     best=min(eligible,key=lambda row:(row[1]/max(1,row[0]),row[1],row[2],-row[0],row[3],row[4],row[5]))
-    return list(best[6]),best[7],float(best[1])
+    _cancel(cancelled)
+    local_paths=_runs_from_mask(useful,row_stride=best[3],row_offset=best[5],orientation=best[4])
+    painted=np.zeros_like(target,dtype=np.bool_)
+    for path in local_paths:paint(painted,path)
+    paths=_offset_paths(local_paths,origin)
+    _cancel(cancelled)
+    return paths,painted,float(best[1])
 
 
 def _eligible_brush_sizes_for_roi(sizes,roi_shape):
@@ -384,13 +404,14 @@ def _eligible_brush_sizes_for_roi(sizes,roi_shape):
     return eligible,pruned
 
 
-def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:False):
-    """Find the cheapest exact verified multi-brush packing for one region.
+def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:False,*,projection=None):
+    """Find the cheapest exact verified brush packing for one region.
 
     Work is bbox-local. Brush sizes that physically cannot fit the component ROI
     are rejected before erosion. A bounded set of verified brush ladders is then
     evaluated so an expensive intermediate brush switch is never mandatory just
-    because the target exposes five controls.
+    because the target exposes five controls. A ladder may need only one of its
+    available sizes to finish the region.
     """
     default=max(1,int(options.get("brush_px") or 1))
     verified,dynamic=verified_brush_sizes(str(options.get("profile_key") or ""),
@@ -399,7 +420,7 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
     if not dynamic or len(verified)<2:
         return None,"no verified multi-brush controls"
     smallest=min(verified)
-    if comp.area<max(48,smallest*smallest*6):
+    if projection is None and comp.area<max(48,smallest*smallest*6):
         return None,"component too small for region brush packing"
 
     h,w=component_map.shape
@@ -407,8 +428,17 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
     x0=max(0,min(w-1,x0));x1=max(0,min(w-1,x1))
     y0=max(0,min(h-1,y0));y1=max(0,min(h-1,y1))
     if x1<x0 or y1<y0:return None,"invalid component bbox"
-    roi_map=component_map[y0:y1+1,x0:x1+1]
-    target=roi_map==comp.component_id
+    native_roi=None
+    if projection is not None:
+        native_roi,reason=projection.component_roi(component_map,comp.component_id,
+            (x0,y0,x1,y1),cancelled=cancelled)
+        if native_roi is None:return None,reason
+        target=native_roi.target
+        if np.count_nonzero(target)<max(48,smallest*smallest*6):
+            return None,'component too small for native region brush packing'
+    else:
+        roi_map=component_map[y0:y1+1,x0:x1+1]
+        target=roi_map==comp.component_id
     if not np.any(target):return None,"empty component"
 
     roi_h,roi_w=target.shape
@@ -440,10 +470,11 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
             _cancel(cancelled)
             residual=target & ~painted
             if not np.any(residual):break
+            extra={'projection':native_roi} if native_roi is not None else {}
             paths,trial,local_cost=_candidate_paths_for_brush(
                 target,residual,brush,model=model,comp=comp,
                 phase=("detail" if brush==smallest else base_phase),
-                final_size=(brush==smallest),origin=(x0,y0),cancelled=cancelled)
+                final_size=(brush==smallest),origin=(x0,y0),cancelled=cancelled,**extra)
             if not paths:continue
             newly=int(np.count_nonzero(trial & residual))
             if newly<=0:continue
@@ -458,7 +489,9 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
         missing=int(np.count_nonzero(target & ~painted))
         best_residual=missing if best_residual is None else min(best_residual,missing)
         if missing or not np.array_equal(painted,target):continue
-        if len(set(used))<2:continue
+        # One verified size can already cover the region exactly. It is still
+        # a physically selectable candidate and must compete on actual cost;
+        # requiring two used sizes rejected the simplest successful pack.
         cost=model.sequence_cost(
             sequence,initial_color=int(comp.color_index),initial_brush=default).total_seconds
         exact_candidates.append({"sequence":sequence,"paths":flat_paths,"cost":float(cost),
@@ -471,7 +504,9 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
         return None,(f"smallest verified brush cannot exactly repair residual pixels "
                      f"(best residual={residual_text}); eligible={sizes} pruned={pruned}")
     best=min(exact_candidates,key=lambda row:(row["cost"],len(row["sequence"]),-len(set(row["used_brush_sizes"]))))
-    roi_pixels=int(target.size);canvas_pixels=int(component_map.size)
+    roi_pixels=int(target.size)
+    canvas_pixels=(int(projection.canvas_size[0]*projection.canvas_size[1])
+                   if projection is not None else int(component_map.size))
     reduction=max(0.0,1.0-(roi_pixels/max(1,canvas_pixels)))
     best.update({
         "packing_roi_bbox":(x0,y0,x1,y1),"packing_workspace_pixels":roi_pixels,
@@ -480,12 +515,15 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
         "verified_brush_sizes":verified,"eligible_brush_sizes":sizes,"pruned_brush_sizes":pruned,
         "ladder_candidates_evaluated":len(ladders),"exact_ladder_candidates":len(exact_candidates),
     })
+    if native_roi is not None:
+        best['packing_native_origin']=native_roi.native_origin
+        best['packing_coordinate_space']='physical canvas pixels'
     return best,(
         f"exact verified brush packing chose ladder {best['requested_ladder']} using {best['used_brush_sizes']} "
         f"from {len(exact_candidates)}/{len(ladders)} exact candidates; pruned={pruned}")
 
 
-def _choose_component(comp,component_map,total_drawable,model,options,cancelled=lambda:False):
+def _choose_component(comp,component_map,total_drawable,model,options,cancelled=lambda:False,*,projection=None):
     phase=_phase(comp,total_drawable);gain=_component_gain(comp,total_drawable)
     default=max(1,int(options.get("brush_px") or 1))
     verified,dynamic=verified_brush_sizes(str(options.get("profile_key") or ""),options.get("browser_brush_plan"),default)
@@ -499,7 +537,8 @@ def _choose_component(comp,component_map,total_drawable,model,options,cancelled=
         cost=model.sequence_cost(
             seq, initial_color=int(comp.color_index), initial_brush=default).total_seconds
         candidates.append((cost,len(paths),orientation,seq,paths,base_brush))
-    packed,pack_reason=_brush_pack_candidate(comp,component_map,options,model,cancelled)
+    extra={'projection':projection} if projection is not None else {}
+    packed,pack_reason=_brush_pack_candidate(comp,component_map,options,model,cancelled,**extra)
     if packed:
         candidates.append((packed["cost"],len(packed["paths"]),packed["method"],packed["sequence"],packed["paths"],packed["brush_px"]))
     if comp.area==1:
@@ -521,6 +560,13 @@ def _choose_component(comp,component_map,total_drawable,model,options,cancelled=
                         float(comp.importance_mean),float(comp.edge_mean),comp.protected_pixels,
                         cost,gain,gain/(cost*1000.0),best[1],best[5],True,
                         f"minimum calibrated execution cost among {len(candidates)} exact candidate(s); {pack_reason}")
+    if projection is not None:
+        # The legacy connected-run proof describes source centerlines. A
+        # scaled fallback may leave native gaps or paint beyond a source cell;
+        # only the fully checked native packing earns an exact-footprint claim.
+        choice.exact=best[2]=='region-brush-pack'
+        choice.reason=(f'minimum calibrated execution cost among {len(candidates)} candidate(s); '
+                       f'native exact packing={choice.exact}; {pack_reason}')
     diagnostics={"component_id":comp.component_id,
         "verified_brush_sizes":list(map(int,verified)),"base_brush_px":int(base_brush),
         "candidates":[{"method":c[2],"estimated_seconds":round(float(c[0]),6),"paths":int(c[1])} for c in candidates]}
@@ -530,6 +576,9 @@ def _choose_component(comp,component_map,total_drawable,model,options,cancelled=
         "workspace_pixels":int(packed.get("packing_workspace_pixels",0) or 0),
         "canvas_pixels":int(packed.get("packing_canvas_pixels",0) or 0),
         "workspace_reduction_percent":float(packed.get("packing_workspace_reduction_percent",0.0) or 0.0)}
+    if packed and projection is not None:
+        diagnostics['brush_packing'].update(coordinate_space='physical canvas pixels',
+            native_origin=packed.get('packing_native_origin'))
     return choice,list(best[3]),diagnostics
 
 
@@ -886,6 +935,97 @@ def diagnostic_previews(pixel_map:PixelMap,canvas:np.ndarray):
     return Image.fromarray(coverage,"RGB"),Image.fromarray(error,"RGB")
 
 
+def _native_rectangles(projection,sequence,fill_regions=(),*,default_brush=1,cancelled=lambda:False):
+    """Ordered native footprints; the brush is never scaled with the image."""
+    width,height=projection.canvas_size
+    for region in fill_regions or ():
+        _cancel(cancelled)
+        color=validate_color_index(region.get('color_index'))
+        for number,(y,x0,x1) in enumerate(region.get('row_spans') or ()):
+            if number%256==0:_cancel(cancelled)
+            x0,x1=sorted((int(x0),int(x1)))
+            bounds=projection.source_rectangle(x0,int(y),x1,int(y))
+            if bounds[0]<=bounds[2] and bounds[1]<=bounds[3]:yield color,bounds
+    brush=max(1,int(default_brush))
+    for entry in sequence or ():
+        _cancel(cancelled)
+        path=entry.get('path') or ()
+        if not path:continue
+        color=validate_color_index(entry['color_index'])
+        brush=max(1,int(entry.get('brush_px') or brush))
+        native=projection.native_path(path,cancelled=cancelled)
+        for bounds in _path_rectangles(native,brush,width,height,cancelled=cancelled):
+            yield color,bounds
+
+
+def simulate_native_plan(pixel_map,sequence,projection,fill_regions=(),*,default_brush=1,cancelled=lambda:False):
+    """Score the whole physical canvas in bounded tiles, including letterbox spill."""
+    _cancel(cancelled)
+    validated_pixel_indices(pixel_map,cancelled=cancelled)
+    width,height=projection.canvas_size
+    preview_scale=min(1.,1600/max(width,height))
+    preview_size=(max(1,round(width*preview_scale)),max(1,round(height*preview_scale)))
+    preview_x=np.asarray(nearest_axis_samples(width,preview_size[0],cancelled=cancelled))
+    preview_y=np.asarray(nearest_axis_samples(height,preview_size[1],cancelled=cancelled))
+    coverage=Image.new('RGB',preview_size,'white')
+    totals=dict(intended=0,painted=0,covered=0,correct=0,wrong=0,spill=0,
+                edges=0,correct_edges=0,protected=0,correct_protected=0,missing=0)
+    try:
+        for left,top,right,bottom in projection.tiles(cancelled=cancelled):
+            raw_x=projection.x_source[left:right];raw_y=projection.y_source[top:bottom]
+            valid=((raw_y>=0)&(raw_y<pixel_map.height))[:,None]&((raw_x>=0)&(raw_x<pixel_map.width))[None,:]
+            xs=np.clip(raw_x,0,pixel_map.width-1);ys=np.clip(raw_y,0,pixel_map.height-1)
+            select=np.ix_(ys,xs)
+            target=pixel_map.palette_index[select]
+            drawable=pixel_map.drawable_mask[select]&valid
+            canvas=np.full(target.shape,-1,dtype=np.int16)
+            for color,(x0,y0,x1,y1) in _native_rectangles(projection,sequence,fill_regions,
+                    default_brush=default_brush,cancelled=cancelled):
+                xa,xb=max(left,x0),min(right-1,x1);ya,yb=max(top,y0),min(bottom-1,y1)
+                if xa<=xb and ya<=yb:canvas[ya-top:yb-top+1,xa-left:xb-left+1]=color
+            painted=canvas>=0
+            correct=drawable&(canvas==target)
+            edge_target=drawable&(pixel_map.edge_map[select]>=.5)
+            protected=drawable&pixel_map.protected_mask[select].astype(np.bool_,copy=False)
+            counts={'intended':drawable,'painted':painted,'covered':drawable&painted,
+                'correct':correct,'wrong':drawable&painted&(canvas!=target),'spill':(~drawable)&painted,
+                'edges':edge_target,'correct_edges':correct&edge_target,
+                'protected':protected,'correct_protected':correct&protected,'missing':drawable&~painted}
+            for name,mask in counts.items():totals[name]+=int(np.count_nonzero(mask))
+            px0,px1=np.searchsorted(preview_x,(left,right),side='left')
+            py0,py1=np.searchsorted(preview_y,(top,bottom),side='left')
+            if px0<px1 and py0<py1:
+                samples=np.ix_(preview_y[py0:py1]-top,preview_x[px0:px1]-left)
+                shade=np.full((py1-py0,px1-px0,3),255,dtype=np.uint8)
+                shade[correct[samples]]=(225,225,225)
+                shade[counts['missing'][samples]]=(255,80,80)
+                shade[counts['wrong'][samples]]=(255,170,45)
+                shade[counts['spill'][samples]]=(175,60,220)
+                with closing(Image.fromarray(shade,'RGB')) as block:coverage.paste(block,(int(px0),int(py0)))
+            _cancel(cancelled)
+        intended=max(1,totals['intended'])
+        def pct(name,denominator,fallback=0.):
+            return totals[name]/denominator*100. if denominator else fallback
+        covered=pct('covered',intended);color=pct('correct',intended)
+        edge=pct('correct_edges',totals['edges'],color)
+        detail=pct('correct_protected',totals['protected'],color)
+        spill=max(0.,100.-pct('spill',max(1,totals['painted'])))
+        metrics={'coverage_percent':round(covered,4),'color_accuracy_percent':round(color,4),
+            'edge_preservation_percent':round(edge,4),'protected_detail_percent':round(detail,4),
+            'spill_accuracy_percent':round(spill,4),'wrong_color_pixels':totals['wrong'],
+            'spill_pixels':totals['spill'],'missing_pixels':totals['missing'],
+            'pixel_accuracy_score':round(.35*color+.25*covered+.20*edge+.15*detail+.05*spill,4),
+            'score_formula':'0.35*color_accuracy + 0.25*coverage + 0.20*edge_preservation + 0.15*protected_detail + 0.05*spill_accuracy',
+            'coordinate_space':'physical canvas pixels before CanvasGuard','target_pixels':totals['intended'],
+            'canvas_size':projection.canvas_size,'simulation_tile_pixel_limit':projection.pixel_limit}
+        _cancel(cancelled)
+        error=coverage.copy()
+        return metrics,coverage,error
+    except BaseException:
+        coverage.close()
+        raise
+
+
 def build_adaptive_execution(pixel_map:PixelMap,palette_rgb,options:dict[str,Any],fitted,
                              *,fill_regions=(),reference_pixel_map:PixelMap|None=None,cancelled=lambda:False):
     t0=time.perf_counter();_cancel(cancelled)
@@ -893,21 +1033,29 @@ def build_adaptive_execution(pixel_map:PixelMap,palette_rgb,options:dict[str,Any
     components,cmap,component_meta=connected_components(pixel_map,cpu_workers=workers,cancelled=cancelled)
     region_seconds=time.perf_counter()-t0
     model=build_cost_model(options,(pixel_map.width,pixel_map.height),tuple(fitted))
+    from NativeBrushProjection import NativeBrushProjection
+    projection=NativeBrushProjection.for_scaled_plan((pixel_map.width,pixel_map.height),fitted,options,
+                                                     cancelled=cancelled)
     total=max(1,int(np.count_nonzero(pixel_map.drawable_mask)))
     choices=[];seqs={};candidate_meta=[]
     t1=time.perf_counter()
     for comp in components:
         _cancel(cancelled)
-        choice,seq,meta=_choose_component(comp,cmap,total,model,options,cancelled)
+        extra={'projection':projection} if projection is not None else {}
+        choice,seq,meta=_choose_component(comp,cmap,total,model,options,cancelled,**extra)
         choices.append(choice);seqs[comp.component_id]=seq;candidate_meta.append(meta)
     candidate_seconds=time.perf_counter()-t1
     t2=time.perf_counter()
     groups,sequence,schedule_meta=_schedule(
         choices,seqs,(pixel_map.width,pixel_map.height),model,options,fill_regions,fitted=fitted,cancelled=cancelled)
     reference=reference_pixel_map if reference_pixel_map is not None else pixel_map
-    metrics,canvas=simulate_quantized_plan(reference,sequence,fill_regions,cancelled=cancelled)
-    _cancel(cancelled)
-    coverage_preview,error_preview=diagnostic_previews(reference,canvas)
+    if projection is not None:
+        metrics,coverage_preview,error_preview=simulate_native_plan(reference,sequence,projection,fill_regions,
+            default_brush=options.get('brush_px',1),cancelled=cancelled)
+    else:
+        metrics,canvas=simulate_quantized_plan(reference,sequence,fill_regions,cancelled=cancelled)
+        _cancel(cancelled)
+        coverage_preview,error_preview=diagnostic_previews(reference,canvas)
     simulation_seconds=time.perf_counter()-t2
     methods={}
     for c in choices:methods[c.method]=methods.get(c.method,0)+1
@@ -933,6 +1081,8 @@ def build_adaptive_execution(pixel_map:PixelMap,palette_rgb,options:dict[str,Any
                        "plan_simulation_seconds":round(simulation_seconds,6),
                        "adaptive_hybrid_total_seconds":round(time.perf_counter()-t0,6)},
             "quality":metrics,
+            **({'native_projection':projection.as_meta(),'coverage_coordinate_space':'full physical canvas'}
+               if projection is not None else {}),
             "fallback_engine":"legacy standard planner",
             "native_input_engine_changed":False,
         },
@@ -1111,12 +1261,37 @@ def build_adaptive_hybrid_plan(original:Image.Image,area,options:dict[str,Any],m
         return base
 
 
-def render_adaptive_preview(source_size,preview_size,sequence,palette_rgb,fill_regions=(),*,cancelled=lambda:False):
+def render_adaptive_preview(source_size,preview_size,sequence,palette_rgb,fill_regions=(),*,cancelled=lambda:False,
+                            fitted=None,options=None):
     _cancel(cancelled)
     w,h=map(int,source_size);pw,ph=map(int,preview_size)
     if min(w,h,pw,ph)<=0:raise ValueError('Preview dimensions must be positive.')
     count=len(palette_rgb)
     if count:validate_palette_count(count)
+    if fitted is not None:
+        from NativeBrushProjection import NativeBrushProjection
+        projection=NativeBrushProjection.for_scaled_plan(source_size,fitted,options or {},cancelled=cancelled)
+        if projection is not None:
+            # Sample the physical fitted crop into the bounded display. Brush
+            # intervals have already been painted in native pixels; resizing the
+            # display must not resize their widths with the analysis image.
+            x_samples=np.floor(projection.offset[0]+(np.arange(pw)+.5)*projection.fitted[0]/pw).astype(np.int64)
+            y_samples=np.floor(projection.offset[1]+(np.arange(ph)+.5)*projection.fitted[1]/ph).astype(np.int64)
+            out=Image.new('RGB',(pw,ph),'white');draw=ImageDraw.Draw(out)
+            try:
+                for color,bounds in _native_rectangles(projection,sequence,fill_regions,
+                        default_brush=(options or {}).get('brush_px',1),cancelled=cancelled):
+                    index=validate_color_index(color,palette_count=count)
+                    x0,y0,x1,y1=bounds
+                    left,right=np.searchsorted(x_samples,(x0,x1+1),side='left')
+                    top,bottom=np.searchsorted(y_samples,(y0,y1+1),side='left')
+                    if left<right and top<bottom:
+                        draw.rectangle((int(left),int(top),int(right-1),int(bottom-1)),fill=tuple(palette_rgb[index]))
+                _cancel(cancelled)
+                return out
+            except BaseException:
+                out.close()
+                raise
     x_samples=nearest_axis_samples(w,pw,cancelled=cancelled)
     y_samples=nearest_axis_samples(h,ph,cancelled=cancelled)
     out=Image.new("RGB",(pw,ph),"white");draw=ImageDraw.Draw(out)

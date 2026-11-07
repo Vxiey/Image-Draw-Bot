@@ -39,6 +39,7 @@
     "ok": true
   },
   "exact_raster_fixtures": 8,
-  "checkpoint_native_ci": "pending",
-  "previous_checkpoint_ci": "42309898941: all four jobs and all seven commit checks passed"
+  "checkpoint_native_ci": "42320087469: all four jobs and all seven commit checks passed",
+  "previous_checkpoint_ci": "42309898941: all four jobs and all seven commit checks passed",
+  "checkpoint_commit": "3c5fe8fc27ec3b503e2affa6f3ed00cb7856f973"
 }

@@ -21,7 +21,7 @@ class RecoveryUiTests(unittest.TestCase):
         DrawBotApp._schedule_recovery_checkpoint(app,include_image=False,delay=100)
         root.after_cancel.assert_called_once_with('old-recovery')
         for name in unrelated:self.assertEqual(getattr(app,name),name+'-job')
-        with patch.object(DrawBotApp,'_save_recovery_checkpoint') as save:
+        with patch.object(DrawBotApp,'_queue_recovery_checkpoint') as save:
             callbacks[0]()
         save.assert_called_once_with(app,include_image=True)
         self.assertFalse(app.recovery_image_pending)

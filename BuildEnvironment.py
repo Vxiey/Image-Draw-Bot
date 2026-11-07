@@ -1,19 +1,123 @@
 """One private Python environment for release tests and frozen packaging."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
+import errno
 import json
 import os
 from pathlib import Path
 import stat
 import subprocess
 import sys
+import threading
 
 from GpuSetupRuntime import SetupEnvironmentError, checked_requirements, pip_command, pip_environment
 
 
 class BuildEnvironmentError(RuntimeError):
     pass
+
+
+@dataclass
+class _WorkspaceOwner:
+    process: int
+    thread: int
+    acquired: bool = False
+
+
+_WORKSPACE_GUARD = threading.Lock()
+_WORKSPACE_OWNERS: dict[str, _WorkspaceOwner] = {}
+_BUSY_MESSAGE = ('Another build is already using this source workspace. '
+                 'Wait for that build to finish before trying again.')
+
+
+def _workspace_key(root):
+    return os.path.normcase(str(Path(root).resolve()))
+
+
+def require_build_workspace(root):
+    """Only the current CLI's owner may mutate its shared builder and outputs."""
+    with _WORKSPACE_GUARD:
+        owner = _WORKSPACE_OWNERS.get(_workspace_key(root))
+        if (owner is None or not owner.acquired or owner.process != os.getpid()
+                or owner.thread != threading.get_ident()):
+            raise BuildEnvironmentError('Build preparation and packaging require an active workspace build session.')
+
+
+@contextmanager
+def build_workspace(root):
+    """Reserve one checkout through environment setup, tests and publication.
+
+    The stable sidecar stays under PyInstaller's excluded build directory. It
+    is never removed: another process must not acquire a replacement inode
+    while the previous owner still holds the original one. Internal build APIs
+    reuse this owner; a second CLI entry cannot silently nest or skip the lock.
+    """
+    root = Path(root).resolve()
+    key = _workspace_key(root)
+    owner = _WorkspaceOwner(os.getpid(), threading.get_ident())
+    stream = None
+    unlock = None
+    failure = None
+    try:
+        with _WORKSPACE_GUARD:
+            existing = _WORKSPACE_OWNERS.get(key)
+            if existing is not None and existing.process == owner.process:
+                raise BuildEnvironmentError(_BUSY_MESSAGE)
+            _WORKSPACE_OWNERS[key] = owner
+        work = root/'build'
+        work.mkdir(parents=True, exist_ok=True)
+        stream = (work/'.workspace-build.lock').open('a+b')
+        if os.name == 'nt':
+            import msvcrt
+            stream.seek(0, os.SEEK_END)
+            if stream.tell() == 0:
+                stream.write(b'\0')
+                stream.flush()
+            stream.seek(0)
+            def acquire():
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            def release():
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            def acquire():
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            def release():
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        try:
+            acquire()
+        except OSError as error:
+            if error.errno in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                raise BuildEnvironmentError(_BUSY_MESSAGE) from error
+            raise
+        unlock = release
+        with _WORKSPACE_GUARD:
+            owner.acquired = True
+        yield root
+    except BaseException as error:
+        failure = error
+        raise
+    finally:
+        with _WORKSPACE_GUARD:
+            owner.acquired = False
+        cleanup_error = None
+        for cleanup in (unlock, stream.close if stream is not None else None):
+            if cleanup is not None:
+                try:
+                    cleanup()
+                except OSError as error:
+                    if cleanup_error is None:
+                        cleanup_error = error
+        with _WORKSPACE_GUARD:
+            if _WORKSPACE_OWNERS.get(key) is owner:
+                del _WORKSPACE_OWNERS[key]
+        if cleanup_error is not None:
+            if failure is None:
+                raise cleanup_error
+            failure.add_note(f'Build workspace lock cleanup also failed: {type(cleanup_error).__name__}.')
 
 
 @dataclass(frozen=True)
@@ -87,6 +191,7 @@ def _verify_builder(python: Path, directory: Path, root: Path):
 def prepare_builder(root: Path, *, gpu=False) -> Builder:
     """Install only into the actual verified private builder, never the caller."""
     root = Path(root).resolve()
+    require_build_workspace(root)
     requirement_names = ['requirements.txt', 'requirements-build.txt', 'requirements-gpu-universal.txt']
     if gpu:
         requirement_names.append('requirements-gpu-nvidia.txt')

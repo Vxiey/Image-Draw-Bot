@@ -16,7 +16,7 @@ import zipfile
 from Version import APP_VERSION, FILE_VERSION, BUILD_CHANNEL
 from ReleaseCandidateHardening import run_source_release_gate, validate_windows_release
 from RuntimePaths import _replace_with_retry, atomic_write_text
-from BuildEnvironment import prepare_builder
+from BuildEnvironment import BuildEnvironmentError, build_workspace, prepare_builder
 from build_exe import build_application
 from ReleasePublication import publish_release
 
@@ -145,6 +145,15 @@ def main() -> int:
     if github_ref_type == 'tag' and github_ref and github_ref != f'v{APP_VERSION}':
         raise SystemExit(f'Git tag {github_ref!r} does not match Version.py ({APP_VERSION}). Expected tag v{APP_VERSION}.')
 
+    try:
+        with build_workspace(BASE):
+            return _build_release(args, signing)
+    except BuildEnvironmentError as error:
+        raise SystemExit(str(error)) from error
+
+
+def _build_release(args, signing):
+    """Use the caller's single owner through every shared-output read/write."""
     report=run_source_release_gate(BASE,soak_cycles=5000)
     print('RC source gate: PASS', report.as_dict())
     # Failed dependency/build steps must not erase previously completed assets.

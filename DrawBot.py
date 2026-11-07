@@ -706,6 +706,10 @@ def make_plan(original, area, options, cancelled=lambda: False):
     if options.get('outline'):
         options = dict(options, subject_focus='Off')
     options = _ensure_time_budget_options(options)
+    if options.get('subject_focus', 'Off') != 'Off':
+        if options.get('outline') or options.get('paint_current_color') or options.get('erase_mode'):
+            raise ValueError('Subject focus needs full colour drawing. Turn off Outline, Eraser and current-colour-only mode.')
+        options['draw_quality'] = 'Pixel Accurate'
     # Extra Fast quality fix: the old route built connected scanlines and then
     # applied a generic path-count cap, which could discard most of a portrait
     # (for example 653 candidate paths -> 182 kept). Adaptive Region Hybrid
@@ -715,6 +719,10 @@ def make_plan(original, area, options, cancelled=lambda: False):
     # destroyed later by an unrelated per-path cap.
     if (options.get('extra_fast') and options.get('extra_fast_v2')
             and not options.get('_adaptive_hybrid_inner')
+            # Pixel Art and Subject focus already selected an exact component
+            # renderer. Wrapping its finished plan in another regional planner
+            # discarded that new sequence while publishing its diagnostics.
+            and options.get('draw_quality') != 'Pixel Accurate'
             and not (options.get('paint_current_color') or options.get('outline') or options.get('erase_mode'))
             # A legacy/manual profile can claim Fill capability without carrying
             # executable tool actions. Preserve the proven ExtraFast2 Fill route
@@ -726,10 +734,6 @@ def make_plan(original, area, options, cancelled=lambda: False):
     if options.get('outline') and options.get('sketch_detail')=='Auto':
         from AutoSketchBudget import choose_sketch
         return choose_sketch(original,area,options,make_plan,finish_plan,cancelled)
-    if options.get('subject_focus', 'Off') != 'Off':
-        if options.get('outline') or options.get('paint_current_color') or options.get('erase_mode'):
-            raise ValueError('Subject focus needs full colour drawing. Turn off Outline, Eraser and current-colour-only mode.')
-        options['draw_quality'] = 'Pixel Accurate'
     profiler_begin(options)
     try:
         if 'cpu_workers_resolved' not in options or 'ram_budget_mb' not in options:
@@ -2016,7 +2020,8 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     if options.get('adaptive_hybrid_active') and execution_sequence:
         try:
             from AdaptiveRegionHybrid import render_adaptive_preview
-            preview=render_adaptive_preview(image.size,size,execution_sequence,palette_rgb,options.get('fill_regions') or (),cancelled=cancelled)
+            preview=render_adaptive_preview(image.size,size,execution_sequence,palette_rgb,options.get('fill_regions') or (),
+                cancelled=cancelled,fitted=fitted,options=options)
         except InterruptedError:
             raise
         except Exception as _ah_preview_error:
@@ -2127,7 +2132,11 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
         for _key,_option_key in (('coverage','_pixel_coverage_preview'),('accuracy_error','_pixel_error_preview')):
             _im=options.get(_option_key)
             if isinstance(_im,Image.Image):
-                ui_previews[_key]=_im.resize(size,Image.Resampling.NEAREST)
+                _full_canvas=(_key=='coverage' and
+                    (options.get('adaptive_hybrid_meta') or {}).get('coverage_coordinate_space')=='full physical canvas')
+                # Physical coverage includes letterboxes; fitting it back to
+                # the source aspect can distort or hide real native spill.
+                ui_previews[_key]=_im.copy() if _full_canvas else _im.resize(size,Image.Resampling.NEAREST)
         if preview_safety is not None:
             ui_previews['safety']=render_preview_safety_map(image,size,preview_safety,palette_rgb,brush,cancelled)
             ui_previews['safety_debug']=render_safety_debug_overlay(size,preview_safety,palette_rgb,brush,cancelled)
@@ -4451,7 +4460,7 @@ class DrawBotApp:
         # Preview mode is intentionally not checkpointed: recovery always returns to Manual.
         return out
 
-    def _save_recovery_checkpoint(self, *, include_image=False):
+    def _save_recovery_checkpoint(self, *, include_image=False, prepared_image=None):
         if self.closing or self.shutdown_complete or getattr(self,'_suppress_recovery',False):return
         try:
             from SessionRecovery import save_snapshot
@@ -4465,11 +4474,83 @@ class DrawBotApp:
             subject_selection={'mode':getattr(getattr(self,'subject_focus',None),'get',lambda:'Off')(),
                                'region':getattr(self,'subject_region',None)} if self.original is not None else None
             target_lock=getattr(self,'target_lock_fingerprint',None) if getattr(self,'target_lock_passed',False) else None
-            save_snapshot(profile=profile,options=DrawBotApp._recovery_option_snapshot(self),saved_area=area,image=image,clear_render_resume=bool(include_image),target_lock=target_lock,subject_selection=subject_selection)
+            arguments=dict(profile=profile,options=DrawBotApp._recovery_option_snapshot(self),saved_area=area,
+                image=image if prepared_image is None else None,
+                clear_render_resume=bool(include_image and prepared_image is None),
+                target_lock=target_lock,subject_selection=subject_selection)
+            if prepared_image is not None:arguments['prepared_image']=prepared_image
+            # Image adoption already clears the old resume checkpoint. A later
+            # encoded PNG must not clear progress from a draw begun since then.
+            save_snapshot(**arguments)
             if image is not None:self._recovery_source_ref=weakref.ref(image)
             log_event(f'Recovery checkpoint saved. image_cached={bool(include_image and self.original is not None)} target_lock_hint={bool(target_lock)}.')
+            return True
         except Exception as error:
             log_event(f'Recovery checkpoint skipped: {error!r}')
+            return False
+
+    def _queue_recovery_checkpoint(self, *, include_image=False):
+        if self.closing or self.shutdown_complete or getattr(self,'_suppress_recovery',False):return False
+        job=getattr(self,'_recovery_image_job',None)
+        if job is not None and not job.is_alive():
+            if DrawBotApp._finish_recovery_image_job(self,job):include_image=False
+            job=getattr(self,'_recovery_image_job',None)
+        if job is not None:
+            # Keep one private snapshot, and remember only that the latest UI
+            # state needs a checkpoint. Never queue more full-resolution copies.
+            self._recovery_save_pending=True
+            if job.source() is not self.original:
+                try:job.cancel()
+                except OSError as error:log_event(f'Recovery staging cleanup delayed: {error!r}')
+            return True
+        cached_source=getattr(self,'_recovery_source_ref',lambda:None)()
+        if self.original is None or not (include_image or self.original is not cached_source):
+            return DrawBotApp._save_recovery_checkpoint(self,include_image=include_image)
+        try:
+            from RecoveryImagePreparation import RecoveryImageJob
+            job=RecoveryImageJob(self.original,lambda completed:self.events.put(('recovery_image_prepared',completed)))
+            self._recovery_image_job=job
+            self._recovery_save_pending=False
+            job.start()
+            return True
+        except Exception as error:
+            self._recovery_image_job=None
+            log_event(f'Recovery image preparation skipped: {error!r}')
+            return False
+
+    def _finish_recovery_image_job(self,job):
+        if job is not getattr(self,'_recovery_image_job',None):
+            try:job.cancel()
+            except OSError as error:log_event(f'Recovery staging cleanup delayed: {error!r}')
+            return False
+        if job.is_alive():return False
+        self._recovery_image_job=None
+        prepared,error=job.take()
+        saved=False
+        try:
+            if error is not None and not isinstance(error,InterruptedError):
+                log_event(f'Recovery image preparation skipped: {error!r}')
+            elif (prepared is not None and not self.closing and not self.shutdown_complete
+                    and not getattr(self,'_suppress_recovery',False) and self.original is not None
+                    and job.source() is self.original):
+                saved=bool(DrawBotApp._save_recovery_checkpoint(self,include_image=True,prepared_image=prepared))
+        finally:
+            if prepared is not None:
+                try:prepared.close()
+                except OSError as cleanup_error:log_event(f'Recovery staging cleanup delayed: {cleanup_error!r}')
+        pending=bool(getattr(self,'_recovery_save_pending',False))
+        self._recovery_save_pending=False
+        if pending and not saved and not self.closing and not getattr(self,'_suppress_recovery',False):
+            DrawBotApp._schedule_recovery_checkpoint(self,delay=20)
+        return saved
+
+    def _cancel_recovery_image_job(self):
+        self._recovery_save_pending=False
+        job=getattr(self,'_recovery_image_job',None)
+        if job is not None:
+            try:job.cancel()
+            except OSError as error:log_event(f'Recovery staging cleanup delayed: {error!r}')
+        return job
 
     def _schedule_recovery_checkpoint(self, *, include_image=False, delay=250):
         if self.closing or self.shutdown_complete:return
@@ -4478,7 +4559,7 @@ class DrawBotApp:
         def run():
             self.recovery_checkpoint_after=None
             with_image=bool(self.recovery_image_pending);self.recovery_image_pending=False
-            DrawBotApp._save_recovery_checkpoint(self,include_image=with_image)
+            DrawBotApp._queue_recovery_checkpoint(self,include_image=with_image)
         try:self.recovery_checkpoint_after=self.root.after(max(20,int(delay)),run)
         except (tk.TclError,RuntimeError,AttributeError):self.recovery_checkpoint_after=None
 
@@ -4582,6 +4663,10 @@ class DrawBotApp:
                 return
             else:
                 if self.closing or self.activity:return
+                job=DrawBotApp._cancel_recovery_image_job(self)
+                if job is not None and job.is_alive():
+                    DrawBotApp.clear_recovery_snapshot(self)
+                    return
                 try:
                     clear_snapshot()
                 except Exception as error:
@@ -4610,6 +4695,7 @@ class DrawBotApp:
         self.pending_clear_drawing=bool(remove_image or previous)
         if previous is None:self._clear_worker=getattr(self,'worker',None)
         self._suppress_recovery=True
+        DrawBotApp._cancel_recovery_image_job(self)
         self.cancel()
         for name in ('preview_after','preview_render_after','recovery_checkpoint_after','paint_config_after'):
             DrawBotApp._cancel_after_attr(self,name)
@@ -4619,7 +4705,8 @@ class DrawBotApp:
     def _finish_clear_drawing(self):
         if self.closing or getattr(self,'pending_clear_drawing',None) is None:return
         worker=getattr(self,'_clear_worker',None)
-        if self.activity or (worker is not None and worker.is_alive()):
+        recovery_job=getattr(self,'_recovery_image_job',None)
+        if self.activity or (worker is not None and worker.is_alive()) or (recovery_job is not None and recovery_job.is_alive()):
             self.root.after(50,lambda:DrawBotApp._finish_clear_drawing(self));return
         remove_image=getattr(self,'pending_clear_drawing',False)
         self.plan=None;self.pending_render_resume=None;self.needs_plan=False
@@ -4678,6 +4765,32 @@ class DrawBotApp:
             self.status.set('Stop the current operation before clearing recovery data.');return
         DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
         self.recovery_image_pending=False
+        job=DrawBotApp._cancel_recovery_image_job(self)
+        if job is not None and job.is_alive():
+            previous_suppression=bool(getattr(self,'_suppress_recovery',False))
+            self._recovery_clear_previous_suppression=previous_suppression
+            self._suppress_recovery=True
+            self.status.set('Stopping recovery image preparation and clearing the local checkpoint…')
+            def work():
+                error=None
+                try:
+                    while not job.wait_idle(.05):
+                        if self.stop.is_set():raise InterruptedError('Recovery clearing cancelled.')
+                    if self.stop.is_set():raise InterruptedError('Recovery clearing cancelled.')
+                    from SessionRecovery import clear_snapshot
+                    clear_snapshot()
+                except Exception as failure:error=str(failure)
+                self.events.put(('recovery_clear_complete',(error,previous_suppression)))
+            try:
+                started=self.begin_worker('recovery-clear',work)
+            except BaseException:
+                self._suppress_recovery=previous_suppression
+                self._recovery_clear_previous_suppression=None
+                raise
+            if not started:
+                self._suppress_recovery=previous_suppression
+                self._recovery_clear_previous_suppression=None
+            return
         try:
             from SessionRecovery import clear_snapshot
             clear_snapshot()
@@ -7155,6 +7268,8 @@ class DrawBotApp:
                 'paint_tool':selected_tool,'effective_paint_tool':effective_paint_tool,'tool_actions':[],'fill_tool_available':fill_available,'fill_tool_actions':[],'fill_restore_actions':[]}
         result['use_region_fill_engine']=use_region_fill_engine
         result['fill_aggressiveness']=fill_aggressiveness
+        if 'exact_color_limit_profile_ceiling' in _effective_policy:
+            result['exact_color_limit_profile_ceiling']=_effective_policy['exact_color_limit_profile_ceiling']
         from PicturePalettePlanning import active_picture_palette
         prepared=active_picture_palette(self)
         if prepared and not result.get('paint_current_color') and not result.get('outline'):
@@ -7998,6 +8113,8 @@ class DrawBotApp:
         if hasattr(self,'recovery_checkpoint_after'):
             DrawBotApp._schedule_recovery_checkpoint(self,delay=300)
         self._maybe_auto_preview(delay=1000, reason='settings-change')
+        from NumericEntryCommit import sync_numeric_commits
+        sync_numeric_commits(self)
 
     def request_preview(self):
         if self.original is None:
@@ -10037,6 +10154,11 @@ class DrawBotApp:
 
     def _discard_worker_result(self,kind,value):
         """Release rejected worker-owned images while retaining live UI owners."""
+        if kind=='recovery_image_prepared':
+            try:value.cancel()
+            except OSError as error:log_event(f'Recovery staging cleanup delayed: {error!r}')
+            if value is getattr(self,'_recovery_image_job',None):self._recovery_image_job=None
+            return
         from PIL import Image
         from AutoSketchBudget import _release_trial
         retained={name:getattr(self,name,None) for name in
@@ -10058,6 +10180,7 @@ class DrawBotApp:
         if getattr(self,'pending_clear_drawing',None) is not None:
             if kind=='done':
                 if value=='performance-auto-tuner':self.hardware_benchmark_running=False
+                if value=='recovery-clear':self._recovery_clear_previous_suppression=None
                 self.activity=None;self.worker=None
                 screen_window=getattr(self,'screen_task_window',None)
                 if screen_window is not None:screen_window.restore()
@@ -10082,6 +10205,20 @@ class DrawBotApp:
             if activity==self.activity:
                 self._worker_terminal_status=(activity,str(message))
                 if not self.stop.is_set() and not self.closing:self.status.set(str(message))
+        elif kind=='recovery_image_prepared':
+            DrawBotApp._finish_recovery_image_job(self,value)
+        elif kind=='recovery_clear_complete':
+            error,previous_suppression=value
+            self._recovery_clear_previous_suppression=None
+            if self.closing:return
+            if error is None:
+                self._suppress_recovery=True
+                self.pending_render_resume=None
+                self.status.set('Local safe-recovery checkpoint cleared.')
+                log_event('Recovery checkpoint cleared by user.')
+            else:
+                self._suppress_recovery=previous_suppression
+                self.status.set(f'Could not clear recovery checkpoint: {error}')
         elif kind=='recovery_loaded':
             self.recovery_loaded_pending=value
         elif kind=='paint_auto_calibration_complete':
@@ -10829,6 +10966,10 @@ class DrawBotApp:
             from StabilityRC import current_completion
             if current_completion(self.activity,value):
                 finished=self.activity
+                if finished=='recovery-clear':
+                    previous=getattr(self,'_recovery_clear_previous_suppression',None)
+                    self._recovery_clear_previous_suppression=None
+                    if previous is not None:self._suppress_recovery=previous
                 if finished=='performance-auto-tuner':
                     self.hardware_benchmark_running=False
                     if self.stop.is_set():
@@ -10908,6 +11049,18 @@ class DrawBotApp:
 
     def _finish_shutdown(self):
         if self.shutdown_complete:return
+        job=DrawBotApp._cancel_recovery_image_job(self)
+        if job is not None and job.is_alive():
+            if getattr(self,'recovery_shutdown_after',None) is None:
+                def retry():
+                    self.recovery_shutdown_after=None
+                    DrawBotApp._finish_shutdown(self)
+                try:self.recovery_shutdown_after=self.root.after(50,retry)
+                except (tk.TclError,RuntimeError):
+                    log_event('Shutdown could not schedule recovery cleanup; its cancelled worker retains local cleanup ownership.')
+            return
+        self._recovery_image_job=None
+        DrawBotApp._cancel_after_attr(self,'recovery_shutdown_after')
         self.shutdown_complete=True
         DrawBotApp._cancel_after_attr(self,'poll_after')
         DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
@@ -10974,6 +11127,7 @@ class DrawBotApp:
         self.smart_drop_pending_payload=None
         self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
         self.closing=True
+        DrawBotApp._cancel_recovery_image_job(self)
         log_event('Shutdown requested.')
         try:self.save_settings()
         except Exception as error:log_event(f'Settings save during shutdown failed: {error!r}')
