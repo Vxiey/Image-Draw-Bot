@@ -310,7 +310,8 @@ def show_guide(app):
             state['profile_job'] = window.after_idle(refresh_profile)
 
     try:
-        window = ctk.CTkToplevel(app.root)
+        from UiCompatibility import scoped_toplevel
+        window = scoped_toplevel(app.root)
         app._getting_started_window = window
         window.title('Get started - Image Draw Bot')
         from WorkspaceLayout import fit_window

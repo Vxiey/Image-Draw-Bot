@@ -186,7 +186,7 @@ class TinySubjectTests(unittest.TestCase):
     def harness(self,stack,size):
         image=Image.new('RGB',size,'red');stack.callback(image.close)
         bindings={};window_bindings={};buttons=[];callback=Mock()
-        top=stack.enter_context(patch('customtkinter.CTkToplevel'))
+        top=stack.enter_context(patch('UiCompatibility.scoped_toplevel'))
         stack.enter_context(patch('customtkinter.CTkLabel'))
         stack.enter_context(patch('customtkinter.CTkButton',side_effect=lambda *a,**k:buttons.append(k) or Mock()))
         canvas=stack.enter_context(patch('tkinter.Canvas'))

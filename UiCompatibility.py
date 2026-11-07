@@ -8,6 +8,18 @@ import tkinter as tk
 _PATCHED = False
 
 
+def scoped_window_class(base):
+    """Use a local root/window subclass without changing third-party classes."""
+    from UiWindowLifetime import scoped_window_class as owned_class
+    return owned_class(base)
+
+
+def scoped_toplevel(parent, **kwargs):
+    """Create an application CTk dialog with owned callbacks and shared polls."""
+    import customtkinter as ctk
+    return scoped_window_class(ctk.CTkToplevel)(parent, **kwargs)
+
+
 def _scoped_scrollable_class(base):
     class ScopedScrollableFrame(base):
         """Own the global callbacks CTk installs for this particular frame."""

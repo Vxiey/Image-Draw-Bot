@@ -1,6 +1,15 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 815 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17 and five in batch 18. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 818 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18 and three in batch 19. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 19: less repeated analysis and reliable window cleanup
+
+- Prepare unchanged color-cluster statistics once while preserving exact palette, plan and picture-palette output.
+- Reuse bounded ordered native footprints across physical simulation tiles; preserve streaming fallbacks and disclose their bounded preparation overhead.
+- Read and validate one saved hardware profile per scoring operation while retaining fresh next-operation data, current backend health and zero reads for explicit CPU.
+- Complete existing root/dialog cleanup, tooltip icon cancellation, shared DPI/appearance polling and failed-DnD fallback ownership. These completions add no IDs.
+
+Three new groups bring the registry to **818**, leaving **182** before the requested release. Frozen-source discovery completed **4,083 tests: 4,025 passed and 58 skipped**. The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures, historical parity and nine real Xorg/Tk cases passed. Eighteen paired workloads disclose both improvements and slower controls; these measurements do not establish universal speedups or native drawing/GPU throughput. See [final local validation](docs/v148-batch19-validation.json). Exact-commit Windows/CI results remain a separate gate recorded in PR46.
 
 ## Batch 18: fresh result checks and bounded planning work
 

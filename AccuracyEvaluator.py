@@ -152,7 +152,7 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
                      cancelled: Callable[[], bool] = lambda: False,
                      return_error_map: bool = False,
                      return_delta_e_heatmap: bool = False,
-                     gpu_mode: str = "Auto") -> dict[str, Any]:
+                     gpu_mode: str = "Auto", _profile_observation=None) -> dict[str, Any]:
     """Compare the final simulated preview directly with the original source.
 
     ``coverage_percent`` and ``plan_execution_accuracy_percent`` are accepted
@@ -161,6 +161,31 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
     """
     if cancelled():
         raise InterruptedError()
+    observation = _profile_observation
+    owned = observation is None
+    if owned:
+        try:
+            from UniversalGpuAcceleration import HardwareProfileObservation
+            observation = HardwareProfileObservation()
+        except Exception:
+            # The numeric stages retain their existing import/CPU fallback.
+            observation = None
+    try:
+        return _evaluate_preview(source, preview, importance,
+            normalized_source=normalized_source, coverage_percent=coverage_percent,
+            plan_execution_accuracy_percent=plan_execution_accuracy_percent,
+            cancelled=cancelled, return_error_map=return_error_map,
+            return_delta_e_heatmap=return_delta_e_heatmap, gpu_mode=gpu_mode,
+            profile=observation)
+    finally:
+        if owned and observation is not None:
+            observation.close()
+
+
+def _evaluate_preview(source, preview, importance, *, normalized_source,
+                      coverage_percent, plan_execution_accuracy_percent,
+                      cancelled, return_error_map, return_delta_e_heatmap,
+                      gpu_mode, profile):
     def percentage(value, name):
         if value is None:
             return None
@@ -185,7 +210,8 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
     # look catastrophic.
     try:
         from UniversalGpuAcceleration import pixel_channel_error, perceptual_pair
-        channel_error, pixel_route = pixel_channel_error(src, dst, gpu_mode=gpu_mode, cancelled=cancelled)
+        channel_error, pixel_route = pixel_channel_error(src, dst, gpu_mode=gpu_mode,
+                                                        profile=profile, cancelled=cancelled)
     except InterruptedError:
         raise
     except Exception as exc:
@@ -198,7 +224,8 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
     if cancelled():
         raise InterruptedError()
     try:
-        src_lab, dst_lab, lab_delta, perceptual_route = perceptual_pair(src, dst, gpu_mode=gpu_mode, cancelled=cancelled)
+        src_lab, dst_lab, lab_delta, perceptual_route = perceptual_pair(src, dst, gpu_mode=gpu_mode,
+                                                                     profile=profile, cancelled=cancelled)
     except InterruptedError:
         raise
     except Exception as exc:
@@ -237,8 +264,10 @@ def evaluate_preview(source: Image.Image, preview: Image.Image, importance=None,
 
     try:
         from UniversalGpuAcceleration import edge_magnitude
-        src_edge, edge_route = edge_magnitude(src_lab[..., 0], gpu_mode=gpu_mode, cancelled=cancelled)
-        dst_edge, edge_route_dst = edge_magnitude(dst_lab[..., 0], gpu_mode=gpu_mode, cancelled=cancelled)
+        src_edge, edge_route = edge_magnitude(src_lab[..., 0], gpu_mode=gpu_mode,
+                                              profile=profile, cancelled=cancelled)
+        dst_edge, edge_route_dst = edge_magnitude(dst_lab[..., 0], gpu_mode=gpu_mode,
+                                                profile=profile, cancelled=cancelled)
     except InterruptedError:
         raise
     except Exception as exc:

@@ -293,7 +293,7 @@ class CalibrationAndModalTests(unittest.TestCase):
 
     def test_subject_selector_handles_compact_desktop_and_closes_before_callback(self):
         parent = Mock(); parent.winfo_screenwidth.return_value = 80; parent.winfo_screenheight.return_value = 120
-        with patch('customtkinter.CTkToplevel') as top, patch('customtkinter.CTkLabel'), \
+        with patch('UiCompatibility.scoped_toplevel') as top, patch('customtkinter.CTkLabel'), \
              patch('customtkinter.CTkButton'), patch('tkinter.Canvas') as canvas, patch('PIL.ImageTk.PhotoImage'):
             SubjectSelector.select_subject(parent, Image.new('RGB', (10, 10)), Mock())
             self.assertEqual(canvas.call_args.kwargs['width'], 1)
@@ -303,7 +303,7 @@ class CalibrationAndModalTests(unittest.TestCase):
         def callback(_region):
             top.return_value.destroy.assert_called_once()
             raise ValueError('callback failure')
-        with patch('customtkinter.CTkToplevel') as top, patch('customtkinter.CTkLabel'), \
+        with patch('UiCompatibility.scoped_toplevel') as top, patch('customtkinter.CTkLabel'), \
              patch('customtkinter.CTkButton') as button, patch('tkinter.Canvas') as canvas, patch('PIL.ImageTk.PhotoImage'):
             canvas.return_value.bind.side_effect = lambda event, action: bindings.__setitem__(event, action)
             button.side_effect = lambda *args, **kwargs: commands.append(kwargs['command']) or Mock()

@@ -236,6 +236,7 @@ def score_final_canvas_snapshot(*, snapshot: Image.Image, original_source: Image
     if not isinstance(original_source, Image.Image):
         return {"available": False, "trusted": False, "feedback_trust": "none", "scoring_state": "unavailable", "reason": "missing original source", "capture_pixels_persisted": False}
     owned = []
+    profile_observation = None
     def own(image):
         owned.append(image)
         return image
@@ -262,15 +263,23 @@ def score_final_canvas_snapshot(*, snapshot: Image.Image, original_source: Image
         mask = _mask_stats(expected_mask, actual_mask)
         actual_coverage = float(mask["actual_coverage_percent"])
 
+        try:
+            from UniversalGpuAcceleration import HardwareProfileObservation
+            profile_observation = HardwareProfileObservation()
+        except Exception:
+            # Preserve the evaluator's normal numeric import/CPU fallback.
+            pass
         source_metrics = evaluate_preview(source_norm, actual, coverage_percent=actual_coverage,
                                           return_error_map=False, return_delta_e_heatmap=False,
-                                          gpu_mode=gpu_mode, cancelled=cancelled)
+                                          gpu_mode=gpu_mode, cancelled=cancelled,
+                                          _profile_observation=profile_observation)
         simulated_match = None
         simulated_metrics: dict[str, Any] = {}
         if isinstance(simulated_final, Image.Image):
             simulated_metrics = evaluate_preview(expected_norm, actual, coverage_percent=actual_coverage,
                                                  return_error_map=False, return_delta_e_heatmap=False,
-                                                 gpu_mode=gpu_mode, cancelled=cancelled)
+                                                 gpu_mode=gpu_mode, cancelled=cancelled,
+                                                 _profile_observation=profile_observation)
             simulated_match = _float(simulated_metrics.get("visual_accuracy_percent"), None)
         target_match = None
         if isinstance(quantized_target, Image.Image):
@@ -278,7 +287,8 @@ def score_final_canvas_snapshot(*, snapshot: Image.Image, original_source: Image
                            own(normalize_source(quantized_target, comparison_size, background=background)))
             target_metrics = evaluate_preview(target_norm, actual, coverage_percent=actual_coverage,
                                               return_error_map=False, return_delta_e_heatmap=False,
-                                              gpu_mode=gpu_mode, cancelled=cancelled)
+                                              gpu_mode=gpu_mode, cancelled=cancelled,
+                                              _profile_observation=profile_observation)
             target_match = _float(target_metrics.get("visual_accuracy_percent"), None)
         else:
             target_metrics = None
@@ -371,5 +381,7 @@ def score_final_canvas_snapshot(*, snapshot: Image.Image, original_source: Image
             "privacy": "No screenshot or image pixels were saved.",
         }
     finally:
+        if profile_observation is not None:
+            profile_observation.close()
         for image in reversed(owned):
             image.close()

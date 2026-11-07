@@ -34,8 +34,13 @@ def actual_live_readouts(parent, app):
               and node.targets[0].id in READOUTS):
             statements.append(node)
     namespace = dict(vars(StudioUI), a=app, step5=parent)
-    exec(compile(ast.Module(body=statements, type_ignores=[]), StudioUI.__file__, 'exec'), namespace)
-    return {name: namespace[name] for name in READOUTS}
+    try:
+        exec(compile(ast.Module(body=statements, type_ignores=[]), StudioUI.__file__, 'exec'), namespace)
+        return {name: namespace[name] for name in READOUTS}
+    finally:
+        # The temporary label function otherwise retains its own globals and
+        # their app/Tcl owner until whichever thread next collects cycles.
+        namespace.clear()
 
 
 class LiveReadoutTests(unittest.TestCase):

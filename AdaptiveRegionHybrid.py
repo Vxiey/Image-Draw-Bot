@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from contextlib import closing
+from itertools import chain
 import time
 import math
 from typing import Any, Callable, Sequence
@@ -1010,6 +1011,76 @@ def _native_rectangles(projection,sequence,fill_regions=(),*,default_brush=1,can
             yield color,bounds
 
 
+_MAX_NATIVE_FOOTPRINTS = 8192
+
+
+def _native_footprint_index(projection,sequence,fill_regions,*,default_brush,cancelled):
+    """Prepare bounded ordered rectangles, or retain the streaming contract.
+
+    The index has at most min(8192, pixel allowance) five-int64 records. Large
+    geometry and non-replayable iterators retain the original per-tile stream;
+    neither all path samples nor an unbounded rectangle list is materialized.
+    """
+    _cancel(cancelled)
+    limit=min(_MAX_NATIVE_FOOTPRINTS,projection.pixel_limit)
+    if limit<=0:return None
+    # Check only bounded, ordinary planner containers. Consuming a one-shot
+    # path/span iterator while preparing a cache could change its fallback.
+    remaining=limit
+    for values,is_fill in ((sequence,False),(fill_regions,True)):
+        if not isinstance(values,(list,tuple)) or len(values)>limit:return None
+        for serial,entry in enumerate(values):
+            if serial%128==0:_cancel(cancelled)
+            if not isinstance(entry,dict):return None
+            rows=entry.get('row_spans' if is_fill else 'path') or ()
+            if not isinstance(rows,(list,tuple)) or len(rows)>remaining:return None
+            remaining-=len(rows)
+            if any(not isinstance(row,(list,tuple)) for row in rows):return None
+    try:
+        storage=np.empty((limit,5),dtype=np.int64)
+    except MemoryError:
+        _cancel(cancelled)
+        return None
+    try:
+        count=0
+        for color,bounds in _native_rectangles(projection,sequence,fill_regions,
+                default_brush=default_brush,cancelled=cancelled):
+            if count%128==0:_cancel(cancelled)
+            if count==limit:return None
+            storage[count]=(color,*bounds)
+            count+=1
+        _cancel(cancelled)
+        # This private array owns its storage and has never exposed a view.
+        # Shrinking avoids retaining the capacity for a small successful plan.
+        try:
+            storage.resize((count,5),refcheck=False)
+        except MemoryError:
+            _cancel(cancelled)
+            return None
+        return storage
+    finally:
+        # A retained Stop/error traceback must not own this private workspace.
+        storage=None
+
+
+def _indexed_native_rectangles(records,tile,*,cancelled):
+    """Filter native rectangles while retaining their original overpaint order."""
+    selected=matching=row=None
+    try:
+        _cancel(cancelled)
+        left,top,right,bottom=tile
+        matching=((records[:,1]<right)&(records[:,3]>=left)&
+                  (records[:,2]<bottom)&(records[:,4]>=top))
+        selected=np.flatnonzero(matching)
+        for number,index in enumerate(selected):
+            if number%128==0:_cancel(cancelled)
+            row=records[index]
+            yield int(row[0]),tuple(map(int,row[1:]))
+        _cancel(cancelled)
+    finally:
+        records=selected=matching=row=None
+
+
 def simulate_native_plan(pixel_map,sequence,projection,fill_regions=(),*,default_brush=1,cancelled=lambda:False):
     """Score the whole physical canvas in bounded tiles, including letterbox spill."""
     _cancel(cancelled)
@@ -1022,8 +1093,14 @@ def simulate_native_plan(pixel_map,sequence,projection,fill_regions=(),*,default
     coverage=Image.new('RGB',preview_size,'white')
     totals=dict(intended=0,painted=0,covered=0,correct=0,wrong=0,spill=0,
                 edges=0,correct_edges=0,protected=0,correct_protected=0,missing=0)
+    footprints=None
     try:
-        for left,top,right,bottom in projection.tiles(cancelled=cancelled):
+        tiles=iter(projection.tiles(cancelled=cancelled))
+        first=next(tiles,None);second=next(tiles,None)
+        if second is not None:
+            footprints=_native_footprint_index(projection,sequence,fill_regions,
+                default_brush=default_brush,cancelled=cancelled)
+        for left,top,right,bottom in chain((tile for tile in (first,second) if tile is not None),tiles):
             raw_x=projection.x_source[left:right];raw_y=projection.y_source[top:bottom]
             valid=((raw_y>=0)&(raw_y<pixel_map.height))[:,None]&((raw_x>=0)&(raw_x<pixel_map.width))[None,:]
             xs=np.clip(raw_x,0,pixel_map.width-1);ys=np.clip(raw_y,0,pixel_map.height-1)
@@ -1031,10 +1108,13 @@ def simulate_native_plan(pixel_map,sequence,projection,fill_regions=(),*,default
             target=pixel_map.palette_index[select]
             drawable=pixel_map.drawable_mask[select]&valid
             canvas=np.full(target.shape,-1,dtype=np.int16)
-            for color,(x0,y0,x1,y1) in _native_rectangles(projection,sequence,fill_regions,
-                    default_brush=default_brush,cancelled=cancelled):
-                xa,xb=max(left,x0),min(right-1,x1);ya,yb=max(top,y0),min(bottom-1,y1)
-                if xa<=xb and ya<=yb:canvas[ya-top:yb-top+1,xa-left:xb-left+1]=color
+            rectangles=(_indexed_native_rectangles(footprints,(left,top,right,bottom),cancelled=cancelled)
+                if footprints is not None else _native_rectangles(projection,sequence,fill_regions,
+                    default_brush=default_brush,cancelled=cancelled))
+            with closing(rectangles):
+                for color,(x0,y0,x1,y1) in rectangles:
+                    xa,xb=max(left,x0),min(right-1,x1);ya,yb=max(top,y0),min(bottom-1,y1)
+                    if xa<=xb and ya<=yb:canvas[ya-top:yb-top+1,xa-left:xb-left+1]=color
             painted=canvas>=0
             correct=drawable&(canvas==target)
             edge_target=drawable&(pixel_map.edge_map[select]>=.5)
@@ -1076,6 +1156,8 @@ def simulate_native_plan(pixel_map,sequence,projection,fill_regions=(),*,default
     except BaseException:
         coverage.close()
         raise
+    finally:
+        footprints=None
 
 
 def build_adaptive_execution(pixel_map:PixelMap,palette_rgb,options:dict[str,Any],fitted,

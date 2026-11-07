@@ -91,7 +91,7 @@ class SubjectDialogTests(unittest.TestCase):
 
     def test_selector_shows_transparent_pixels_on_white_and_closes_failed_dialog(self):
         image=Image.new('RGBA',(10,10),(200,0,0,0));pixels=[]
-        with patch('customtkinter.CTkToplevel') as top,patch('customtkinter.CTkLabel'),\
+        with patch('UiCompatibility.scoped_toplevel') as top,patch('customtkinter.CTkLabel'),\
              patch('customtkinter.CTkButton',side_effect=RuntimeError('cannot build button')),\
              patch('tkinter.Canvas'),patch('PIL.ImageTk.PhotoImage',side_effect=lambda flat:pixels.append(flat.getpixel((0,0))) or Mock()):
             with self.assertRaisesRegex(RuntimeError,'cannot build button'):selector.select_subject(self.parent(),image,Mock())
@@ -101,7 +101,7 @@ class SubjectDialogTests(unittest.TestCase):
 
     def test_selection_cannot_apply_twice_or_apply_an_invalid_rectangle(self):
         bindings={};buttons=[];callback=Mock()
-        with patch('customtkinter.CTkToplevel') as top,patch('customtkinter.CTkLabel'),\
+        with patch('UiCompatibility.scoped_toplevel') as top,patch('customtkinter.CTkLabel'),\
              patch('customtkinter.CTkButton',side_effect=lambda *args,**kwargs:buttons.append(kwargs) or Mock()),\
              patch('tkinter.Canvas') as canvas,patch('PIL.ImageTk.PhotoImage'):
             canvas.return_value.bind.side_effect=lambda name,fn:bindings.__setitem__(name,fn)
@@ -115,7 +115,7 @@ class SubjectDialogTests(unittest.TestCase):
     def test_mask_overlay_remains_alive_until_its_own_dialog_is_destroyed(self):
         image=Image.new('RGBA',(10,10),(255,0,0,0));image.putpixel((5,5),(255,0,0,255))
         bindings={};overlays=[]
-        with patch('customtkinter.CTkToplevel') as top,patch('customtkinter.CTkLabel'),\
+        with patch('UiCompatibility.scoped_toplevel') as top,patch('customtkinter.CTkLabel'),\
              patch('customtkinter.CTkImage',side_effect=lambda **kwargs:overlays.append(kwargs['light_image']) or Mock()):
             top.return_value.bind.side_effect=lambda name,fn,**kwargs:bindings.__setitem__(name,fn)
             selector.show_mask(self.parent(),image)

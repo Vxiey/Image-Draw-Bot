@@ -48,8 +48,11 @@ def actual_diagnostic_readout(parent, app):
     statement = ast.Assign(targets=[ast.Name(id='diagnostic', ctx=ast.Store())], value=call)
     module = ast.fix_missing_locations(ast.Module(body=[factory, statement], type_ignores=[]))
     namespace = dict(vars(StudioUI), a=app, workspace_center=parent)
-    exec(compile(module, StudioUI.__file__, 'exec'), namespace)
-    return namespace['diagnostic']
+    try:
+        exec(compile(module, StudioUI.__file__, 'exec'), namespace)
+        return namespace['diagnostic']
+    finally:
+        namespace.clear()
 
 
 class PlanStatusFixture(unittest.TestCase):
@@ -57,12 +60,32 @@ class PlanStatusFixture(unittest.TestCase):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         self.tcl = tk.Tcl()
+        self.tcl_thread = threading.get_ident()
+        self.apps = []
         self.images = []
         self.plans = []
         self.addCleanup(self.close_images)
+        self.addCleanup(self.close_apps)
         self.stack.enter_context(patch('DrawBot.log_event'))
         self.stack.enter_context(patch('SessionRecovery.clear_render_progress'))
         self.stack.enter_context(patch.object(DrawBot.DrawBotApp, '_close_smart_drop_overlay'))
+
+    def close_apps(self):
+        self.assertEqual(threading.get_ident(), self.tcl_thread)
+        # These apps deliberately use real workers and Tcl variables. Keep all
+        # fixtures alive until their workers finish, then break mock/method
+        # cycles on the interpreter's creator thread instead of later worker GC.
+        for app in self.apps:
+            worker = getattr(app, 'worker', None)
+            if isinstance(worker, threading.Thread) and worker.is_alive():
+                app.stop.set()
+                app.paused.clear()
+                worker.join(timeout=3)
+                self.assertFalse(worker.is_alive(), 'Fixture worker outlived its Tcl owner')
+        for app in self.apps:
+            vars(app).clear()
+        self.apps.clear()
+        self.tcl = None
 
     def close_images(self):
         for plan in self.plans:
@@ -77,6 +100,7 @@ class PlanStatusFixture(unittest.TestCase):
 
     def app(self):
         app = SimpleNamespace(**{name: Value('') for name in (*SETTING_NAMES, *ADDITIONAL_VARIABLES)})
+        self.apps.append(app)
         app.root = ScheduledRoot()
         app.root.deiconify = Mock()
         app.root.title = Mock()

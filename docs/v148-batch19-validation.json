@@ -1,0 +1,169 @@
+{
+  "baseline_commit": "7f41c7ee8c4b69f750008bd2d83349d186396fd1",
+  "implemented": 818,
+  "target": 1000,
+  "remaining": 182,
+  "added_behavior_groups": [
+    "C1901",
+    "R1901",
+    "P1901"
+  ],
+  "release_published": false,
+  "uncounted_completions": [
+    "GP15/UW10/090: local root/dialog ownership cancels exact owned Tcl timers/global bindings, releases icon Map jobs including ordinary tooltips, preserves shared DPI/appearance polling and retryable destroy errors, and disposes a failed DnD root before fallback",
+    "Existing subject/calibration/mobile test boundaries follow the new local factory; original behavior assertions are retained",
+    "Test-only creator-thread teardown releases headless Tcl fixture app/method/AST namespace cycles after real workers finish; a bounded subprocess proves native Variable finalization before later worker GC, with no product GC change or skipped assertions",
+    "Native-window regression evidence, historical comparison infrastructure, documentation and the recorded batch18 Windows success add no improvement IDs"
+  ],
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 4083,
+    "runner_seconds": 117.859,
+    "wall_seconds": 118.812,
+    "status": "OK (skipped=58)",
+    "skipped": 58,
+    "source_files": 857,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "3743e476eb8596030a5884bd05e8657e6cf5e75ba9b901a46fde2ec1edd68a4f"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1179,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch19-engine-benchmarks.json",
+    "fixtures": 8,
+    "mismatched_plan_pixels": {
+      "icon": 0,
+      "line-art": 0,
+      "text-small-detail": 0,
+      "cartoon-large-colour": 0,
+      "photo-gradient": 0,
+      "fill-risk": 0,
+      "thin-diagonals": 0,
+      "many-islands": 0
+    },
+    "all_exact_palette_geometry": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "comparisons": {
+    "colour": {
+      "artifact": "v148-batch19-colour-benchmarks.json",
+      "sha256": "a34705ec47ee54f219df981b47890288f55fafbce39d9c96c752a8d87bc503f2",
+      "historical_parity": {
+        "complete_dynamic_pairs": 72,
+        "independent_drawable_rasters": 24,
+        "complete_merge_pairs": 24,
+        "complete_output_sha256": "482d8350624a7684653c78a371dcdaec32b7561874ccf8e023f2d097df52bc15"
+      },
+      "workloads": 6,
+      "balanced_pairs_per_workload": 6,
+      "scope": "CPU region/color planning, complete result fingerprinting and owned-plan cleanup. No physical input, target-app drawing, native GPU, network or GUI timing.",
+      "memory_scope": "Python/NumPy traced peaks. This excludes process RSS and most native Pillow cores. Private region snapshots are bounded by the temporary quantizer palette and explicitly cleared.",
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 807,
+      "source_hash_manifest_sha256": "a0d152b40c9a48c43492f51a6ac54aa655a7df99aabeae90b03d1db2e6e0b551"
+    },
+    "platform": {
+      "artifact": "v148-batch19-platform-profile-benchmarks.json",
+      "sha256": "04e3a0638ec591f1e685cc5b76b49c6a544991af5cdb303d25f54d564e295836",
+      "historical_parity": {
+        "complete_output_sha256": "0a495074de5aa43ef3ef781f030a9468ac3e54cbebc9606a0b0cd4909f6e921a",
+        "complete_pairs": 36,
+        "coverage": "CPU/Auto/forced CUDA, current/missing profiles, measured crossover, native-device failure and live quarantine; thin and ordinary RGB/RGBA inputs, every score/route field and diagnostic image byte."
+      },
+      "workloads": 6,
+      "balanced_pairs_per_workload": 6,
+      "scope": "Complete public evaluator/final-canvas scorer, fresh local profile JSON/schema/current-hardware validation, full output fingerprint and owned diagnostic-image cleanup. Input images already exist. No GPU, screen capture, drawing input, GUI or network timing.",
+      "memory_scope": "Python/NumPy traced allocations, excluding process RSS, most native Pillow cores and other processes. Retained-with-result and retained-after-result-release are reported separately from peak.",
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 807,
+      "source_hash_manifest_sha256": "a0d152b40c9a48c43492f51a6ac54aa655a7df99aabeae90b03d1db2e6e0b551"
+    },
+    "rendering": {
+      "artifact": "v148-batch19-rendering-benchmarks.json",
+      "sha256": "d5a1d7c16702bfab4595641dc3fdff895b244f86daa8de3e5a8683de5f438799",
+      "historical_parity": {
+        "complete_native_pairs": 72,
+        "complete_output_sha256": "e4c22496b134f8477d150bd3602650cec96b3330d60c34672b8dc8d336ba4834"
+      },
+      "workloads": 6,
+      "balanced_pairs_per_workload": 6,
+      "scope": "CPU planning/simulation, complete-output fingerprinting and owned-image cleanup. No physical input, GPU, GUI or network timings.",
+      "memory_scope": "Python/NumPy traced peaks, excluding process RSS and most native Pillow cores. Index construction capacity and retained payload bytes are separately observed outside timing.",
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 807,
+      "source_hash_manifest_sha256": "a0d152b40c9a48c43492f51a6ac54aa655a7df99aabeae90b03d1db2e6e0b551"
+    }
+  },
+  "native_xorg_validation": {
+    "methods": 9,
+    "passed": 9,
+    "ui19_methods": 4,
+    "mobile18_methods": 2,
+    "existing_button_switch_selector_methods": 3,
+    "ledger": "v148-batch19-ui-workflow.md",
+    "new_windows_platform_gate_pending": true
+  },
+  "independent_source_reviews": "All three new groups and the existing-contract UI completion have closed independent reviews. Complete historical/actual-flow comparisons, retained-error ownership, optional-allocation fallback and real Xorg/Tk lifecycle evidence passed.",
+  "earlier_gate_attempt": {
+    "exit_code": -4,
+    "wall_seconds": 116.483,
+    "completed_test_count": null,
+    "source_files": 857,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "bffeff5fd87d5a05954117cc55c068bdd7f66cba1645e06a683bb7c008d48770",
+    "failure": "Tcl_AsyncDelete: async handler deleted by the wrong thread",
+    "cause": "Older headless PlanStatusFixture app/method/mock/AST namespace cycles retained Tcl variables until a later background worker collected them.",
+    "deterministic_before_exit_code": 132,
+    "deterministic_after_exit_code": 0,
+    "independent_new_regression_pass_seconds": 0.378,
+    "resolution": "Explicit creator-thread test-fixture teardown after worker completion; complete behavior assertions and production GC remain unchanged.",
+    "passing_gate_is_separate": true
+  },
+  "prior_checkpoint_validation": {
+    "commit": "7f41c7ee8c4b69f750008bd2d83349d186396fd1",
+    "all_seven_checks_passed": true,
+    "windows_tests": 4046,
+    "windows_runner_seconds": 252.159,
+    "windows_skipped": 3,
+    "live_native_memory_overlap_passed": true,
+    "both_native_mobile_lifecycle_cases_passed": true,
+    "windows_selftest_passed": true,
+    "bundle_validation_passed": true,
+    "packaged_gui_and_native_drop_passed": true,
+    "run_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42385960455",
+    "windows_job_id": 128443254754
+  },
+  "remote_validation": "Exact published-commit Windows/Linux, dependency and CodeQL results are recorded in PR46. The prior 7f41 checkpoint is green; the new root/dialog additions need their own Windows result.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46"
+}

@@ -251,16 +251,35 @@ def _weighted_stats(items: Sequence[dict], context: dict) -> dict:
     }
 
 
-def cluster_region_relation(a, b, context: dict | None) -> dict:
+def _prepare_cluster_region(cluster, context: dict) -> tuple:
+    """Prepare one ordered membership state for its owner's merge operation.
+
+    The owner must invalidate this value after changing members. Nothing is
+    cached on the caller's mutable cluster/context or in module-global state.
+    """
+    items = tuple(_members(cluster))
+    return items, _weighted_stats(items, context)
+
+
+def cluster_region_relation(a, b, context: dict | None, *, _prepared=None) -> dict:
     """Return merge affinity/protection signals for two quantized clusters."""
     if not context or not context.get('stats'):
         return {'texture_affinity':0.0,'adjacency':0.0,'spatial_overlap':0.0,
                 'tone_conflict':False,'detail_conflict':False,'region_penalty':1.0}
-    ai=_members(a); bi=_members(b)
-    sa=_weighted_stats(ai,context); sb=_weighted_stats(bi,context)
-    ta=np.asarray(sa['tiles'],dtype=np.float64); tb=np.asarray(sb['tiles'],dtype=np.float64)
-    denom=sqrt(float(np.dot(ta,ta))*float(np.dot(tb,tb)))
-    overlap=0.0 if denom<=1e-12 else max(0.0,min(1.0,float(np.dot(ta,tb)/denom)))
+    if _prepared is None:
+        ai=_members(a); bi=_members(b)
+        sa=_weighted_stats(ai,context); sb=_weighted_stats(bi,context)
+    else:
+        (ai,sa),(bi,sb)=_prepared
+    ta=tb=None
+    try:
+        ta=np.asarray(sa['tiles'],dtype=np.float64); tb=np.asarray(sb['tiles'],dtype=np.float64)
+        denom=sqrt(float(np.dot(ta,ta))*float(np.dot(tb,tb)))
+        overlap=0.0 if denom<=1e-12 else max(0.0,min(1.0,float(np.dot(ta,tb)/denom)))
+    finally:
+        # Later relation errors must not keep aliases to the owner's arrays in
+        # a retained traceback after that owner has cleared its prepared state.
+        ta=tb=None
     adjacency_map=context.get('adjacency') or {}
     adj=0.0
     for x in ai:

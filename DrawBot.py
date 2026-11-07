@@ -7011,8 +7011,9 @@ class DrawBotApp:
             self.status.set('Paint tool calibration is available only for the Microsoft Paint profile.');return
         from PaintToolCalibration import PaintToolCalibrationApp
         import customtkinter as ctk
+        from UiCompatibility import scoped_toplevel
         self.set_busy('tool-calibration')
-        window=ctk.CTkToplevel(self.root)
+        window=scoped_toplevel(self.root)
         def closed():
             self.refresh_tool_calibration();self.set_busy(None);self.status.set('Paint tool calibration closed.')
         from ScreenTaskWindow import ScreenTaskWindow
@@ -7034,9 +7035,10 @@ class DrawBotApp:
             self.status.set('Use Calibrate Paint tools for Microsoft Paint.');return
         from AppToolCalibration import AppToolCalibrationApp
         import customtkinter as ctk
+        from UiCompatibility import scoped_toplevel
         profile_key=PROFILES[self.game.get()][0]
         self.set_busy('tool-calibration')
-        window=ctk.CTkToplevel(self.root)
+        window=scoped_toplevel(self.root)
         def closed():
             self.refresh_app_tool_calibration();self.set_busy(None);self.status.set('Application tool calibration closed.')
         from ScreenTaskWindow import ScreenTaskWindow
@@ -8049,11 +8051,12 @@ class DrawBotApp:
             self.status.set('Load an image before upscaling.')
             return
         import customtkinter as ctk
+        from UiCompatibility import scoped_toplevel
         from ImageUpscale import suggested_factor,upscale_size
         DrawBotApp._cancel_browser_one_click(self,'image editing')
         DrawBotApp._disarm_manual_drop_in(self,'image editing')
         source=self.original
-        dialog=ctk.CTkToplevel(self.root)
+        dialog=scoped_toplevel(self.root)
         dialog.title('Upscale image')
         dialog.transient(self.root)
         suggested=suggested_factor(source.size)
@@ -10665,7 +10668,8 @@ class DrawBotApp:
 
     def show_version_history(self):
         import customtkinter as ctk
-        window=ctk.CTkToplevel(self.root)
+        from UiCompatibility import scoped_toplevel
+        window=scoped_toplevel(self.root)
         window.title('Image Draw Bot version history')
         from WorkspaceLayout import fit_window
         fit_window(window,preferred=(850,680),minimum=(720,520));window.transient(self.root)
@@ -10683,8 +10687,9 @@ class DrawBotApp:
 
     def show_about(self):
         import customtkinter as ctk
+        from UiCompatibility import scoped_toplevel
         from RuntimePaths import is_frozen
-        window=ctk.CTkToplevel(self.root)
+        window=scoped_toplevel(self.root)
         window.title('About Image Draw Bot')
         from WorkspaceLayout import fit_window
         fit_window(window,preferred=(610,500),minimum=(480,400));window.transient(self.root)
@@ -10762,13 +10767,14 @@ class DrawBotApp:
         """Open the Step 20 beginner setup wizard dialog."""
         if self.closing:return
         import customtkinter as ctk
+        from UiCompatibility import scoped_toplevel
         from BeginnerSetupWizard import format_wizard_dialog
         from ProfilePolish import profile_release_warnings
         steps=DrawBotApp._beginner_setup_steps(self)
         try:cal_state=self.options().get('calibration_state')
         except Exception:cal_state={}
         text=format_wizard_dialog(steps,profile_warnings=profile_release_warnings(self.game.get(),cal_state))
-        window=ctk.CTkToplevel(self.root)
+        window=scoped_toplevel(self.root)
         window.title('Beginner setup wizard')
         from WorkspaceLayout import fit_window
         fit_window(window,preferred=(760,680),minimum=(640,520));window.transient(self.root)
@@ -11921,6 +11927,7 @@ def create_root():
     remains available without replacing the CTk root implementation.
     """
     from AppBranding import configure_root, set_windows_app_id
+    from UiCompatibility import scoped_window_class
     set_windows_app_id()
     try:
         import customtkinter as ctk
@@ -11932,20 +11939,29 @@ def create_root():
     except ImportError:
         ctk=None
     if ctk is not None:
+        owned_ctk=scoped_window_class(ctk.CTk)
         try:
             from tkinterdnd2 import TkinterDnD
-            class ImageDrawBotRoot(ctk.CTk,TkinterDnD.DnDWrapper):
-                def __init__(self,*args,**kwargs):
-                    ctk.CTk.__init__(self,*args,**kwargs)
-                    self.TkdndVersion=TkinterDnD._require(self)
-            return configure_root(ImageDrawBotRoot())
+        except ImportError:
+            return configure_root(owned_ctk())
+        class ImageDrawBotRoot(owned_ctk,TkinterDnD.DnDWrapper):
+            pass
+        root=ImageDrawBotRoot()
+        try:
+            root.TkdndVersion=TkinterDnD._require(root)
         except (ImportError,RuntimeError,tk.TclError):
-            return configure_root(ctk.CTk())
+            # The native extension failed after Tk was created. Dispose that
+            # interpreter/window before creating a clean non-DnD fallback.
+            # A real teardown failure remains visible instead of orphaning it.
+            root.destroy()
+            root=owned_ctk()
+        return configure_root(root)
+
     try:
         from tkinterdnd2 import TkinterDnD
-        return configure_root(TkinterDnD.Tk())
+        return configure_root(scoped_window_class(TkinterDnD.Tk)())
     except (ImportError,RuntimeError,tk.TclError):
-        return configure_root(tk.Tk())
+        return configure_root(scoped_window_class(tk.Tk)())
 
 
 def main():

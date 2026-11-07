@@ -40,6 +40,43 @@ _FAILED: dict[tuple[str, str], str] = {}
 _OPENCL_CACHE: dict[str, tuple[Any, Any, Any, Any]] = {}
 
 
+class HardwareProfileObservation:
+    """One lazily validated profile for a synchronous scoring operation.
+
+    This owns no global cache and freezes no backend-health decision. Its
+    operation owner must close it, including when a traceback is retained.
+    Failed reads retain only their reason, never an exception or traceback.
+    """
+    __slots__ = ('_loaded', '_profile', '_unavailable', '_closed')
+
+    def __init__(self):
+        self._loaded = False
+        self._profile = None
+        self._unavailable = ''
+        self._closed = False
+
+    def _resolve(self):
+        if self._closed:
+            raise RuntimeError('Hardware profile observation is closed.')
+        if not self._loaded:
+            self._loaded = True
+            try:
+                from UniversalHardwareBenchmark import load_hardware_profile
+                self._profile = load_hardware_profile() or {}
+            except Exception as error:
+                self._profile = {}
+                self._unavailable = f'hardware profile unavailable: {type(error).__name__}: {error}'
+        return self._profile, self._unavailable
+
+    def close(self):
+        self._profile = None
+        self._unavailable = ''
+        self._closed = True
+
+
+ProfileInput = dict[str, Any] | HardwareProfileObservation | None
+
+
 @dataclass(frozen=True)
 class RouteInfo:
     workload: str
@@ -85,7 +122,7 @@ def _cpu_route(workload: str, pixels: int, reason: str = "CPU/NumPy fallback") -
 
 
 def select_route(workload: str, *, pixels: int, gpu_mode: str = "Auto",
-                 profile: dict[str, Any] | None = None) -> RouteInfo:
+                 profile: ProfileInput = None) -> RouteInfo:
     """Resolve the measured backend for one real workload.
 
     ``Auto`` obeys Step 22. ``CPU`` is an unconditional fallback. The legacy
@@ -101,7 +138,12 @@ def select_route(workload: str, *, pixels: int, gpu_mode: str = "Auto",
 
     try:
         from UniversalHardwareBenchmark import load_hardware_profile, preferred_backend
-        prof = profile if isinstance(profile, dict) else (load_hardware_profile() or {})
+        if isinstance(profile, HardwareProfileObservation):
+            prof, unavailable = profile._resolve()
+            if unavailable:
+                return _cpu_route(logical, px, unavailable)
+        else:
+            prof = profile if isinstance(profile, dict) else (load_hardware_profile() or {})
         pref = dict(preferred_backend(mapped, pixels=px, profile=prof) or {})
     except Exception as exc:
         return _cpu_route(logical, px, f"hardware profile unavailable: {type(exc).__name__}: {exc}")
@@ -370,7 +412,7 @@ def _float4_host(rgb: np.ndarray, *, alpha: np.ndarray | None = None, scale255: 
 
 
 @_check_completed
-def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: dict[str, Any] | None = None,
+def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInput = None,
                 cancelled: Callable[[], bool] = lambda: False) -> tuple[np.ndarray, dict[str, Any]]:
     _cancel(cancelled)
     arr = np.asarray(rgb)
@@ -415,7 +457,7 @@ def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: dict[str, A
 
 @_check_completed
 def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str = "Auto",
-                    profile: dict[str, Any] | None = None,
+                    profile: ProfileInput = None,
                     cancelled: Callable[[], bool] = lambda: False) -> tuple[np.ndarray,np.ndarray,np.ndarray,dict[str,Any]]:
     """Convert two RGB arrays to OKLab and calculate real per-pixel ΔE.
 
@@ -461,7 +503,7 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
 
 
 @_check_completed
-def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: dict[str, Any] | None = None,
+def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInput = None,
                    cancelled: Callable[[], bool] = lambda: False) -> tuple[np.ndarray,dict[str,Any]]:
     _cancel(cancelled)
     lum=np.asarray(luminance,dtype=np.float32)
@@ -491,7 +533,7 @@ def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: di
 
 @_check_completed
 def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str = "Auto",
-                        profile: dict[str,Any] | None=None,
+                        profile: ProfileInput = None,
                         cancelled: Callable[[],bool]=lambda:False) -> tuple[np.ndarray,dict[str,Any]]:
     _cancel(cancelled)
     a=_rgb01(src_rgb);b=_rgb01(dst_rgb)
@@ -570,7 +612,7 @@ def _rgba_visible_rgb(raw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indices: Sequence[int], custom_flags: Sequence[bool], *,
                          color_rendering: str="Perceptual match", custom_mode: str="Calibrated palette",
                          color_fidelity: str="Balanced", skip_white: bool=True, gpu_mode: str="Auto",
-                         profile: dict[str,Any] | None=None, cancelled: Callable[[],bool]=lambda:False) -> tuple[tuple[np.ndarray,np.ndarray],dict[str,Any]]:
+                         profile: ProfileInput = None, cancelled: Callable[[],bool]=lambda:False) -> tuple[tuple[np.ndarray,np.ndarray],dict[str,Any]]:
     """Map real RGBA image pixels to palette indexes through the measured backend.
 
     Unlike the legacy CUDA helper this function always returns a result: when GPU
@@ -694,7 +736,7 @@ def _pairwise_lab_distance(lab, *, xp=np, cancelled=lambda: False):
 
 
 @_check_completed
-def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="Auto", profile: dict[str,Any] | None=None,
+def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="Auto", profile: ProfileInput = None,
                             cancelled: Callable[[],bool]=lambda:False) -> tuple[np.ndarray,dict[str,Any]]:
     """Deterministic quantization distance matrix routed by Step 22.
 

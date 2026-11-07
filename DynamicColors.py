@@ -12,7 +12,8 @@ from ColorMatchingEngine import visible_rgb_image, measure_quantized_regions
 from ColorFidelity import delta_e2000, delta_e_oklab, mapping_pair_metrics, finalize_mapping_stats
 from ExactColorEngine import candidate_cost
 from DominantHuePreservation import dominant_hue_family, protected_hue_families, summarize_hue_families
-from RegionAwareQuantization import build_region_context, cluster_region_relation, merge_threshold_multiplier
+from RegionAwareQuantization import (build_region_context, cluster_region_relation,
+                                    merge_threshold_multiplier, _prepare_cluster_region)
 
 EXACT_COLOR_LIMITS=("Auto","8","16","24","32")
 
@@ -100,6 +101,9 @@ def _merge_quantized(entries,max_colors,cancelled=lambda:False, *, region_contex
     protected=set(protected_hue_families(entry_colors,entry_weights,max_colors,fidelity='Faithful'))
     threshold2=0.0018  # perceptually very close after quantization
     clusters=[]
+    prepared=[]
+    item_prepared=None
+    has_region_stats=bool(region_context and region_context.get('stats'))
     source_to_cluster={}
     diag=diagnostics if diagnostics is not None else {}
     diag.setdefault('region_texture_merges',0)
@@ -128,97 +132,129 @@ def _merge_quantized(entries,max_colors,cancelled=lambda:False, *, region_contex
         if relation.get('detail_conflict'):
             diag['region_protected_detail_merges']=int(diag.get('region_protected_detail_merges',0))+1
 
-    for item in sorted(entries,key=lambda e:e['count'],reverse=True):
-        if cancelled():
-            return None,None
-        item_family=family_of(item['rgb'])
-        best_i=None; best_key=None; best_distance=None; best_relation=None
-        for i,cl in enumerate(clusters):
-            cl_family=family_of(cl['rgb'])
-            # A protected hue may absorb shades from its own family, but never
-            # disappear into another protected family during the early merge.
-            item_protected={item_family} if item_family in protected else set()
-            cl_protected=protected_members(cl)
-            if item_protected and cl_protected and item_protected.isdisjoint(cl_protected):
-                continue
-            if item_protected and cl_family not in (item_family,None):
-                continue
-            if cl_protected and item_family is not None and item_family not in cl_protected:
-                continue
-            d2=_perceptual_distance2(item['rgb'],cl['rgb'])
-            relation=cluster_region_relation(item,cl,region_context)
-            key=(d2*float(relation.get('region_penalty',1.0)),d2,i)
-            if best_key is None or key<best_key:
-                best_key=key;best_i=i;best_distance=d2;best_relation=relation
-        frac=item['count']/total_pixels
-        local_threshold=threshold2*(1.0 + max(0.0,0.02-frac)*20.0)
-        allowed=(local_threshold*merge_threshold_multiplier(best_relation or {}))
-        if best_i is not None and best_distance is not None and best_distance<=allowed:
-            clusters[best_i]['items'].append(item)
-            rgb,count=_weighted_rgb(clusters[best_i]['items'])
-            clusters[best_i]['rgb']=rgb; clusters[best_i]['count']=count
-            source_to_cluster[item['qindex']]=best_i
-            note_merge(best_relation or {},forced=False)
-        else:
-            source_to_cluster[item['qindex']]=len(clusters)
-            clusters.append({'items':[item],'rgb':tuple(item['rgb']),'count':int(item['count'])})
+    def region_state(cluster,index):
+        state=prepared[index]
+        if state is None:
+            state=prepared[index]=_prepare_cluster_region(cluster,region_context)
+        return state
 
-    # If still over budget, merge same-object low-detail shades first.  Distinct
-    # dominant hues, intentional tone roles and protected small details remain
-    # progressively more expensive and are only collapsed if the hard cap leaves
-    # no legal alternative.
-    while len(clusters)>max_colors:
-        if cancelled():
-            return None,None
-        family_counts={}
-        for cl in clusters:
-            fam=family_of(cl['rgb'])
-            if fam is not None: family_counts[fam]=family_counts.get(fam,0)+1
-        best_pair=None; best_key=None; best_relation=None
-        for i in range(len(clusters)):
-            for j in range(i+1,len(clusters)):
-                ci,cj=clusters[i],clusters[j]
-                fi,fj=family_of(ci['rgb']),family_of(cj['rgb'])
-                relation=cluster_region_relation(ci,cj,region_context)
-                texture=float(relation.get('texture_affinity',0.0))
-                pi,pj=protected_members(ci),protected_members(cj)
-                # Protected *source* families outrank the current weighted RGB.
-                # This prevents a forced merge from averaging green into yellow
-                # and silently defeating Step 3's one-slot-per-main-hue promise.
-                if pi and pj and pi!=pj:
-                    tier=9
-                elif pi or pj:
-                    protected_set=pi or pj
-                    other_family=fj if pi else fi
-                    if other_family in protected_set:
-                        tier=0 if texture>=.18 and not relation.get('tone_conflict') else 1
-                    else:
-                        tier=5
-                elif fi==fj:
-                    tier=0 if texture>=.18 and not relation.get('tone_conflict') and not relation.get('detail_conflict') else 1
+    # Cache only current cluster states; merged members are always
+    # recomputed in their original order, never from averaged summaries.
+    try:
+        for item in sorted(entries,key=lambda e:e['count'],reverse=True):
+            if cancelled():
+                return None,None
+            item_prepared=None
+            item_family=family_of(item['rgb'])
+            best_i=None; best_key=None; best_distance=None; best_relation=None
+            for i,cl in enumerate(clusters):
+                cl_family=family_of(cl['rgb'])
+                # A protected hue may absorb shades from its own family, but never
+                # disappear into another protected family during the early merge.
+                item_protected={item_family} if item_family in protected else set()
+                cl_protected=protected_members(cl)
+                if item_protected and cl_protected and item_protected.isdisjoint(cl_protected):
+                    continue
+                if item_protected and cl_family not in (item_family,None):
+                    continue
+                if cl_protected and item_family is not None and item_family not in cl_protected:
+                    continue
+                d2=_perceptual_distance2(item['rgb'],cl['rgb'])
+                if has_region_stats:
+                    if item_prepared is None:
+                        item_prepared=_prepare_cluster_region(item,region_context)
+                    relation=cluster_region_relation(item,cl,region_context,
+                        _prepared=(item_prepared,region_state(cl,i)))
                 else:
-                    tier=2
-                # Detail/tone protection matters *inside* the hue-protection
-                # tier, but can never make two different protected hue families
-                # cheaper than disposable texture shades.
-                if tier<5 and relation.get('tone_conflict'): tier+=2
-                if tier<5 and relation.get('detail_conflict'): tier+=2
-                d2=_perceptual_distance2(ci['rgb'],cj['rgb'])
-                coverage=(ci['count']+cj['count'])/total_pixels
-                regional=float(relation.get('region_penalty',1.0))
-                key=(tier,d2*coverage*regional,d2*regional,-texture,i,j)
+                    relation=cluster_region_relation(item,cl,region_context)
+                key=(d2*float(relation.get('region_penalty',1.0)),d2,i)
                 if best_key is None or key<best_key:
-                    best_key=key;best_pair=(i,j);best_relation=relation
-        if best_pair is None:
-            break
-        i,j=best_pair
-        merged={'items':clusters[i]['items']+clusters[j]['items']}
-        rgb,count=_weighted_rgb(merged['items']); merged['rgb']=rgb; merged['count']=count
-        clusters[i]=merged;clusters.pop(j)
-        note_merge(best_relation or {},forced=True)
-        for src,cidx in list(source_to_cluster.items()):
-            if cidx==j: source_to_cluster[src]=i
-            elif cidx>j: source_to_cluster[src]=cidx-1
+                    best_key=key;best_i=i;best_distance=d2;best_relation=relation
+            frac=item['count']/total_pixels
+            local_threshold=threshold2*(1.0 + max(0.0,0.02-frac)*20.0)
+            allowed=(local_threshold*merge_threshold_multiplier(best_relation or {}))
+            if best_i is not None and best_distance is not None and best_distance<=allowed:
+                clusters[best_i]['items'].append(item)
+                prepared[best_i]=None
+                rgb,count=_weighted_rgb(clusters[best_i]['items'])
+                clusters[best_i]['rgb']=rgb; clusters[best_i]['count']=count
+                source_to_cluster[item['qindex']]=best_i
+                note_merge(best_relation or {},forced=False)
+            else:
+                source_to_cluster[item['qindex']]=len(clusters)
+                clusters.append({'items':[item],'rgb':tuple(item['rgb']),'count':int(item['count'])})
+                prepared.append(item_prepared)
+
+        # If still over budget, merge same-object low-detail shades first.  Distinct
+        # dominant hues, intentional tone roles and protected small details remain
+        # progressively more expensive and are only collapsed if the hard cap leaves
+        # no legal alternative.
+        while len(clusters)>max_colors:
+            if cancelled():
+                return None,None
+            family_counts={}
+            for cl in clusters:
+                fam=family_of(cl['rgb'])
+                if fam is not None: family_counts[fam]=family_counts.get(fam,0)+1
+            best_pair=None; best_key=None; best_relation=None
+            for i in range(len(clusters)):
+                for j in range(i+1,len(clusters)):
+                    ci,cj=clusters[i],clusters[j]
+                    fi,fj=family_of(ci['rgb']),family_of(cj['rgb'])
+                    relation=(cluster_region_relation(ci,cj,region_context,
+                        _prepared=(region_state(ci,i),region_state(cj,j))) if has_region_stats
+                        else cluster_region_relation(ci,cj,region_context))
+                    texture=float(relation.get('texture_affinity',0.0))
+                    pi,pj=protected_members(ci),protected_members(cj)
+                    # Protected *source* families outrank the current weighted RGB.
+                    # This prevents a forced merge from averaging green into yellow
+                    # and silently defeating Step 3's one-slot-per-main-hue promise.
+                    if pi and pj and pi!=pj:
+                        tier=9
+                    elif pi or pj:
+                        protected_set=pi or pj
+                        other_family=fj if pi else fi
+                        if other_family in protected_set:
+                            tier=0 if texture>=.18 and not relation.get('tone_conflict') else 1
+                        else:
+                            tier=5
+                    elif fi==fj:
+                        tier=0 if texture>=.18 and not relation.get('tone_conflict') and not relation.get('detail_conflict') else 1
+                    else:
+                        tier=2
+                    # Detail/tone protection matters *inside* the hue-protection
+                    # tier, but can never make two different protected hue families
+                    # cheaper than disposable texture shades.
+                    if tier<5 and relation.get('tone_conflict'): tier+=2
+                    if tier<5 and relation.get('detail_conflict'): tier+=2
+                    d2=_perceptual_distance2(ci['rgb'],cj['rgb'])
+                    coverage=(ci['count']+cj['count'])/total_pixels
+                    regional=float(relation.get('region_penalty',1.0))
+                    key=(tier,d2*coverage*regional,d2*regional,-texture,i,j)
+                    if best_key is None or key<best_key:
+                        best_key=key;best_pair=(i,j);best_relation=relation
+            if best_pair is None:
+                break
+            i,j=best_pair
+            merged={'items':clusters[i]['items']+clusters[j]['items']}
+            rgb,count=_weighted_rgb(merged['items']); merged['rgb']=rgb; merged['count']=count
+            clusters[i]=merged;clusters.pop(j)
+            prepared[i]=None;prepared.pop(j)
+            note_merge(best_relation or {},forced=True)
+            for src,cidx in list(source_to_cluster.items()):
+                if cidx==j: source_to_cluster[src]=i
+                elif cidx>j: source_to_cluster[src]=cidx-1
+
+    finally:
+        # Tracebacks may retain the private prepared pair passed to a relation.
+        # Drop its arrays as well as the operation's list of snapshots.
+        for state in prepared:
+            if state is not None:
+                state[1].clear()
+        if item_prepared is not None:
+            item_prepared[1].clear()
+        prepared.clear()
+        item_prepared=None
 
     if region_context:
         diag.update(dict(region_context.get('diagnostics') or {}))

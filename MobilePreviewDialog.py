@@ -13,97 +13,6 @@ def _release_photo(photo):
             pass
 
 
-def _cancel_widget_after_jobs(window):
-    """Cancel only single-command timers registered by this widget subtree."""
-    interpreter = getattr(window, 'tk', None)
-    if interpreter is None:
-        return
-    commands = set()
-
-    def collect(widget):
-        commands.update(getattr(widget, '_tclCommands', ()) or ())
-        for child in widget.winfo_children():
-            collect(child)
-
-    try:
-        collect(window)
-        for job in interpreter.splitlist(interpreter.call('after', 'info')):
-            script, _kind = interpreter.call('after', 'info', job)
-            words = interpreter.splitlist(script)
-            if len(words) == 1 and words[0] in commands:
-                # Each child still owns deletecommand during its normal
-                # destroy; cancelling via the panel's after_cancel would
-                # remove the command from the wrong Python registry.
-                interpreter.call('after', 'cancel', job)
-    except (tk.TclError, RuntimeError):
-        pass
-
-
-def _dialog_window_class(base):
-    class DialogWindow(base):
-        """Scope CTk's native callbacks to this panel, keeping other observers."""
-        def __init__(self, *args, **kwargs):
-            self._panel_after = set()
-            self._panel_bindings = []
-            self._panel_destroyed = False
-            try:
-                super().__init__(*args, **kwargs)
-            except BaseException:
-                try:
-                    self.destroy()
-                except (tk.TclError, RuntimeError, AttributeError):
-                    pass
-                raise
-
-        def bind_all(self, sequence=None, func=None, add=None):
-            token = super().bind_all(sequence, func, add)
-            if token is not None and func is not None:
-                self._panel_bindings.append((self._root(), sequence, token))
-            return token
-
-        def after(self, ms, func=None, *args):
-            if func is None:
-                return super().after(ms)
-            from customtkinter.windows.widgets.scaling.scaling_tracker import ScalingTracker
-            if func == ScalingTracker.check_dpi_scaling:
-                # CTk may start its shared DPI loop on the first widget's
-                # Toplevel. Keep that service on the app root when we close.
-                return self._root().after(ms, func, *args)
-
-            def run():
-                self._panel_after.discard(job)
-                if not self._panel_destroyed:
-                    func(*args)
-
-            job = super().after(ms, run)
-            self._panel_after.add(job)
-            return job
-
-        def after_cancel(self, job):
-            self._panel_after.discard(job)
-            return super().after_cancel(job)
-
-        def destroy(self):
-            if self._panel_destroyed:
-                return
-            self._panel_destroyed = True
-            for job in tuple(self._panel_after):
-                try:
-                    self.after_cancel(job)
-                except (tk.TclError, RuntimeError):
-                    pass
-            bindings, self._panel_bindings = self._panel_bindings, []
-            for root, sequence, token in bindings:
-                try:
-                    root._unbind(('bind', 'all', sequence), token)
-                except (tk.TclError, RuntimeError):
-                    pass
-            _cancel_widget_after_jobs(self)
-            super().destroy()
-
-    return DialogWindow
-
-
 class _MobilePreviewDialog:
     def __init__(self, app, server, url):
         self.app = app
@@ -122,8 +31,9 @@ class _MobilePreviewDialog:
     def _build(self):
         import customtkinter as ctk
         from WorkspaceLayout import fit_window
+        from UiCompatibility import scoped_toplevel
 
-        window = self.window = _dialog_window_class(ctk.CTkToplevel)(self.app.root)
+        window = self.window = scoped_toplevel(self.app.root)
         window.bind('<Destroy>', self._destroyed, add='+')
         window.protocol('WM_DELETE_WINDOW', self.close)
         window.title('Mobile Preview')

@@ -43,7 +43,8 @@ def select_subject(parent,image,callback):
         with closing(_preview_rgba(image,bounds)) as preview, closing(Image.new('RGBA',preview.size,'white')) as flat:
             flat.alpha_composite(preview)
             width,height=flat.size
-            dialog=ctk.CTkToplevel(parent)
+            from UiCompatibility import scoped_toplevel
+            dialog=scoped_toplevel(parent)
             dialog.title('Mark subject');dialog.transient(parent)
             ctk.CTkLabel(dialog,text='Drag a rectangle around the people or objects to keep.\nEverything inside the rectangle is included.',wraplength=500).pack(padx=16,pady=12)
             canvas=tk.Canvas(dialog,width=width,height=height,highlightthickness=0,cursor='crosshair')
@@ -111,7 +112,8 @@ def show_mask(parent,image,region=None):
                 with closing(flat.convert('RGB')) as original, closing(Image.new('RGB',preview.size,'#161c26')) as dark:
                     with closing(Image.blend(original,dark,.8)) as dimmed, closing(Image.fromarray(mask.astype('uint8')*255)) as alpha:
                         overlay=Image.composite(original,dimmed,alpha)
-        dialog=ctk.CTkToplevel(parent);dialog.title('Subject mask preview');dialog.transient(parent)
+        from UiCompatibility import scoped_toplevel
+        dialog=scoped_toplevel(parent);dialog.title('Subject mask preview');dialog.transient(parent)
         ctk.CTkLabel(dialog,text='Bright area = subject. Dim area = background.\n'+method,wraplength=600).pack(padx=16,pady=12)
         photo=ctk.CTkImage(light_image=overlay,dark_image=overlay,size=overlay.size)
         widget=ctk.CTkLabel(dialog,text='',image=photo);widget.pack(padx=16,pady=(0,16));widget.image=photo
