@@ -106,6 +106,23 @@ class _KeyboardFocusSupport:
         return tk.Misc.focus_force(self)
 
 
+    def _keyboard_focus_from_child(self, *, force=False):
+        return self.focus_force() if force else self.focus_set()
+
+
+    def _keyboard_force_focus_from_child(self):
+        return self._keyboard_focus_from_child(force=True)
+
+
+    def _keyboard_own_decorative_child(self, child):
+        # CTk's global click handler focuses event.widget after local handlers.
+        # Decorative children delegate to their owner without consuming the
+        # click or changing application bindings. Interactive children do not.
+        child.configure(takefocus=0)
+        child.focus = child.focus_set = self._keyboard_focus_from_child
+        child.focus_force = self._keyboard_force_focus_from_child
+
+
     def _keyboard_draw_focus(self):
         try:
             if not self._keyboard_focus_active or not self._keyboard_focusable():
@@ -246,7 +263,7 @@ class KeyboardButton(_KeyboardReleaseSupport, ctk.CTkButton):
         # canvas and each new label remain decorative rather than extra stops.
         for child in (self._canvas, self._text_label, self._image_label):
             if child is not None and child not in self._keyboard_nodes:
-                child.configure(takefocus=0)
+                self._keyboard_own_decorative_child(child)
                 child.bind('<ButtonPress-1>', self._keyboard_pointer_focus, add='+')
                 self._keyboard_nodes.add(child)
 
@@ -305,7 +322,7 @@ class KeyboardSwitch(_KeyboardReleaseSupport, ctk.CTkSwitch):
     def _keyboard_sync_children(self):
         for child in (self._bg_canvas, self._canvas, self._text_label):
             if child not in self._keyboard_nodes:
-                child.configure(takefocus=0)
+                self._keyboard_own_decorative_child(child)
                 self._keyboard_nodes.add(child)
 
     def _draw(self, *args, **kwargs):
@@ -367,7 +384,17 @@ class KeyboardOptionMenu(_KeyboardFocusSupport, ctk.CTkOptionMenu):
 
     def _keyboard_sync_children(self):
         for child in (self._canvas, self._text_label):
-            child.configure(takefocus=0)
+            self._keyboard_own_decorative_child(child)
+
+    def _keyboard_focus_from_child(self, *, force=False):
+        # A native popup may take focus while the local click handler opens it.
+        # CTk's later global click must not steal that focus from the menu.
+        try:
+            if self.focus_get() is self._dropdown_menu and self._dropdown_menu.winfo_viewable():
+                return None
+        except (tk.TclError, KeyError):
+            return None
+        return super()._keyboard_focus_from_child(force=force)
 
     def _draw(self, *args, **kwargs):
         super()._draw(*args, **kwargs)
@@ -488,12 +515,7 @@ class KeyboardSlider(_KeyboardFocusSupport, ctk.CTkSlider):
         self._keyboard_display_value=None
         super().__init__(*args, **kwargs)
         self._keyboard_ready=True
-        self._canvas.configure(takefocus=0)
-        # CTk's global click handler focuses event.widget after local handlers.
-        # Its decorative canvas must return focus to the same logical owner
-        # without swallowing the click or replacing application bindings.
-        for method in ('focus','focus_set','focus_force'):
-            setattr(self._canvas,method,getattr(self,method))
+        self._keyboard_own_decorative_child(self._canvas)
         tk.Frame.configure(self,takefocus=self._keyboard_focusable)
         for sequence, callback in (('<FocusIn>',self._keyboard_focus_in),
                                    ('<FocusOut>',self._keyboard_focus_out),

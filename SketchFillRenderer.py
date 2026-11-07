@@ -54,7 +54,17 @@ def _black_selector(colors, selectors):
     except ValueError:pass
     from Colors import allColors
     native=min(range(len(allColors)),key=lambda i:sum(int(v)*int(v) for v in allColors[i].RGB))
-    colors.append((0,0,0));selectors.append({'kind':'palette','palette_index':native,'rgb':(0,0,0)})
+    # Palette-only sub-plans use implicit, index-matched selectors. Preserve
+    # those existing actions before appending a contour selector at its own
+    # color index; otherwise it occupies index zero and execution falls back
+    # to the last native swatch for the new contour color.
+    for index in range(len(selectors),len(colors)):
+        selectors.append({'kind':'palette','palette_index':index,'rgb':colors[index]})
+    # A native fallback can only paint the measured swatch, even when its
+    # darkest RGB is near-black rather than exactly zero. Preview and Paint's
+    # color verifier must describe that same available ink.
+    rgb=tuple(allColors[native].RGB)
+    colors.append(rgb);selectors.append({'kind':'palette','palette_index':native,'rgb':rgb})
     return len(colors)-1,colors,selectors
 
 

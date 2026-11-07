@@ -101,8 +101,17 @@ class SketchOwnershipTests(unittest.TestCase):
                 # grouped representation. This fixture is identity-scaled and
                 # entirely within the unchanged CanvasGuard inset.
                 delivery = resolve_stroke_delivery(options)
-                moves = sum(len(precision_path(a, b, options['precision'], delivery.step_px))
-                            for entry in sequence for a, b in zip(entry['path'], entry['path'][1:]))
+                moves = 0
+                brush = float(options['brush_px'])
+                for entry in sequence:
+                    if not entry['path']:
+                        continue
+                    brush = float(entry.get('brush_px', brush))
+                    step = delivery.step_px
+                    if options.get('pixel_accurate'):
+                        step = min(step, max(1., brush * 1.5))
+                    moves += sum(len(precision_path(a, b, options['precision'], step))
+                                 for a, b in zip(entry['path'], entry['path'][1:]))
                 dots = sum(len(entry['path']) == 1 for entry in sequence)
                 motion = moves * max(DrawBot.phase_delay(options['delay'], options['speed'], 'path'),
                                      delivery.min_path_delay)

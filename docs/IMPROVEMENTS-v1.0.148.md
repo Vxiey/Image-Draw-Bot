@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 803 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **197 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 807 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **193 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -67,8 +67,14 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 799–800 | R1501–R1502 | Batch 15 Sketch scratch lifetimes and copy-free input preparation | 2 | [Rendering ledger](v148-batch15-rendering.md); independent exact pixel, EXIF and public-plan review. |
 | 801–802 | U1501–U1502 | Batch 15 clipboard text sources and numeric Contrast control | 2 | [UI ledger](v148-batch15-ui-workflow.md); independent importer, focus and controller review. |
 | 803 | P1501 | Batch 15 per-execution sequence recovery proof | 1 | [Platform ledger](v148-batch15-platform.md); independent root and actual-executor review. |
+| 804 | A1601 | Batch 16 deferred update ownership | 1 | [Application ledger](v148-batch16-application-update.md); independent controller/hotkey review. |
+| 805 | R1601 | Batch 16 calibrated Sketch Fill black selector | 1 | [Selector ledger](v148-batch16-rendering-selector.md); actual executor and native RGB replay. |
+| 806 | R1602 | Batch 16 detail-preview numeric scratch | 1 | [Detail ledger](v148-batch16-rendering-detail.md); exact historical module and public-plan comparisons. |
+| 807 | U1601 | Batch 16 current plan feedback | 1 | [UI ledger](v148-batch16-ui-workflow.md); actual controller transitions and workspace labels. |
 
 ## Integration evidence
+
+- Batch 16: four independently reviewed behavior groups bring the total to **807**, with **193 remaining**. Final frozen-source integration completed **3,923 tests: 3,872 passed, 51 skipped**. All 830 source/configuration hashes remained unchanged. The 5,000-cycle source gate, source-package hygiene, eight exact-raster fixtures and all eight paired preview workloads passed. Current recovery profile identity, Studio worker/image lifetime, native cost pricing, saved-area reuse and decorative native focus complete existing IDs. [Final local validation](v148-batch16-validation.json); [paired measurements](v148-batch16-detail-benchmarks.json). Native Windows/CI results for the exact published commit are recorded in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
 
 - Batch 15: seven independently reviewed behavior groups bring the count to **803**, with **197 remaining**. Final frozen-source integration passed **3,851 tests** (48 platform/hardware skips); the **5,000-cycle source gate**, **1,106-file package hygiene**, **eight exact-raster fixtures** and all **three paired benchmarks** passed. All 820 source/configuration hashes stayed unchanged during integration. Existing final-plan/capture/edit/export ownership, preparation cancellation and manual-Paint guidance completions add zero IDs. [Final local validation](v148-batch15-validation.json); published-commit Windows/CI evidence is recorded in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
 

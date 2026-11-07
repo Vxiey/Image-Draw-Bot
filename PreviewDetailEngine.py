@@ -83,8 +83,8 @@ def _cell_extreme(rgb: np.ndarray, base_rgb: np.ndarray, factor: int, dark_bias:
     w = base_rgb.shape[1]
     # Visible luminance; alpha is handled separately and white is the visual canvas.
     luma = rgb[..., 0] * 0.299 + rgb[..., 1] * 0.587 + rgb[..., 2] * 0.114
-    cells_rgb = rgb.reshape(h, factor, w, factor, 3).transpose(0, 2, 1, 3, 4).reshape(h, w, factor * factor, 3)
     cells_luma = luma.reshape(h, factor, w, factor).transpose(0, 2, 1, 3).reshape(h, w, factor * factor)
+    del luma
     base_luma = base_rgb[..., 0] * 0.299 + base_rgb[..., 1] * 0.587 + base_rgb[..., 2] * 0.114
     delta = np.abs(cells_luma - base_luma[..., None])
     # A slight dark bias helps thin pupils/eye contours survive without turning
@@ -92,11 +92,20 @@ def _cell_extreme(rgb: np.ndarray, base_rgb: np.ndarray, factor: int, dark_bias:
     # their actual deviation is stronger.
     dark = np.clip(base_luma[..., None] - cells_luma, 0.0, 255.0)
     score = delta + dark * float(dark_bias)
+    del delta, dark, base_luma
     choice = np.argmax(score, axis=2)
-    rows = np.arange(h)[:, None]
-    cols = np.arange(w)[None, :]
-    chosen = cells_rgb[rows, cols, choice]
+    del score
     contrast = cells_luma.max(axis=2) - cells_luma.min(axis=2)
+    del cells_luma
+    # Unpack the row-major cell index directly into the original raster.
+    # Packing every RGB cell would copy all oversampled float32 RGB pixels,
+    # although only one pixel from each cell is returned.
+    rows = choice // factor
+    cols = choice % factor
+    del choice
+    rows += np.arange(h)[:, None] * factor
+    cols += np.arange(w)[None, :] * factor
+    chosen = rgb[rows, cols]
     return chosen, contrast
 
 
@@ -142,20 +151,28 @@ def _detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "D
     # from the normal resample in the returned preview image.
     alpha = arr[..., 3:4].astype(np.float32) / 255.0
     visible = arr[..., :3].astype(np.float32) * alpha + 255.0 * (1.0 - alpha)
+    del arr, alpha
     base = hi.resize((w, h), Image.Resampling.LANCZOS)
     _owned.append(base)
     base_arr = np.asarray(base, dtype=np.uint8).astype(np.float32)
     base_alpha = base_arr[..., 3:4] / 255.0
     base_visible = base_arr[..., :3] * base_alpha + 255.0 * (1.0 - base_alpha)
+    del base_arr, base_alpha
 
     chosen, contrast = _cell_extreme(visible, base_visible, factor, profile.dark_bias)
+    del visible
     if cancelled():
         raise InterruptedError()
     active = contrast >= float(profile.threshold)
     strength = np.clip((contrast - profile.threshold) / max(1.0, 90.0 - profile.threshold), 0.0, 1.0)
     strength = (0.20 + 0.80 * strength) * float(profile.recovery_strength)
     strength *= active.astype(np.float32)
+    if metadata is not None:
+        recovered = int(np.count_nonzero(active))
+        max_contrast = round(float(np.max(contrast)) if contrast.size else 0.0, 2)
+    del active, contrast
     mixed = base_visible * (1.0 - strength[..., None]) + chosen * strength[..., None]
+    del base_visible, chosen, strength
     mixed = np.rint(mixed).clip(0, 255).astype(np.uint8)
 
     out_arr = np.asarray(base, dtype=np.uint8).copy()
@@ -165,8 +182,11 @@ def _detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "D
     a = out_arr[..., 3:4].astype(np.float32) / 255.0
     denom = np.maximum(a, 1.0 / 255.0)
     straight = (mixed.astype(np.float32) - 255.0 * (1.0 - a)) / denom
+    del mixed, denom
     straight = np.where(a > 0.0, straight, out_arr[..., :3].astype(np.float32))
+    del a
     out_arr[..., :3] = np.rint(straight).clip(0, 255).astype(np.uint8)
+    del straight
     out = Image.fromarray(out_arr, mode="RGBA")
     _owned.append(out)
     if profile.sharpen_percent > 0:
@@ -178,7 +198,6 @@ def _detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "D
     if cancelled():
         raise InterruptedError()
     if metadata is not None:
-        recovered = int(np.count_nonzero(active))
         total = max(1, w * h)
         metadata.update({
             "preview_detail_mode": mode,
@@ -186,7 +205,7 @@ def _detail_aware_resize(image: Image.Image, size: Sequence[int], mode: str = "D
             "preview_detail_recovered_cells": recovered,
             "preview_detail_recovered_percent": round(recovered * 100.0 / total, 3),
             "preview_detail_threshold": int(profile.threshold),
-            "preview_detail_max_local_contrast": round(float(np.max(contrast)) if contrast.size else 0.0, 2),
+            "preview_detail_max_local_contrast": max_contrast,
         })
     return out
 

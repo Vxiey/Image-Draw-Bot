@@ -310,41 +310,46 @@ def run(make_plan: Callable[..., dict], base_options: dict[str, Any] | None = No
             "color_fidelity": options.get("color_fidelity", "Faithful"),
         })
         with closing(load_golden_image(case, directory)) as image:
-            started = time.monotonic()
-            plan = make_plan(image, tuple(target_area), options, cancelled)
-            elapsed = time.monotonic() - started
-        if cancelled():raise InterruptedError('Golden image regression cancelled.')
-        acc = _accuracy_meta(plan)
-        de = _delta_e_meta(plan)
-        plan_options = plan.get("options") if isinstance(plan, dict) and isinstance(plan.get("options"), dict) else {}
-        usable = _num(plan_options.get("deadline_render_budget_seconds",case.time_budget_seconds))
-        estimate=_draw_seconds(plan)
-        correction = plan_options.get("post_draw_correction_meta") if isinstance(plan_options.get("post_draw_correction_meta"), dict) else {}
-        row = {
-            "case": case.name,
-            "description": case.description,
-            "target_seconds": int(case.time_budget_seconds),
-            "usable_seconds": None if usable is None else round(usable, 3),
-            "planning_seconds": round(elapsed, 4),
-            "planned_paths": int(plan.get("count", 0) or 0) if isinstance(plan, dict) else 0,
-            "estimated_draw_seconds": None if estimate is None else round(estimate, 3),
-            "visual_accuracy_percent": acc.get("visual_accuracy_percent"),
-            "source_pixel_accuracy_percent": acc.get("source_pixel_accuracy_percent"),
-            "perceptual_color_accuracy_percent": acc.get("perceptual_color_accuracy_percent"),
-            "luminance_accuracy_percent": acc.get("luminance_accuracy_percent"),
-            "hue_accuracy_percent": acc.get("hue_accuracy_percent"),
-            "edge_accuracy_percent": acc.get("edge_accuracy_percent"),
-            "coverage_percent": acc.get("coverage_percent"),
-            "plan_execution_accuracy_percent": acc.get("plan_execution_accuracy_percent"),
-            "mean_delta_e_oklab": de.get("mean_delta_e_oklab"),
-            "p95_delta_e_oklab": de.get("p95_delta_e_oklab"),
-            "correction_safe": correction.get('safe') if type(correction.get('safe')) is bool else None,
-            "privacy": "synthetic fixture only; no user image stored",
-        }
-        passed, failures = _pass_fail(row, case)
-        row["passed"] = bool(passed)
-        row["failures"] = failures
-        rows.append(row)
+            plan=None
+            try:
+                started = time.monotonic()
+                plan = make_plan(image, tuple(target_area), options, cancelled)
+                elapsed = time.monotonic() - started
+                if cancelled():raise InterruptedError('Golden image regression cancelled.')
+                acc = _accuracy_meta(plan)
+                de = _delta_e_meta(plan)
+                plan_options = plan.get("options") if isinstance(plan, dict) and isinstance(plan.get("options"), dict) else {}
+                usable = _num(plan_options.get("deadline_render_budget_seconds",case.time_budget_seconds))
+                estimate=_draw_seconds(plan)
+                correction = plan_options.get("post_draw_correction_meta") if isinstance(plan_options.get("post_draw_correction_meta"), dict) else {}
+                row = {
+                    "case": case.name,
+                    "description": case.description,
+                    "target_seconds": int(case.time_budget_seconds),
+                    "usable_seconds": None if usable is None else round(usable, 3),
+                    "planning_seconds": round(elapsed, 4),
+                    "planned_paths": int(plan.get("count", 0) or 0) if isinstance(plan, dict) else 0,
+                    "estimated_draw_seconds": None if estimate is None else round(estimate, 3),
+                    "visual_accuracy_percent": acc.get("visual_accuracy_percent"),
+                    "source_pixel_accuracy_percent": acc.get("source_pixel_accuracy_percent"),
+                    "perceptual_color_accuracy_percent": acc.get("perceptual_color_accuracy_percent"),
+                    "luminance_accuracy_percent": acc.get("luminance_accuracy_percent"),
+                    "hue_accuracy_percent": acc.get("hue_accuracy_percent"),
+                    "edge_accuracy_percent": acc.get("edge_accuracy_percent"),
+                    "coverage_percent": acc.get("coverage_percent"),
+                    "plan_execution_accuracy_percent": acc.get("plan_execution_accuracy_percent"),
+                    "mean_delta_e_oklab": de.get("mean_delta_e_oklab"),
+                    "p95_delta_e_oklab": de.get("p95_delta_e_oklab"),
+                    "correction_safe": correction.get('safe') if type(correction.get('safe')) is bool else None,
+                    "privacy": "synthetic fixture only; no user image stored",
+                }
+                passed, failures = _pass_fail(row, case)
+                row["passed"] = bool(passed)
+                row["failures"] = failures
+                rows.append(row)
+            finally:
+                from AutoSketchBudget import _release_trial
+                _release_trial(plan,image,options)
     passed_count = sum(1 for row in rows if row.get("passed"))
     return {
         "version": VERSION,

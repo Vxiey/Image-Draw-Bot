@@ -1,6 +1,16 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 803 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14 and seven in batch 15. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 807 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15 and four in batch 16. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 16: coherent update, preview and background-work lifecycles
+
+- Preserve a stopped update request across later workers and deferred installer callbacks.
+- Select the actual darkest calibrated swatch for Sketch Fill black phases, including palettes without exact RGB black.
+- Remove the full oversampled RGB cell copy and release completed detail-preview numeric scratch, with exact pixel/metadata parity.
+- Clear plan estimates and diagnostics whenever their underlying plan becomes stale.
+- Complete existing native sampling/brush-cost pricing, recovery profile identity, tracked Studio benchmark ownership, saved-area reuse and decorative-control focus contracts without additional IDs.
+
+Four new groups bring the registry to **807**, leaving **193** before the requested release. Frozen-source discovery completed **3,923 tests: 3,872 passed and 51 skipped**. The 5,000-cycle source gate, package hygiene, eight exact-raster cases and eight paired preview workloads passed. Detailed timing, traced allocation scope, exact outputs and source hashes are in the [detail ledger](docs/v148-batch16-rendering-detail.md) and [final validation](docs/v148-batch16-validation.json). Linux native Tk focus checks also passed; exact-commit Windows CI is recorded separately in PR46.
 
 ## Batch 15: lower planning memory and reliable application handoff
 

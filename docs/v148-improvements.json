@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 803,
+  "implemented": 807,
   "release_published": false,
-  "validation": "Batch 15: 3,851 tests passed in 103.373 seconds, with 48 platform/hardware skips and all 820 source/configuration hashes unchanged. Seven new behavior groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, 1,106-file package hygiene, eight exact-raster fixtures and three frozen-source paired benchmarks passed. Exact evidence is in v148-batch15-validation.json; published-commit platform checks are recorded in PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 16: 3,923 test cases completed in 102.640 seconds: 3,872 passed and 51 platform/hardware cases skipped, with all 830 source/configuration hashes unchanged. Four new behavior groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, source-package hygiene, eight exact-raster fixtures and eight frozen-source paired preview workloads passed. Exact evidence is in v148-batch16-validation.json; published-commit platform checks are recorded in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6243,6 +6243,38 @@
       "description": "Build the immutable sequence recovery proof once per execution before input, then mark verified operation occurrences in a compact bitset. Periodic, Stop and failure checkpoints serialize existing proof without rescanning source pixels, geometry or the full catalog. Preserve schema 3, inherited-brush identity, repeated operations, deadline skips and visual-verification boundaries; cancellable initialization and capacity fallback keep existing drawing limits. Whole-executor comparisons disclose reduced CPU work and the additional retained catalog memory.",
       "batch": 15,
       "id": 803
+    },
+    {
+      "local_id": "A1601",
+      "area": "batch16-application",
+      "ledger": "v148-batch16-application-update.md",
+      "description": "Own each deferred update installation request with private cancellation and one-way phases. Esc latches the request before the reusable global Stop signal, so a later worker cannot revive an old installer callback. Preserve verified installer launch, settings-save gates, stale-result identity and exactly-once successful close handoff.",
+      "batch": 16,
+      "id": 804
+    },
+    {
+      "local_id": "R1601",
+      "area": "batch16-rendering",
+      "ledger": "v148-batch16-rendering-selector.md",
+      "description": "Resolve composed Sketch Fill black phases against the actual darkest calibrated native palette entry. Preserve implicit selector indexes before appending a matching RGB/selector pair, so real drawing and independent ink replay agree even when the palette has no exact RGB black.",
+      "batch": 16,
+      "id": 805
+    },
+    {
+      "local_id": "R1602",
+      "area": "batch16-rendering",
+      "ledger": "v148-batch16-rendering-detail.md",
+      "description": "Gather only the selected RGB triplet from each oversampled preview cell and release numeric scratch arrays after their final consumers. Avoid the full float32 RGB cell-order copy while preserving exact float32 arithmetic, alpha, EXIF, first-tie selection, metadata and public preview plans. Paired measurements disclose traced allocation and CPU results separately.",
+      "batch": 16,
+      "id": 806
+    },
+    {
+      "local_id": "U1601",
+      "area": "batch16-ui-workflow",
+      "ledger": "v148-batch16-ui-workflow.md",
+      "description": "Clear stale plan estimates and preview diagnostics whenever the actual controller invalidates or clears its plan. Real setting, source, profile and drawing-area transitions cannot leave labels describing the discarded plan. Preserve live and completed execution timer policy and unchanged-edit behavior.",
+      "batch": 16,
+      "id": 807
     }
   ]
 }

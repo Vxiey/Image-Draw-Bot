@@ -13,7 +13,8 @@ def _trial_images(plan):
     if isinstance(previews,dict):images.extend(previews.values())
     opts=plan.get('options')
     if isinstance(opts,dict):
-        for key in ('_accuracy_original_source','_pixel_coverage_preview','_pixel_error_preview'):
+        for key in ('_accuracy_original_source','_accuracy_quantized_target',
+                    '_pixel_coverage_preview','_pixel_error_preview'):
             images.append(opts.get(key))
     return [image for image in images if isinstance(image,Image.Image)]
 

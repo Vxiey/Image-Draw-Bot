@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from DrawBot import DrawBotApp
+from UpdateRequest import UpdateRequest
 import test_v148_application_batch04_settings as settings_fixtures
 
 
@@ -17,7 +18,8 @@ class UpdateSaveBoundaryTests(unittest.TestCase):
         self.app.activity = None
         self.app.stop = threading.Event()
         self.app.events = queue.Queue()
-        self.app.update_request = object()
+        self.app.update_request = UpdateRequest()
+        self.assertTrue(self.app.update_request.ready())
         self.app.update_summary = Mock()
         self.app.begin_worker = Mock(return_value=True)
         self.app.save_settings = lambda: DrawBotApp.save_settings(self.app)
@@ -45,14 +47,25 @@ class UpdateSaveBoundaryTests(unittest.TestCase):
     def test_successful_actual_save_schedules_one_verified_install_and_consumes_request(self):
         self.assertTrue(DrawBotApp._install_checked_update(self.app,self.payload))
         self.assertTrue(self.path.is_file())
-        self.assertIsNone(self.app.update_request)
+        self.assertIs(self.app.update_request, self.payload['request'])
+        self.assertEqual(self.app.update_request.phase, 'installing')
         self.app.begin_worker.assert_called_once()
         self.assertEqual(self.app.begin_worker.call_args.args[0], 'update-install')
-        with patch('UpdateCenter.launch_installer') as launch:
+        self.assertIs(self.app.begin_worker.call_args.kwargs['reset_stop'], False)
+        checked = []
+        def verify_launch(path, asset, *, cancelled):
+            checked.append((path, asset, cancelled()))
+        with patch('UpdateCenter.launch_installer', side_effect=verify_launch) as launch:
             self.app.begin_worker.call_args.args[1]()
-        launch.assert_called_once_with(self.payload['installer_path'], self.payload['installer'],
-                                       cancelled=self.app.stop.is_set)
-        self.assertEqual(self.app.events.get_nowait(), ('update_installer_started',True))
+        launch.assert_called_once()
+        self.assertEqual(checked, [(self.payload['installer_path'], self.payload['installer'], False)])
+        self.assertEqual(self.app.update_request.phase, 'started')
+        event = self.app.events.get_nowait()
+        self.assertEqual(event, ('update_installer_started', self.payload['request']))
+        self.app.close = Mock()
+        DrawBotApp._handle_event(self.app, *event)
+        self.app.close.assert_called_once_with()
+        self.assertIsNone(self.app.update_request)
         self.assertFalse(DrawBotApp._install_checked_update(self.app,self.payload))
         self.app.begin_worker.assert_called_once()
 

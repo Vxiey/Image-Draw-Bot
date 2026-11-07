@@ -1,0 +1,103 @@
+{
+  "baseline_commit": "86fa125306b9c2db8e8125fec6a38270b09c8ff9",
+  "implemented": 807,
+  "target": 1000,
+  "remaining": 193,
+  "added_behavior_groups": [
+    "A1601",
+    "R1601",
+    "R1602",
+    "U1601"
+  ],
+  "release_published": false,
+  "uncounted_completions": [
+    "RP02/RP28: price actual native Pixel samples and verified brush-control waits; retain P1402 empty-row brush inheritance",
+    "A1001: bind timer and prepared-PNG recovery publication to the applied profile during deferred profile selection",
+    "IW40/IW08: track all three Studio benchmark workers, preserve Stop/shutdown, and close private snapshots, complete owned plans and synthetic ImageDraw pixel references",
+    "RT53: guard and roll back saved-area reuse while retaining valid startup anchors",
+    "UK01/U1201/UW806: decorative children preserve native logical focus without stealing live popup or Entry focus"
+  ],
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 3923,
+    "runner_seconds": 102.64,
+    "wall_seconds": 103.414,
+    "status": "OK (skipped=51)",
+    "skipped": 51,
+    "source_files": 830,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "63081ef31ad14c3282722b86501952024ab1681c818eecf8cb14f67fb70f733c"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch16-engine-benchmarks.json",
+    "fixtures": 8,
+    "mismatched_plan_pixels": {
+      "icon": 0,
+      "line-art": 0,
+      "text-small-detail": 0,
+      "cartoon-large-colour": 0,
+      "photo-gradient": 0,
+      "fill-risk": 0,
+      "thin-diagonals": 0,
+      "many-islands": 0
+    },
+    "all_exact_palette_geometry": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "native_linux_focus": {
+    "new_cases": 3,
+    "new_cases_passed": 3,
+    "historical_cases": 9,
+    "historical_cases_passed": 9,
+    "independent_review": true,
+    "scope": "Actual CTk/Tk under Xorg. Windows verification is a separate published-commit gate."
+  },
+  "independent_source_reviews": "All four new groups and existing-contract completions have closed independent reviews. Actual public planner, executor, controller and native Tk boundaries are covered. Review-found private Stop ordering, empty-row brush inheritance, quantized-target ownership, synthetic ImageDraw references and old Sketch motion-oracle issues are resolved within their existing groups.",
+  "benchmarks": {
+    "v148-batch16-detail-benchmarks.json": "07d5b8298608429ab6878f4dfc177242cd05058735aeda231ec436080813cdf5"
+  },
+  "benchmark_source_manifest_sha256": "1174910496c869777f22eee93e9328c22558704fac7de74b4f0c13d8345e0569",
+  "prior_checkpoint_validation": {
+    "commit": "86fa125306b9c2db8e8125fec6a38270b09c8ff9",
+    "all_seven_checks_passed": true,
+    "windows_tests": 3851,
+    "windows_skips": 3,
+    "windows_seconds": 222.865,
+    "windows_self_test": true,
+    "windows_bundle": true,
+    "packaged_gui_native_dnd": true,
+    "run_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42377334258"
+  },
+  "remote_validation": "The exact new published commit needs its own Windows/Linux, dependency and CodeQL checks. PR46 records their results; the preceding checkpoint is not evidence for later edits.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46",
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1127,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  }
+}

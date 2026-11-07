@@ -6,16 +6,17 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
-Batch 15 implements **803 total distinct improvements, with 197 remaining**.
-All seven new groups and existing-contract completions have closed independent
-source reviews. Final frozen-source integration passed **3,851 tests**
-(48 platform/hardware skips), with all 820 source/configuration hashes
-unchanged. Three paired benchmarks, the 5,000-cycle source gate, 1,106-file
-package hygiene and eight exact-raster fixtures passed. [Final local evidence](v148-batch15-validation.json)
-is separate from the published-commit Windows/CI gate recorded in PR46. The previous 796-group checkpoint at
-`43a1c968eb56a63224827f1567e4ccc354acdadb` passed all seven GitHub checks,
-including Windows/Linux, dependencies, CodeQL and packaged Windows GUI/native
-drag-and-drop in [run 42371919639](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42371919639).
+Batch 16 implements **807 total distinct improvements, with 193 remaining**.
+All four new groups and existing-contract completions have closed independent
+source reviews. Final frozen-source integration completed **3,923 tests**:
+**3,872 passed and 51 platform/hardware cases skipped**, with all
+830 source/configuration hashes unchanged. The 5,000-cycle source
+gate, source-package hygiene, eight exact-raster fixtures and all eight paired
+preview workloads passed. [Final local evidence](v148-batch16-validation.json)
+is separate from the published-commit Windows/CI gate recorded in PR46.
+The preceding 803-group checkpoint `86fa125306b9c2db8e8125fec6a38270b09c8ff9`
+passed all seven checks, including Windows self-test, bundle validation and
+packaged GUI/native drag-and-drop in [run 42377334258](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42377334258).
 The release condition remains 1,000 independently verified behavior changes.
 
 - The first 100 improvements are merged on `main` at `eb9804560c8648a92aabe2688e362a6b4a1d28b5`; Windows and Linux CI passed for their reviewed source head.

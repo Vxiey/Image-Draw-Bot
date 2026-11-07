@@ -11,6 +11,7 @@ import AdaptiveRegionHybrid as regional
 from DrawBot import make_plan
 from ExecutionCostModel import build_cost_model
 from NativeBrushProjection import NativeBrushProjection
+from StrokeDelivery import resolve_stroke_delivery
 from test_v148_rendering_batch06_canvas import close_plan
 from test_v148_rendering_batch10_candidates import component,scalar_candidate_oracle
 from test_v148_rendering_batch10_physical import physical_options,replay_executor
@@ -40,6 +41,27 @@ def packing_metadata(plan):
 
 
 class CompletePackChoiceTests(unittest.TestCase):
+    def native_brush_wait_delta(self,plan,expected_switches):
+        # Keep the recorded geometry/cost oracle, adding only the wait that
+        # native execution already performs for these verified brush controls.
+        # Do not derive the expected price from ExecutionCostModel or the new
+        # shared brush_switch_delays helper.
+        brush=int(plan['options']['brush_px']);switches=0
+        self.assertEqual(brush,2)
+        for entry in plan['execution_sequence']:
+            if not entry['path']:continue
+            following=int(entry.get('brush_px',brush))
+            if following!=brush:switches+=1
+            brush=following
+        self.assertEqual(switches,expected_switches)
+        self.assertEqual(plan['options']['adaptive_brush_runtime_meta']['switches'],switches)
+        ui_delay=resolve_stroke_delivery(plan['options']).ui_control_delay
+        historical_wait=max(.06,ui_delay*.75)
+        native_wait=max(.025,ui_delay*.45)+max(.10,ui_delay)
+        self.assertAlmostEqual(historical_wait,.06375)
+        self.assertAlmostEqual(native_wait,.13825)
+        return switches*(native_wait-historical_wait)
+
     def public_variants(self,stack,fixture):
         size,area,box=FIXTURES[fixture];origin=(100,100)
         stack.enter_context(patch('DrawTimeCalibration.load_profile',return_value=None))
@@ -93,8 +115,10 @@ class CompletePackChoiceTests(unittest.TestCase):
             self.assertEqual(packing['packing_policy'],'maximum-gain')
             costs=packing['policy_candidates']
             self.assertLess(costs['maximum-gain']['best_seconds'],costs['gain-per-cost']['best_seconds'])
-            self.assertAlmostEqual(costs['gain-per-cost']['best_seconds'],10.576773842074575)
-            self.assertAlmostEqual(costs['maximum-gain']['best_seconds'],8.546752857069972)
+            self.assertAlmostEqual(costs['gain-per-cost']['best_seconds'],
+                10.576773842074575+self.native_brush_wait_delta(original,3))
+            self.assertAlmostEqual(costs['maximum-gain']['best_seconds'],
+                8.546752857069972+self.native_brush_wait_delta(plans['maximum'],1))
             self.assertLessEqual(sum(row['evaluated'] for row in costs.values()),12)
             self.assertEqual(packing['used_brush_sizes'],[16])
 
@@ -109,8 +133,10 @@ class CompletePackChoiceTests(unittest.TestCase):
             self.assertEqual(selected['execution_groups'],plans['original']['execution_groups'])
             costs=packing['policy_candidates']
             self.assertLess(costs['gain-per-cost']['best_seconds'],costs['maximum-gain']['best_seconds'])
-            self.assertAlmostEqual(costs['gain-per-cost']['best_seconds'],4.851547335954672)
-            self.assertAlmostEqual(costs['maximum-gain']['best_seconds'],7.333242709276697)
+            self.assertAlmostEqual(costs['gain-per-cost']['best_seconds'],
+                4.851547335954672+self.native_brush_wait_delta(plans['original'],4))
+            self.assertAlmostEqual(costs['maximum-gain']['best_seconds'],
+                7.333242709276697+self.native_brush_wait_delta(plans['maximum'],3))
 
     def test_exact_complete_cost_tie_retains_original_even_when_alternative_has_fewer_paths(self):
         size=(96,64);area=(192,128)

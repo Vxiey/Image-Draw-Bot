@@ -73,30 +73,35 @@ def run(make_plan: Callable[..., dict], base_options: dict, *, cancelled=lambda:
                         'manual_max_seconds':seconds,'time_budget_mode':mode,'_preview_plan':True,
                         '_preview_mode':'Benchmark suite','planning_resolution':'Standard'})
         with closing(factory()) as image:
-            started=time.monotonic();plan=make_plan(image,target_area,options,cancelled);elapsed=time.monotonic()-started
-        if cancelled():raise InterruptedError()
-        acc=(plan.get('options') or {}).get('adaptive_accuracy_meta') or {}
-        de=(plan.get('options') or {}).get('preview_delta_e_meta') or {}
-        timing=plan.get('draw_time_estimate') or {}
-        projected=_number(timing.get('projected_seconds'))
-        if projected is None:projected=_number(plan.get('estimate'))
-        plan_options=plan.get('options') or {}
-        usable=_number(plan_options.get('deadline_render_budget_seconds',seconds))
-        acceptance=plan_options.get('auto_tuner_acceptance_meta') or {}
-        rows.append({
-            'case':name,'target_seconds':seconds,'usable_seconds':None if usable is None else round(usable,3),
-            'planning_seconds':round(elapsed,4),'source_strokes':int(plan.get('source_count',0) or 0),
-            'planned_paths':int(plan.get('count',0) or 0),'estimated_draw_seconds':None if projected is None else round(projected,3),
-            'fits_budget':projected is not None and usable is not None and usable>0 and projected<=usable,
-            'visual_accuracy_percent':_number(acc.get('visual_accuracy_percent'),maximum=100),
-            'perceptual_color_accuracy_percent':_number(acc.get('perceptual_color_accuracy_percent'),maximum=100),
-            'mean_delta_e_oklab':_number(de.get('mean_delta_e_oklab')),'p95_delta_e_oklab':_number(de.get('p95_delta_e_oklab')),
-            'palette_colors':len(plan.get('colors') or ()),
-            'auto_tuner_status':acceptance.get('status'),
-            'acceptance_passed':acceptance.get('accepted') if type(acceptance.get('accepted')) is bool else None,
-            'visual_gate_percent':(acceptance.get('gates') or {}).get('visual_accuracy_min_percent'),
-            'auto_tuner_strategy':(plan_options.get('auto_tuner_meta') or {}).get('selected_strategy'),
-        })
+            plan=None
+            try:
+                started=time.monotonic();plan=make_plan(image,target_area,options,cancelled);elapsed=time.monotonic()-started
+                if cancelled():raise InterruptedError()
+                acc=(plan.get('options') or {}).get('adaptive_accuracy_meta') or {}
+                de=(plan.get('options') or {}).get('preview_delta_e_meta') or {}
+                timing=plan.get('draw_time_estimate') or {}
+                projected=_number(timing.get('projected_seconds'))
+                if projected is None:projected=_number(plan.get('estimate'))
+                plan_options=plan.get('options') or {}
+                usable=_number(plan_options.get('deadline_render_budget_seconds',seconds))
+                acceptance=plan_options.get('auto_tuner_acceptance_meta') or {}
+                rows.append({
+                    'case':name,'target_seconds':seconds,'usable_seconds':None if usable is None else round(usable,3),
+                    'planning_seconds':round(elapsed,4),'source_strokes':int(plan.get('source_count',0) or 0),
+                    'planned_paths':int(plan.get('count',0) or 0),'estimated_draw_seconds':None if projected is None else round(projected,3),
+                    'fits_budget':projected is not None and usable is not None and usable>0 and projected<=usable,
+                    'visual_accuracy_percent':_number(acc.get('visual_accuracy_percent'),maximum=100),
+                    'perceptual_color_accuracy_percent':_number(acc.get('perceptual_color_accuracy_percent'),maximum=100),
+                    'mean_delta_e_oklab':_number(de.get('mean_delta_e_oklab')),'p95_delta_e_oklab':_number(de.get('p95_delta_e_oklab')),
+                    'palette_colors':len(plan.get('colors') or ()),
+                    'auto_tuner_status':acceptance.get('status'),
+                    'acceptance_passed':acceptance.get('accepted') if type(acceptance.get('accepted')) is bool else None,
+                    'visual_gate_percent':(acceptance.get('gates') or {}).get('visual_accuracy_min_percent'),
+                    'auto_tuner_strategy':(plan_options.get('auto_tuner_meta') or {}).get('selected_strategy'),
+                })
+            finally:
+                from AutoSketchBudget import _release_trial
+                _release_trial(plan,image,options)
     if cancelled():raise InterruptedError()
     total=time.monotonic()-suite_started
     fit=sum(1 for row in rows if row['fits_budget'])

@@ -42,6 +42,19 @@ class StrokeDeliveryPolicy:
         }
 
 
+def interpolation_step(step_px, brush_px, *, pixel_accurate=False):
+    """The native drag spacing after its physical detail-brush limit."""
+    if pixel_accurate:
+        return min(float(step_px), max(1.0, float(brush_px) * 1.5))
+    return step_px
+
+
+def brush_switch_delays(policy):
+    """Existing move/click settling for a verified in-sequence brush change."""
+    return (max(.025, policy.ui_control_delay * .45),
+            max(.10, policy.ui_control_delay))
+
+
 def _profile_key(options: dict) -> str:
     explicit = str(options.get('profile_key') or '').strip().lower()
     if explicit:

@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from WorkerEventQueue import WorkerEventQueue
 from WorkerPlanOwnership import WorkerPlanPublication
+from UpdateRequest import UpdateRequest
 
 from Colors import allColors, enable_dpi_awareness, DATA_DIR, load_calibration, reset_palette, CALIBRATION_FILE, normalize_rgb
 from ProfileStorage import profile_palette_file, profile_settings_file, calibration_context_fingerprint
@@ -37,7 +38,7 @@ from Precision import CanvasTransform, precision_path, precision_path_count, val
 from HumanMode import HUMAN_MODES, HumanCadence, human_overhead_seconds, humanize_strokes, stable_seed, validate_human_mode
 from SpeedOptimizer import (SPEED_PROFILES, base_delay as speed_base_delay, estimated_motion_seconds,
                             normalize_speed, optimize_strokes, phase_delay, profile as speed_profile)
-from StrokeDelivery import resolve_stroke_delivery
+from StrokeDelivery import resolve_stroke_delivery, interpolation_step, brush_switch_delays
 from SkribblFastRenderer import optimize_skribbl_groups
 from GarticPhoneFastRenderer import optimize_gartic_phone_groups, build_gartic_execution_paths
 from GarticEngineV2 import choose_runtime_profile
@@ -977,8 +978,9 @@ def make_plan(original, area, options, cancelled=lambda: False):
         from PixelAccuratePlanner import build_pixel_map
         from PixelStrokeEngine import build_pixel_stroke_plan
         # Block B prices the actual selector workflow while ordering components;
-        # attach the resolved palette before its cost model is constructed.
-        options=dict(options,color_selectors=picture_selectors)
+        # attach the resolved palette and native Pixel spacing before its
+        # cost model is constructed, not only after the schedule is chosen.
+        options=dict(options,color_selectors=picture_selectors,pixel_accurate=True)
         _prof_color = profiler_start(options, 'color_planning')
         pixel_map=build_pixel_map(
             image, picture_plan_colors,
@@ -1998,7 +2000,9 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     precision=options.get('precision','High')
     speed_name=normalize_speed(options.get('speed','Balanced'))
     estimate_delivery=resolve_stroke_delivery(options, dry_run=bool(options.get('dry_run_sampled',False)))
-    estimate_step_px=estimate_delivery.step_px
+    def estimate_step(physical_brush):
+        return interpolation_step(estimate_delivery.step_px,physical_brush,
+                                  pixel_accurate=bool(options.get('pixel_accurate')))
     preview_safety=None
     try:
         # Every final pass order belongs to the preview, including progressive
@@ -2021,13 +2025,17 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
             preview,draw=_native_preview,_native_draw
         else:
             draw_safe_paths(draw,preview_safety,fitted,size,palette_rgb,brush,cancelled)
-        for paths in preview_safety.groups:
-            for path in paths:
-                if len(path)==1:
-                    dot_count+=1
-                    continue
-                for a,b in zip(path,path[1:]):
-                    if a!=b:path_moves_total+=precision_path_count(a,b,precision,estimate_step_px)
+        if preview_safety.sequence is not None:
+            priced_paths=((entry['path'],entry['brush_px']) for entry in preview_safety.sequence)
+        else:
+            priced_paths=((path,max(1,int(options.get('brush_px',3))))
+                          for paths in preview_safety.groups for path in paths)
+        for path,physical_brush in priced_paths:
+            if len(path)==1:
+                dot_count+=1
+                continue
+            for a,b in zip(path,path[1:]):
+                if a!=b:path_moves_total+=precision_path_count(a,b,precision,estimate_step(physical_brush))
     except InterruptedError:
         raise
     except Exception as error:
@@ -2047,8 +2055,10 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
             if execution_sequence:
                 from AdaptiveBrushEngine import brush_for_entry
                 for entry in execution_sequence:
+                    path=entry.get('path') or ()
+                    if not path:continue
                     physical_brush=brush_for_entry(entry,physical_brush)
-                    yield int(entry['color_index']),entry.get('path') or (),physical_brush
+                    yield int(entry['color_index']),path,physical_brush
             else:
                 order=options.get('color_order') or range(len(groups))
                 for raw in order:
@@ -2078,7 +2088,7 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
                     draw.ellipse((x-before,y-before,x+after,y+after),fill=palette_rgb[index])
             for (x1,y1),(x2,y2) in zip(path,path[1:]):
                 if (x1,y1)!=(x2,y2):
-                    path_moves_total+=precision_path_count(execution_transform.point(x1,y1),execution_transform.point(x2,y2),precision,estimate_step_px)
+                    path_moves_total+=precision_path_count(execution_transform.point(x1,y1),execution_transform.point(x2,y2),precision,estimate_step(physical_brush))
 
     if options.get('sketch_fill_active') and execution_sequence:
         try:
@@ -2182,13 +2192,15 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
                 key=(int(entry['color_index']),bool(entry.get('detail_zoom')),entry.get('brush_px'))
                 if key!=previous_batch:verification_seconds+=.08
                 previous_batch=key
-    operation_overhead=palette_seconds+fill_seconds+tool_seconds+clear_seconds+custom_color_seconds+verification_seconds
+    brush_seconds=sequence_timing.brush_seconds if sequence_timing is not None else 0.0
+    operation_overhead=palette_seconds+fill_seconds+tool_seconds+clear_seconds+custom_color_seconds+verification_seconds+brush_seconds
     estimate=3+motion+operation_overhead+count*.0015
     estimate += human_overhead_seconds(count, options.get('human_mode','Off'))
     options['fill_timing_meta']=fill_timing_meta
     options['operation_timing_meta']={
         'countdown_seconds':3.0,'palette_seconds':round(palette_seconds,4),
         'fill_seconds':round(fill_seconds,4),'tool_seconds':round(tool_seconds,4),
+        'brush_seconds':round(brush_seconds,4),
         'canvas_clear_seconds':round(clear_seconds,4),'custom_color_seconds':round(custom_color_seconds,4),
         'verification_seconds':round(verification_seconds,4),'motion_seconds':round(motion,4),
         'path_bookkeeping_seconds':round(count*.0015,4),
@@ -3332,11 +3344,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             def deliver_current_stroke(*, retry=False):
                 retry_cfg=(delivery_retry_parameters(delivery_verify_policy,stroke_step_px,effective_path_delay) if retry else None)
                 step_px=(retry_cfg['step_px'] if retry_cfg else stroke_step_px)
-                if plan['options'].get('pixel_accurate'):
-                    # Smaller detail brushes need denser mouse interpolation on
-                    # browser canvases; otherwise a fast move can visibly skip
-                    # pixels even when the planner geometry is exact.
-                    step_px=min(float(step_px),max(1.0,float(current_execution_brush)*1.5))
+                step_px=interpolation_step(step_px,current_execution_brush,
+                    pixel_accurate=bool(plan['options'].get('pixel_accurate')))
                 path_delay_now=(retry_cfg['path_delay'] if retry_cfg else effective_path_delay)
                 press_settle_now=(retry_cfg['press_settle'] if retry_cfg else stroke_delivery.press_settle)
                 release_settle_now=(retry_cfg['release_settle'] if retry_cfg else stroke_delivery.release_settle)
@@ -3809,9 +3818,10 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             # A previously verified brush no longer justifies its narrower
             # inset once another selection is attempted.
             install_brush_guard(_initial_guard_brush)
-            mouse.move(*position);wait(max(.025,stroke_delivery.ui_control_delay*.45))
+            move_settle,click_settle=brush_switch_delays(stroke_delivery)
+            mouse.move(*position);wait(move_settle)
             if not dry_run:
-                mouse.click();wait(max(.10,stroke_delivery.ui_control_delay))
+                mouse.click();wait(click_settle)
                 from BrowserBrushSize import verify_brush_selection
                 if not verify_brush_selection(brush_plan,index):
                     _verified_execution_brush=None
@@ -4496,6 +4506,7 @@ class DrawBotApp:
         self.mobile_preview_status = tk.StringVar(value='Mobile Preview is off · local network only.')
         self.mobile_preview_url = tk.StringVar(value='')
         self.latest_release_url = 'https://github.com/Vxiey/Image-Draw-Bot/releases'
+        self.update_request = None
         self.preview_mode = tk.StringVar(value='Manual')
         self.preview_detail_level = tk.StringVar(value='Detailed')
         self.tool_strategy = tk.StringVar(value='Auto')
@@ -4547,7 +4558,7 @@ class DrawBotApp:
         self.refresh_beginner_setup_wizard()
         self.profile_hint.set(PROFILES[self.game.get()][2])
         try:
-            self.hotkeys.append(self.keyboard.add_hotkey('esc',self.stop.set))
+            self.hotkeys.append(self.keyboard.add_hotkey('esc',self._request_stop))
             self.hotkeys.append(self.keyboard.add_hotkey('f6',lambda:self.events.put(('toggle_pause',None))))
             quick=lambda:self.events.put(('quick_start',None))
             try:
@@ -4622,7 +4633,8 @@ class DrawBotApp:
         if self.closing or self.shutdown_complete or getattr(self,'_suppress_recovery',False):return
         try:
             from SessionRecovery import save_snapshot
-            profile=self.game.get() if hasattr(self,'game') else ''
+            # A pending menu selection has not loaded its profile settings yet.
+            profile=getattr(self,'_active_profile_name',None) or (self.game.get() if hasattr(self,'game') else '')
             area=self.saved_area or (self.corners if len(self.corners)==2 else None)
             # An image-specific subject rectangle cannot be attached to an
             # older cached raster after a failed or delayed image checkpoint.
@@ -4869,6 +4881,7 @@ class DrawBotApp:
             self.root.after(50,lambda:DrawBotApp._finish_clear_drawing(self));return
         remove_image=getattr(self,'pending_clear_drawing',False)
         self.plan=None;self.pending_render_resume=None;self.needs_plan=False
+        DrawBotApp._clear_plan_feedback(self)
         self.upscale_original=None;self.small_test_passed=False
         self.color_session_cache.clear()
         if remove_image:
@@ -8256,7 +8269,7 @@ class DrawBotApp:
             self.worker.start()
         except Exception as error:
             self.worker=None
-            self.stop.set()
+            DrawBotApp._request_stop(self)
             try:self.set_busy(None)
             except Exception as cleanup_error:
                 log_event(f'Worker startup UI cleanup failed: {cleanup_error!r}')
@@ -8290,11 +8303,21 @@ class DrawBotApp:
     def _auto_preview_enabled(self):
         return getattr(getattr(self,'preview_mode',None),'get',lambda:'Manual')() != 'Manual'
 
+    def _clear_plan_feedback(self):
+        """Invalidate projections and diagnostics, leaving runtime timers alone."""
+        if self.closing:return
+        for name,text in (
+                ('draw_time_text','Estimated draw time appears after Build preview.'),
+                ('preview_diagnostics_text','Preview diagnostics appear after Build preview.')):
+            try:getattr(self,name).set(text)
+            except (tk.TclError,AttributeError):pass
+
     def _mark_plan_stale(self, message='Settings changed. Press Build preview or Start Drawing when ready.'):
         DrawBotApp._cancel_after_attr(self,'preview_after')
         self.preview_generation=int(getattr(self,'preview_generation',0))+1
         self.needs_plan=False
         self.plan=None
+        DrawBotApp._clear_plan_feedback(self)
         self.preview_dirty_reason=message
         self.small_test_passed=False
         DrawBotApp._invalidate_target_lock(self,'plan/setup became stale',disarm=True)
@@ -8833,15 +8856,23 @@ class DrawBotApp:
             if not started:snapshot.close()
 
     def reuse_area(self):
-        if self.saved_area:
+        if not DrawBotApp._profile_action_ready(self) or not self.saved_area:return False
+        previous=(self.corners,self.canvas_anchor_detection,self.target_window,
+                  self.target_client_rect,getattr(self,'target_dpi',None))
+        try:
             self.corners=[tuple(p) for p in self.saved_area]
-            if min(self.area()[2:])<10:self.corners=[];self.status.set('The saved area is too small. Select a new one.');return
-            try:self.capture_target()
-            except (OSError,ValueError,AttributeError,InterruptedError) as error:
-                self.corners=[];self.status.set(str(error));return
-            self.area_text.set(f'✓ {self.area()[2]} × {self.area()[3]} px. Make sure the target application remains in the same position.')
-            self.small_test_passed=False
-            self.set_busy(None);self._mark_plan_stale('Drawing area restored. Press Build preview or Safety preflight / Dry run when ready.');self._maybe_auto_preview(delay=900, reason='reuse-area')
+            if min(self.area()[2:])<10:
+                raise ValueError('The saved area is too small. Select a new one.')
+            self.capture_target()
+        except (OSError,ValueError,AttributeError,InterruptedError) as error:
+            (self.corners,self.canvas_anchor_detection,self.target_window,
+             self.target_client_rect,self.target_dpi)=previous
+            self.status.set(str(error));return False
+        self.area_text.set(f'✓ {self.area()[2]} × {self.area()[3]} px. Make sure the target application remains in the same position.')
+        self.small_test_passed=False
+        self._mark_plan_stale('Drawing area restored. Press Build preview or Safety preflight / Dry run when ready.')
+        self.set_busy(None);self._maybe_auto_preview(delay=900, reason='reuse-area')
+        return True
 
     def set_boundary(self):
         if not DrawBotApp._profile_action_ready(self):return
@@ -9867,8 +9898,16 @@ class DrawBotApp:
             self.paused.set();self.pause_button.configure(text='Resume · F6')
             self.status.set('Pausing after the current brush stroke. Wait until the status says Paused before moving the mouse.')
 
+    def _request_stop(self):
+        """Keyboard-thread-safe Stop: no Tk calls or resettable update token."""
+        request=getattr(self,'update_request',None)
+        if isinstance(request,UpdateRequest):request.cancel()
+        # Publish the reusable global signal only after the request has its
+        # permanent cancellation; another worker may clear Stop immediately.
+        self.stop.set()
+
     def cancel(self):
-        self.update_request=None
+        DrawBotApp._request_stop(self)
         self.paint_start_request=None
         # Emergency stop also revokes native mouse permission immediately.
         DrawBotApp._close_smart_drop_overlay(self,'cancel/stop pressed')
@@ -9888,7 +9927,7 @@ class DrawBotApp:
         DrawBotApp._cancel_after_attr(self,'preview_after')
         DrawBotApp._cancel_after_attr(self,'preview_render_after')
         DrawBotApp._cancel_browser_one_click(self,'Stop pressed')
-        self.stop.set();self.paused.clear()
+        self.paused.clear()
         process=getattr(self,'mouse_probe_process',None)
         if process is not None:
             try:
@@ -9997,37 +10036,61 @@ class DrawBotApp:
             else:self.status.set(f'Latest safety report: {path}')
         except OSError as error:self.status.set(f'Could not open safety report: {error}')
 
+    def _update_request_current(self,request,*,phase=None):
+        if not isinstance(request,UpdateRequest):return False
+        if (self.closing or self.stop.is_set() or
+                getattr(self,'update_request',None) is not request):
+            request.cancel()
+            return False
+        return not request.is_cancelled() and (phase is None or request.phase==phase)
+
     def check_for_updates(self):
-        if self.activity or self.closing:
-            self.status.set('Stop the current operation before checking for updates.');return
-        if hasattr(self,'show_tools'):self.show_tools()
-        request=object();self.update_request=request
-        self.update_summary.set('Checking GitHub Releases…')
-        self.update_detail.set('A newer Windows release will be downloaded, verified and opened in the installer.')
-        self.status.set('Checking Image Draw Bot releases on GitHub…')
+        if not DrawBotApp._profile_action_ready(self):
+            self.status.set('Stop the current operation before checking for updates.');return False
+        # This explicit new action may follow an earlier Stop. Any later Esc is
+        # also recorded on the private request, before a worker can reuse Stop.
+        previous=getattr(self,'update_request',None)
+        if isinstance(previous,UpdateRequest):previous.cancel()
+        self.stop.clear()
+        request=UpdateRequest();self.update_request=request
+        def cancelled():
+            return not DrawBotApp._update_request_current(self,request)
         def work():
             from UpdateCenter import check_for_updates,download_installer
+            if cancelled():raise InterruptedError('Update cancelled.')
             try:
-                result=check_for_updates(cancelled=self.stop.is_set)
+                result=check_for_updates(cancelled=cancelled)
                 if result.get('update_available'):
                     asset=result.get('installer')
                     if asset:
-                        previous=[-1]
+                        previous_percent=[-1]
                         def progress(done,total):
+                            if cancelled():raise InterruptedError('Update cancelled.')
                             percent=round(done*100/total)
-                            if percent!=previous[0]:
-                                previous[0]=percent
-                                self.events.put(('update_progress',f'Downloading {asset["version"]}: {percent}%'))
-                        result['installer_path']=download_installer(asset,cancelled=self.stop.is_set,progress=progress)
+                            if percent!=previous_percent[0]:
+                                previous_percent[0]=percent
+                                self.events.put(('update_progress',(request,f'Downloading {asset["version"]}: {percent}%')))
+                        result['installer_path']=download_installer(asset,cancelled=cancelled,progress=progress)
                     else:result['message']='A newer release exists, but its verified Windows installer is not available yet. Try again later or open Releases.'
-                result['request']=request
             except InterruptedError:raise
             except Exception as error:result={'error':str(error),'message':'Update failed. Nothing was installed. Try again.'}
+            if cancelled():raise InterruptedError('Update cancelled.')
+            result['request']=request
             self.events.put(('update_check_complete',result))
-        return self.begin_worker('update-check',work)
+        started=False
+        try:
+            if hasattr(self,'show_tools'):self.show_tools()
+            self.update_summary.set('Checking GitHub Releases…')
+            self.update_detail.set('A newer Windows release will be downloaded, verified and opened in the installer.')
+            self.status.set('Checking Image Draw Bot releases on GitHub…')
+            started=bool(self.begin_worker('update-check',work,reset_stop=False))
+            return started
+        finally:
+            if not started:request.cancel()
 
     def _install_checked_update(self,payload):
-        if (self.closing or self.stop.is_set() or getattr(self,'update_request',None) is not payload.get('request')):
+        request=payload.get('request') if isinstance(payload,dict) else None
+        if not DrawBotApp._update_request_current(self,request,phase='ready'):
             return False
         if self.activity:
             self.root.after(100,lambda:DrawBotApp._install_checked_update(self,payload));return False
@@ -10035,16 +10098,30 @@ class DrawBotApp:
             if self.save_settings() is False:
                 raise OSError('Current settings could not be saved. Nothing was installed.')
         except Exception as error:
-            self.update_summary.set(f'Could not save settings before update: {error}')
+            if DrawBotApp._update_request_current(self,request,phase='ready'):
+                self.update_summary.set(f'Could not save settings before update: {error}')
             return False
-        self.update_request=None
-        self.update_summary.set('Verifying installer and starting the update…')
+        # Settings publication can take time. Esc during it must survive the
+        # worker handoff, and repeated callbacks may claim installation once.
+        if (not DrawBotApp._update_request_current(self,request,phase='ready') or
+                not request.begin_install()):
+            return False
+        def cancelled():
+            return not DrawBotApp._update_request_current(self,request,phase='installing')
         def work():
             from UpdateCenter import launch_installer
-            if self.stop.is_set():raise InterruptedError()
-            launch_installer(payload['installer_path'],payload['installer'],cancelled=self.stop.is_set)
-            self.events.put(('update_installer_started',True))
-        return self.begin_worker('update-install',work)
+            if cancelled():raise InterruptedError('Update cancelled.')
+            launch_installer(payload['installer_path'],payload['installer'],cancelled=cancelled)
+            # The process has really started. A later Stop cannot undo it, so
+            # deliver the existing close-for-update handoff exactly once.
+            if request.mark_started():self.events.put(('update_installer_started',request))
+        started=False
+        try:
+            self.update_summary.set('Verifying installer and starting the update…')
+            started=bool(self.begin_worker('update-install',work,reset_stop=False))
+            return started
+        finally:
+            if not started:request.cancel()
 
     def open_latest_release_page(self):
         import webbrowser
@@ -10259,106 +10336,137 @@ class DrawBotApp:
 
     def run_performance_benchmark(self):
         """Benchmark the current planning pipeline without arming mouse input."""
-        if self.activity:
-            self.status.set('Stop the current operation before running the performance benchmark.')
-            return
+        if not DrawBotApp._profile_action_ready(self):
+            if self.activity and not self.closing:
+                self.status.set('Stop the current operation before running the performance benchmark.')
+            return False
+        self.stop.clear()
         try:
             options=self.options()
         except ValueError as error:
-            self.status.set(str(error));return
-        original=self.original.copy() if self.original is not None else None
-        if original is None:
-            from PIL import Image,ImageDraw
-            original=Image.new('RGBA',(640,480),'white')
-            pen=ImageDraw.Draw(original)
-            pen.rectangle((45,45,595,435),fill=(235,235,245,255))
-            pen.ellipse((120,70,520,430),fill=(70,130,210,255))
-            pen.rectangle((230,160,410,390),fill=(235,90,70,255))
-            pen.line((90,400,550,90),fill=(20,20,20,255),width=9)
-        else:
-            original.thumbnail((640,480))
-        target=(800,450)
-        self.status.set('Running planner benchmark… No mouse input can be armed by this test.')
-        def work():
-            try:
-                started=time.monotonic()
-                plan=make_plan(original,target,dict(options),self.stop.is_set)
-                elapsed=time.monotonic()-started
-                profile=plan.get('performance_profile') or {}
-                phase,phase_seconds=profiler_dominant_phase(profile)
-                phase_name=(phase or 'unknown').replace('_',' ')
-                source=max(1,int(plan.get('source_count',0) or 0))
-                throughput=source/max(elapsed,.001)
-                benchmark_options=plan.get('options') or {}
-                advanced=benchmark_options.get('advanced_color_meta') or {}
-                portrait=benchmark_options.get('portrait_stats') or {}
-                backend=advanced.get('acceleration_backend') or portrait.get('acceleration_backend') or advanced.get('cpu_backend') or 'CPU'
-                device=advanced.get('acceleration_device') or portrait.get('acceleration_device') or ''
-                backend_text=f"{backend}{' · '+str(device) if device else ''}"
-                text=(f"Planner benchmark: {elapsed:.2f}s total · {throughput:,.0f} source strokes/s · backend {backend_text} · "
-                      f"slowest phase: {phase_name} {phase_seconds:.2f}s. "
-                      f"{format_performance_profile(profile, compact=True)}")
-                log_event('Performance benchmark complete: '+text)
-                self.events.put(('status',text))
-                self.events.put(('performance_benchmark',{'text':text,'profile':profile,'elapsed':elapsed,'source':source,'count':plan.get('count',0)}))
-            except InterruptedError:
-                self.events.put(('status','Performance benchmark cancelled safely. No mouse input was sent.'))
-            except Exception as error:
-                self.events.put(('status',f'Performance benchmark failed safely: {error}'))
-        self.stop.clear()
-        threading.Thread(target=work,daemon=True,name='planning-benchmark').start()
+            self.status.set(str(error));return False
+        if self.stop.is_set() or self.closing:return False
+        original=None
+        started=False
+        def release_original():
+            nonlocal original
+            snapshot=original;original=None
+            if snapshot is not None:snapshot.close()
+        try:
+            original=self.original.copy() if self.original is not None else None
+            if original is None:
+                from PIL import Image,ImageDraw
+                original=Image.new('RGBA',(640,480),'white')
+                pen=ImageDraw.Draw(original)
+                try:
+                    pen.rectangle((45,45,595,435),fill=(235,235,245,255))
+                    pen.ellipse((120,70,520,430),fill=(70,130,210,255))
+                    pen.rectangle((230,160,410,390),fill=(235,90,70,255))
+                    pen.line((90,400,550,90),fill=(20,20,20,255),width=9)
+                finally:
+                    # A retained startup/paint traceback must not keep a second
+                    # owner of the synthetic source's native pixel storage.
+                    pen.draw=None;pen.im=None;pen._image=None
+            else:
+                original.thumbnail((640,480))
+            target=(800,450)
+            self.status.set('Running planner benchmark… No mouse input can be armed by this test.')
+            def work():
+                plan=None
+                try:
+                    begin=time.monotonic()
+                    plan=make_plan(original,target,dict(options),self.stop.is_set)
+                    elapsed=time.monotonic()-begin
+                    if self.stop.is_set():raise InterruptedError()
+                    profile=plan.get('performance_profile') or {}
+                    phase,phase_seconds=profiler_dominant_phase(profile)
+                    phase_name=(phase or 'unknown').replace('_',' ')
+                    source=max(1,int(plan.get('source_count',0) or 0))
+                    throughput=source/max(elapsed,.001)
+                    benchmark_options=plan.get('options') or {}
+                    advanced=benchmark_options.get('advanced_color_meta') or {}
+                    portrait=benchmark_options.get('portrait_stats') or {}
+                    backend=advanced.get('acceleration_backend') or portrait.get('acceleration_backend') or advanced.get('cpu_backend') or 'CPU'
+                    device=advanced.get('acceleration_device') or portrait.get('acceleration_device') or ''
+                    backend_text=f"{backend}{' · '+str(device) if device else ''}"
+                    text=(f"Planner benchmark: {elapsed:.2f}s total · {throughput:,.0f} source strokes/s · backend {backend_text} · "
+                          f"slowest phase: {phase_name} {phase_seconds:.2f}s. "
+                          f"{format_performance_profile(profile, compact=True)}")
+                    log_event('Performance benchmark complete: '+text)
+                    self.events.put(('status',text))
+                    self.events.put(('performance_benchmark',{'text':text,'profile':profile,'elapsed':elapsed,'source':source,'count':plan.get('count',0)}))
+                except InterruptedError:
+                    raise
+                except Exception as error:
+                    if self.stop.is_set():raise InterruptedError() from None
+                    self.events.put(('status',f'Performance benchmark failed safely: {error}'))
+                finally:
+                    DrawBotApp._release_plan_images(self,plan)
+            started=bool(self.begin_worker('performance-benchmark',work,reset_stop=False,cleanup=release_original))
+            return started
+        finally:
+            if not started:release_original()
 
     def run_benchmark_suite(self):
         """Run deterministic preview/accuracy/deadline benchmarks without mouse input."""
-        if self.activity:
-            self.status.set('Stop the current operation before running the benchmark suite.')
-            return
+        if not DrawBotApp._profile_action_ready(self):
+            if self.activity and not self.closing:
+                self.status.set('Stop the current operation before running the benchmark suite.')
+            return False
+        self.stop.clear()
         try:
             options=self.options()
         except ValueError as error:
-            self.status.set(str(error));return
+            self.status.set(str(error));return False
+        if self.stop.is_set() or self.closing:return False
         self.status.set('Running Step 10 benchmark suite locally… No mouse input, screen capture, network or telemetry.')
         self.benchmark_suite_text.set('Benchmark suite running…')
         def work():
             try:
                 from BenchmarkSuite import run as run_suite, format_result
                 result=run_suite(make_plan,dict(options),cancelled=self.stop.is_set)
+                if self.stop.is_set():raise InterruptedError()
                 text=format_result(result)
                 log_event('Step 10 benchmark suite complete: '+text.replace('\n',' | '))
                 self.events.put(('benchmark_suite',{'text':text,'result':result}))
             except InterruptedError:
-                self.events.put(('status','Benchmark suite cancelled safely. No mouse input was sent.'))
+                raise
             except Exception as error:
+                if self.stop.is_set():raise InterruptedError() from None
                 self.events.put(('benchmark_suite',{'text':f'Benchmark suite failed safely: {error}','result':{'error':str(error)}}))
-        self.stop.clear()
-        threading.Thread(target=work,daemon=True,name='preview-benchmark-suite').start()
+        return bool(self.begin_worker('benchmark-suite',work,reset_stop=False))
 
     def run_golden_image_regression(self):
         """Run Step 17 golden-image regression tests without mouse/screen input."""
-        if self.activity:
-            self.status.set('Stop the current operation before running golden image regression.')
-            return
+        if not DrawBotApp._profile_action_ready(self):
+            if self.activity and not self.closing:
+                self.status.set('Stop the current operation before running golden image regression.')
+            return False
+        self.stop.clear()
         try:
             options=self.options()
         except ValueError as error:
-            self.status.set(str(error));return
+            self.status.set(str(error));return False
+        if self.stop.is_set() or self.closing:return False
         self.status.set('Running Step 17 golden-image regression locally… No mouse input, screen capture, network or telemetry.')
         try:self.benchmark_suite_text.set('Golden image regression running…')
         except (tk.TclError,AttributeError):pass
         def work():
             try:
                 from GoldenImageRegression import run as run_golden, format_result, ensure_local_golden_images
-                ensure_local_golden_images(overwrite=False)
+                ensure_local_golden_images(overwrite=False,cancelled=self.stop.is_set)
+                if self.stop.is_set():raise InterruptedError()
                 result=run_golden(make_plan,dict(options),cancelled=self.stop.is_set)
+                if self.stop.is_set():raise InterruptedError()
                 text=format_result(result)
                 log_event('Step 17 golden image regression complete: '+text.replace('\n',' | '))
                 self.events.put(('golden_regression',{'text':text,'result':result}))
             except InterruptedError:
-                self.events.put(('status','Golden image regression cancelled safely. No mouse input was sent.'))
+                raise
             except Exception as error:
+                if self.stop.is_set():raise InterruptedError() from None
                 self.events.put(('golden_regression',{'text':f'Golden image regression failed safely: {error}','result':{'error':str(error)}}))
-        self.stop.clear()
-        threading.Thread(target=work,daemon=True,name='golden-image-regression').start()
+        return bool(self.begin_worker('golden-regression',work,reset_stop=False))
 
     def clear_gpu_cache(self):
         if self.activity:
@@ -10594,7 +10702,8 @@ class DrawBotApp:
         if (stop is not None and stop.is_set() and kind in
                 ('loaded','pasted','planned','background_removed','screen','recovery_loaded','paint_auto_calibration_complete',
                  'browser_one_click_setup_complete','browser_auto_calibration_complete',
-                 'one_click_setup_verification_complete','picture_palette_complete')):
+                 'one_click_setup_verification_complete','picture_palette_complete',
+                 'performance_benchmark','benchmark_suite','golden_regression')):
             log_event(f'Ignored cancelled worker result: {kind}.')
             DrawBotApp._discard_worker_result(self,kind,value)
             return
@@ -10653,12 +10762,22 @@ class DrawBotApp:
                 }
                 self.root.after(50,lambda:DrawBotApp._resume_prepared_paint(self,request))
         elif kind=='update_progress':
-            self.update_summary.set(str(value))
+            if not isinstance(value,tuple) or len(value)!=2:return
+            request,text=value
+            if DrawBotApp._update_request_current(self,request,phase='checking'):
+                self.update_summary.set(str(text))
         elif kind=='update_installer_started':
+            if (not isinstance(value,UpdateRequest) or
+                    getattr(self,'update_request',None) is not value or not value.consume_started()):
+                return
+            self.update_request=None
             self.status.set('Installer started. Closing Image Draw Bot to complete the update.')
             self.close()
         elif kind=='update_check_complete':
             payload=value if isinstance(value,dict) else {}
+            request=payload.get('request')
+            if not DrawBotApp._update_request_current(self,request,phase='checking'):return
+            if not (request.ready() if payload.get('installer_path') else request.finish_check()):return
             action=getattr(self,'update_download_button',None)
             if action is not None:
                 action.configure(text='Open GitHub Releases')

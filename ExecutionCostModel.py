@@ -17,11 +17,11 @@ from typing import Any, Iterable, Sequence
 
 from DrawTimeCalibration import correction_for
 from SpeedOptimizer import normalize_speed, phase_delay
-from StrokeDelivery import resolve_stroke_delivery
+from StrokeDelivery import resolve_stroke_delivery, interpolation_step, brush_switch_delays
 from Precision import effective_step, precision_path_count, round_screen
 
 Point = tuple[int, int]
-EXECUTION_MODEL_VERSION = 6
+EXECUTION_MODEL_VERSION = 7
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -130,7 +130,9 @@ class ExecutionCostModel:
         self.sy = max(.001, _safe_float(self.options.get("_execution_scale_y", self.options.get("_hybrid_scale_y", _sy_default)), _sy_default))
         self.delivery = resolve_stroke_delivery(self.options, dry_run=False)
         self.precision = self.options.get("precision", "High")
-        self.step_px = effective_step(self.precision, self.delivery.step_px)
+        self.step_px = effective_step(self.precision, interpolation_step(
+            self.delivery.step_px, max(1, int(self.options.get('brush_px') or 1)),
+            pixel_accurate=bool(self.options.get('pixel_accurate'))))
         self.speed = normalize_speed(self.options.get("speed", "Balanced"))
         self.delay = max(0.0, _safe_float(self.options.get("delay"), 0.0))
         self.path_wait = max(float(self.delivery.min_path_delay),
@@ -278,7 +280,9 @@ class ExecutionCostModel:
         path = tuple((int(p[0]), int(p[1])) for p in (path or ()))
         if not path:
             return CostBreakdown(0.0, source=self.source)
-        _brush = max(1, int(brush_px or self.options.get("brush_px") or 1))
+        brush = max(1, int(brush_px or self.options.get("brush_px") or 1))
+        step_px = interpolation_step(self.delivery.step_px, brush,
+                                     pixel_accurate=bool(self.options.get('pixel_accurate')))
         length = _path_length(path, self.sx, self.sy)
         start = path[0]
         travel_px = 0.0
@@ -316,7 +320,7 @@ class ExecutionCostModel:
         screen_path = [(round_screen((x + .5) * self.sx - .5),
                         round_screen((y + .5) * self.sy - .5)) for x, y in path]
         for a, b in zip(screen_path, screen_path[1:]):
-            moves += precision_path_count(a, b, self.precision, self.delivery.step_px)
+            moves += precision_path_count(a, b, self.precision, step_px)
         drag = moves * self.path_wait
         target = self.boundary_wait + .0015
         body = press_release + drag + target
@@ -342,7 +346,7 @@ class ExecutionCostModel:
         defaults = {
             "palette_change": float(self.delivery.palette_click_delay),
             "tool_change": float(self.delivery.ui_control_delay),
-            "brush_change": max(.06, float(self.delivery.ui_control_delay) * .75),
+            "brush_change": sum(brush_switch_delays(self.delivery)),
             "fill": max(.12, float(self.delivery.ui_control_delay) + .04),
             "verification": max(.08, float(self.delivery.palette_click_delay) * .45),
         }
