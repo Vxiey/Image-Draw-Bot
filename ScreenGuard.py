@@ -2,7 +2,7 @@
 import ctypes
 import os
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from ctypes import wintypes
 
 from DpiSupport import get_window_dpi_info
@@ -434,11 +434,17 @@ class GuardedMouse:
 
     def click(self):
         # Keep button-down visible to event loops; release even on cancellation/errors.
-        import time
         self.check()
-        try:
-            self.mouse.press();time.sleep(.015)
-        finally:self.mouse.release()
+        self._click_with_settle()
+
+    def _click_with_settle(self):
+        transaction = getattr(self.mouse, 'input_transaction', None)
+        # The native backend owns the complete gesture, including its release.
+        # Other injected backends retain their established press/release API.
+        with transaction() if callable(transaction) else nullcontext():
+            try:
+                self.mouse.press();time.sleep(.015)
+            finally:self.mouse.release()
 
     def _check_modal_geometry(self,point=None):
         """Keep modal color-picker sampling tied to the originally locked target."""
@@ -526,15 +532,13 @@ class GuardedMouse:
         The foreground dialog must belong to the locked target. Recheck after
         moving the cursor, since focus or an overlay can change during movement.
         """
-        import time
         self._check_modal_geometry(point)
         current=self.mouse.get_position()
         if self.last is not None and max(abs(current[i]-self.last[i]) for i in (0,1))>getattr(self,'tracking_tolerance',4):
             raise InterruptedError('Stopped: the mouse was moved manually while selecting an exact color.')
         self.mouse.move(*_screen_point(point));self.last=self.mouse.get_position()
         self._check_modal_geometry(self.last)
-        try:self.mouse.press();time.sleep(.015)
-        finally:self.mouse.release()
+        self._click_with_settle()
 
     def press(self):
         self.check();self.mouse.press()

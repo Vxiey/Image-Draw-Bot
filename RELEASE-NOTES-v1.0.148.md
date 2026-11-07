@@ -1,6 +1,18 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 830 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19, three in batch 20, two in batch 21, three in batch 22, two in batch 23 and two in batch 24. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 837 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19, three in batch 20, two in batch 21, three in batch 22, two in batch 23, two in batch 24 and seven in batch 25. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 25: accurate paint order, Fill evidence and usable resource recommendations
+
+- Preserve the original execution order after timed Pixel admission chooses its retained strokes.
+- Compute scaled regional Fill preview and physical scores from the actual contour/seed topology within the existing categorical brush model.
+- Preserve measured OpenCL/CPU/GPU route preferences in automatic recommendations, and benchmark the same RAM policy that the recommendation applies.
+- Measure actual bounded thread/process work before recommending scheduler workers; reject the preceding serial-proxy format.
+- Avoid unused full-source host RGB/visibility preparation on successful OpenCL palette mapping.
+- Read compact native screen neighborhoods with bounded bulk transfers and a scalar fallback.
+- Complete existing widget/worker/calibration lifetime, late Stop/image handoff and whole-click ownership contracts. These corrections add zero IDs.
+
+Seven new groups bring the registry to **837**, leaving **163**. All 830 preceding entries and the concurrent batch24 implementation are preserved. Frozen merged-source discovery completed **4,372 tests: 4,302 passed and 70 skipped**, with all 919 source/configuration hashes unchanged. The 5,000-cycle source gate, 1,284-file package hygiene and eight existing-raster fixtures passed. Three paired rendering workloads disclose quality changes, unchanged/slower controls and allocation costs without a general speedup claim. See [final local validation](docs/v148-batch25-validation.json). The parent checkpoint passed all seven remote checks; new exact-commit Windows/package/native sampling results are recorded separately in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46). Version 1.0.148 remains unpublished.
 
 ## Batch 24: responsive palette calibration and bounded scheduling
 

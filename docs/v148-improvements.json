@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 830,
+  "implemented": 837,
   "release_published": false,
-  "validation": "Batch 24: 4,308 tests completed in 205.763 seconds: 4,242 passed and 66 platform/hardware cases skipped, with 900 source/configuration hashes unchanged. Two independently reviewed groups bring the total to 830, with 170 remaining. Manual palette analysis stays responsive and Pixel scheduling bounds active-list removal work. Prepared Paint workflow, Upscale keyboard, widget timers and retained image ownership complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical parity covers 54 palette-controller cases, 72 scheduler pairs and 24 complete public plans/independent rasters. Nine queue workloads have six balanced pairs and separate traced allocations, all bound to the same 850 root Python hashes. The preceding bb6dfa6 checkpoint passed all seven remote checks and Windows/package/native GUI gates; the new exact commit is verified separately in PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 25: 4,372 tests completed in 209.654 seconds: 4,302 passed and 70 platform/hardware cases skipped, with all 919 source/configuration hashes unchanged. Seven independently reviewed groups bring the total to 837, with 163 remaining; all 830 preceding entries and concurrent batch24 implementation are preserved. Existing widget/worker/calibration, Stop, image-handoff and whole-click completions add zero IDs. The 5,000-cycle source gate, 1,284-file package hygiene and eight existing-raster geometry fixtures passed. Three rendering workloads have six balanced pairs and share 863 unchanged root Python hashes; unchanged/slower controls and added Fill allocation are disclosed without a general speedup claim. Fill diagnostics remain within the documented categorical model. The parent checkpoint passed all seven remote checks; new exact-commit Windows/package/native sampling results are recorded separately in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6459,6 +6459,62 @@
       "description": "Maintain only the current first 72 pending Pixel components in an active selection list, reusing the same stable sorted remainder in reverse order and replenishing from its end. Selection no longer shifts the entire unseen tail. Preserve exact candidate/cost-call order, ties, cursor/color state, phases, Stop, diagnostics and complete public plans. Actual list-work counters, full historical-module parity, independent rasters and executor replay verify the change; balanced whole-call timing and separate allocation probes retain slower controls and do not claim physical drawing or GPU gains.",
       "batch": 24,
       "id": 830
+    },
+    {
+      "local_id": "R2501",
+      "area": "batch25-rendering",
+      "ledger": "v148-batch25-rendering.md",
+      "description": "Retain the original paint order after timed Pixel admission chooses its phase quotas. Select operation occurrence positions, then replay that subsequence without changing retained phase counts or physical brushes; individually correct protected details are no longer overwritten solely by quota regrouping. Literal brush and actual public-plan regressions verify the change.",
+      "batch": 25,
+      "id": 831
+    },
+    {
+      "local_id": "R2502",
+      "area": "batch25-rendering",
+      "ledger": "v148-batch25-rendering.md",
+      "description": "Model scaled regional Fill from the delivered color-batched contours, seals and bucket seeds instead of ideal projected source spans. Share one bounded sparse row-interval footprint stream between physical scoring and preview, preserving the categorical square-brush/four-neighbor model, fixed native width and execution order. Dense oracle, actual public executor, cache-overflow, Stop and complete-base-plan OOM controls verify exact topology without claiming physical Paint or RGB-alias equivalence.",
+      "batch": 25,
+      "id": 832
+    },
+    {
+      "local_id": "P2501",
+      "area": "batch25-platform",
+      "ledger": "v148-batch25-platform.md",
+      "description": "Keep verified universal per-workload compute preferences when building an automatic performance recommendation. Select Auto for usable measured GPU or legacy-CUDA evidence so OpenCL winners, CPU winners and crossover thresholds reach the unchanged route selector; detection-only summaries cannot enable an unmeasured backend, and explicit CPU remains authoritative.",
+      "batch": 25,
+      "id": 833
+    },
+    {
+      "local_id": "P2502",
+      "area": "batch25-platform",
+      "ledger": "v148-batch25-platform.md",
+      "description": "Benchmark, save and apply the same resolved RAM policy from one live allocation observation. The newly saved worker recommendation remains compatible with its applied memory signature, and low-memory settings describe the allocator's actual retained-headroom budget instead of an unattainable request.",
+      "batch": 25,
+      "id": 834
+    },
+    {
+      "local_id": "P2503",
+      "area": "batch25-platform",
+      "ledger": "v148-batch25-platform.md",
+      "description": "Measure complete real thread/process executor work for CPU scheduler candidates instead of a serial proxy with worker labels. Use identical bounded integer payloads, full result verification, reversed measurement rounds and complete startup/collection/shutdown timing; failed work cannot win, Stop preserves the old profile, and old serial-proxy schema records are invalidated. The evidence is workload-specific, not a claim of universal planner-optimal worker counts.",
+      "batch": 25,
+      "id": 835
+    },
+    {
+      "local_id": "P2504",
+      "area": "batch25-platform",
+      "ledger": "v148-batch25-platform.md",
+      "description": "Prepare visible host RGB and its mask only for the CPU or CUDA route that consumes them. Successful OpenCL palette matching skips unused full-source host buffers; CUDA fallback reuses one complete preparation, while failed OpenCL releases native state before its first CPU preparation and Stop suppresses fallback. Existing color, tie, visibility and source ownership semantics remain exact.",
+      "batch": 25,
+      "id": 836
+    },
+    {
+      "local_id": "N2501",
+      "area": "batch25-native",
+      "ledger": "v148-batch25-native-sampling.md",
+      "description": "Read dense compact screen neighborhoods through one bounded native DIB transfer and flush instead of per-pixel GetPixel calls. Preserve ordered RGB, duplicate and mutable iterable observations, fixed-width native ABI and private resource ownership; small, sparse, cross-monitor, oversized and allocation-failure cases retain streaming scalar reads. Native Windows parity, GDI lifetime and paired timing have their own gate; reduced call counts do not establish whole-drawing speed.",
+      "batch": 25,
+      "id": 837
     }
   ]
 }

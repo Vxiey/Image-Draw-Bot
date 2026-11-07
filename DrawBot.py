@@ -7072,22 +7072,35 @@ class DrawBotApp:
         from PaintToolCalibration import PaintToolCalibrationApp
         import customtkinter as ctk
         from UiCompatibility import scoped_toplevel
-        self.set_busy('tool-calibration')
-        window=scoped_toplevel(self.root)
-        def closed():
-            self.refresh_tool_calibration();self.set_busy(None);self.status.set('Paint tool calibration closed.')
         from ScreenTaskWindow import ScreenTaskWindow
-        visibility=ScreenTaskWindow(self.root)
-        previous_closed=closed
+        window=visibility=None
         def closed():
-            try:previous_closed()
-            finally:visibility.restore()
+            try:self.refresh_tool_calibration()
+            finally:
+                try:self.set_busy(None)
+                finally:
+                    self.activity=None
+                    if visibility is not None:visibility.restore()
+            self.status.set('Paint tool calibration closed.')
         try:
+            self.set_busy('tool-calibration')
+            window=scoped_toplevel(self.root)
+            self.paint_tool_window=window
+            visibility=ScreenTaskWindow(self.root)
             visibility.hide()
             PaintToolCalibrationApp(window,on_close=closed)
         except Exception:
-            window.destroy();self.set_busy(None);visibility.restore();raise
-        self.paint_tool_window=window
+            try:
+                if window is not None:window.destroy()
+            except Exception as error:
+                log_error(f'Paint tool dialog cleanup failed: {error!r}',category='calibration',exc_info=True)
+            try:self.set_busy(None)
+            except Exception as error:
+                log_error(f'Paint tool dialog UI reset failed: {error!r}',category='calibration',exc_info=True)
+            finally:
+                self.activity=None
+                if visibility is not None:visibility.restore()
+            raise
 
     def calibrate_app_tools(self):
         if not DrawBotApp._profile_action_ready(self):return
@@ -7097,22 +7110,35 @@ class DrawBotApp:
         import customtkinter as ctk
         from UiCompatibility import scoped_toplevel
         profile_key=PROFILES[self.game.get()][0]
-        self.set_busy('tool-calibration')
-        window=scoped_toplevel(self.root)
-        def closed():
-            self.refresh_app_tool_calibration();self.set_busy(None);self.status.set('Application tool calibration closed.')
         from ScreenTaskWindow import ScreenTaskWindow
-        visibility=ScreenTaskWindow(self.root)
-        previous_closed=closed
+        window=visibility=None
         def closed():
-            try:previous_closed()
-            finally:visibility.restore()
+            try:self.refresh_app_tool_calibration()
+            finally:
+                try:self.set_busy(None)
+                finally:
+                    self.activity=None
+                    if visibility is not None:visibility.restore()
+            self.status.set('Application tool calibration closed.')
         try:
+            self.set_busy('tool-calibration')
+            window=scoped_toplevel(self.root)
+            self.app_tool_window=window
+            visibility=ScreenTaskWindow(self.root)
             visibility.hide()
             AppToolCalibrationApp(window,profile_key,self.game.get(),on_close=closed)
         except Exception:
-            window.destroy();self.set_busy(None);visibility.restore();raise
-        self.app_tool_window=window
+            try:
+                if window is not None:window.destroy()
+            except Exception as error:
+                log_error(f'Application tool dialog cleanup failed: {error!r}',category='calibration',exc_info=True)
+            try:self.set_busy(None)
+            except Exception as error:
+                log_error(f'Application tool dialog UI reset failed: {error!r}',category='calibration',exc_info=True)
+            finally:
+                self.activity=None
+                if visibility is not None:visibility.restore()
+            raise
 
     def refresh_app_tool_calibration(self):
         if not hasattr(self,'app_tool_text'):return
@@ -8386,6 +8412,10 @@ class DrawBotApp:
         if not reset_stop and self.stop.is_set():
             log_event(f'Worker {activity} not started: its preflight was stopped.')
             return False
+        # Accept the new request before native preparation. An Esc received
+        # during window construction/hiding belongs to this operation and must
+        # survive the handoff, just like callers with their own preflight.
+        if reset_stop:self.stop.clear()
         if activity != 'result-recheck':
             DrawBotApp._finish_result_recheck(self)
         recheck_worker_request = (getattr(self, 'result_recheck_request', None)
@@ -8441,7 +8471,6 @@ class DrawBotApp:
             if activity in SCREEN_ACTIVITIES:screen_window.hide()
             self.screen_task_window=screen_window
             self._worker_terminal_status=None
-            if reset_stop:self.stop.clear()
             self.set_busy(activity)
             log_event(f'Worker {activity} started.')
             self.worker=threading.Thread(target=work,daemon=True,name=f'imagedrawbot-{activity}')
@@ -8465,7 +8494,7 @@ class DrawBotApp:
         if (not _from_sync and action==DROP_IN_ACTION and
                 drop_in_should_wait(activity=getattr(self,'activity',None),phase=getattr(self,'drop_in_sync_phase',None))):
             return DrawBotApp._queue_pending_drop_in_import(self,source,label,action)
-        if self.activity or self.closing:
+        if not DrawBotApp._profile_action_ready(self):
             log_event(f'Image load deferred/rejected: label={label!r} busy={self.activity!r} closing={self.closing!r}.')
             if action==DROP_IN_ACTION and not _from_sync:
                 return DrawBotApp._queue_pending_drop_in_import(self,source,label,action) if drop_in_should_wait(activity=self.activity,phase=getattr(self,'drop_in_sync_phase',None)) else False
@@ -8474,9 +8503,15 @@ class DrawBotApp:
         log_event(f'Image load requested: {label!r}.')
         def work():
             image=load_image(source,self.stop.is_set)
-            if self.stop.is_set():raise InterruptedError()
-            log_event(f'Image loaded: size={image.size} label={label!r}.')
-            self.events.put(('loaded',(image,label,action,bool(one_click_force))))
+            try:
+                if self.stop.is_set():raise InterruptedError()
+                log_event(f'Image loaded: size={image.size} label={label!r}.')
+                self.events.put(('loaded',(image,label,action,bool(one_click_force))))
+            except BaseException:
+                # The decoder transfers its owned result only after enqueue.
+                # A late Stop or publication failure still belongs to us.
+                image.close()
+                raise
         return bool(self.begin_worker('load',work))
 
     def _auto_preview_enabled(self):

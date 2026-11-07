@@ -10,6 +10,7 @@ import json
 import math
 import os
 import platform
+import statistics
 import time
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,9 @@ from typing import Any
 from RuntimePaths import atomic_write_text, data_dir, is_finite_number, read_json
 
 RESOURCE_SCHEDULER_MODES = ("Auto", "Off", "Benchmark recommendations")
+# Keep the established path, but never reuse v2's serial proxy scores as actual
+# executor measurements. The independent hardware benchmark format is unchanged.
+SCHEDULER_VERSION = 3
 SCHEDULER_FILE = data_dir() / "resource-scheduler-v2.json"
 
 
@@ -82,7 +86,7 @@ def load_recommendation(path: Path | None = None, *, signature: str | None = Non
 
 
 def _valid_recommendation(data):
-    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != 2:
+    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != SCHEDULER_VERSION:
         return False
     for key in ('logical_cpus', 'recommended_workers', 'ram_budget_mb'):
         if type(data.get(key)) is not int or data[key] <= 0:
@@ -99,7 +103,7 @@ def save_recommendation(result: dict[str, Any], path: Path | None = None) -> dic
     path = Path(path or SCHEDULER_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     clean = {
-        "version": 2,
+        "version": SCHEDULER_VERSION,
         "created_at": int(time.time()),
         "machine_signature": str(result.get("machine_signature") or machine_signature(
             logical_cpus=int(result.get("logical_cpus", os.cpu_count() or 1) or 1),
@@ -111,6 +115,9 @@ def save_recommendation(result: dict[str, Any], path: Path | None = None) -> dic
         "scores": result.get("scores", []),
         "ram_budget_mb": int(result.get("ram_budget_mb", 0) or 0),
     }
+    for key in ('benchmark_workload', 'benchmark_tasks', 'benchmark_iterations', 'benchmark_repeats'):
+        if key in result:
+            clean[key] = result[key]
     if not _valid_recommendation(clean):
         raise ValueError('Invalid resource scheduler recommendation.')
     atomic_write_text(path, json.dumps(clean, ensure_ascii=False, indent=2, allow_nan=False))
@@ -285,56 +292,94 @@ def resolve_resource_schedule(allocation: dict[str, Any], *, mode: str = "Auto",
     }
 
 
-def _bench_once(workers: int, loops: int, *, cancelled=lambda: False) -> float:
-    state=0x12345678 ^ workers
-    total=0
-    loops=max(1000,int(loops))
+def _bench_once(workers: int, tasks, expected, *, backend: str, cancelled=lambda: False) -> float:
+    from ResourceAllocation import _resource_benchmark_worker, parallel_map
+    if cancelled():
+        raise InterruptedError('Scheduler benchmark cancelled.')
+    # parallel_map owns the executor through shutdown. Time the complete attempt,
+    # including process startup, payload dispatch and ordered result collection.
     started=time.perf_counter()
-    # Single-process deterministic approximation.  It is intentionally quick;
-    # the result is used for recommendations, not scientific benchmarking.
-    for w in range(max(1,int(workers))):
-        local=(state + w*2654435761) & 0xffffffff
-        for i in range(loops):
-            if i % 1024 == 0 and cancelled():
-                raise InterruptedError('Scheduler benchmark cancelled.')
-            local=(1664525*local + 1013904223 + i) & 0xffffffff
-            total ^= ((local >> 7) * 2246822519) & 0xffffffff
+    result=parallel_map(_resource_benchmark_worker,tasks,backend=backend,
+                        workers=workers,cancelled=cancelled)
     elapsed=max(time.perf_counter()-started,1e-9)
-    return (workers*loops)/elapsed/1_000_000
+    if cancelled():
+        raise InterruptedError('Scheduler benchmark cancelled.')
+    if result != expected:
+        raise ValueError('Scheduler worker results differ from the complete serial reference.')
+    return elapsed
 
 
 def benchmark_scheduler(allocation: dict[str, Any], *, loops_per_worker: int = 28_000, save: bool = True,
                         path: Path | None = None, cancelled=lambda: False) -> dict[str, Any]:
     if cancelled():
         raise InterruptedError('Scheduler benchmark cancelled.')
+    from ResourceAllocation import _resource_benchmark_worker, parallel_map, validate_cpu_engine
     logical=max(1,int(allocation.get("logical_cpus",os.cpu_count() or 1) or 1))
     cap=_safe_cap(logical)
+    engine=validate_cpu_engine(str(allocation.get('cpu_engine','Auto')))
+    engine='Threads' if engine=='Auto' else engine
     candidates=[]
     for value in (1,2,4,6,8,10,12,16,24,32):
         if value<=min(logical,cap) and value not in candidates:
             candidates.append(value)
     if not candidates:
         candidates=[1]
+    # Every candidate executes exactly the same work, in bounded pieces so Stop
+    # can cancel the queue while already-running tasks finish promptly.
+    loops=max(1000,min(100_000,int(loops_per_worker)))
+    tasks=tuple((index,loops) for index in range(max(2,cap*2)))
+    iterations=loops*len(tasks)
+    expected=parallel_map(_resource_benchmark_worker,tasks,backend='serial',workers=1,
+                          cancelled=cancelled)
+    records={workers:{'workers':workers,'backend':('serial' if workers==1 else
+                       'processes' if engine=='Processes' else 'threads'),
+                       'iterations':iterations,'samples_ms':[]} for workers in candidates}
+    # Reverse the second round to avoid always favoring the same warm/late
+    # candidate. The safe CPU cap supplies headroom without inventing a score.
+    for order in (candidates,list(reversed(candidates))):
+        for workers in order:
+            if cancelled():
+                raise InterruptedError('Scheduler benchmark cancelled.')
+            row=records[workers]
+            if row.get('error'):
+                continue
+            try:
+                elapsed=_bench_once(workers,tasks,expected,backend=row['backend'],cancelled=cancelled)
+                row['samples_ms'].append(elapsed*1000.0)
+            except InterruptedError:
+                raise
+            except Exception as error:
+                row['error']=f'{type(error).__name__}: {error}'
     scores=[]
     for workers in candidates:
-        if cancelled():
-            raise InterruptedError('Scheduler benchmark cancelled.')
-        score=_bench_once(workers, max(1000, int(loops_per_worker)//max(1,workers)),
-                          cancelled=cancelled)
-        # Penalize very high worker counts slightly to represent GUI/input headroom.
-        headroom_penalty = 1.0 - min(0.18, max(0, workers - 8) * 0.012)
-        adjusted = score * headroom_penalty
-        scores.append({"workers": workers, "score": round(score, 3), "adjusted_score": round(adjusted, 3)})
-    best=max(scores, key=lambda item:(item["adjusted_score"], -item["workers"]))
+        row=records[workers]
+        complete=not row.get('error') and len(row['samples_ms'])==2
+        row['elapsed_ms']=statistics.median(row['samples_ms']) if complete else None
+        row['score']=round(iterations/(row['elapsed_ms']*1000.0),3) if complete else 0.0
+        # Retain this public field for older summary consumers; it is the actual
+        # measured score, without the former fabricated headroom multiplier.
+        row['adjusted_score']=row['score']
+        scores.append(row)
+    valid=[row for row in scores if row['elapsed_ms'] is not None]
+    if not valid:
+        raise RuntimeError('No resource scheduler candidate completed verified work.')
+    fastest=min(row['elapsed_ms'] for row in valid)
+    # Prefer fewer workers inside a small measurement-noise margin, retaining
+    # room for the UI and target app instead of rewarding an insignificant lead.
+    best=min((row for row in valid if row['elapsed_ms']<=fastest*1.05),key=lambda row:row['workers'])
     result={
-        "version": 2,
+        "version": SCHEDULER_VERSION,
         "machine_signature": machine_signature(logical_cpus=logical, ram_mb=allocation.get("ram_budget_mb")),
         "logical_cpus": logical,
         "ram_budget_mb": int(allocation.get("ram_budget_mb",0) or 0),
         "recommended_workers": int(best["workers"]),
-        "recommended_engine": "Threads" if str(allocation.get("cpu_engine","Auto"))=="Auto" else str(allocation.get("cpu_engine","Threads")),
+        "recommended_engine": engine,
         "best_score": float(best["adjusted_score"]),
         "scores": scores,
+        "benchmark_workload": "bounded integer CPU work with complete executor lifetime",
+        "benchmark_tasks": len(tasks),
+        "benchmark_iterations": iterations,
+        "benchmark_repeats": 2,
     }
     if cancelled():
         raise InterruptedError('Scheduler benchmark cancelled.')

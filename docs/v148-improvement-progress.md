@@ -6,11 +6,22 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 25 implements **837 total distinct improvements, with 163 remaining**.
+
+Batch 25: 4,372 tests completed in 209.654 seconds: 4,302 passed and 70 platform/hardware cases skipped, with all 919 source/configuration hashes unchanged. Seven independently reviewed groups bring the total to 837, with 163 remaining; all 830 preceding entries and concurrent batch24 implementation are preserved. Existing widget/worker/calibration, Stop, image-handoff and whole-click completions add zero IDs. The 5,000-cycle source gate, 1,284-file package hygiene and eight existing-raster geometry fixtures passed. Three rendering workloads have six balanced pairs and share 863 unchanged root Python hashes; unchanged/slower controls and added Fill allocation are disclosed without a general speedup claim. Fill diagnostics remain within the documented categorical model. The parent checkpoint passed all seven remote checks; new exact-commit Windows/package/native sampling results are recorded separately in PR46. Version 1.0.148 is not released.
+
+The seven groups cover timed Pixel paint order, categorical contour/seed Fill footprints, measured compute-route recommendations, an applicable RAM signature, real executor measurement, necessary OpenCL host preparation and bounded native screen sampling. [Final local evidence](v148-batch25-validation.json) binds the merged source; published-commit Windows/package/native results are recorded in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
+
+<details>
+<summary>Previous batch24 checkpoint</summary>
+
 Batch 24 implements **830 total distinct improvements, with 170 remaining**.
 
 Batch 24: 4,308 tests completed in 205.763 seconds: 4,242 passed and 66 platform/hardware cases skipped, with 900 source/configuration hashes unchanged. Two independently reviewed groups bring the total to 830, with 170 remaining. Manual palette analysis stays responsive and Pixel scheduling bounds active-list removal work. Prepared Paint workflow, Upscale keyboard, widget timers and retained image ownership complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical parity covers 54 palette-controller cases, 72 scheduler pairs and 24 complete public plans/independent rasters. Nine queue workloads have six balanced pairs and separate traced allocations, all bound to the same 850 root Python hashes. The preceding bb6dfa6 checkpoint passed all seven remote checks and Windows/package/native GUI gates; the new exact commit is verified separately in PR46. Version 1.0.148 is not released.
 
 [Final local evidence](v148-batch24-validation.json) binds all source and historical comparisons. [Palette analysis](v148-batch24-palette-scan.md) and [component scheduling](v148-batch24-component-queue.md) describe the two new groups. [UI workflow](v148-batch24-ui-workflow.md) and [widget lifetime](v148-batch24-widget-lifetime-completion.md) record existing-contract completions.
+
+</details>
 
 <details>
 <summary>Previous batch23 checkpoint</summary>

@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 830 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **170 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 837 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **163 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -95,8 +95,14 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 828 | P2301 | Batch 23 actual-size local JSON input allocation | 1 | [Evidence](v148-batch23-json-reader.md); independent source/actual-flow review. |
 | 829 | U2401 | Batch 24 responsive manual palette analysis | 1 | [Evidence](v148-batch24-palette-scan.md); independent source/actual-flow review. |
 | 830 | R2401 | Batch 24 bounded Pixel component candidate queue | 1 | [Evidence](v148-batch24-component-queue.md); independent source/actual-flow review. |
+| 831 | R2501 | Batch 25 timed Pixel paint order | 1 | [Evidence](v148-batch25-rendering.md); independent source and physical-brush review. |
+| 832 | R2502 | Batch 25 actual contour/seed Fill topology | 1 | [Evidence](v148-batch25-rendering.md); independent dense oracle and executor review. |
+| 833–836 | P2501–P2504 | Batch 25 usable measured resource policy and necessary host preparation | 4 | [Evidence](v148-batch25-platform.md); independent route, persistence, executor and ownership reviews. |
+| 837 | N2501 | Batch 25 bounded native screen sampling | 1 | [Evidence](v148-batch25-native-sampling.md); two independent native/ownership reviews. |
 
 ## Integration evidence
+
+- Batch 25: 4,372 tests completed in 209.654 seconds: 4,302 passed and 70 platform/hardware cases skipped, with all 919 source/configuration hashes unchanged. Seven independently reviewed groups bring the total to 837, with 163 remaining; all 830 preceding entries and concurrent batch24 implementation are preserved. Existing widget/worker/calibration, Stop, image-handoff and whole-click completions add zero IDs. The 5,000-cycle source gate, 1,284-file package hygiene and eight existing-raster geometry fixtures passed. Three rendering workloads have six balanced pairs and share 863 unchanged root Python hashes; unchanged/slower controls and added Fill allocation are disclosed without a general speedup claim. Fill diagnostics remain within the documented categorical model. The parent checkpoint passed all seven remote checks; new exact-commit Windows/package/native sampling results are recorded separately in PR46. Version 1.0.148 is not released. [Final local validation](v148-batch25-validation.json).
 
 - Batch 24: 4,308 tests completed in 205.763 seconds: 4,242 passed and 66 platform/hardware cases skipped, with 900 source/configuration hashes unchanged. Two independently reviewed groups bring the total to 830, with 170 remaining. Manual palette analysis stays responsive and Pixel scheduling bounds active-list removal work. Prepared Paint workflow, Upscale keyboard, widget timers and retained image ownership complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical parity covers 54 palette-controller cases, 72 scheduler pairs and 24 complete public plans/independent rasters. Nine queue workloads have six balanced pairs and separate traced allocations, all bound to the same 850 root Python hashes. The preceding bb6dfa6 checkpoint passed all seven remote checks and Windows/package/native GUI gates; the new exact commit is verified separately in PR46. Version 1.0.148 is not released. [Final local validation](v148-batch24-validation.json).
 

@@ -991,15 +991,9 @@ def diagnostic_previews(pixel_map:PixelMap,canvas:np.ndarray):
 def _native_rectangles(projection,sequence,fill_regions=(),*,default_brush=1,cancelled=lambda:False):
     """Ordered native footprints; the brush is never scaled with the image."""
     width,height=projection.canvas_size
-    for region in fill_regions or ():
-        _cancel(cancelled)
-        color=validate_color_index(region.get('color_index'))
-        for number,(y,x0,x1) in enumerate(region.get('row_spans') or ()):
-            if number%256==0:_cancel(cancelled)
-            x0,x1=sorted((int(x0),int(x1)))
-            bounds=projection.source_rectangle(x0,int(y),x1,int(y))
-            if bounds[0]<=bounds[2] and bounds[1]<=bounds[3]:yield color,bounds
     brush=max(1,int(default_brush))
+    from NativeFillSimulation import native_fill_rectangles
+    yield from native_fill_rectangles(projection,fill_regions,brush,_path_rectangles,cancelled=cancelled)
     for entry in sequence or ():
         _cancel(cancelled)
         path=entry.get('path') or ()
@@ -1027,15 +1021,26 @@ def _native_footprint_index(projection,sequence,fill_regions,*,default_brush,can
     # Check only bounded, ordinary planner containers. Consuming a one-shot
     # path/span iterator while preparing a cache could change its fallback.
     remaining=limit
+    def bounded_points(rows):
+        nonlocal remaining
+        if not isinstance(rows,(list,tuple)) or len(rows)>remaining:return False
+        remaining-=len(rows)
+        return all(isinstance(row,(list,tuple)) for row in rows)
     for values,is_fill in ((sequence,False),(fill_regions,True)):
         if not isinstance(values,(list,tuple)) or len(values)>limit:return None
         for serial,entry in enumerate(values):
             if serial%128==0:_cancel(cancelled)
             if not isinstance(entry,dict):return None
             rows=entry.get('row_spans' if is_fill else 'path') or ()
-            if not isinstance(rows,(list,tuple)) or len(rows)>remaining:return None
-            remaining-=len(rows)
-            if any(not isinstance(row,(list,tuple)) for row in rows):return None
+            if not bounded_points(rows):return None
+            if is_fill:
+                if not bounded_points(entry.get('contour') or ()):return None
+                seals=entry.get('fill_seal_paths') or ()
+                if not isinstance(seals,(list,tuple)) or len(seals)>remaining:return None
+                remaining-=len(seals)
+                for path in seals:
+                    _cancel(cancelled)
+                    if not bounded_points(path):return None
     try:
         storage=np.empty((limit,5),dtype=np.int64)
     except MemoryError:
@@ -1043,12 +1048,13 @@ def _native_footprint_index(projection,sequence,fill_regions,*,default_brush,can
         return None
     try:
         count=0
-        for color,bounds in _native_rectangles(projection,sequence,fill_regions,
-                default_brush=default_brush,cancelled=cancelled):
-            if count%128==0:_cancel(cancelled)
-            if count==limit:return None
-            storage[count]=(color,*bounds)
-            count+=1
+        with closing(_native_rectangles(projection,sequence,fill_regions,
+                default_brush=default_brush,cancelled=cancelled)) as rectangles:
+            for color,bounds in rectangles:
+                if count%128==0:_cancel(cancelled)
+                if count==limit:return None
+                storage[count]=(color,*bounds)
+                count+=1
         _cancel(cancelled)
         # This private array owns its storage and has never exposed a view.
         # Shrinking avoids retaining the capacity for a small successful plan.
@@ -1413,14 +1419,15 @@ def render_adaptive_preview(source_size,preview_size,sequence,palette_rgb,fill_r
             y_samples=np.floor(projection.offset[1]+(np.arange(ph)+.5)*projection.fitted[1]/ph).astype(np.int64)
             out=Image.new('RGB',(pw,ph),'white');draw=ImageDraw.Draw(out)
             try:
-                for color,bounds in _native_rectangles(projection,sequence,fill_regions,
-                        default_brush=(options or {}).get('brush_px',1),cancelled=cancelled):
-                    index=validate_color_index(color,palette_count=count)
-                    x0,y0,x1,y1=bounds
-                    left,right=np.searchsorted(x_samples,(x0,x1+1),side='left')
-                    top,bottom=np.searchsorted(y_samples,(y0,y1+1),side='left')
-                    if left<right and top<bottom:
-                        draw.rectangle((int(left),int(top),int(right-1),int(bottom-1)),fill=tuple(palette_rgb[index]))
+                with closing(_native_rectangles(projection,sequence,fill_regions,
+                        default_brush=(options or {}).get('brush_px',1),cancelled=cancelled)) as rectangles:
+                    for color,bounds in rectangles:
+                        index=validate_color_index(color,palette_count=count)
+                        x0,y0,x1,y1=bounds
+                        left,right=np.searchsorted(x_samples,(x0,x1+1),side='left')
+                        top,bottom=np.searchsorted(y_samples,(y0,y1+1),side='left')
+                        if left<right and top<bottom:
+                            draw.rectangle((int(left),int(top),int(right-1),int(bottom-1)),fill=tuple(palette_rgb[index]))
                 _cancel(cancelled)
                 return out
             except BaseException:

@@ -52,7 +52,9 @@ class ResourceSafetyTests(unittest.TestCase):
                     allocation.resolve_ram_budget_mb('Auto')
             with self.assertRaises(ValueError):
                 performance._ram_recommendation(free)
-        self.assertEqual(performance._ram_recommendation(256), ('Custom', '256', 256))
+        # The tuner must describe the allocator's actual headroom-limited
+        # budget, rather than proposing all currently available memory.
+        self.assertEqual(performance._ram_recommendation(256), ('Custom', '128', 128))
         self.assertEqual(allocation.resolve_ram_budget_mb('Auto', available_mb=None), 2048)
 
     def test_wide_image_chunks_obey_ram_budget_even_below_eight_rows(self):

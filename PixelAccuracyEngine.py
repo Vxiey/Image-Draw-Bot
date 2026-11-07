@@ -344,9 +344,9 @@ def progressive_time_budget(execution_sequence: Sequence[dict], *, active: bool,
     else:
         phases={p:[] for p in ('fill','mid_detail','cleanup','fine_detail')}
         other=[]
-        for e in sequence:
+        for position,e in enumerate(sequence):
             phase=str(e.get('phase') or '')
-            (phases[phase] if phase in phases else other).append(e)
+            (phases[phase] if phase in phases else other).append(position)
         # Coverage/form first, guaranteed protected cleanup next, then remaining fine detail.
         fractions={'fill':.38,'mid_detail':.34,'cleanup':.16,'fine_detail':.12}
         caps={p:min(len(v),max(0,int(round(base_budget*fractions[p])))) for p,v in phases.items()}
@@ -356,16 +356,21 @@ def progressive_time_budget(execution_sequence: Sequence[dict], *, active: bool,
             if used>=base_budget:break
             extra=min(len(phases[p])-caps[p],base_budget-used)
             caps[p]+=max(0,extra);used+=max(0,extra)
-        selected=[]
+        selected_positions=[]
         for p in ('fill','mid_detail','cleanup','fine_detail'):
-            selected.extend(phases[p][:caps[p]])
-        if len(selected)<base_budget:selected.extend(other[:base_budget-len(selected)])
-        selected=selected[:base_budget]
+            selected_positions.extend(phases[p][:caps[p]])
+        if len(selected_positions)<base_budget:
+            selected_positions.extend(other[:base_budget-len(selected_positions)])
+        # Phase quotas choose which work survives, not a new paint order.
+        # Protected cleanup must retain its original place above overlapping
+        # fine strokes; sorting occurrence positions also preserves duplicates.
+        selected=[sequence[position] for position in sorted(selected_positions[:base_budget])]
     return {
         'execution_sequence':selected,'active':True,'path_budget':path_budget,'base_path_budget':len(selected),
         'correction_reserve':max(0,path_budget-len(selected)),'paths_omitted':max(0,total-len(selected)),
         'paths_per_second':round(pps,4),'learned_speed':learned,'seconds':sec,'reserve_seconds':reserve_seconds,
-        'source':'progressive-accuracy-time-budget','phase_order':'fill -> mid detail -> protected cleanup -> fine detail',
+        'source':'progressive-accuracy-time-budget','phase_order':'original execution order',
+        'admission_priority':'fill -> mid detail -> protected cleanup -> fine detail',
     }
 
 

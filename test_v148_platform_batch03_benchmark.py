@@ -206,7 +206,7 @@ class TunerCancellationPublicationTests(unittest.TestCase):
         hardware.assert_not_called();publish.assert_not_called()
 
     def test_completed_profiles_publish_as_one_rollback_capable_file_set(self):
-        cpu=dict(version=2,logical_cpus=4,recommended_workers=2,best_score=1,scores=[],
+        cpu=dict(version=scheduler.SCHEDULER_VERSION,logical_cpus=4,recommended_workers=2,best_score=1,scores=[],
                  recommended_engine="Threads",ram_budget_mb=1024,machine_signature="synthetic")
         hardware=dict(version=bench.PROFILE_VERSION,hardware_signature="synthetic",primary_backend={},workload_preferences={})
         with tempfile.TemporaryDirectory() as tmp:

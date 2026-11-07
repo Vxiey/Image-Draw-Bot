@@ -146,11 +146,25 @@ class PaintToolCalibrationApp:
         except (OSError,ValueError) as error:self.status.set(f'Could not save: {error}')
 
     def close(self):
-        if getattr(self,'closed',False):return
-        self.closed=True
-        if self.job is not None:
-            try:self.root.after_cancel(self.job)
-            except tk.TclError:pass
-            self.job=None
-        self.root.destroy()
-        if self.on_close:self.on_close()
+        if getattr(self,'closed',False) or getattr(self,'_closing',False):return
+        self._closing=True
+        try:
+            if self.job is not None:
+                try:self.root.after_cancel(self.job)
+                except tk.TclError:pass
+                self.job=None
+            # Native teardown can fail or reenter Close. Keep retry available
+            # until the window is gone, and deliver completion only once.
+            self.closed=True
+            try:self.root.destroy()
+            except BaseException:
+                self.closed=False
+                raise
+            finally:
+                # The cancelled countdown no longer owns restoring this window.
+                # A failed destroy must leave its Close action visible for retry.
+                visibility=getattr(self,'capture_visibility',None)
+                self.capture_visibility=None
+                if visibility is not None:visibility.restore()
+            if self.on_close:self.on_close()
+        finally:self._closing=False

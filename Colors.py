@@ -171,28 +171,9 @@ PALETTE_FILE = POSITIONS_FILE.with_name("palette.json")
 
 
 def sample_screen_colors(points):
-    """Read one or more physical screen pixels using a single desktop DC."""
-    import ctypes
-    from ctypes import wintypes
-    user32, gdi32 = ctypes.windll.user32, ctypes.windll.gdi32
-    user32.GetDC.argtypes = [wintypes.HWND]
-    user32.GetDC.restype = wintypes.HDC
-    user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
-    gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
-    gdi32.GetPixel.restype = wintypes.DWORD
-    dc = user32.GetDC(None)
-    if not dc:
-        raise OSError("Cannot read screen colors.")
-    values=[]
-    try:
-        for x,y in points:
-            value = gdi32.GetPixel(dc, int(x), int(y))
-            if value == 0xFFFFFFFF:
-                raise OSError("Cannot read this screen position.")
-            values.append((value & 255, (value >> 8) & 255, (value >> 16) & 255))
-        return values
-    finally:
-        user32.ReleaseDC(None, dc)
+    """Read physical screen pixels through the bounded native sampling path."""
+    from ScreenPixelSampling import sample_screen_colors as sample
+    return sample(points)
 
 
 def sample_screen_color(x, y):

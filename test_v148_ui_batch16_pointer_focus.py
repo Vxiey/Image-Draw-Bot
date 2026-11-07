@@ -346,14 +346,14 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
         self.assertIsNotNone(widget._keyboard_job)
         commands = self.owned_commands(widget)
         owned_jobs = set()
-        for job in self.root.tk.call('after', 'info'):
-            script = self.root.tk.call('after', 'info', job)[0]
+        for token in self.root.tk.splitlist(self.root.tk.call('after', 'info')):
+            script, _kind = self.root.tk.call('after', 'info', token)
             words = self.root.tk.splitlist(script)
             if len(words) == 1 and words[0] in commands:
-                owned_jobs.add(job)
+                owned_jobs.add(token)
         widget.destroy()
-        remaining = set(self.root.tk.call('after', 'info'))
-        self.assertFalse(owned_jobs & remaining, 'Destroyed button left native timers')
+        self.assertFalse(owned_jobs & set(self.root.tk.splitlist(self.root.tk.call('after', 'info'))),
+                         'Deleting a button command must also retire its delayed animation script')
         self.root.update()
         self.assertIsNone(widget._keyboard_job)
         self.assertEqual(command.call_count, count)

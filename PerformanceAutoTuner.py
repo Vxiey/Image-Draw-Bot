@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from RuntimePaths import atomic_write_text, data_dir, is_finite_number, read_json, replace_text_files
-from ResourceAllocation import available_ram_mb, logical_cpu_count, resolve_allocation
+from ResourceAllocation import available_ram_mb, logical_cpu_count, resolve_allocation, resolve_ram_budget_mb
 from ResourceScheduler import benchmark_scheduler
 from UniversalHardwareBenchmark import (run_universal_hardware_benchmark, load_hardware_profile,
                                         format_hardware_summary as format_universal_hardware_summary)
@@ -87,21 +87,56 @@ def _ram_recommendation(available_mb: int | None) -> tuple[str, str, int]:
         return "2 GB", "2048", 2048
     if available_mb < 128:
         raise ValueError('Less than 128 MB of RAM is available for planning.')
+    setting = 'Custom'
     if available_mb < 512:
-        return 'Custom', str(int(available_mb)), int(available_mb)
-    avail = max(512, int(available_mb))
-    target = max(512, min(12288, int(avail * 0.35)))
-    # Keep at least 2 GiB of currently available memory unreserved when possible.
-    target = min(target, max(512, avail - 2048))
-    fixed = (
-        (512, "512 MB"), (1024, "1 GB"), (2048, "2 GB"), (4096, "4 GB"),
-        (8192, "8 GB"), (12288, "12 GB"), (16384, "16 GB"),
-    )
-    # Prefer a fixed UI value when it is within 12.5% of the target.
-    nearest_mb, nearest_label = min(fixed, key=lambda item: abs(item[0] - target))
-    if abs(nearest_mb - target) <= max(256, int(target * 0.125)) and nearest_mb <= max(512, avail - 1024):
-        return nearest_label, str(nearest_mb), nearest_mb
-    return "Custom", str(target), target
+        target = int(available_mb)
+    else:
+        avail = int(available_mb)
+        target = max(512, min(12288, int(avail * 0.35)))
+        # Keep at least 2 GiB of currently available memory unreserved when possible.
+        target = min(target, max(512, avail - 2048))
+        fixed = (
+            (512, "512 MB"), (1024, "1 GB"), (2048, "2 GB"), (4096, "4 GB"),
+            (8192, "8 GB"), (12288, "12 GB"), (16384, "16 GB"),
+        )
+        # Prefer a fixed UI value when it is within 12.5% of the target.
+        nearest_mb, nearest_label = min(fixed, key=lambda item: abs(item[0] - target))
+        if abs(nearest_mb - target) <= max(256, int(target * 0.125)) and nearest_mb <= max(512, avail - 1024):
+            setting, target = nearest_label, nearest_mb
+    resolved = resolve_ram_budget_mb(setting, target, available_mb=available_mb)
+    if resolved != target:
+        setting = 'Custom'
+    return setting, str(resolved), resolved
+
+
+def _recommended_compute_mode(hardware: dict[str, Any], cuda_available: bool) -> str:
+    """Keep verified per-workload choices instead of forcing one GPU family."""
+    from UniversalHardwareBenchmark import PROFILE_VERSION, WORKLOADS
+    from UniversalGpuAcceleration import _cuda_device_id, _opencl_device_ids
+    preferences = hardware.get('workload_preferences')
+    measured = []
+    if type(hardware.get('version')) is int and hardware['version'] == PROFILE_VERSION and isinstance(preferences, dict):
+        for workload in WORKLOADS:
+            item = preferences.get(workload)
+            if not isinstance(item, dict) or _nonnegative_number(item.get('large_throughput_mp_s')) <= 0:
+                continue
+            minimum = item.get('min_pixels')
+            if type(minimum) is not int or minimum < 0:
+                continue
+            backend = item.get('backend_id')
+            try:
+                if isinstance(backend, str) and backend.startswith('cuda:'):
+                    _cuda_device_id(backend)
+                elif isinstance(backend, str) and backend.startswith('opencl:'):
+                    _opencl_device_ids(backend)
+                elif backend != 'cpu:numpy':
+                    continue
+            except ValueError:
+                continue
+            measured.append(backend)
+    if measured and (cuda_available or any(backend != 'cpu:numpy' for backend in measured)):
+        return 'Auto'
+    return 'NVIDIA CUDA' if cuda_available else 'CPU'
 
 
 def _vram_recommendation(total_mb: int | None, free_mb: int | None) -> str:
@@ -157,7 +192,7 @@ def build_recommendation(*, scheduler_result: dict[str, Any], available_mb: int 
     primary_device = str(primary.get("device") or "CPU")
     safe_gpu_memory = primary.get("safe_memory_budget_mb")
     hardware_tile = primary.get("tile_size")
-    gpu_mode = "NVIDIA CUDA" if gpu_ok else "CPU"
+    gpu_mode = _recommended_compute_mode(hardware, gpu_ok)
     gpu_vram = _vram_recommendation(gpu.get("total_vram_mb"), gpu.get("free_vram_mb")) if gpu_ok else "Auto"
     gpu_perf = "High throughput" if gpu_ok else "Balanced"
     planning = _planning_resolution(workers, ram_mb, gpu_ok, gpu_mp_s)
@@ -218,9 +253,13 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
         return value
     check_cancelled()
     started = time.perf_counter()
-    logical = logical_cpu_count()
-    available = available_ram_mb()
     allocation = resolve_allocation("Auto", "Threads", "Auto", "4096")
+    # Benchmark the same resolved RAM policy the recommendation will apply.
+    # Reuse allocation's one live observation; a second probe could describe a
+    # different budget and invalidate the just-saved scheduler signature.
+    available = allocation.get('available_ram_mb')
+    ram_setting, _ram_custom, ram_mb = _ram_recommendation(available)
+    allocation = dict(allocation, ram_budget=ram_setting, ram_budget_mb=ram_mb)
     scheduler = benchmark(benchmark_scheduler,allocation,loops_per_worker=max(8_000,int(scheduler_loops)),save=False)
 
     gpu_result: dict[str, Any] = {}

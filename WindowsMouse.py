@@ -53,11 +53,7 @@ def _serialized_input(method):
     def call(self, *args, **kwargs):
         # Keep disarm a barrier: an already authorized command must finish
         # before disarm returns, and a later command must see the revoked arm.
-        # Lazy creation also supports lightweight injected native test backends.
-        lock = getattr(self, '_native_input_lock', None)
-        if lock is None:
-            lock = self.__dict__.setdefault('_native_input_lock', threading.RLock())
-        with lock:
+        with self.input_transaction():
             return method(self, *args, **kwargs)
     return call
 
@@ -87,6 +83,14 @@ class WindowsMouse:
         self.api.GetSystemMetrics.restype = ctypes.c_int
         self.api.GetAsyncKeyState.argtypes = [ctypes.c_int]
         self.api.GetAsyncKeyState.restype = ctypes.c_short
+
+    def input_transaction(self):
+        """Keep one compound native gesture inside the disarm barrier."""
+        # Lazy creation also supports lightweight injected native test backends.
+        lock = getattr(self, '_native_input_lock', None)
+        if lock is None:
+            lock = self.__dict__.setdefault('_native_input_lock', threading.RLock())
+        return lock
 
     def configure_precision(self, level='High'):
         from Precision import profile
@@ -236,7 +240,10 @@ class WindowsMouse:
             # until an accepted LEFTUP so the next cleanup step can retry it.
             self.held = False
 
+    @_serialized_input
     def click(self):
+        # Keep cleanup attached to this press. Otherwise disarm/rearm could
+        # start another drag during the pause and this LEFTUP would release it.
         try:
             self.press()
             time.sleep(.02)

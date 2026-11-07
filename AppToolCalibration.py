@@ -122,11 +122,24 @@ class AppToolCalibrationApp:
             self.status.set(f"Could not save: {error}")
 
     def close(self):
-        if getattr(self,'closed',False):return
-        self.closed=True
-        if self.job is not None:
-            try: self.root.after_cancel(self.job)
-            except tk.TclError: pass
-            self.job = None
-        self.root.destroy()
-        if self.on_close: self.on_close()
+        if getattr(self,'closed',False) or getattr(self,'_closing',False):return
+        self._closing=True
+        try:
+            if self.job is not None:
+                try:self.root.after_cancel(self.job)
+                except tk.TclError:pass
+                self.job=None
+            # A failed native destroy must retain this Close action for retry.
+            self.closed=True
+            try:self.root.destroy()
+            except BaseException:
+                self.closed=False
+                raise
+            finally:
+                # Teardown owns the cancelled countdown's window restoration,
+                # including a failed destroy that must remain visibly retryable.
+                visibility=getattr(self,'capture_visibility',None)
+                self.capture_visibility=None
+                if visibility is not None:visibility.restore()
+            if self.on_close:self.on_close()
+        finally:self._closing=False

@@ -280,6 +280,9 @@ class KeyboardButton(_KeyboardReleaseSupport, ctk.CTkButton):
     def destroy(self):
         self._keyboard_closed = True
         self._keyboard_cancel()
+        # CTk pointer release owns an animation on this button, independently
+        # of our keyboard-idle job. Retire exact subtree timers before Tk
+        # deletes their commands; a later root destroy cannot find this child.
         from UiWindowLifetime import cancel_widget_after_jobs
         cancel_widget_after_jobs(self)
         super().destroy()
