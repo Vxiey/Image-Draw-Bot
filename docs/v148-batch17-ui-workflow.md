@@ -108,3 +108,33 @@ Separate real-popup probes proved callback failure propagates out of a modal
 wait and closes the menu, and a never-posted menu fails after three seconds.
 These are local X11 and portable results; the native Windows branch still needs
 the next Windows CI run. This completion adds **zero improvement groups**.
+
+### Exact Windows follow-up and observed native selection
+
+The [Windows job for `d7721a36975a36137b583beda9ff3c47c05208fd`](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42382098235/job/128431685230)
+completed 3,985 test cases in 188.397 seconds, with three skips and one failure.
+The selector's isolated child returned in 0.848 seconds, so the previous modal
+hang was resolved. Its sole failure was substantive: the assumed
+Home/Down/Return sequence selected Safe instead of the asserted Balanced.
+The native owner and earlier pointer/focus assertions had passed; this was not
+a successful Windows gate.
+
+The follow-up changes only the test harness. It navigates with real Down
+messages and waits for the read-only active menu index before progressing from
+Safe to Balanced, then sends real Return. The selected variable must still be
+Safe and its callback count unchanged before Return; afterward Balanced and
+exactly one callback remain mandatory. No `menu.activate`, `menu.invoke`,
+mocked popup or weakened result assertion is used.
+
+This observation is supported by the [Tk menu command contract](https://www.tcl-lang.org/man/tcl8.6/TkCmd/menu.htm)
+and the Windows source linked above: `WM_INITMENU` clears the old active index,
+while `WM_MENUSELECT` records the native selection before servicing Tcl events.
+Thus the driver does not infer a highlighted item from keyboard focus or the
+entry argument passed to `tk_popup`. Per-entry navigation bounds and the
+three-second/20-second timeouts remain in place.
+
+The three real Xorg/Tk cases passed after this follow-up (0.146, 0.154 and
+1.098 seconds). Independent harness review and the root's initialization-order
+review closed without blockers. A subsequent native Windows run remains the
+required platform proof. No product code or improvement count changes in this
+follow-up.

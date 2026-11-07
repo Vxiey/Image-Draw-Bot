@@ -89,9 +89,9 @@ class NativePopupDriver:
     def key(self, symbol):
         if self.windows:
             owner = self.assert_open()
-            code = {'Escape': 0x1B, 'Home': 0x24, 'Down': 0x28, 'Return': 0x0D}[symbol]
+            code = {'Escape': 0x1B, 'Down': 0x28, 'Return': 0x0D}[symbol]
             scan = self.api.MapVirtualKeyW(code, 0)
-            flags = 1 | (scan << 16) | (0x01000000 if symbol in ('Home', 'Down') else 0)
+            flags = 1 | (scan << 16) | (0x01000000 if symbol == 'Down' else 0)
             # Address only this test's verified native menu owner. The Windows
             # modal loop consumes real queued key messages, not menu.invoke().
             for message, value in ((0x0100, flags), (0x0101, flags | 0xC0000000)):
@@ -102,6 +102,31 @@ class NativePopupDriver:
             self.case.assertIsNotNone(focused)
             focused.event_generate('<KeyPress-' + symbol + '>', when='tail')
             focused.event_generate('<KeyRelease-' + symbol + '>', when='tail')
+
+    def highlight(self, index):
+        """Return an action that navigates with Down and observes native state.
+
+        Tk/Windows mirrors WM_MENUSELECT into the read-only active index. Home
+        does not establish the assumed first-item baseline on every Windows
+        menu. Wait for each real navigation event before sending another key.
+        """
+        waiting, sent = object(), 0
+        limit = int(self.menu.index('end')) + 2
+
+        def advance():
+            nonlocal waiting, sent
+            current = self.menu.index('active')
+            if current == index:
+                return True
+            if current != waiting:
+                self.case.assertLess(sent, limit,
+                    f'Native menu did not reach index {index}; active={current}, Down events={sent}')
+                self.key('Down')
+                waiting = current
+                sent += 1
+            return False
+
+        return advance
 
     def abort(self):
         # This is failure cleanup only; successful Escape/Return must dismiss
@@ -149,8 +174,9 @@ class NativePopupDriver:
 
         def step(index=0):
             self.assert_open()
-            actions[index]()
-            later((lambda: step(index + 1)) if index + 1 < len(actions) else closed)
+            complete = actions[index]() is not False
+            following = index + 1 if complete else index
+            later((lambda: step(following)) if following < len(actions) else closed)
 
         def opened():
             if self.visible():
@@ -425,11 +451,16 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
                 actions.append(lambda child=child, method=method: getattr(child, method)())
                 actions.append(lambda: driver.assert_owner(owner[0]))
         before = app.options_changed.call_count
-        # Native Windows starts with no highlighted entry; Home establishes the
-        # same Safe baseline that tk_popup's entry argument selects on X11.
-        if driver.windows:
-            actions.append(lambda: driver.key('Home'))
-        actions.extend((lambda: driver.key('Down'), lambda: driver.key('Return')))
+        # Observe actual highlight on both platforms; do not infer it from
+        # focus or the entry argument passed to tk_popup. Only native Down
+        # events select the highlighted entries, and Return invokes the item.
+        actions.extend((driver.highlight(0),
+            lambda: self.assertEqual(menu.entrycget(menu.index('active'), 'label').strip(), 'Safe'),
+            driver.highlight(1),
+            lambda: self.assertEqual(menu.entrycget(menu.index('active'), 'label').strip(), 'Balanced'),
+            lambda: self.assertEqual(variable.get(), 'Safe'),
+            lambda: self.assertEqual(app.options_changed.call_count, before),
+            lambda: driver.key('Return')))
         driver.run(lambda: self.press_focused('F4'), actions)
         self.assertEqual(variable.get(), 'Balanced')
         self.assertEqual(app.options_changed.call_count, before + 1)
