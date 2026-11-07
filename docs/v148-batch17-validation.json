@@ -1,0 +1,100 @@
+{
+  "baseline_commit": "e87bcf1b783b33ff866c2188e10c8b5d22a22707",
+  "implemented": 810,
+  "target": 1000,
+  "remaining": 190,
+  "added_behavior_groups": [
+    "A1701",
+    "R1701",
+    "P1701"
+  ],
+  "release_published": false,
+  "uncounted_completions": [
+    "A1501: preserve Stop through accepted correction-only retry preflight and handoff; defer while profile/clear is pending",
+    "U1601: retire completed source-image timer labels only after actual replacement/removal, preserving live and unchanged-source timing",
+    "UK01/U1201/UW806: clear stale pointer/keyboard popup state after a real Windows modal return; the native regression driver respects HMENU semantics and has bounded callback/process failure cleanup",
+    "Dependency floors, 17 previously undiscovered legacy/property tests, superseded test expectations and import cleanup are maintenance, not new product IDs",
+    "Existing source-archive privacy/cache contract: prune generated Hypothesis caches while keeping actual committed fixtures; no additional improvement ID"
+  ],
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 3985,
+    "runner_seconds": 111.165,
+    "wall_seconds": 112.161,
+    "status": "OK (skipped=51)",
+    "skipped": 51,
+    "source_files": 837,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "46ac70f04b8f509d356b106bbabbc34395387a34ef42ffe929bb421eb7d618d9"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1143,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch17-engine-benchmarks.json",
+    "fixtures": 8,
+    "mismatched_plan_pixels": {
+      "icon": 0,
+      "line-art": 0,
+      "text-small-detail": 0,
+      "cartoon-large-colour": 0,
+      "photo-gradient": 0,
+      "fill-risk": 0,
+      "thin-diagonals": 0,
+      "many-islands": 0
+    },
+    "all_exact_palette_geometry": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "historical_layered_parity": {
+    "artifact": "v148-batch17-layered-diagnostics-evidence.json",
+    "sha256": "6366f95431eb63e5a0dabed97ed90690b128b3086b25253de19b2e72a2a12c4a",
+    "helper_pairs": 160,
+    "serial_thread_pairs": 2,
+    "public_plan_pairs": 4,
+    "scope": "Only intended sampled diagnostics and elapsed profiler fields differ. Complete groups, selectors, paths, images and estimated delivery time remain identical."
+  },
+  "independent_source_reviews": "All three new groups and current-contract completions have closed independent reviews. Root independently ran all 43 new cross-area methods with no skips in 2.741 s; application review separately ran all 18 current-report/retry methods.",
+  "prior_checkpoint_validation": {
+    "commit": "e87bcf1b783b33ff866c2188e10c8b5d22a22707",
+    "other_six_checks_passed": true,
+    "windows_status": "The Windows full suite was cancelled after its 30-minute job limit while blocked in the native selector popup case. The other six checks passed. This checkpoint corrects the modal driver and requires a new exact-commit Windows run.",
+    "windows_job_id": 128422921623,
+    "blocked_test": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_selector_decorations_keep_logical_focus_without_stealing_native_popup_or_entry",
+    "run_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42379163268"
+  },
+  "remote_validation": "Exact published-commit Windows/Linux, dependency and CodeQL results are recorded in PR46. Native popup corrections are not declared Windows-verified before that run passes.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46",
+  "native_linux_focus": {
+    "real_cases": 3,
+    "passed": 3,
+    "scope": "Actual CTk/Tk under Xorg, including real popup, callback-error cleanup and bounded absent-popup failure. Windows native menu verification remains a separate exact-commit CI gate."
+  }
+}

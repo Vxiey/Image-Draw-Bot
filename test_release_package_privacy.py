@@ -32,11 +32,15 @@ class SourceArchivePrivacyTests(unittest.TestCase):
                 "profiles.json",
                 "release-state.json",
                 "session-recovery.png",
+                ".hypothesis/examples/generated-case",
+                ".HYPOTHESIS/constants/generated-constant",
+                "tools/.hypothesis/examples/nested-generated-case",
             )
             public_files = (
                 "palette-index-maps.json", "verified-colors-microsoft-paint.json",
                 "resource-scheduler-v2.json", "golden-regression/manifest.json",
                 "docs/settings-example.json",
+                "tests/fixtures/hypothesis/example.json",
             )
             for relative in (*private_files, *public_files):
                 path = root / relative

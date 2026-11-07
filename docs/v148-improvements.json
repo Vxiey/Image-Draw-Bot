@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 807,
+  "implemented": 810,
   "release_published": false,
-  "validation": "Batch 16: 3,923 test cases completed in 102.640 seconds: 3,872 passed and 51 platform/hardware cases skipped, with all 830 source/configuration hashes unchanged. Four new behavior groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, source-package hygiene, eight exact-raster fixtures and eight frozen-source paired preview workloads passed. Exact evidence is in v148-batch16-validation.json; published-commit platform checks are recorded in PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 17: 3,985 test cases completed in 111.165 seconds: 3,934 passed and 51 platform/hardware cases skipped, with all 837 source/configuration hashes unchanged. Three new behavior groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Layered diagnostics have 166 historical implementation/public-plan comparisons; all geometry and preview pixels remain exact. Evidence is in v148-batch17-validation.json; published-commit Windows/CI results are recorded separately in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6275,6 +6275,30 @@
       "description": "Clear stale plan estimates and preview diagnostics whenever the actual controller invalidates or clears its plan. Real setting, source, profile and drawing-area transitions cannot leave labels describing the discarded plan. Preserve live and completed execution timer policy and unchanged-edit behavior.",
       "batch": 16,
       "id": 807
+    },
+    {
+      "local_id": "A1701",
+      "area": "batch17-application",
+      "ledger": "v148-batch17-runtime-report.md",
+      "description": "Present the current execution's detached runtime safety evidence in the actual safety card and Open action. A stopped run or failed report save cannot silently fall back to an older passing report; new-run identity, clear, shutdown, early failure, correction retry and worker handoff preserve current ownership without retaining mutable plans or images.",
+      "batch": 17,
+      "id": 808
+    },
+    {
+      "local_id": "R1701",
+      "area": "batch17-rendering",
+      "ledger": "v148-batch17-rendering-layered-diagnostics.md",
+      "description": "Measure layered-color diagnostics from the primary/secondary palette pixels selected at their actual ordered Bayer positions. Bound sampling to complete spatial cells so a regular stride cannot alias a single layer phase. Preserve nonlayered evidence, transparent/white skips, every stroke, native selector and preview pixel; final/full-preview workspace summaries now describe the emitted colors.",
+      "batch": 17,
+      "id": 809
+    },
+    {
+      "local_id": "P1701",
+      "area": "batch17-platform",
+      "ledger": "v148-batch17-report-paths.md",
+      "description": "Derive historical safety-report opening destinations only from the selected local JSON and its actual adjacent text file. Discard embedded text destinations, including invalid types or unrelated existing files, and fall back to the verified JSON when its text sibling is missing or is a directory. Preserve ordinary saved report pairs, evidence and file contents.",
+      "batch": 17,
+      "id": 810
     }
   ]
 }

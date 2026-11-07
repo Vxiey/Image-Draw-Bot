@@ -1,6 +1,15 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 807 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15 and four in batch 16. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 810 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16 and three in batch 17. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 17: current runtime evidence and dependable verification
+
+- Keep the safety card and Open action on the current run, including Stop, early failure and a report that could not be saved.
+- Measure layered-color diagnostics from the actual spatial palette pixels emitted by the planner.
+- Derive stored-report destinations from the selected local report pair, discarding embedded alternative paths.
+- Complete correction-retry Stop ownership and source-image timer feedback, repair native Windows popup test driving, update compatible dependency floors and restore 17 existing tests to the ordinary gate. These completions and maintenance add no IDs.
+
+Three new groups bring the registry to **810**, leaving **190** before the requested release. Frozen-source discovery completed **3,985 tests: 3,934 passed and 51 skipped**. The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures and historical layered-plan parity passed. See [final local validation](docs/v148-batch17-validation.json). Exact-commit Windows/CI results remain a separate gate recorded in PR46.
 
 ## Batch 16: coherent update, preview and background-work lifecycles
 

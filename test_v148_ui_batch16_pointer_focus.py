@@ -1,6 +1,9 @@
 """Real CTk global click delivery keeps composite controls' logical focus."""
 import os
+from pathlib import Path
+import subprocess
 import sys
+import threading
 from types import SimpleNamespace
 import tkinter as tk
 import unittest
@@ -14,10 +17,178 @@ from test_v148_ui_batch08_keyboard import actual_menu_factory
 from test_v148_ui_batch12_switches import actual_switch_rows, switch_app
 
 
+_SELECTOR_CASE = 'test_selector_decorations_keep_logical_focus_without_stealing_native_popup_or_entry'
+_MENU_CHILD = 'IMAGEDRAWBOT_NATIVE_MENU_TEST_CHILD'
+
+
+class NativePopupDriver:
+    """Drive a real menu from callbacks scheduled before its modal entry."""
+    def __init__(self, case, widget):
+        self.case, self.root, self.widget = case, case.root, widget
+        self.menu = widget._dropdown_menu
+        self.windows = sys.platform == 'win32'
+        if self.windows:
+            import ctypes
+            from WindowsSystem import load_system_library
+            self.ctypes = ctypes
+
+            class Rect(ctypes.Structure):
+                _fields_ = [(name, ctypes.c_int32) for name in ('left', 'top', 'right', 'bottom')]
+
+            class GuiThreadInfo(ctypes.Structure):
+                _fields_ = [('cbSize', ctypes.c_uint32), ('flags', ctypes.c_uint32)] + [
+                    (name, ctypes.c_void_p) for name in ('hwndActive', 'hwndFocus', 'hwndCapture',
+                        'hwndMenuOwner', 'hwndMoveSize', 'hwndCaret')] + [('rcCaret', Rect)]
+
+            self.info_type = GuiThreadInfo
+            self.thread_id = threading.get_native_id()
+            self.api = load_system_library('user32', use_last_error=True)
+            self.api.GetGUIThreadInfo.argtypes = [ctypes.c_uint32, ctypes.POINTER(GuiThreadInfo)]
+            self.api.GetGUIThreadInfo.restype = ctypes.c_int32
+            self.api.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+            self.api.GetWindowThreadProcessId.restype = ctypes.c_uint32
+            self.api.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_size_t, ctypes.c_ssize_t]
+            self.api.PostMessageW.restype = ctypes.c_int32
+            self.api.MapVirtualKeyW.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+            self.api.MapVirtualKeyW.restype = ctypes.c_uint32
+            self.api.EndMenu.argtypes = []
+            self.api.EndMenu.restype = ctypes.c_int32
+
+    def native_state(self):
+        info = self.info_type()
+        info.cbSize = self.ctypes.sizeof(info)
+        self.case.assertTrue(self.api.GetGUIThreadInfo(self.thread_id, self.ctypes.byref(info)),
+                             f'GetGUIThreadInfo failed: {self.ctypes.get_last_error()}')
+        return info
+
+    def visible(self):
+        # Windows TrackPopupMenu owns an HMENU, not a mapped Tk menu window.
+        return bool(self.native_state().flags & 0x10) if self.windows else bool(self.menu.winfo_viewable())
+
+    def assert_open(self):
+        self.case.assertTrue(self.visible(), 'The real popup is not active')
+        if self.windows:
+            info = self.native_state()
+            self.case.assertTrue(info.flags & 0x04, 'GUI_INMENUMODE must accompany the popup')
+            self.case.assertTrue(info.hwndMenuOwner)
+            pid = self.ctypes.c_uint32()
+            thread = self.api.GetWindowThreadProcessId(info.hwndMenuOwner, self.ctypes.byref(pid))
+            self.case.assertEqual(thread, self.thread_id)
+            self.case.assertEqual(pid.value, os.getpid())
+            return info.hwndMenuOwner
+        return self.menu
+
+    def assert_closed(self):
+        self.case.assertFalse(self.visible(), 'The real popup did not close')
+
+    def assert_owner(self, owner):
+        self.case.assertEqual(self.assert_open(), owner)
+        if not self.windows:
+            self.case.assertIs(self.root.focus_get(), self.menu)
+
+    def key(self, symbol):
+        if self.windows:
+            owner = self.assert_open()
+            code = {'Escape': 0x1B, 'Home': 0x24, 'Down': 0x28, 'Return': 0x0D}[symbol]
+            scan = self.api.MapVirtualKeyW(code, 0)
+            flags = 1 | (scan << 16) | (0x01000000 if symbol in ('Home', 'Down') else 0)
+            # Address only this test's verified native menu owner. The Windows
+            # modal loop consumes real queued key messages, not menu.invoke().
+            for message, value in ((0x0100, flags), (0x0101, flags | 0xC0000000)):
+                self.case.assertTrue(self.api.PostMessageW(owner, message, code, value),
+                    f'Native {symbol} delivery failed: {self.ctypes.get_last_error()}')
+        else:
+            focused = self.root.focus_get()
+            self.case.assertIsNotNone(focused)
+            focused.event_generate('<KeyPress-' + symbol + '>', when='tail')
+            focused.event_generate('<KeyRelease-' + symbol + '>', when='tail')
+
+    def abort(self):
+        # This is failure cleanup only; successful Escape/Return must dismiss
+        # the actual menu themselves before the driver accepts the result.
+        if self.windows:
+            if self.visible():
+                self.assert_open()
+                self.api.EndMenu()
+        else:
+            self.menu.unpost()
+            if self.menu.grab_current() is self.menu:
+                self.menu.grab_release()
+
+    def run(self, open_popup, actions):
+        finished = tk.BooleanVar(self.root, value=False)
+        failures, timers = [], set()
+
+        def fail(error):
+            failures.append(error)
+            try:
+                self.abort()
+            finally:
+                finished.set(True)
+
+        def later(callback, delay=20):
+            token = None
+
+            def invoke():
+                timers.discard(token)
+                if finished.get():
+                    return
+                try:
+                    callback()
+                except BaseException as error:
+                    fail(error)
+
+            token = self.root.after(delay, invoke)
+            timers.add(token)
+
+        def closed():
+            if self.visible():
+                later(closed)
+            else:
+                finished.set(True)
+
+        def step(index=0):
+            self.assert_open()
+            actions[index]()
+            later((lambda: step(index + 1)) if index + 1 < len(actions) else closed)
+
+        def opened():
+            if self.visible():
+                step()
+            else:
+                later(opened)
+
+        def timeout():
+            raise AssertionError('Native popup did not complete its interaction within 3 seconds')
+
+        later(opened)
+        later(timeout, 3000)
+        try:
+            # Tk/Windows enters TrackPopupMenu here and returns only after the
+            # scheduled interaction closes it. X11 returns before that work.
+            open_popup()
+            if not finished.get():
+                self.root.wait_variable(finished)
+        except BaseException:
+            self.abort()
+            raise
+        finally:
+            for token in timers:
+                self.root.after_cancel(token)
+        if failures:
+            raise failures[0]
+        self.assert_closed()
+
+
 @unittest.skipUnless(sys.platform == 'win32' or bool(os.environ.get('DISPLAY')),
                      'Native pointer/focus regression requires a Tk display.')
 class NativeCompositePointerFocusTests(unittest.TestCase):
     def setUp(self):
+        # A broken native modal loop must fail this case, not stall the whole
+        # Windows regression job. The child executes every original assertion.
+        if self._testMethodName == _SELECTOR_CASE and os.environ.get(_MENU_CHILD) != '1':
+            self.root = None
+            return
         self.root = ctk.CTk()
         self.root.geometry('740x620+30+30')
         self.errors = []
@@ -32,6 +203,8 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
                          for sequence in ('<Button-1>', '<KeyPress>', '<Tab>', '<Escape>')}
 
     def tearDown(self):
+        if self.root is None:
+            return
         # CTk's process-wide appearance/scaling pollers can outlive a destroyed
         # test root. Cancel its remaining Tcl timers before the next case starts.
         for token in self.root.tk.call('after', 'info'):
@@ -199,19 +372,34 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
         self.assert_global_bindings()
 
     def test_selector_decorations_keep_logical_focus_without_stealing_native_popup_or_entry(self):
+        if self.root is None:
+            command = [sys.executable, '-m', 'unittest', '-v',
+                f'{Path(__file__).stem}.NativeCompositePointerFocusTests.{_SELECTOR_CASE}']
+            try:
+                result = subprocess.run(command, cwd=Path(__file__).resolve().parent,
+                    env=dict(os.environ, **{_MENU_CHILD: '1'}), capture_output=True, text=True, timeout=20)
+            except subprocess.TimeoutExpired as error:
+                self.fail(f'Native popup child exceeded 20 seconds.\n{error.stdout}\n{error.stderr}')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return
+        import faulthandler
+        faulthandler.dump_traceback_later(12)
+        self.addCleanup(faulthandler.cancel_dump_traceback_later)
         app = SimpleNamespace(controls=[], options_changed=Mock())
         variable = tk.StringVar(self.root, value='Balanced')
         widget = actual_menu_factory(app)(self.root, variable, ['Safe', 'Balanced', 'Aggressive'])
         widget.pack()
         self.map_widgets()
         menu = widget._dropdown_menu
+        driver = NativePopupDriver(self, widget)
         for child in (widget._canvas, widget._text_label):
             before = app.options_changed.call_count
-            self.click(child)
-            self.assertTrue(menu.winfo_viewable())
-            self.assertIn(self.root.focus_get(), (widget, menu))
-            self.press_focused('Escape')
-            self.assertFalse(menu.winfo_viewable())
+            driver.run(lambda: self.click(child), [
+                lambda: self.assertIn(self.root.focus_get(), (widget, menu)),
+                lambda: driver.key('Escape'),
+            ])
+            driver.assert_closed()
+            self.assertFalse(widget._close_on_next_click)
             self.assertIs(self.root.focus_get(), widget)
             self.assertIn(self.clicks[-1], ((child, widget), (child, menu)))
             self.assertEqual(int(child.cget('takefocus')), 0)
@@ -227,29 +415,35 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
         widget.set('Safe')
         widget.focus_force()
         self.root.update()
-        self.press_focused('F4')
-        self.assertTrue(menu.winfo_viewable())
-        menu.focus_force()
-        self.root.update()
+        owner = []
+        actions = []
+        if not driver.windows:
+            actions.append(menu.focus_force)
+        actions.append(lambda: owner.append(driver.assert_open()))
         for child in (widget._canvas, widget._text_label):
             for method in ('focus', 'focus_set', 'focus_force'):
-                getattr(child, method)()
-                self.root.update()
-                self.assertIs(self.root.focus_get(), menu)
+                actions.append(lambda child=child, method=method: getattr(child, method)())
+                actions.append(lambda: driver.assert_owner(owner[0]))
         before = app.options_changed.call_count
-        self.press_focused('Down')
-        self.press_focused('Return')
+        # Native Windows starts with no highlighted entry; Home establishes the
+        # same Safe baseline that tk_popup's entry argument selects on X11.
+        if driver.windows:
+            actions.append(lambda: driver.key('Home'))
+        actions.extend((lambda: driver.key('Down'), lambda: driver.key('Return')))
+        driver.run(lambda: self.press_focused('F4'), actions)
         self.assertEqual(variable.get(), 'Balanced')
         self.assertEqual(app.options_changed.call_count, before + 1)
-        self.assertFalse(menu.winfo_viewable())
+        driver.assert_closed()
+        self.assertFalse(widget._close_on_next_click)
         self.assertIs(self.root.focus_get(), widget)
-        self.press_focused('F4')
-        menu.focus_force()
-        self.root.update()
-        self.press_focused('Escape')
-        self.assertFalse(menu.winfo_viewable())
-        self.assertEqual(variable.get(), 'Balanced')
-        self.assertEqual(app.options_changed.call_count, before + 1)
+        for _ in range(2):
+            # Reopening after Escape needs one F4, without a pointer Enter or
+            # a Tk-menu Unmap to repair Windows' native modal return state.
+            driver.run(lambda: self.press_focused('F4'), [lambda: driver.key('Escape')])
+            driver.assert_closed()
+            self.assertFalse(widget._close_on_next_click)
+            self.assertEqual(variable.get(), 'Balanced')
+            self.assertEqual(app.options_changed.call_count, before + 1)
         self.click(self.entry._entry)
         self.assertIs(self.root.focus_get(), self.entry._entry)
 
@@ -257,7 +451,7 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
         for child in (widget._canvas, widget._text_label):
             self.click(child)
             self.press_focused('End')
-        self.assertFalse(menu.winfo_viewable())
+        driver.assert_closed()
         self.assertEqual(variable.get(), 'Balanced')
         self.assertEqual(app.options_changed.call_count, before + 1)
         commands = self.owned_commands(widget)

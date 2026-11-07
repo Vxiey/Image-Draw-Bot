@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 807 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **193 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 810 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **190 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -58,7 +58,6 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 779 | R1201 | Batch 12 operation-local Pixel score preparation | 1 | [Rendering ledger](v148-batch12-rendering.md); independent source/scalar-oracle review and paired measurements. |
 | 780 | R1301 | Resumed maintenance: reuse 2-opt route-boundary costs | 1 | [Maintenance evidence](v148-improvement-progress.md#resumed-maintenance-r1301-and-p1301); independent parity review and [paired measurements](v148-maintenance-stroke-benchmarks.json). |
 | 781 | P1301 | Resumed maintenance: bounded Windows full-suite verification | 1 | [Maintenance evidence](v148-improvement-progress.md#resumed-maintenance-r1301-and-p1301); actual CLI subprocess-boundary regressions and independent review. |
-
 | 782–786 | A1401–A1405 | Batch 14 display events, Paint, live/resumed progress and browser start ownership | 5 | [Application ledger](v148-batch14-application.md), [browser start ledger](v148-batch14-browser-start.md); independent controller and actual-executor review. |
 | 787–789 | R1401–R1403 | Batch 14 lossless attachment, translucent fallback and prepared path costs | 3 | [Rendering ledger](v148-batch14-rendering.md); independent source and exact raster review. |
 | 790–792 | U1401–U1403 | Batch 14 preview ownership, keyboard inspection and selected browser images | 3 | [UI ledger](v148-batch14-ui-workflow.md); independent renderer review. |
@@ -71,8 +70,13 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 805 | R1601 | Batch 16 calibrated Sketch Fill black selector | 1 | [Selector ledger](v148-batch16-rendering-selector.md); actual executor and native RGB replay. |
 | 806 | R1602 | Batch 16 detail-preview numeric scratch | 1 | [Detail ledger](v148-batch16-rendering-detail.md); exact historical module and public-plan comparisons. |
 | 807 | U1601 | Batch 16 current plan feedback | 1 | [UI ledger](v148-batch16-ui-workflow.md); actual controller transitions and workspace labels. |
+| 808 | A1701 | Batch 17 current runtime safety presentation | 1 | [Application ledger](v148-batch17-runtime-report.md); independent controller/executor review. |
+| 809 | R1701 | Batch 17 real layered-color diagnostics | 1 | [Rendering ledger](v148-batch17-rendering-layered-diagnostics.md); independent emitted-raster and public-plan review. |
+| 810 | P1701 | Batch 17 local report destination authority | 1 | [Platform ledger](v148-batch17-report-paths.md); actual disk-loader/Open integration review. |
 
 ## Integration evidence
+
+- Batch 17: three independently reviewed behavior groups bring the total to **810**, with **190 remaining**. Frozen-source integration completed **3,985 tests: 3,934 passed, 51 skipped**, with all 837 source/configuration hashes unchanged. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Current-report ownership, real layered-color evidence and local report destinations are new groups; retry/timer/native-popup completions, dependency maintenance and restored test discovery add no IDs. [Final local validation](v148-batch17-validation.json). Exact-commit Windows/CI evidence is recorded in PR46.
 
 - Batch 16: four independently reviewed behavior groups bring the total to **807**, with **193 remaining**. Final frozen-source integration completed **3,923 tests: 3,872 passed, 51 skipped**. All 830 source/configuration hashes remained unchanged. The 5,000-cycle source gate, source-package hygiene, eight exact-raster fixtures and all eight paired preview workloads passed. Current recovery profile identity, Studio worker/image lifetime, native cost pricing, saved-area reuse and decorative native focus complete existing IDs. [Final local validation](v148-batch16-validation.json); [paired measurements](v148-batch16-detail-benchmarks.json). Native Windows/CI results for the exact published commit are recorded in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
 

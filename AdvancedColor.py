@@ -503,7 +503,8 @@ def build_color_strokes(image, *, lines: bool = True, skip_white: bool = True,
     try:
         meta["color_fidelity_diagnostics"]=_sample_mapping_diagnostics(
             rgb_image,color_rendering=color_rendering,custom_color_workflow=custom_color_workflow,
-            color_fidelity=color_fidelity,skip_white=skip_white,palette=palette,names=names)
+            color_fidelity=color_fidelity,skip_white=skip_white,color_layers=color_layers,
+            palette=palette,names=names)
     except Exception:
         meta["color_fidelity_diagnostics"]={"dark_bias_detected":False}
     if cancelled():
@@ -512,16 +513,54 @@ def build_color_strokes(image, *, lines: bool = True, skip_white: bool = True,
 
 
 
+def _layered_sample_coordinates(width: int, height: int, sample_limit: int):
+    """Sample whole Bayer cells, so a regular stride cannot select one phase.
+
+    Small images are measured completely. Larger images use evenly spaced
+    four-by-four cells, including both ends of the image. Partial edge cells
+    contribute only their real pixels; the total work stays within the budget.
+    """
+    limit = max(0, int(sample_limit))
+    if width <= 0 or height <= 0 or limit <= 0:
+        return
+    if width * height <= limit:
+        for y in range(height):
+            for x in range(width):
+                yield x, y
+        return
+    columns = (width + 3) // 4
+    cell_count = columns * ((height + 3) // 4)
+    cell_pixels = min(4, width) * min(4, height)
+    selected = min(cell_count, max(1, limit // cell_pixels))
+    remaining = limit
+    for slot in range(selected):
+        cell = ((cell_count - 1) // 2 if selected == 1
+                else slot * (cell_count - 1) // (selected - 1))
+        left, top = (cell % columns) * 4, (cell // columns) * 4
+        for y in range(top, min(top + 4, height)):
+            for x in range(left, min(left + 4, width)):
+                yield x, y
+                remaining -= 1
+                if remaining <= 0:
+                    return
+
+
 def _sample_mapping_diagnostics(rgb_image, *, color_rendering: str, custom_color_workflow: str,
                                 color_fidelity: str, skip_white: bool, sample_limit: int = 768,
-                                palette=None, names=None) -> dict:
-    """Cheap deterministic tone/fidelity audit for preview/final-plan metadata."""
+                                color_layers: str = "Off", palette=None, names=None) -> dict:
+    """Measure the palette pixels the planner will actually emit, not a mix RGB."""
     palette = tuple(tuple(c.RGB) for c in allColors) if palette is None else palette
     names = tuple(c.name for c in allColors) if names is None else names
     if not palette:
         return finalize_mapping_stats({"mapped_pixels": 0})
+    if color_rendering == "Layered color mix" and color_layers == "Off":
+        color_layers = "Dual-color mix"
+    layered = color_rendering != "RGB nearest" and color_layers != "Off"
     pixels = rgb_image.load(); total=max(1, rgb_image.width * rgb_image.height)
     stride=max(1, int((total / max(1, int(sample_limit))) ** 0.5))
+    coordinates = (_layered_sample_coordinates(rgb_image.width, rgb_image.height, sample_limit)
+                   if layered else ((x, y) for y in range(0, rgb_image.height, stride)
+                                    for x in range(0, rgb_image.width, stride)))
     stats={
         "mapped_pixels":0,"source_lightness_sum":0.0,"mapped_lightness_sum":0.0,
         "source_saturation_sum":0.0,"mapped_saturation_sum":0.0,
@@ -529,23 +568,29 @@ def _sample_mapping_diagnostics(rgb_image, *, color_rendering: str, custom_color
         "delta_e_sum":0.0,"delta_e_max":0.0,"delta_e2000_sum":0.0,"delta_e2000_max":0.0,
         "delta_e_oklab_sum":0.0,"delta_e_oklab_max":0.0,"hue_error_sum":0.0,
     }
-    for y in range(0, rgb_image.height, stride):
-        for x in range(0, rgb_image.width, stride):
-            r,g,b,a=pixels[x,y]; src=_visible_rgb(r,g,b,a)
-            if a <= 0 or (skip_white and min(src) >= 245):
-                continue
+    for x, y in coordinates:
+        r,g,b,a=pixels[x,y]; src=_visible_rgb(r,g,b,a)
+        if a <= 0 or (skip_white and min(src) >= 245):
+            continue
+        if layered:
+            idx, secondary, ratio, _improvement = _best_layer_cached(
+                src, palette, names, color_rendering, custom_color_workflow,
+                color_layers, color_fidelity)
+            if secondary is not None and _should_overlay(x, y, ratio, color_layers):
+                idx = secondary
+        else:
             idx=_closest_palette_index_cached(src,palette,names,color_rendering,custom_color_workflow,color_fidelity)
-            pair=mapping_pair_metrics(src,palette[idx])
-            stats["mapped_pixels"]+=1
-            stats["source_lightness_sum"]+=pair["source_lightness"];stats["mapped_lightness_sum"]+=pair["mapped_lightness"]
-            stats["source_saturation_sum"]+=pair["source_saturation"];stats["mapped_saturation_sum"]+=pair["mapped_saturation"]
-            stats["source_luminance_sum"]+=pair["source_luminance"];stats["mapped_luminance_sum"]+=pair["mapped_luminance"]
-            stats["delta_e_sum"]+=pair["delta_e76"];stats["delta_e_max"]=max(stats["delta_e_max"],pair["delta_e76"])
-            stats["delta_e2000_sum"]+=pair["delta_e2000"];stats["delta_e2000_max"]=max(stats["delta_e2000_max"],pair["delta_e2000"])
-            stats["delta_e_oklab_sum"]+=pair["delta_e_oklab"];stats["delta_e_oklab_max"]=max(stats["delta_e_oklab_max"],pair["delta_e_oklab"])
-            stats["hue_error_sum"]+=pair.get("hue_error",0.0)
-            if stats["mapped_pixels"] >= sample_limit:
-                return finalize_mapping_stats(stats)
+        pair=mapping_pair_metrics(src,palette[idx])
+        stats["mapped_pixels"]+=1
+        stats["source_lightness_sum"]+=pair["source_lightness"];stats["mapped_lightness_sum"]+=pair["mapped_lightness"]
+        stats["source_saturation_sum"]+=pair["source_saturation"];stats["mapped_saturation_sum"]+=pair["mapped_saturation"]
+        stats["source_luminance_sum"]+=pair["source_luminance"];stats["mapped_luminance_sum"]+=pair["mapped_luminance"]
+        stats["delta_e_sum"]+=pair["delta_e76"];stats["delta_e_max"]=max(stats["delta_e_max"],pair["delta_e76"])
+        stats["delta_e2000_sum"]+=pair["delta_e2000"];stats["delta_e2000_max"]=max(stats["delta_e2000_max"],pair["delta_e2000"])
+        stats["delta_e_oklab_sum"]+=pair["delta_e_oklab"];stats["delta_e_oklab_max"]=max(stats["delta_e_oklab_max"],pair["delta_e_oklab"])
+        stats["hue_error_sum"]+=pair.get("hue_error",0.0)
+        if stats["mapped_pixels"] >= sample_limit:
+            return finalize_mapping_stats(stats)
     return finalize_mapping_stats(stats)
 
 def suggested_color_workflow(calibrated_count: int, image_mode: str = "RGB") -> str:

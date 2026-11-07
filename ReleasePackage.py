@@ -32,6 +32,7 @@ EXCLUDED_DIR_NAMES = {
     ".svn",
     "__pycache__",
     ".pytest_cache",
+    ".hypothesis",
     ".mypy_cache",
     ".ruff_cache",
     ".build-venv",

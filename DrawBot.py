@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from WorkerEventQueue import WorkerEventQueue
 from WorkerPlanOwnership import WorkerPlanPublication
 from UpdateRequest import UpdateRequest
+from RuntimeSafetyView import RuntimeSafetyView, capture_runtime_report
 
 from Colors import allColors, enable_dpi_awareness, DATA_DIR, load_calibration, reset_palette, CALIBRATION_FILE, normalize_rgb
 from ProfileStorage import profile_palette_file, profile_settings_file, calibration_context_fingerprint
@@ -108,7 +109,7 @@ from PreviewSafety import (build_preview_safety_plan, draw_safe_paths,
 from PreviewDetailEngine import (PREVIEW_DETAIL_MODES, validate_preview_detail_mode)
 from SafetyDebugOverlay import render_safety_debug_overlay
 from RuntimeSafetyReport import (RuntimeSafetySession, safe_save as save_runtime_safety_report,
-                                 latest_report as load_latest_runtime_safety_report, compact_summary as runtime_safety_compact_summary, REPORT_DIR as RUNTIME_SAFETY_REPORT_DIR)
+                                 latest_report as load_latest_runtime_safety_report, REPORT_DIR as RUNTIME_SAFETY_REPORT_DIR)
 from RuntimePaths import atomic_write_text, data_dir
 from PerformanceAutoTuner import run_auto_tune, load_tune_result, format_tune_summary
 from UniversalHardwareBenchmark import (format_hardware_summary as format_universal_hardware_summary,
@@ -4769,6 +4770,7 @@ class DrawBotApp:
         image=(load_cached_image(expected_sha256=state.get('image_sha256')) if state.get('has_image') is True else None) if recovered_image is _RECOVERY_IMAGE_UNSET else recovered_image
         if image is not None:
             self.original=image;self.plan=None;self.file_label.set('Recovered local image')
+            DrawBotApp._clear_source_time_feedback(self)
             self._recovery_source_ref=weakref.ref(image)
         self.subject_region=None
         subject_mode='Off'
@@ -4858,6 +4860,8 @@ class DrawBotApp:
 
     def _request_clear_drawing(self,remove_image):
         if self.closing:return
+        DrawBotApp._runtime_safety_view(self).clear()
+        DrawBotApp.refresh_runtime_safety_ui(self)
         pending=getattr(self,'recovery_loaded_pending',None)
         if pending is not None:
             DrawBotApp._discard_worker_result(self,'recovery_loaded',pending)
@@ -4886,6 +4890,7 @@ class DrawBotApp:
         self.color_session_cache.clear()
         if remove_image:
             self.original=None;self.subject_region=None
+            DrawBotApp._clear_source_time_feedback(self)
             self.background_removal_original=None;self.background_removal_meta=None
             self.file_label.set('No image loaded');self.url.set('')
         error=None
@@ -5918,7 +5923,7 @@ class DrawBotApp:
         full draw.  It reuses the existing plan and source image; it does not
         rebuild/restart the whole drawing.
         """
-        if self.activity or self.closing:
+        if not DrawBotApp._profile_action_ready(self):
             return
         if not isinstance(getattr(self, 'plan', None), dict):
             self.status.set('Correction-only retry unavailable: no completed plan exists yet.')
@@ -5954,6 +5959,8 @@ class DrawBotApp:
         if not hasattr(self.mouse, 'snapshot_canvas'):
             self.status.set('Correction-only retry unavailable: this mouse backend cannot take a safe canvas snapshot.')
             return
+        # This explicit retry owns Esc from preflight through worker startup.
+        self.stop.clear()
         try:
             current_client = self._refresh_target_for_draw()
             profile_key = PROFILES[self.game.get()][0]
@@ -5976,11 +5983,16 @@ class DrawBotApp:
         retry_plan=build_correction_retry_plan(base_plan)
         self._disarm_full_draw('correction-only retry accepted', update_text=True)
         self.paused.clear(); self.progress['value'] = 0; self.save_settings()
+        runtime_request=DrawBotApp._begin_runtime_safety_request(self,'correction-only retry')
         def work():
             self.events.put(('status', 'Correction-only retry starting. Fresh read-only snapshot will be scored before any patch strokes.'))
-            execute_plan(retry_plan, area, palette, guarded, self.stop, self.paused,
-                         lambda k, v: self.events.put((k, v)), dry_run=False, keyboard=self.keyboard,
-                         checkpoint=None)
+            retry_plan['options'].pop('runtime_safety_report',None)
+            try:
+                execute_plan(retry_plan, area, palette, guarded, self.stop, self.paused,
+                             lambda k, v: self.events.put((k, v)), dry_run=False, keyboard=self.keyboard,
+                             checkpoint=None)
+            finally:
+                DrawBotApp._publish_runtime_safety_report(self,runtime_request,retry_plan['options'])
             try:
                 base_plan['options']['post_draw_before_correction_accuracy_meta'] = retry_plan['options'].get('post_draw_before_correction_accuracy_meta')
                 base_plan['options']['post_draw_accuracy_meta'] = retry_plan['options'].get('post_draw_accuracy_meta', base_plan.get('options', {}).get('post_draw_accuracy_meta'))
@@ -5990,7 +6002,14 @@ class DrawBotApp:
             except Exception:
                 pass
             self.events.put(('correction_review', (base_plan.get('options') or {}).get('correction_review_meta') or {}))
-        if self.begin_worker('draw', work):
+        accepted=False
+        try:
+            accepted=bool(self.begin_worker('draw',work,reset_stop=False))
+        finally:
+            if not accepted:
+                DrawBotApp._runtime_safety_view(self).finish(runtime_request)
+                DrawBotApp.refresh_runtime_safety_ui(self)
+        if accepted:
             try:self.root.iconify()
             except tk.TclError:pass
 
@@ -7912,6 +7931,7 @@ class DrawBotApp:
             return False
         DrawBotApp._cancel_browser_one_click(self,'background removal undone')
         self.original=previous.copy();self.background_removal_original=None;self.background_removal_meta=None
+        DrawBotApp._clear_source_time_feedback(self)
         self.plan=None;DrawBotApp._clear_render_resume(self,'background removal undone')
         self.file_label.set(image_label(self.original,'Background removal undone'))
         self._mark_plan_stale('Background removal undone. Build preview to update ETA.')
@@ -8106,6 +8126,7 @@ class DrawBotApp:
             if not DrawBotApp._profile_action_ready(self):return False
             DrawBotApp._cancel_browser_one_click(self,'source replaced by screen image')
             self._suppress_recovery=False;self.original=image.convert('RGBA');self.plan=None;self.file_label.set('Image from screen')
+            DrawBotApp._clear_source_time_feedback(self)
             self.subject_region=None;self.upscale_original=None
             self.background_removal_original=None;self.background_removal_meta=None
             if hasattr(self,'subject_hint'):self.subject_hint.set('Auto: simple background or transparent PNG. Mark busy photos.')
@@ -8302,6 +8323,15 @@ class DrawBotApp:
 
     def _auto_preview_enabled(self):
         return getattr(getattr(self,'preview_mode',None),'get',lambda:'Manual')() != 'Manual'
+
+    def _clear_source_time_feedback(self):
+        """Retire the old source's timer display after accepting a replacement."""
+        if getattr(self,'closing',False) or getattr(self,'activity',None) in ('draw','dry-run'):return
+        for name,text in (
+                ('draw_live_time_text','Drawing timer: starts when drawing begins.'),
+                ('total_draw_time_text','Total draw time: —')):
+            try:getattr(self,name).set(text)
+            except (tk.TclError,AttributeError):pass
 
     def _clear_plan_feedback(self):
         """Invalidate projections and diagnostics, leaving runtime timers alone."""
@@ -9692,6 +9722,7 @@ class DrawBotApp:
         generation=self.preview_generation
         publication=WorkerPlanPublication(lambda plan:DrawBotApp._release_plan_images(self,plan))
         self._draw_plan_publication=publication
+        runtime_request=DrawBotApp._begin_runtime_safety_request(self,action_label)
         def release_source_snapshot(retained_plan=None,*,transfer=False):
             nonlocal original
             snapshot=original
@@ -9839,8 +9870,12 @@ class DrawBotApp:
                 from SessionRecovery import save_render_progress
                 save_render_progress(payload)
                 self.events.put(('render_checkpoint',payload))
-            execute_plan(plan,area,palette,guarded,self.stop,self.paused,lambda k,v:self.events.put((k,v)),dry_run=dry_run,keyboard=self.keyboard,
-                         checkpoint=(None if (dry_run or test) else persist_checkpoint))
+            plan['options'].pop('runtime_safety_report',None)
+            try:
+                execute_plan(plan,area,palette,guarded,self.stop,self.paused,lambda k,v:self.events.put((k,v)),dry_run=dry_run,keyboard=self.keyboard,
+                             checkpoint=(None if (dry_run or test) else persist_checkpoint))
+            finally:
+                DrawBotApp._publish_runtime_safety_report(self,runtime_request,plan['options'])
             if start_state and not self.stop.is_set():start_state.transition('COMPLETED','render execution completed')
             if not dry_run and not test and not self.stop.is_set():
                 try:
@@ -9859,6 +9894,8 @@ class DrawBotApp:
         except BaseException:
             release_worker_images()
             self._draw_plan_publication=None
+            DrawBotApp._runtime_safety_view(self).finish(runtime_request)
+            DrawBotApp.refresh_runtime_safety_ui(self)
             raise
         if accepted:
             if not dry_run and not test:self.drop_in_sync_phase=DROP_SYNC_DRAWING
@@ -9867,6 +9904,8 @@ class DrawBotApp:
         else:
             release_worker_images()
             self._draw_plan_publication=None
+            DrawBotApp._runtime_safety_view(self).finish(runtime_request)
+            DrawBotApp.refresh_runtime_safety_ui(self)
             if self.stop.is_set():
                 if start_state:start_state.transition('ABORTED','drawing start cancelled before worker handoff')
                 self.status.set('Drawing start cancelled. No automatic restart.')
@@ -9999,17 +10038,37 @@ class DrawBotApp:
     def _report_context(self):
         return self._diagnostics_context()
 
-    def refresh_runtime_safety_ui(self):
+    def _runtime_safety_view(self):
+        view=getattr(self,'_runtime_safety_report_view',None)
+        if view is None:
+            view=RuntimeSafetyView()
+            self._runtime_safety_report_view=view
+        return view
+
+    def _begin_runtime_safety_request(self,label):
+        request=DrawBotApp._runtime_safety_view(self).begin(label)
+        DrawBotApp.refresh_runtime_safety_ui(self)
+        return request
+
+    def _publish_runtime_safety_report(self,request,options):
+        # This worker-side envelope owns no plan/image references. Publication
+        # failure must not replace the executor's original exception.
         try:
-            payload=load_latest_runtime_safety_report()
-            self.runtime_safety_summary.set(runtime_safety_compact_summary(payload))
-            if payload:
-                stop=(payload.get('stop') or {}).get('reason') or ''
-                when=str(payload.get('finished_utc') or payload.get('started_utc') or '')
-                extra=(f" · Stop: {stop[:90]}" if stop else '')
-                self.runtime_safety_detail.set(f"Latest: {when} · Profile: {payload.get('profile','')}{extra}")
-            else:
-                self.runtime_safety_detail.set('Local-only safety reports are saved after each execution.')
+            result=capture_runtime_report(request,options)
+            self.events.put(('runtime_safety_complete',result))
+        except Exception as error:
+            log_event(f'Runtime safety UI publication skipped: {error!r}')
+
+    def refresh_runtime_safety_ui(self):
+        if (getattr(self,'closing',False) or not hasattr(self,'runtime_safety_summary')
+                or not hasattr(self,'runtime_safety_detail')):
+            return
+        try:
+            view=DrawBotApp._runtime_safety_view(self)
+            payload=view.current_or_history(load_latest_runtime_safety_report)
+            summary,detail=view.presentation(payload,stopped=bool(getattr(self,'stop',None) and self.stop.is_set()))
+            self.runtime_safety_summary.set(summary)
+            self.runtime_safety_detail.set(detail)
         except Exception as error:
             self.runtime_safety_summary.set('Safety report status unavailable.')
             self.runtime_safety_detail.set(str(error)[:180])
@@ -10024,10 +10083,18 @@ class DrawBotApp:
             self.status.set(f'Could not open safety reports folder: {error}')
 
     def open_latest_safety_report(self):
-        payload=load_latest_runtime_safety_report()
+        if getattr(self,'closing',False):return
+        view=DrawBotApp._runtime_safety_view(self)
+        payload=view.current_or_history(load_latest_runtime_safety_report)
         if not payload:
-            self.status.set('No runtime safety report exists yet. Run Fast Dry run or Start drawing first.');return
-        path=Path(payload.get('text_path') or payload.get('json_path') or '')
+            self.status.set('No current runtime safety report is available.' if view.local else
+                            'No runtime safety report exists yet. Run Fast Dry run or Start drawing first.')
+            return
+        destination=payload.get('text_path') or payload.get('json_path')
+        if not destination:
+            self.status.set('The current runtime safety report was not saved. Its results remain visible in the safety card.')
+            return
+        path=Path(destination)
         if not path.is_file():
             self.status.set('The latest safety report file could not be found.');return
         try:
@@ -10714,6 +10781,12 @@ class DrawBotApp:
             if activity==self.activity:
                 self._worker_terminal_status=(activity,str(message))
                 if not self.stop.is_set() and not self.closing:self.status.set(str(message))
+        elif kind=='runtime_safety_complete':
+            # A current STOPPED report must survive the shared Stop filter.
+            # Clear/new-run identity and closing still reject older evidence.
+            if not getattr(self,'closing',False):
+                view=DrawBotApp._runtime_safety_view(self)
+                if view.accept(value):DrawBotApp.refresh_runtime_safety_ui(self)
         elif kind=='recovery_image_prepared':
             DrawBotApp._finish_recovery_image_job(self,value)
         elif kind=='recovery_clear_complete':
@@ -11085,6 +11158,7 @@ class DrawBotApp:
             DrawBotApp._cancel_browser_one_click(self,'source image resized')
             self._suppress_recovery=False
             self.original,previous=value
+            DrawBotApp._clear_source_time_feedback(self)
             self.upscale_original=previous
             # Undo belongs to the most recent edit type. A background-removal
             # snapshot from before this resize must not discard the resize.
@@ -11115,6 +11189,7 @@ class DrawBotApp:
                 if self.background_removal_original is None:
                     self.background_removal_original=self.original.copy()
                 self.original=prepared;self.background_removal_meta=dict(meta);self.plan=None
+                DrawBotApp._clear_source_time_feedback(self)
                 self.upscale_original=None
                 DrawBotApp._clear_render_resume(self,'background removed')
                 self.file_label.set(image_label(self.original,'Background removed PNG'))
@@ -11131,6 +11206,7 @@ class DrawBotApp:
         elif kind=='pasted':
             DrawBotApp._cancel_browser_one_click(self,'source replaced by pasted image')
             self._suppress_recovery=False;self.original,action=value;self.plan=None
+            DrawBotApp._clear_source_time_feedback(self)
             self.upscale_original=None
             self.background_removal_original=None;self.background_removal_meta=None
             self.subject_region=None
@@ -11166,10 +11242,7 @@ class DrawBotApp:
             self._mark_plan_stale('Image loaded. Preview was not rebuilt automatically in Manual mode.')
             try:self.draw_time_text.set('Estimated draw time appears after Build preview.')
             except (tk.TclError,AttributeError):pass
-            try:self.draw_live_time_text.set('Drawing timer: starts when drawing begins.')
-            except (tk.TclError,AttributeError):pass
-            try:self.total_draw_time_text.set('Total draw time: —')
-            except (tk.TclError,AttributeError):pass
+            DrawBotApp._clear_source_time_feedback(self)
             DrawBotApp._queue_drop_in_start(self,_action,source_label=str(label))
             if normalize_drop_in_action(_action)!=DROP_IN_ACTION:
                 DrawBotApp._queue_browser_one_click_after_import(self,str(label),force=bool(_one_click_force))
@@ -11558,6 +11631,8 @@ class DrawBotApp:
                     try:self.root.deiconify()
                     except tk.TclError:pass
                 if finished in ('draw','dry-run') and not self.closing:
+                    view=DrawBotApp._runtime_safety_view(self)
+                    view.finish(view.request)
                     self.refresh_runtime_safety_ui()
                     try:self.refresh_correction_review_ui()
                     except Exception:pass
@@ -11687,6 +11762,7 @@ class DrawBotApp:
         self.smart_drop_pending_payload=None
         self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
         self.closing=True
+        DrawBotApp._runtime_safety_view(self).clear()
         DrawBotApp._cancel_recovery_image_job(self)
         log_event('Shutdown requested.')
         try:self.save_settings()

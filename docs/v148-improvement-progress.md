@@ -6,18 +6,10 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
-Batch 16 implements **807 total distinct improvements, with 193 remaining**.
-All four new groups and existing-contract completions have closed independent
-source reviews. Final frozen-source integration completed **3,923 tests**:
-**3,872 passed and 51 platform/hardware cases skipped**, with all
-830 source/configuration hashes unchanged. The 5,000-cycle source
-gate, source-package hygiene, eight exact-raster fixtures and all eight paired
-preview workloads passed. [Final local evidence](v148-batch16-validation.json)
-is separate from the published-commit Windows/CI gate recorded in PR46.
-The preceding 803-group checkpoint `86fa125306b9c2db8e8125fec6a38270b09c8ff9`
-passed all seven checks, including Windows self-test, bundle validation and
-packaged GUI/native drag-and-drop in [run 42377334258](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42377334258).
-The release condition remains 1,000 independently verified behavior changes.
+Batch 17 implements **810 total distinct improvements, with 190 remaining**.
+Final frozen-source integration completed **3,985 tests**: **3,934 passed and 51 platform/hardware cases skipped**, with all 837 source/configuration hashes unchanged. All three new groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures and 166 historical layered implementation/public-plan comparisons passed. [Final local evidence](v148-batch17-validation.json) is separate from the exact published-commit Windows/CI gate in PR46.
+
+The preceding 807-group checkpoint passed six checks, but its Windows suite stalled in a new native-menu test whose synchronous driver could not dismiss the Windows modal popup. Batch 17 supplies a real native event-loop driver with bounded callback and child-process timeouts, and clears the app popup flag after Windows modal return so the next pointer/keyboard opening works. Windows verification must come from the new published commit; the prior hang is not a passing gate. The release condition remains 1,000 independently verified behavior changes.
 
 - The first 100 improvements are merged on `main` at `eb9804560c8648a92aabe2688e362a6b4a1d28b5`; Windows and Linux CI passed for their reviewed source head.
 - Version 1.0.147's promotion PR was closed unmerged after the target changed. The RC4 release run was cancelled before publication.

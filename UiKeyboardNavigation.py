@@ -423,6 +423,22 @@ class KeyboardOptionMenu(_KeyboardFocusSupport, ctk.CTkOptionMenu):
         except (tk.TclError, RuntimeError, KeyError):
             pass
 
+    def _keyboard_modal_popup(self):
+        try:
+            return self.tk.call('tk', 'windowingsystem') == 'win32'
+        except (tk.TclError, RuntimeError, AttributeError):
+            return False
+
+    def _open_dropdown_menu(self):
+        modal = self._keyboard_modal_popup()
+        try:
+            return super()._open_dropdown_menu()
+        finally:
+            # Windows returns only after its HMENU closes and sends no Tk
+            # menu-window Unmap. X11 returns while its popup is still open.
+            if modal:
+                self._close_on_next_click = False
+
     def _keyboard_open_popup(self):
         values = self.cget('values')
         if not self._keyboard_focusable() or not self._keyboard_has_focus() or not self._keyboard_in_view():
@@ -434,6 +450,7 @@ class KeyboardOptionMenu(_KeyboardFocusSupport, ctk.CTkOptionMenu):
             selected = values.index(self.get())
         except ValueError:
             selected = 0
+        modal = self._keyboard_modal_popup()
         self._close_on_next_click = True
         try:
             # tk_popup handles menu arrows/Return/Escape and focus restoration.
@@ -442,6 +459,9 @@ class KeyboardOptionMenu(_KeyboardFocusSupport, ctk.CTkOptionMenu):
                 self.winfo_rooty() + self.winfo_height(), selected)
         except (tk.TclError, RuntimeError):
             self._keyboard_close_popup()
+        finally:
+            if modal:
+                self._close_on_next_click = False
 
     def _keyboard_key_press(self, event):
         key = getattr(event, 'keysym', '')

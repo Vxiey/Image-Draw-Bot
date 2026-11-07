@@ -243,6 +243,9 @@ def latest_report(directory: Path | None = None) -> dict | None:
         try:
             payload = read_json(path, max_bytes=512*1024)
             if _valid_report(payload):
+                # File destinations come from the selected local report pair,
+                # never from path fields embedded in diagnostic JSON.
+                payload.pop("text_path", None)
                 payload["json_path"] = str(path)
                 txt = path.with_suffix(".txt")
                 if txt.is_file(): payload["text_path"] = str(txt)

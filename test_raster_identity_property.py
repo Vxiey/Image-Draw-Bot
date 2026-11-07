@@ -75,3 +75,13 @@ def test_extra_fast_preserves_exact_axis_raster_for_all_deadline_policies(runs, 
     report = compare_runs_to_paths(runs, execution[0])
     assert report.safe, report.as_dict()
     assert len(execution[0]) <= len(runs)
+
+
+class RasterIdentityPropertyTests(unittest.TestCase):
+    """Expose the existing generated cases to CI's unittest discovery."""
+
+    def test_continuous_paths_preserve_exact_axis_raster(self):
+        test_continuous_paths_preserve_exact_axis_raster()
+
+    def test_extra_fast_preserves_exact_axis_raster_for_all_deadline_policies(self):
+        test_extra_fast_preserves_exact_axis_raster_for_all_deadline_policies()
