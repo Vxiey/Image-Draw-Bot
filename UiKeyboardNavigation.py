@@ -489,6 +489,11 @@ class KeyboardSlider(_KeyboardFocusSupport, ctk.CTkSlider):
         super().__init__(*args, **kwargs)
         self._keyboard_ready=True
         self._canvas.configure(takefocus=0)
+        # CTk's global click handler focuses event.widget after local handlers.
+        # Its decorative canvas must return focus to the same logical owner
+        # without swallowing the click or replacing application bindings.
+        for method in ('focus','focus_set','focus_force'):
+            setattr(self._canvas,method,getattr(self,method))
         tk.Frame.configure(self,takefocus=self._keyboard_focusable)
         for sequence, callback in (('<FocusIn>',self._keyboard_focus_in),
                                    ('<FocusOut>',self._keyboard_focus_out),

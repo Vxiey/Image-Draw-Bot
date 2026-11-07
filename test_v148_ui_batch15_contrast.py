@@ -91,6 +91,7 @@ class ContrastKeyboardTests(unittest.TestCase):
         self.stack.enter_context(patch.object(tk.Frame, 'configure', self.frame_configure))
         self.stack.enter_context(patch.object(tk.Misc, 'bind', self.logical_bind))
         self.stack.enter_context(patch.object(tk.Misc, 'focus_set', self.logical_focus))
+        self.stack.enter_context(patch.object(tk.Misc, 'focus_force', self.logical_focus))
         self.global_bind = self.stack.enter_context(patch.object(tk.Misc, 'bind_all'))
 
     def native_init(self, widget, master=None, **kwargs):
@@ -312,6 +313,10 @@ class ContrastKeyboardTests(unittest.TestCase):
         widget.focus_get.return_value = None
         widget._canvas.deliver('<Button-1>', event(x=80))
         self.assertIs(widget.focus_get(), widget)
+        for method in ('focus', 'focus_set', 'focus_force'):
+            widget.focus_get.return_value = None
+            getattr(widget._canvas, method)()
+            self.assertIs(widget.focus_get(), widget)
         self.assertEqual(app.contrast.get(), 1)
         self.assertEqual(label.cget('text'), 'Contrast · 1.00×')
         self.press(widget, 'Right')
@@ -384,6 +389,10 @@ class NativeContrastKeyboardTests(unittest.TestCase):
         self.assertIs(after.tk_focusPrev(), widget)
         self.assertEqual(int(widget._canvas.cget('takefocus')), 0)
         globals_before = self.root.bind_all('<KeyPress>')
+        clicks = []
+        click_observer = self.root.bind_all('<Button-1>',
+            lambda event: clicks.append((event.widget, self.root.focus_get())), add='+')
+        click_binding = self.root.bind_all('<Button-1>')
         entry.focus_force(); self.root.update()
         entry.event_generate('<Tab>', when='now'); self.root.update()
         self.assertIs(self.root.focus_get(), widget)
@@ -396,9 +405,14 @@ class NativeContrastKeyboardTests(unittest.TestCase):
         self.assertEqual(app.contrast.get(), 2)
         widget._canvas.event_generate('<Button-1>', x=0, y=8, when='now'); self.root.update()
         self.assertIs(self.root.focus_get(), widget)
+        self.assertEqual(clicks, [(widget._canvas, widget)])
         self.assertEqual(app.contrast.get(), .5)
-        widget.event_generate('<KeyPress-Right>', when='now'); self.root.update()
+        self.root.focus_get().event_generate('<KeyPress-Right>', when='now'); self.root.update()
         self.assertAlmostEqual(app.contrast.get(), .51)
+        for method in ('focus', 'focus_set', 'focus_force'):
+            after.focus_force(); self.root.update()
+            getattr(widget._canvas, method)(); self.root.update()
+            self.assertIs(self.root.focus_get(), widget)
         widget.focus_set(); self.root.update()
         self.assertIs(self.root.focus_get(), widget)
         widget.focus_force(); self.root.update()
@@ -413,6 +427,8 @@ class NativeContrastKeyboardTests(unittest.TestCase):
         self.assertFalse(app.contrast.trace_info())
         for token in tokens: self.assertFalse(self.root.tk.call('info', 'commands', token))
         self.assertEqual(self.root.bind_all('<KeyPress>'), globals_before)
+        self.assertEqual(self.root.bind_all('<Button-1>'), click_binding)
+        self.root._unbind(('bind', 'all', '<Button-1>'), click_observer)
 
     def test_tab_reveals_offscreen_slider_before_key_adjustment(self):
         panel = ctk.CTkScrollableFrame(self.root, width=440, height=130); panel.pack()

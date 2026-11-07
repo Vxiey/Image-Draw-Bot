@@ -144,3 +144,37 @@ checked the complete subclass/mixin/native CTk call order, actual StudioUI row,
 scroll ownership, state and visibility guards, variable-before-command order
 and trace teardown, then ran the final nine-method module: **seven passed and
 two native Windows cases skipped**. No production patch was needed after review.
+
+### U1502 Windows gate completion — decorative canvas focus
+
+The Windows regression job for checkpoint
+`d1a5e3a709745ee64263b5801cf1b9089cd6b707` exposed a remaining pointer-focus
+failure in the native contrast test. Tab traversal reached `KeyboardSlider`,
+but after an actual canvas click `focus_get()` returned its internal
+`CTkCanvas`. The installed CTk 6 root adds a global `<Button-1>` callback that
+calls `event.widget.focus_set()` after the widget's local click handler. That
+later callback undid the local assignment to the logical slider. The portable
+event boundary had not reproduced this final global callback.
+
+The decorative canvas now delegates its `focus`, `focus_set` and `focus_force`
+entry points to the logical slider. CTk's global click callback and other
+application observers still run; no global binding is replaced or removed,
+and the click is not stopped with `break`. The original focus assertion is
+retained. Its native regression additionally checks the global click observer,
+keyboard input on the actual focused widget, all three canvas focus entry
+points, and unchanged global bindings after widget destruction.
+
+The exact original failure was reproduced locally with real Tk/CTk under the
+installed Xorg dummy display. Both native contrast cases then passed after the
+fix, each in a fresh interpreter process. This local native run covers the
+actual event and focus path; it is still a Linux Xorg run, not a replacement
+for the Windows gate. The adjacent contrast/button/selector/switch/numeric/
+preview/layout/workspace/Browser One-Click selection passed **100 tests:
+87 passed and 13 Windows-gated cases skipped**. No skip condition or original
+focus requirement was weakened. This closes the existing U1502 behavior and
+adds **zero improvement groups**.
+
+Independent root and peer reviews of this completion are closed without
+blockers. Root repeated both real Xorg cases successfully; the peer traced the
+installed CTk global callbacks and mixin dispatch and passed 24 focused cases
+with five native Windows skips. These overlapping checks do not add IDs.
