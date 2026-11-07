@@ -132,20 +132,9 @@ def _package_versions(issues=None, *, cancelled=lambda: False):
 def _memory_total_mb():
     try:
         if os.name == 'nt':
-            import ctypes
-            class MEMORYSTATUSEX(ctypes.Structure):
-                _fields_=[('dwLength',ctypes.c_uint32),('dwMemoryLoad',ctypes.c_uint32),
-                          ('ullTotalPhys',ctypes.c_ulonglong),('ullAvailPhys',ctypes.c_ulonglong),
-                          ('ullTotalPageFile',ctypes.c_ulonglong),('ullAvailPageFile',ctypes.c_ulonglong),
-                          ('ullTotalVirtual',ctypes.c_ulonglong),('ullAvailVirtual',ctypes.c_ulonglong),
-                          ('ullAvailExtendedVirtual',ctypes.c_ulonglong)]
-            status=MEMORYSTATUSEX();status.dwLength=ctypes.sizeof(status)
-            from WindowsSystem import load_system_library
-            memory_status=load_system_library('kernel32').GlobalMemoryStatusEx
-            memory_status.argtypes=[ctypes.POINTER(MEMORYSTATUSEX)]
-            memory_status.restype=ctypes.c_int
-            if memory_status(ctypes.byref(status)):
-                return int(status.ullTotalPhys // (1024*1024))
+            from WindowsSystem import physical_memory_bytes
+            total,_available=physical_memory_bytes()
+            return total // (1024*1024)
         pages=os.sysconf('SC_PHYS_PAGES'); page_size=os.sysconf('SC_PAGE_SIZE')
         return int(pages*page_size//(1024*1024))
     except InterruptedError:

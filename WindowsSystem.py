@@ -45,6 +45,34 @@ def _load_system_library(name: str, use_last_error: bool):
         raise
 
 
+class _MemoryStatusEx(ctypes.Structure):
+    _fields_ = [('dwLength', ctypes.c_uint32), ('dwMemoryLoad', ctypes.c_uint32)] + [
+        (name, ctypes.c_uint64) for name in (
+            'ullTotalPhys', 'ullAvailPhys', 'ullTotalPageFile', 'ullAvailPageFile',
+            'ullTotalVirtual', 'ullAvailVirtual', 'ullAvailExtendedVirtual')]
+
+
+def physical_memory_bytes() -> tuple[int, int]:
+    """Return fresh (total, available) physical bytes through a private ABI.
+
+    The system DLL handle is cached, but indexing it creates a new function
+    object. A concurrent native consumer cannot overwrite this call's argument
+    types, and this call cannot change a different consumer's cached symbol.
+    No memory observation is cached; available zero is a real measurement.
+    """
+    status = _MemoryStatusEx()
+    status.dwLength = ctypes.sizeof(status)
+    query = load_system_library('kernel32.dll', use_last_error=True)['GlobalMemoryStatusEx']
+    query.argtypes = [ctypes.POINTER(_MemoryStatusEx)]
+    query.restype = ctypes.c_int32
+    if not query(ctypes.byref(status)):
+        raise OSError('GlobalMemoryStatusEx failed.')
+    total, available = int(status.ullTotalPhys), int(status.ullAvailPhys)
+    if total <= 0 or available > total:
+        raise OSError('Windows returned inconsistent physical memory information.')
+    return total, available
+
+
 def _directory_path(value: str, label: str) -> Path:
     if not value or not PureWindowsPath(value).is_absolute():
         raise OSError(f'Windows returned an invalid {label} directory.')

@@ -1,6 +1,15 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 810 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16 and three in batch 17. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 815 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17 and five in batch 18. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 18: fresh result checks and bounded planning work
+
+- Re-check the visible drawing through a fresh guarded capture without moving the mouse or drawing; publish current review metrics and read-only history.
+- Export only scheduled row payloads and reuse identical first-brush layout scores while preserving complete plans and physical ink geometry.
+- Honor explicit browser contour/current-ink mode exit and keep concurrent Windows RAM probes independent.
+- Complete transactional saved hardware recommendations and current Mobile Preview panel ownership, including native image and callback cleanup. These complete existing contracts and add no IDs.
+
+Five new groups bring the registry to **815**, leaving **185** before the requested release. Frozen-source discovery completed **4,046 tests: 3,992 passed and 54 skipped**. The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures and historical plan parity passed. Paired planning measurements disclose workload-dependent time and traced allocations; physical GPU and target-app drawing speed are not measured here. See [final local validation](docs/v148-batch18-validation.json). Exact-commit Windows/CI results remain a separate gate recorded in PR46.
 
 ## Batch 17: current runtime evidence and dependable verification
 

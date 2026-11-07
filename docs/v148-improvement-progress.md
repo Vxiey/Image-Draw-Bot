@@ -6,10 +6,10 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
-Batch 17 implements **810 total distinct improvements, with 190 remaining**.
-Final frozen-source integration completed **3,985 tests**: **3,934 passed and 51 platform/hardware cases skipped**, with all 837 source/configuration hashes unchanged. All three new groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures and 166 historical layered implementation/public-plan comparisons passed. [Final local evidence](v148-batch17-validation.json) is separate from the exact published-commit Windows/CI gate in PR46.
+Batch 18 implements **815 total distinct improvements, with 185 remaining**.
+Final frozen-source integration completed **4,046 tests**: **3,992 passed and 54 platform/hardware cases skipped**, with all 849 source/configuration hashes unchanged. All five new groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures and complete historical rendering comparisons passed. Eight workloads have six balanced timing pairs each and separate traced-allocation evidence. [Final local evidence](v148-batch18-validation.json) is separate from the new published-commit Windows/CI gate in PR46.
 
-The preceding 807-group checkpoint passed six checks, but its Windows suite stalled in a new native-menu test whose synchronous driver could not dismiss the Windows modal popup. Batch 17 supplies a real native event-loop driver with bounded callback and child-process timeouts, and clears the app popup flag after Windows modal return so the next pointer/keyboard opening works. Windows verification must come from the new published commit; the prior hang is not a passing gate. The release condition remains 1,000 independently verified behavior changes.
+The preceding native-menu follow-up `f2cf07bc13ee6e2c44c14096ead703ab9881d216` passed all seven checks. Its Windows job completed 3,985 tests in 249.922 seconds (three skips), including the actual native selector, then passed self-test, bundle validation and packaged GUI/native drag-and-drop. [Exact prior run](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42383473745). New native RAM and sharing-dialog changes require the new commit's Windows result. The release condition remains 1,000 independently verified behavior changes.
 
 - The first 100 improvements are merged on `main` at `eb9804560c8648a92aabe2688e362a6b4a1d28b5`; Windows and Linux CI passed for their reviewed source head.
 - Version 1.0.147's promotion PR was closed unmerged after the target changed. The RC4 release run was cancelled before publication.

@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 810 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **190 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 815 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **185 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -42,6 +42,8 @@ The count excludes tests, assertions, documentation, version changes, formatting
 
 The [machine-readable registry](v148-improvements.json) maps every global ID to its area-local ID and evidence ledger. The [working plan](v148-improvement-progress.md) records release conditions and the next review cycle.
 
+| Global IDs | Local IDs | Area | Count | Evidence |
+| --- | --- | --- | ---: | --- |
 | 760 | BA01 | Batch 09 tracked clipboard preparation | 1 | [Application ledger](v148-batch09-application.md); independent platform review. |
 | 761 | R901 | Batch 09 actual brush containment inside a subject | 1 | [Rendering ledger](v148-batch09-rendering.md); root and platform reviews. |
 | 762–764 | U901–U903 | Batch 09 live readouts, complete word results and renderer summaries | 3 | [UI ledger](v148-batch09-ui-workflow.md); independent root review. |
@@ -73,8 +75,15 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 808 | A1701 | Batch 17 current runtime safety presentation | 1 | [Application ledger](v148-batch17-runtime-report.md); independent controller/executor review. |
 | 809 | R1701 | Batch 17 real layered-color diagnostics | 1 | [Rendering ledger](v148-batch17-rendering-layered-diagnostics.md); independent emitted-raster and public-plan review. |
 | 810 | P1701 | Batch 17 local report destination authority | 1 | [Platform ledger](v148-batch17-report-paths.md); actual disk-loader/Open integration review. |
+| 811 | A1801 | Batch 18 fresh read-only result verification | 1 | [Evidence](v148-batch18-application-recheck.md); independent source/actual-flow review. |
+| 812 | R1801 | Batch 18 bounded row payload production | 1 | [Evidence](v148-batch18-rendering.md); independent source/actual-flow review. |
+| 813 | R1802 | Batch 18 component-local packing score reuse | 1 | [Evidence](v148-batch18-rendering.md); independent source/actual-flow review. |
+| 814 | U1801 | Batch 18 explicit browser sketch-mode exit | 1 | [Evidence](v148-batch18-ui-workflow.md); independent source/actual-flow review. |
+| 815 | P1801 | Batch 18 independent native RAM observations | 1 | [Evidence](v148-batch18-platform-native-memory.md); independent source/actual-flow review. |
 
 ## Integration evidence
+
+- Batch 18: five independently reviewed behavior groups bring the total to **815**, with **185 remaining**. Frozen-source integration completed **4,046 tests: 3,992 passed, 54 skipped**, with all 849 source/configuration hashes unchanged. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Eight balanced paired rendering workloads retain complete output; their memory and timing limits are disclosed separately. Guarded result re-check, lazy row payloads, component score reuse, explicit sketch-mode exit and native RAM independence are new groups. Existing-contract completions add no IDs. [Final local validation](v148-batch18-validation.json). New exact-commit Windows/CI results belong to PR46.
 
 - Batch 17: three independently reviewed behavior groups bring the total to **810**, with **190 remaining**. Frozen-source integration completed **3,985 tests: 3,934 passed, 51 skipped**, with all 837 source/configuration hashes unchanged. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Current-report ownership, real layered-color evidence and local report destinations are new groups; retry/timer/native-popup completions, dependency maintenance and restored test discovery add no IDs. [Final local validation](v148-batch17-validation.json). Exact-commit Windows/CI evidence is recorded in PR46.
 

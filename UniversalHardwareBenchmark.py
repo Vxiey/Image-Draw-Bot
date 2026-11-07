@@ -28,7 +28,7 @@ from GpuHardware import GpuDevice, detect_gpus
 from ResourceAllocation import available_ram_mb, logical_cpu_count
 from RuntimePaths import atomic_binary_writer, data_dir, is_finite_number, read_json
 from ImageGradients import luminance_edges
-from WindowsSystem import load_system_library
+from WindowsSystem import physical_memory_bytes
 
 PROFILE_VERSION = 2
 PROFILE_FILE = data_dir() / "hardware-performance-profile-v1.json"
@@ -62,22 +62,8 @@ class BackendScore:
 def _total_ram_mb() -> int | None:
     if sys.platform == "win32":
         try:
-            import ctypes
-
-            class MEMORYSTATUSEX(ctypes.Structure):
-                _fields_ = [
-                    ("dwLength", ctypes.c_uint32), ("dwMemoryLoad", ctypes.c_uint32),
-                    ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
-                    ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
-                    ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
-                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
-                ]
-            stat = MEMORYSTATUSEX(); stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-            memory_status = load_system_library("kernel32.dll").GlobalMemoryStatusEx
-            memory_status.argtypes = [ctypes.POINTER(MEMORYSTATUSEX)]
-            memory_status.restype = ctypes.c_int32
-            if memory_status(ctypes.byref(stat)):
-                return max(0, int(stat.ullTotalPhys // (1024 * 1024)))
+            total, _available = physical_memory_bytes()
+            return total // (1024 * 1024)
         except Exception:
             return None
     try:

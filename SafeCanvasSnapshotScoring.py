@@ -220,6 +220,7 @@ def score_final_canvas_snapshot(*, snapshot: Image.Image, original_source: Image
                                 simulated_final: Image.Image | None = None,
                                 quantized_target: Image.Image | None = None,
                                 profile_key: str = "",
+                                gpu_mode: str = "Auto",
                                 actual_elapsed_seconds: float | None = None,
                                 usable_deadline_seconds: float | None = None,
                                 visual_gate_percent: float | None = None,
@@ -262,19 +263,22 @@ def score_final_canvas_snapshot(*, snapshot: Image.Image, original_source: Image
         actual_coverage = float(mask["actual_coverage_percent"])
 
         source_metrics = evaluate_preview(source_norm, actual, coverage_percent=actual_coverage,
-                                          return_error_map=False, return_delta_e_heatmap=False, cancelled=cancelled)
+                                          return_error_map=False, return_delta_e_heatmap=False,
+                                          gpu_mode=gpu_mode, cancelled=cancelled)
         simulated_match = None
         simulated_metrics: dict[str, Any] = {}
         if isinstance(simulated_final, Image.Image):
             simulated_metrics = evaluate_preview(expected_norm, actual, coverage_percent=actual_coverage,
-                                                 return_error_map=False, return_delta_e_heatmap=False, cancelled=cancelled)
+                                                 return_error_map=False, return_delta_e_heatmap=False,
+                                                 gpu_mode=gpu_mode, cancelled=cancelled)
             simulated_match = _float(simulated_metrics.get("visual_accuracy_percent"), None)
         target_match = None
         if isinstance(quantized_target, Image.Image):
             target_norm = (expected_norm if quantized_target is expected_image else
                            own(normalize_source(quantized_target, comparison_size, background=background)))
             target_metrics = evaluate_preview(target_norm, actual, coverage_percent=actual_coverage,
-                                              return_error_map=False, return_delta_e_heatmap=False, cancelled=cancelled)
+                                              return_error_map=False, return_delta_e_heatmap=False,
+                                              gpu_mode=gpu_mode, cancelled=cancelled)
             target_match = _float(target_metrics.get("visual_accuracy_percent"), None)
         else:
             target_metrics = None

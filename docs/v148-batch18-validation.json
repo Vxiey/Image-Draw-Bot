@@ -1,0 +1,114 @@
+{
+  "baseline_commit": "f2cf07bc13ee6e2c44c14096ead703ab9881d216",
+  "implementation_comparison_commit": "d7721a36975a36137b583beda9ff3c47c05208fd",
+  "implemented": 815,
+  "target": 1000,
+  "remaining": 185,
+  "added_behavior_groups": [
+    "A1801",
+    "R1801",
+    "R1802",
+    "U1801",
+    "P1801"
+  ],
+  "release_published": false,
+  "uncounted_completions": [
+    "AP04/AP06: capture capability belongs to GuardedMouse, not the shipped raw WindowsMouse; correction-only native input retains its safety/unlock chain",
+    "RD01: propagate the retained plan GPU policy through actual execution and read-only re-check into every final-canvas comparison; explicit CPU cannot silently open an Auto GPU route",
+    "U1601/IW40: apply hardware recommendations transactionally, restore settings on save failure, invalidate accepted changed plans once, and preserve real worker-result-to-done application",
+    "090: one current Mobile Preview sharing panel with matching text/QR/actions, old-session revocation, and owned CTk image/callback cleanup",
+    "Existing System32-loader contract: route the available-memory reader through the typed shared system boundary; no separate ID",
+    "Historical benchmark compatibility guard and independent oracle keyword acceptance retain existing frozen methods without extra IDs",
+    "The test-only native-menu follow-up and completed exact Windows evidence add no IDs"
+  ],
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 4046,
+    "runner_seconds": 116.483,
+    "wall_seconds": 117.361,
+    "status": "OK (skipped=54)",
+    "skipped": 54,
+    "source_files": 849,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "6e1ed651c14b9287a8c6b19301d2ccfc35e6787fa393e6a93ccdf8498c55c265"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1162,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch18-engine-benchmarks.json",
+    "fixtures": 8,
+    "mismatched_plan_pixels": {
+      "icon": 0,
+      "line-art": 0,
+      "text-small-detail": 0,
+      "cartoon-large-colour": 0,
+      "photo-gradient": 0,
+      "fill-risk": 0,
+      "thin-diagonals": 0,
+      "many-islands": 0
+    },
+    "all_exact_palette_geometry": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "rendering_comparisons": {
+    "artifact": "v148-batch18-rendering-benchmarks.json",
+    "sha256": "5f41ce551b7dd29168e66ed94523a876b0867728543c8e8c3ed55f6e493e4e00",
+    "historical_parity": {
+      "serial_reader_pairs": 288,
+      "large_reader_pairs": 9,
+      "complete_pack_pairs": 24,
+      "complete_output_sha256": "555926c1571fe9c6ebb0156e41194584fc73aaa91cc257307d9a4384f6493757"
+    },
+    "workloads": 8,
+    "complete_public_plans": 6,
+    "balanced_pairs_per_workload": 6,
+    "scope": "CPU planning, complete-output fingerprinting and owned-image cleanup. No physical drawing, GPU, GUI or network timing.",
+    "memory_scope": "Python/NumPy traced peaks, excluding process RSS, most native Pillow cores and child-process heaps. Eager producer payload bytes and fullsize conversion counts are separate lifetime observations.",
+    "exact_output_parity": true,
+    "source_unchanged": true
+  },
+  "independent_source_reviews": "All five new groups and the existing-contract completions have closed independent source reviews. Actual controller/history/settings gates, real ctypes interleaving and real Xorg/CTk dialog lifecycle checks passed; live Windows additions require the new published commit.",
+  "prior_checkpoint_validation": {
+    "commit": "f2cf07bc13ee6e2c44c14096ead703ab9881d216",
+    "all_seven_checks_passed": true,
+    "windows_tests": 3985,
+    "windows_runner_seconds": 249.922,
+    "windows_skipped": 3,
+    "native_selector_passed": true,
+    "windows_selftest_passed": true,
+    "bundle_validation_passed": true,
+    "packaged_gui_and_native_drop_passed": true,
+    "run_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42383473745",
+    "windows_job_id": 128435813226
+  },
+  "remote_validation": "Exact published-commit Windows/Linux, dependency and CodeQL results are recorded in PR46. The prior checkpoint is green; new native RAM/dialog cases are not declared Windows-verified before the new run passes.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46"
+}

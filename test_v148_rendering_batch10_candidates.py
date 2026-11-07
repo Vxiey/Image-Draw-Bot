@@ -26,8 +26,12 @@ def component(shape):
 
 
 def scalar_candidate_oracle(target,residual,brush_px,*,model,comp,phase,final_size,
-                            origin=(0,0),cancelled=lambda:False,maximize_gain=False):
-    """Literal footprint tests and Pillow axis sweeps, independent of NumPy morphology."""
+                            origin=(0,0),cancelled=lambda:False,maximize_gain=False,_layout_cache=None):
+    """Literal footprint tests and Pillow axis sweeps, independent of NumPy morphology.
+
+    The production caller may offer cached scalar scores. This independent
+    oracle deliberately ignores them and recomputes every footprint/layout.
+    """
     h,w=target.shape;brush=max(1,int(brush_px));before,after=(brush-1)//2,brush//2
     centers=np.zeros((h,w),bool)
     for y in range(before,h-after):

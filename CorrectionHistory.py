@@ -368,10 +368,61 @@ def record_correction_history(plan_or_options: dict[str, Any], *, actual_seconds
         }
 
 
+def record_result_verification(options: dict[str, Any], metrics: dict[str, Any], *,
+                               path: Path | None = None, created_at: float | None = None,
+                               cancelled=lambda: False) -> dict[str, Any]:
+    """Append a read-only observation without attributing correction or drawing.
+
+    Old correction fields in ``options`` supply no before/after pair, counters
+    or gain. Only the context and this fresh observation enter the history.
+    Cancellation is checked before the atomic publication; an already committed
+    observation is never deleted if Stop arrives afterward.
+    """
+    def check():
+        if cancelled():
+            raise InterruptedError('Result re-check history cancelled.')
+    check()
+    _, options, ctx = _context(options if isinstance(options, dict) else {})
+    observed = compact_result_metrics(metrics)
+    if not observed:
+        raise ValueError('Result re-check history requires fresh result metadata.')
+    created = time.time() if created_at is None else created_at
+    if not is_finite_number(created) or created < 0:
+        raise ValueError('Result re-check timestamp must be finite and nonnegative.')
+    material = json.dumps({'t': round(created, 3), 'ctx': ctx, 'observed': observed,
+                           'operation': 'read-only-verification'}, sort_keys=True, allow_nan=False)
+    entry = {'id': hashlib.sha256(material.encode('utf-8')).hexdigest()[:16],
+             'version': VERSION, 'created_at': round(created, 3),
+             'profile_key': ctx['profile_key'], 'operation': 'read-only-verification',
+             'state': 'rechecked' if metrics.get('available') is True else 'recheck-unavailable',
+             'context': ctx, 'before': {}, 'after': observed, 'delta': {}, 'correction': {},
+             'reason': str(metrics.get('reason') or metrics.get('summary') or '')[:220],
+             'privacy': 'Read-only result observation; no correction gain or persisted image artifacts.',
+             'stores_image_data': False, 'capture_pixels_persisted': False, 'image_pixels_persisted': False}
+    if not _valid_entry(entry):
+        raise ValueError('Result re-check history contains invalid result metadata.')
+    check()
+    with file_transaction(_resolved_path(options, path)):
+        resolved, db = _load(options, path)
+        entries = list(db.get('entries') or [])
+        if not entries or entries[-1].get('id') != entry['id']:
+            entries.append(entry)
+        db['entries'] = entries[-MAX_ENTRIES:]
+        db['updated_at'] = round(time.time(), 3)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        check()
+        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False))
+        return {'recorded': True, 'profile_key': ctx['profile_key'], 'entry_id': entry['id'],
+                'state': entry['state'], 'entries': len(db['entries']),
+                'latest': compact_history_entry(entry),
+                'summary': summarize_correction_history(db, limit=DISPLAY_LIMIT),
+                'storage_path': str(resolved)}
+
+
 def compact_history_entry(entry: dict[str, Any]) -> dict[str, Any]:
     entry = _as_dict(entry)
     before = _as_dict(entry.get("before")); after = _as_dict(entry.get("after")); delta = _as_dict(entry.get("delta")); corr = _as_dict(entry.get("correction"))
-    return {
+    result = {
         "id": entry.get("id"),
         "created_at": entry.get("created_at"),
         "state": entry.get("state"),
@@ -386,6 +437,10 @@ def compact_history_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "selected_correction_pixels": corr.get("selected_correction_pixels"),
         "reason": corr.get("reason"),
     }
+    if entry.get('operation') == 'read-only-verification':
+        result['operation'] = 'read-only-verification'
+        result['reason'] = entry.get('reason')
+    return result
 
 
 def load_correction_history(options: dict[str, Any] | None, *, path: Path | None = None,
@@ -450,6 +505,13 @@ def format_correction_history(history: dict[str, Any] | None, *, max_entries: in
         parts = [state]
         if before is not None and after is not None:
             parts.append(f"Visual {float(before):.1f}% → {float(after):.1f}%")
+        elif item.get('operation') == 'read-only-verification':
+            parts.append('read-only observation')
+            if after is not None:
+                parts.append(f'Visual {float(after):.1f}%')
+            coverage = item.get('after_coverage_percent')
+            if coverage is not None:
+                parts.append(f'Coverage {float(coverage):.1f}%')
         if delta is not None:
             parts.append(f"Δ {float(delta):+.1f} pp")
         if coverage_delta is not None:

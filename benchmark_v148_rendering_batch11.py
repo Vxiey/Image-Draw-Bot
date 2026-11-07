@@ -10,6 +10,7 @@ No captures, downloads, real native input or flagged executables are used.
 import argparse
 from contextlib import closing
 import hashlib
+import inspect
 import json
 from pathlib import Path
 import platform
@@ -58,6 +59,15 @@ def execution_evidence(plan,origin,area):
 
 def measure(revision=BASELINE,repeats=5):
     if type(repeats) is not int or repeats<1:raise ValueError('repeats must be a positive integer')
+    if 'total_drawable' in inspect.signature(regional._brush_pack_candidate).parameters:
+        raise RuntimeError(
+            'This historical policy benchmark requires the frozen batch17 caller '
+            'at d7721a36975a36137b583beda9ff3c47c05208fd or an earlier compatible '
+            'checkpoint. The current caller passes the existing drawable count '
+            'and reuses initial layout scores; substituting only the historical '
+            'packing function would change the isolation contract. Run the '
+            'recorded checkpoint to reproduce batch11; use '
+            'benchmark_v148_rendering_batch18.py for complete-module comparisons.')
     old_pack,old_hash=previous_function(regional,'_brush_pack_candidate',revision)
     new_pack=regional._brush_pack_candidate
     names=('DrawBot','AdaptiveRegionHybrid','NativeBrushProjection','Precision','AutoDrawing',

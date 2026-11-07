@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 810,
+  "implemented": 815,
   "release_published": false,
-  "validation": "Batch 17: 3,985 test cases completed in 111.165 seconds: 3,934 passed and 51 platform/hardware cases skipped, with all 837 source/configuration hashes unchanged. Three new behavior groups and existing-contract completions have closed independent reviews. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Layered diagnostics have 166 historical implementation/public-plan comparisons; all geometry and preview pixels remain exact. Evidence is in v148-batch17-validation.json; published-commit Windows/CI results are recorded separately in PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 18: 4,046 tests completed in 116.483 seconds: 3,992 passed and 54 platform/hardware cases skipped, with all 849 source/configuration hashes unchanged. Five independently reviewed behavior groups and existing-contract completions passed the combined gate. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Rendering parity covers 288 small reader pairs, nine larger serial/thread pairs, 24 complete brush packs and eight paired workloads, including six public plans. Six balanced timing pairs per workload and separate traced-memory measurements preserve complete results. Published-commit native Windows/CI results are recorded separately in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6299,6 +6299,46 @@
       "description": "Derive historical safety-report opening destinations only from the selected local JSON and its actual adjacent text file. Discard embedded text destinations, including invalid types or unrelated existing files, and fall back to the verified JSON when its text sibling is missing or is a directory. Preserve ordinary saved report pairs, evidence and file contents.",
       "batch": 17,
       "id": 810
+    },
+    {
+      "local_id": "A1801",
+      "area": "batch18-application",
+      "ledger": "v148-batch18-application-recheck.md",
+      "description": "Provide the advertised Re-check result action as a tracked, bounded, read-only guarded capture and final-canvas scoring operation. Bind result/status/completion to the retained source, plan, profile and target geometry; preserve Stop across later global resets and reject stale clear/close/completion events. Publish fresh detached review metrics and explicit single-observation history without inherited correction gain, native drawing input or runtime/quality learning. Retire stale result scores when fresh capture is unavailable and retain in-memory results when history saving fails.",
+      "batch": 18,
+      "id": 811
+    },
+    {
+      "local_id": "R1801",
+      "area": "batch18-rendering",
+      "ledger": "v148-batch18-rendering.md",
+      "description": "Export row payloads only as the existing bounded scheduler requests them, avoiding the full raw RGBA export and eager list of every task's bytes in basic and advanced color planning. Borrow existing RGBA pixels and close owned conversions/crops on completion, cancellation and fallback. Preserve picklable process tasks, real serial/thread/process outputs, source ownership and complete public High/Ultra plans; measurements separate payload lifetime and traced allocations from workload-dependent timing.",
+      "batch": 18,
+      "id": 812
+    },
+    {
+      "local_id": "R1802",
+      "area": "batch18-rendering",
+      "ledger": "v148-batch18-rendering.md",
+      "description": "Reuse the identical first-brush layout scores within one component's complete packing search, retaining one useful-centre mask and scalar descriptors rather than completed alternative rasters/path lists. Pass the already known drawable count instead of rescanning the complete component map for each pack. Release the local context on Stop and completion while preserving both gain policies, all ladders, full delivery costs, tie order, metadata and independent physical ink rasters.",
+      "batch": 18,
+      "id": 813
+    },
+    {
+      "local_id": "U1801",
+      "area": "batch18-ui",
+      "ledger": "v148-batch18-ui-workflow.md",
+      "description": "Honor an explicit Black contour sketch Off action in browser profiles by ending the dependent Single-color current-ink choice through the existing deferred configuration refresh. Keep both visible switches and the actual full-color plan consistent, while preserving independent palette contours, saved-settings normalization and Paint's current-ink shaded renderer.",
+      "batch": 18,
+      "id": 814
+    },
+    {
+      "local_id": "P1801",
+      "area": "batch18-platform",
+      "ledger": "v148-batch18-platform-native-memory.md",
+      "description": "Keep concurrent Windows physical-memory observations independent by binding a private native function signature and a shared fixed-width 64-byte MEMORYSTATUSEX layout for each call. Diagnostics, hardware benchmarking and resource allocation read fresh 64-bit values without overwriting another caller's cached ctypes ABI. Preserve known-zero low-memory rejection, unavailable fallbacks and portable probes; deterministic real-ctypes interleaving and a live-Windows integration case verify the boundary.",
+      "batch": 18,
+      "id": 815
     }
   ]
 }

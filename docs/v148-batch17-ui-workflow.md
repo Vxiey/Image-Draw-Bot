@@ -138,3 +138,15 @@ The three real Xorg/Tk cases passed after this follow-up (0.146, 0.154 and
 review closed without blockers. A subsequent native Windows run remains the
 required platform proof. No product code or improvement count changes in this
 follow-up.
+
+### Completed Windows gate for the test-only follow-up
+
+All seven GitHub checks passed for
+`f2cf07bc13ee6e2c44c14096ead703ab9881d216`.
+The [exact Windows job](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42383473745/job/128435813226)
+completed **3,985 tests in 249.922 seconds: 3,982 passed and three skipped**.
+The real selector case passed its Safe-to-Balanced selection and existing
+native ownership, callback and repeated-opening assertions. Windows self-test,
+bundle build/validation and packaged-GUI/native drag-and-drop verification also
+passed. The earlier failed and cancelled runs remain recorded above; neither
+is retroactively described as successful. This follow-up adds zero IDs.

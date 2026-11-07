@@ -508,7 +508,7 @@ def build_ui(a, quality, speed):
     sketch_switch=control(KeyboardSwitch(step4,text='Black contour sketch',variable=a.outline,
         command=a.sketch_mode_changed,progress_color=ACCENT_DARK,text_color=TEXT))
     sketch_switch.pack(anchor='w',pady=(0,8))
-    tooltip(sketch_switch,'Simple black outlines, no shading or colour fills. Uses a calibrated black swatch. For Single-color sketch, select black in the app/game yourself first. Turn off to return to colour drawing.')
+    tooltip(sketch_switch,'Simple black outlines, without shading or colour fills. Uses a calibrated black swatch, or your selected ink when Single-color sketch is on. Outside Paint, turning this off also exits Single-color sketch. Paint can keep single-color shading.')
     setting_row(step4, 'Sketch detail', a.sketch_detail, ['Auto','Simple','Balanced','Detailed'],
                 'Auto fits detail to the available time. Gartic timer reading runs at Start when enabled; preview before Start uses the manual budget.', width=160)
     timer_switch=control(KeyboardSwitch(step4,text='Read Gartic timer at Start',variable=a.read_gartic_timer,command=a.options_changed,progress_color=ACCENT_DARK,text_color=TEXT))
@@ -702,6 +702,11 @@ def build_ui(a, quality, speed):
     a.correction_full_retry_button.pack(side='left')
     tooltip(a.correction_retry_button, 'Runs only a bounded post-draw correction pass from a fresh read-only canvas snapshot. It still requires the normal target lock, safety preflight and unlock chain before native input.')
     tooltip(a.correction_full_retry_button, 'Retries the full drawing with the current image/settings. It never bypasses preflight, dry run, unlock or CanvasGuard.')
+    recheck_actions = frame(review_card)
+    recheck_actions.pack(fill='x', padx=8, pady=(0, 8))
+    a.result_recheck_button = btn(recheck_actions, 'Re-check result', a.recheck_drawing_result, width=186, height=28)
+    a.result_recheck_button.pack(side='left')
+    tooltip(a.result_recheck_button, 'Minimizes Image Draw Bot briefly and scores the current target canvas again. No mouse input is sent; current result metrics and read-only history are refreshed.')
     history_actions = frame(review_card)
     history_actions.pack(fill='x', padx=8, pady=(0, 8))
     a.correction_history_button = btn(history_actions, 'History / before-after', a.show_correction_history, width=186, height=28)

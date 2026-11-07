@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from functools import lru_cache
 from Colors import allColors
+from PlanningRowTasks import read_only_rgba, RgbaRowTasks
 
 
 @dataclass
@@ -141,20 +142,14 @@ def _parallel_basic_strokes(image, lines, skip_white, cancelled, cpu_workers, cp
                                           workers=workers, ram_budget_mb=ram_mb, preview=bool(preview_plan))
         if backend == "serial":
             return None
-        rgba = image.convert("RGBA")
-        raw = rgba.tobytes()
         palette = tuple(tuple(c.RGB) for c in allColors)
-        ranges = row_chunk_ranges(rgba.height, rgba.width, workers=workers, ram_budget_mb=ram_mb,
+        ranges = row_chunk_ranges(image.height, image.width, workers=workers, ram_budget_mb=ram_mb,
                                   bytes_per_pixel=16, min_rows=12, max_rows=256)
         if len(ranges) <= 1:
             return None
-        tasks = []
-        stride = rgba.width * 4
-        for y0, y1 in ranges:
-            if cancelled():
-                return None
-            tasks.append((y0, rgba.width, raw[y0 * stride:y1 * stride], bool(lines), bool(skip_white), palette))
-        chunks = parallel_map(_basic_rows_worker, tasks, backend=backend, workers=workers, cancelled=cancelled)
+        with read_only_rgba(image) as rgba:
+            tasks = RgbaRowTasks(rgba, ranges, (bool(lines), bool(skip_white), palette), cancelled=cancelled)
+            chunks = parallel_map(_basic_rows_worker, tasks, backend=backend, workers=workers, cancelled=cancelled)
         if cancelled():
             return None
         return _merge_groups(chunks, len(palette))
@@ -176,36 +171,36 @@ def build_strokes(image, lines=True, skip_white=True, cancelled=lambda: False,
     """
     if cancelled():
         return None
-    image = image.convert("RGBA")
-    if cpu_workers and int(cpu_workers) > 1:
-        parallel = _parallel_basic_strokes(image, lines, skip_white, cancelled, cpu_workers,
-                                          cpu_engine, ram_budget_mb, preview_plan)
-        if parallel is not None:
-            return parallel
-    groups = [[] for _ in allColors]
-    pixels = image.load()
-    for y in range(image.height):
-        if cancelled():
-            return None
-        previous, start = None, 0
-        for x in range(image.width + 1):
-            color = None
-            if x < image.width:
-                r, g, b, alpha = pixels[x, y]
-                if alpha:
-                    rgb = tuple(round((v * alpha + 255 * (255 - alpha)) / 255)
-                                for v in (r, g, b))
-                    color = closest_color(rgb)
-                    if skip_white and min(allColors[color].RGB) >= 245:
-                        color = None
-            if not lines:
-                if color is not None:
-                    groups[color].append((x, y, x, y))
-            elif color != previous:
-                if previous is not None:
-                    groups[previous].append((start, y, x - 1, y))
-                start, previous = x, color
-    return groups
+    with read_only_rgba(image) as image:
+        if cpu_workers and int(cpu_workers) > 1:
+            parallel = _parallel_basic_strokes(image, lines, skip_white, cancelled, cpu_workers,
+                                              cpu_engine, ram_budget_mb, preview_plan)
+            if parallel is not None:
+                return parallel
+        groups = [[] for _ in allColors]
+        pixels = image.load()
+        for y in range(image.height):
+            if cancelled():
+                return None
+            previous, start = None, 0
+            for x in range(image.width + 1):
+                color = None
+                if x < image.width:
+                    r, g, b, alpha = pixels[x, y]
+                    if alpha:
+                        rgb = tuple(round((v * alpha + 255 * (255 - alpha)) / 255)
+                                    for v in (r, g, b))
+                        color = closest_color(rgb)
+                        if skip_white and min(allColors[color].RGB) >= 245:
+                            color = None
+                if not lines:
+                    if color is not None:
+                        groups[color].append((x, y, x, y))
+                elif color != previous:
+                    if previous is not None:
+                        groups[previous].append((start, y, x - 1, y))
+                    start, previous = x, color
+        return groups
 
 
 def monochrome_strokes(image, lines=True, cancelled=lambda:False,

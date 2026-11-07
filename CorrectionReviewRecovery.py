@@ -268,8 +268,8 @@ def build_correction_review_state(options: dict[str, Any] | None, *, can_snapsho
             "Retry full drawing", full_retry_allowed, full_retry_reason,
             requires_safety_chain=True, native_input=True).as_dict(),
         "rerun_result_verification": ReviewAction(
-            "Re-check result", bool(reverify_allowed and strict_safety_ready is True), reverify_reason,
-            requires_safety_chain=True, native_input=False).as_dict(),
+            "Re-check result", reverify_allowed, reverify_reason,
+            requires_safety_chain=False, native_input=False).as_dict(),
     }
     history_meta = _as_dict(options.get('correction_history_meta'))
     if not history_meta:

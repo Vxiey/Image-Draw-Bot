@@ -330,7 +330,7 @@ def _offset_paths(paths, origin):
 
 def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:int,*,
                                model,comp,phase:str,final_size:bool,origin=(0,0),cancelled=lambda:False,
-                               projection=None,maximize_gain:bool=False):
+                               projection=None,maximize_gain:bool=False,_layout_cache=None):
     """Choose a safe, cost-efficient run layout inside one component ROI.
 
     Extra Fast tests the native brush stride and one denser half-stride for wide
@@ -343,45 +343,61 @@ def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:in
     """
     _cancel(cancelled)
     brush=max(1,int(brush_px))
-    safe=_eroded_centers(target,brush,cancelled=cancelled)
-    useful=safe & _centers_touching_mask(residual,brush,cancelled=cancelled)
-    if projection is not None:
-        useful=projection.source_centers(useful)
-    if not np.any(useful):return [],np.zeros_like(target,dtype=np.bool_),0.0
-    stride_sets={}
-    for orientation in ('horizontal','vertical'):
-        scale=(projection.scale_y if orientation=='horizontal' else projection.scale_x) if projection is not None else 1.
-        stride_sets[orientation]=((1,) if final_size else
-            tuple(dict.fromkeys((max(1,int(brush/scale)),max(1,int((brush//2)/scale))))))
-    strides=tuple(dict.fromkeys(stride for values in stride_sets.values() for stride in values))
+    # Only the first, unchanged residual of a component supplies this private
+    # one-entry cache. Policies differ in their gain floor, not in these scalar
+    # layout scores. Later residuals always perform their own geometry search.
+    key=(id(target),id(residual),brush,id(model),id(comp),phase,bool(final_size),
+         tuple(origin),id(projection))
+    cached=_layout_cache.get(key) if _layout_cache is not None else None
     def paint(mask,path,*,cancelled=cancelled):
         native=projection.native_path(path) if projection is not None else path
         _paint_path(mask,native,brush,cancelled=cancelled)
-    candidates=[]
-    for stride in strides:
-        offsets=(0,) if stride==1 else tuple(range(stride))
-        for orientation in ("horizontal","vertical"):
-            if stride not in stride_sets[orientation]:continue
-            for offset in offsets:
-                _cancel(cancelled)
-                local_paths=_runs_from_mask(useful,row_stride=stride,row_offset=offset,orientation=orientation)
-                if not local_paths:continue
-                trial=np.zeros_like(target,dtype=np.bool_)
-                for path in local_paths:paint(trial,path)
-                if np.any(trial & ~target):continue
-                gained=int(np.count_nonzero(trial & residual))
-                if gained<=0:continue
-                paths=_offset_paths(local_paths,origin)
-                seq=_entry_sequence(comp.color_index,paths,phase=phase,comp=comp,brush_px=brush,
-                                    method=f"region-brush-pack-{brush}px")
-                cost=max(.000001,float(model.sequence_cost(
-                    seq,initial_color=int(comp.color_index),initial_brush=brush).total_seconds))
-                # Selection needs only scalar scores and the deterministic
-                # layout descriptor. Retaining every candidate's full ROI
-                # bitmap and path lists multiplied the live workspace by all
-                # stride offsets; only the winning geometry is returned.
-                candidates.append((gained,cost,len(paths),stride,orientation,offset))
-                del local_paths,paths,seq,trial
+    if cached is None:
+        safe=_eroded_centers(target,brush,cancelled=cancelled)
+        useful=safe & _centers_touching_mask(residual,brush,cancelled=cancelled)
+        if projection is not None:
+            useful=projection.source_centers(useful)
+        if not np.any(useful):
+            if _layout_cache is not None:
+                _layout_cache.clear()
+                _layout_cache[key]=(useful,())
+            return [],np.zeros_like(target,dtype=np.bool_),0.0
+        stride_sets={}
+        for orientation in ('horizontal','vertical'):
+            scale=(projection.scale_y if orientation=='horizontal' else projection.scale_x) if projection is not None else 1.
+            stride_sets[orientation]=((1,) if final_size else
+                tuple(dict.fromkeys((max(1,int(brush/scale)),max(1,int((brush//2)/scale))))))
+        strides=tuple(dict.fromkeys(stride for values in stride_sets.values() for stride in values))
+        candidates=[]
+        for stride in strides:
+            offsets=(0,) if stride==1 else tuple(range(stride))
+            for orientation in ("horizontal","vertical"):
+                if stride not in stride_sets[orientation]:continue
+                for offset in offsets:
+                    _cancel(cancelled)
+                    local_paths=_runs_from_mask(useful,row_stride=stride,row_offset=offset,orientation=orientation)
+                    if not local_paths:continue
+                    trial=np.zeros_like(target,dtype=np.bool_)
+                    for path in local_paths:paint(trial,path)
+                    if np.any(trial & ~target):continue
+                    gained=int(np.count_nonzero(trial & residual))
+                    if gained<=0:continue
+                    paths=_offset_paths(local_paths,origin)
+                    seq=_entry_sequence(comp.color_index,paths,phase=phase,comp=comp,brush_px=brush,
+                                        method=f"region-brush-pack-{brush}px")
+                    cost=max(.000001,float(model.sequence_cost(
+                        seq,initial_color=int(comp.color_index),initial_brush=brush).total_seconds))
+                    # Selection needs only scalar scores and the deterministic
+                    # layout descriptor. Retaining every candidate's full ROI
+                    # bitmap and path lists multiplied the live workspace by all
+                    # stride offsets; only the winning geometry is returned.
+                    candidates.append((gained,cost,len(paths),stride,orientation,offset))
+                    del local_paths,paths,seq,trial
+        cached=(useful,tuple(candidates))
+        if _layout_cache is not None:
+            _layout_cache.clear()
+            _layout_cache[key]=cached
+    useful,candidates=cached
     if not candidates:return [],np.zeros_like(target,dtype=np.bool_),0.0
     max_gain=max(row[0] for row in candidates)
     gain_floor=max_gain if maximize_gain else max(1,int(max_gain*.90))
@@ -406,7 +422,8 @@ def _eligible_brush_sizes_for_roi(sizes,roi_shape):
     return eligible,pruned
 
 
-def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:False,*,projection=None):
+def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:False,*,projection=None,
+                          total_drawable=None):
     """Find the cheapest exact verified brush packing for one region.
 
     Work is bbox-local. Brush sizes that physically cannot fit the component ROI
@@ -463,60 +480,70 @@ def _brush_pack_candidate(comp,component_map,options,model,cancelled=lambda:Fals
         add_ladder(tuple(v for v in sizes if v!=drop))
     ladders=ladders[:6]
 
-    total_drawable=int(np.count_nonzero(component_map>=0))
-    base_phase=_phase(comp,total_drawable)
+    if total_drawable is None:
+        total_drawable=int(np.count_nonzero(component_map>=0))
+    base_phase=_phase(comp,int(total_drawable))
     best=None;best_key=None;best_residual=None;exact_count=0;exact_ladders=set()
     policy_stats={name:{'evaluated':0,'exact':0,'best_seconds':None}
                   for name in ('gain-per-cost','maximum-gain')}
-    for policy_index,policy in enumerate(policy_stats):
-        for ladder_index,ladder in enumerate(ladders):
-            _cancel(cancelled)
-            policy_stats[policy]['evaluated']+=1
-            painted=np.zeros_like(target,dtype=np.bool_)
-            sequence=[];flat_paths=[];used=[];per_size=[]
-            for brush in ladder:
+    # A single useful-centre mask and scalar scores are shared by identical
+    # first-brush searches. Completed candidate rasters/path lists are never
+    # cached, and component-local state is released even when Stop interrupts.
+    initial_scores={}
+    try:
+        for policy_index,policy in enumerate(policy_stats):
+            for ladder_index,ladder in enumerate(ladders):
                 _cancel(cancelled)
-                residual=target & ~painted
-                if not np.any(residual):break
-                extra={'projection':native_roi} if native_roi is not None else {}
-                if policy_index:extra['maximize_gain']=True
-                paths,trial,local_cost=_candidate_paths_for_brush(
-                    target,residual,brush,model=model,comp=comp,
-                    phase=("detail" if brush==smallest else base_phase),
-                    final_size=(brush==smallest),origin=(x0,y0),cancelled=cancelled,**extra)
-                if not paths:continue
-                newly=int(np.count_nonzero(trial & residual))
-                if newly<=0:continue
-                painted |= trial
-                used.append(brush);flat_paths.extend(paths)
-                sequence.extend(_entry_sequence(
-                    comp.color_index,paths,phase=("detail" if brush==smallest else base_phase),
-                    comp=comp,brush_px=brush,method=f"region-brush-pack-{brush}px"))
-                per_size.append({"brush_px":brush,"paths":len(paths),"new_pixels":newly,
-                                 "local_cost_seconds":round(local_cost,6)})
-            if np.any(painted & ~target):continue
-            missing=int(np.count_nonzero(target & ~painted))
-            best_residual=missing if best_residual is None else min(best_residual,missing)
-            if missing or not np.array_equal(painted,target):continue
-            # Compare complete exact results, including narrower cleanup and
-            # brush/phase transitions. Local gain-per-cost can otherwise buy a
-            # cheap first layout whose cleanup makes the finished pack dearer.
-            cost=float(model.sequence_cost(sequence,initial_color=int(comp.color_index),
-                                           initial_brush=default).total_seconds)
-            _cancel(cancelled)
-            exact_count+=1;exact_ladders.add(ladder)
-            stats=policy_stats[policy];stats['exact']+=1
-            stats['best_seconds']=cost if stats['best_seconds'] is None else min(stats['best_seconds'],cost)
-            key=(cost,policy_index,len(sequence),-len(set(used)),ladder_index)
-            if best_key is None or key<best_key:
-                # Retain only the winning pack; two bounded policies must not
-                # double the lifetime of every complete path/sequence result.
-                best_key=key
-                best={"sequence":sequence,"paths":flat_paths,"cost":cost,
-                    "brush_px":max(used),"method":"region-brush-pack","exact":True,
-                    "used_brush_sizes":tuple(used),"packing":per_size,
-                    "requested_ladder":tuple(ladder),"covered_pixels":int(np.count_nonzero(painted)),
-                    'packing_policy':policy}
+                policy_stats[policy]['evaluated']+=1
+                painted=np.zeros_like(target,dtype=np.bool_)
+                sequence=[];flat_paths=[];used=[];per_size=[]
+                for brush_index,brush in enumerate(ladder):
+                    _cancel(cancelled)
+                    residual=target if brush_index==0 else target & ~painted
+                    if not np.any(residual):break
+                    extra={'projection':native_roi} if native_roi is not None else {}
+                    if policy_index:extra['maximize_gain']=True
+                    if brush_index==0:extra['_layout_cache']=initial_scores
+                    paths,trial,local_cost=_candidate_paths_for_brush(
+                        target,residual,brush,model=model,comp=comp,
+                        phase=("detail" if brush==smallest else base_phase),
+                        final_size=(brush==smallest),origin=(x0,y0),cancelled=cancelled,**extra)
+                    if not paths:continue
+                    newly=int(np.count_nonzero(trial & residual))
+                    if newly<=0:continue
+                    painted |= trial
+                    used.append(brush);flat_paths.extend(paths)
+                    sequence.extend(_entry_sequence(
+                        comp.color_index,paths,phase=("detail" if brush==smallest else base_phase),
+                        comp=comp,brush_px=brush,method=f"region-brush-pack-{brush}px"))
+                    per_size.append({"brush_px":brush,"paths":len(paths),"new_pixels":newly,
+                                     "local_cost_seconds":round(local_cost,6)})
+                if np.any(painted & ~target):continue
+                missing=int(np.count_nonzero(target & ~painted))
+                best_residual=missing if best_residual is None else min(best_residual,missing)
+                if missing or not np.array_equal(painted,target):continue
+                # Compare complete exact results, including narrower cleanup and
+                # brush/phase transitions. Local gain-per-cost can otherwise buy a
+                # cheap first layout whose cleanup makes the finished pack dearer.
+                cost=float(model.sequence_cost(sequence,initial_color=int(comp.color_index),
+                                               initial_brush=default).total_seconds)
+                _cancel(cancelled)
+                exact_count+=1;exact_ladders.add(ladder)
+                stats=policy_stats[policy];stats['exact']+=1
+                stats['best_seconds']=cost if stats['best_seconds'] is None else min(stats['best_seconds'],cost)
+                key=(cost,policy_index,len(sequence),-len(set(used)),ladder_index)
+                if best_key is None or key<best_key:
+                    # Retain only the winning pack; two bounded policies must not
+                    # double the lifetime of every complete path/sequence result.
+                    best_key=key
+                    best={"sequence":sequence,"paths":flat_paths,"cost":cost,
+                        "brush_px":max(used),"method":"region-brush-pack","exact":True,
+                        "used_brush_sizes":tuple(used),"packing":per_size,
+                        "requested_ladder":tuple(ladder),"covered_pixels":int(np.count_nonzero(painted)),
+                        'packing_policy':policy}
+
+    finally:
+        initial_scores.clear()
 
     _cancel(cancelled)
     if best is None:
@@ -559,7 +586,8 @@ def _choose_component(comp,component_map,total_drawable,model,options,cancelled=
             seq, initial_color=int(comp.color_index), initial_brush=default).total_seconds
         candidates.append((cost,len(paths),orientation,seq,paths,base_brush))
     extra={'projection':projection} if projection is not None else {}
-    packed,pack_reason=_brush_pack_candidate(comp,component_map,options,model,cancelled,**extra)
+    packed,pack_reason=_brush_pack_candidate(comp,component_map,options,model,cancelled,
+                                               total_drawable=total_drawable,**extra)
     if packed:
         candidates.append((packed["cost"],len(packed["paths"]),packed["method"],packed["sequence"],packed["paths"],packed["brush_px"]))
     if comp.area==1:

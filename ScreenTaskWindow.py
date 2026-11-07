@@ -24,4 +24,4 @@ class ScreenTaskWindow:
         except Exception:pass
 
 SCREEN_ACTIVITIES=frozenset(('calibration','exact-color-calibration','browser-auto-calibration',
-    'browser-one-click-setup','paint-auto-calibration','one-click-verify','screen','record'))
+    'browser-one-click-setup','paint-auto-calibration','one-click-verify','screen','record','result-recheck'))

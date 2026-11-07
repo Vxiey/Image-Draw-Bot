@@ -15,6 +15,7 @@ from math import sqrt
 from typing import Iterable, Sequence
 
 from Colors import allColors
+from PlanningRowTasks import read_only_rgba, RgbaRowTasks
 from ColorFidelity import (COLOR_FIDELITY_MODES, validate_color_fidelity, palette_match_cost,
                            mapping_pair_metrics, finalize_mapping_stats, rgb_to_oklab)
 
@@ -355,20 +356,15 @@ def _parallel_color_strokes(rgb_image, *, lines, skip_white, color_rendering, co
             return None
         palette = tuple(tuple(c.RGB) for c in allColors)
         names = tuple(c.name for c in allColors)
-        raw = rgb_image.tobytes(); stride = rgb_image.width * 4
         ranges = row_chunk_ranges(rgb_image.height, rgb_image.width, workers=workers,
                                   ram_budget_mb=ram_mb,
                                   bytes_per_pixel=96 if (color_rendering == "Layered color mix" or color_layers != "Off") else 40,
                                   min_rows=8, max_rows=192)
         if len(ranges) <= 1:
             return None
-        tasks=[]
-        for y0, y1 in ranges:
-            if cancelled():
-                return None
-            tasks.append((y0, rgb_image.width, raw[y0 * stride:y1 * stride], bool(lines),
-                          bool(skip_white), color_rendering, color_layers,
-                          custom_color_workflow, color_fidelity, palette, names))
+        tasks = RgbaRowTasks(rgb_image, ranges,
+            (bool(lines), bool(skip_white), color_rendering, color_layers,
+             custom_color_workflow, color_fidelity, palette, names), cancelled=cancelled)
         chunks = parallel_map(_color_rows_worker, tasks, backend=backend, workers=workers, cancelled=cancelled)
         if cancelled():
             return None
@@ -404,112 +400,112 @@ def build_color_strokes(image, *, lines: bool = True, skip_white: bool = True,
         return None, {"cancelled": True}
     if color_rendering == "Layered color mix" and color_layers == "Off":
         color_layers = "Dual-color mix"
-    rgb_image = image.convert("RGBA")
-    palette = tuple(tuple(c.RGB) for c in allColors)
-    names = tuple(c.name for c in allColors)
+    with read_only_rgba(image) as rgb_image:
+        palette = tuple(tuple(c.RGB) for c in allColors)
+        names = tuple(c.name for c in allColors)
 
-    gpu_meta = None
-    try:
-        parallel = _gpu_color_strokes(
-            rgb_image, lines=lines, skip_white=skip_white,
-            color_rendering=color_rendering, color_layers=color_layers,
-            custom_color_workflow=custom_color_workflow, color_fidelity=color_fidelity, gpu_mode=gpu_mode,
-            gpu_vram=gpu_vram, gpu_performance=gpu_performance, cancelled=cancelled)
-    except InterruptedError:
-        return None, {"cancelled": True}
-    if parallel is None and cpu_workers and int(cpu_workers) > 1:
-        parallel = _parallel_color_strokes(
-            rgb_image, lines=lines, skip_white=skip_white,
-            color_rendering=color_rendering, color_layers=color_layers,
-            custom_color_workflow=custom_color_workflow, color_fidelity=color_fidelity, cancelled=cancelled,
-            cpu_workers=cpu_workers, cpu_engine=cpu_engine,
-            ram_budget_mb=ram_budget_mb, preview_plan=preview_plan)
-    if parallel is not None:
-        if len(parallel) == 9:
-            groups, overlay_groups, layered_pixels, unique_base, unique_overlay, white_skipped, backend, chunks, gpu_meta = parallel
+        gpu_meta = None
+        try:
+            parallel = _gpu_color_strokes(
+                rgb_image, lines=lines, skip_white=skip_white,
+                color_rendering=color_rendering, color_layers=color_layers,
+                custom_color_workflow=custom_color_workflow, color_fidelity=color_fidelity, gpu_mode=gpu_mode,
+                gpu_vram=gpu_vram, gpu_performance=gpu_performance, cancelled=cancelled)
+        except InterruptedError:
+            return None, {"cancelled": True}
+        if parallel is None and cpu_workers and int(cpu_workers) > 1:
+            parallel = _parallel_color_strokes(
+                rgb_image, lines=lines, skip_white=skip_white,
+                color_rendering=color_rendering, color_layers=color_layers,
+                custom_color_workflow=custom_color_workflow, color_fidelity=color_fidelity, cancelled=cancelled,
+                cpu_workers=cpu_workers, cpu_engine=cpu_engine,
+                ram_budget_mb=ram_budget_mb, preview_plan=preview_plan)
+        if parallel is not None:
+            if len(parallel) == 9:
+                groups, overlay_groups, layered_pixels, unique_base, unique_overlay, white_skipped, backend, chunks, gpu_meta = parallel
+            else:
+                groups, overlay_groups, layered_pixels, unique_base, unique_overlay, white_skipped, backend, chunks = parallel
         else:
-            groups, overlay_groups, layered_pixels, unique_base, unique_overlay, white_skipped, backend, chunks = parallel
-    else:
-        pixels = rgb_image.load()
-        groups = [[] for _ in palette]
-        overlay_groups = [[] for _ in palette]
-        layered_pixels = 0
-        unique_base = set()
-        unique_overlay = set()
-        white_skipped = 0
-        backend = "serial"
-        chunks = 1
-        for y in range(rgb_image.height):
-            if cancelled():
-                return None, {"cancelled": True}
-            previous = None
-            start = None
-            overlay_previous = None
-            overlay_start = None
-            for x in range(rgb_image.width + 1):
-                base_index = None
-                overlay_index = None
-                if x < rgb_image.width:
-                    r, g, b, alpha = pixels[x, y]
-                    source_rgb = _visible_rgb(r, g, b, alpha)
-                    if alpha <= 0 or (skip_white and min(source_rgb) >= 245):
-                        white_skipped += 1
-                    else:
-                        if color_rendering == "Layered color mix" or color_layers != "Off":
-                            base_index, secondary, ratio, _improvement = _best_layer_cached(
-                                source_rgb, palette, names, color_rendering,
-                                custom_color_workflow, color_layers, color_fidelity)
-                            if secondary is not None and _should_overlay(x, y, ratio, color_layers):
-                                overlay_index = secondary
-                                base_index = None
+            pixels = rgb_image.load()
+            groups = [[] for _ in palette]
+            overlay_groups = [[] for _ in palette]
+            layered_pixels = 0
+            unique_base = set()
+            unique_overlay = set()
+            white_skipped = 0
+            backend = "serial"
+            chunks = 1
+            for y in range(rgb_image.height):
+                if cancelled():
+                    return None, {"cancelled": True}
+                previous = None
+                start = None
+                overlay_previous = None
+                overlay_start = None
+                for x in range(rgb_image.width + 1):
+                    base_index = None
+                    overlay_index = None
+                    if x < rgb_image.width:
+                        r, g, b, alpha = pixels[x, y]
+                        source_rgb = _visible_rgb(r, g, b, alpha)
+                        if alpha <= 0 or (skip_white and min(source_rgb) >= 245):
+                            white_skipped += 1
                         else:
-                            base_index = _closest_palette_index_cached(
-                                source_rgb, palette, names, color_rendering,
-                                custom_color_workflow, color_fidelity)
+                            if color_rendering == "Layered color mix" or color_layers != "Off":
+                                base_index, secondary, ratio, _improvement = _best_layer_cached(
+                                    source_rgb, palette, names, color_rendering,
+                                    custom_color_workflow, color_layers, color_fidelity)
+                                if secondary is not None and _should_overlay(x, y, ratio, color_layers):
+                                    overlay_index = secondary
+                                    base_index = None
+                            else:
+                                base_index = _closest_palette_index_cached(
+                                    source_rgb, palette, names, color_rendering,
+                                    custom_color_workflow, color_fidelity)
+                            if base_index is not None:
+                                unique_base.add(base_index)
+                            if overlay_index is not None:
+                                unique_overlay.add(overlay_index); layered_pixels += 1
+                    if not lines:
                         if base_index is not None:
-                            unique_base.add(base_index)
+                            groups[base_index].append((x, y, x, y))
                         if overlay_index is not None:
-                            unique_overlay.add(overlay_index); layered_pixels += 1
-                if not lines:
-                    if base_index is not None:
-                        groups[base_index].append((x, y, x, y))
-                    if overlay_index is not None:
-                        overlay_groups[overlay_index].append((x, y, x, y))
-                else:
-                    if base_index != previous:
-                        _add_run(groups, previous, start, y, x - 1)
-                        previous, start = base_index, x if base_index is not None else None
-                    if overlay_index != overlay_previous:
-                        _add_run(overlay_groups, overlay_previous, overlay_start, y, x - 1)
-                        overlay_previous, overlay_start = overlay_index, x if overlay_index is not None else None
-    if cancelled():
-        return None, {"cancelled": True}
-    for index, strokes in enumerate(overlay_groups):
-        groups[index].extend(strokes)
-    meta = {
-        "color_rendering": color_rendering,
-        "color_layers": color_layers,
-        "custom_color_workflow": custom_color_workflow,
-        "color_fidelity": color_fidelity,
-        "layered_pixels": layered_pixels,
-        "base_colors": len(unique_base),
-        "overlay_colors": len(unique_overlay),
-        "white_skipped": white_skipped,
-        "stroke_weight": sum(_stroke_weight(stroke) for group in groups for stroke in group),
-        "cpu_backend": backend,
-        "cpu_chunks": chunks,
-        "gpu_color_meta": gpu_meta or {},
-    }
-    try:
-        meta["color_fidelity_diagnostics"]=_sample_mapping_diagnostics(
-            rgb_image,color_rendering=color_rendering,custom_color_workflow=custom_color_workflow,
-            color_fidelity=color_fidelity,skip_white=skip_white,color_layers=color_layers,
-            palette=palette,names=names)
-    except Exception:
-        meta["color_fidelity_diagnostics"]={"dark_bias_detected":False}
-    if cancelled():
-        return None, {"cancelled": True}
-    return groups, meta
+                            overlay_groups[overlay_index].append((x, y, x, y))
+                    else:
+                        if base_index != previous:
+                            _add_run(groups, previous, start, y, x - 1)
+                            previous, start = base_index, x if base_index is not None else None
+                        if overlay_index != overlay_previous:
+                            _add_run(overlay_groups, overlay_previous, overlay_start, y, x - 1)
+                            overlay_previous, overlay_start = overlay_index, x if overlay_index is not None else None
+        if cancelled():
+            return None, {"cancelled": True}
+        for index, strokes in enumerate(overlay_groups):
+            groups[index].extend(strokes)
+        meta = {
+            "color_rendering": color_rendering,
+            "color_layers": color_layers,
+            "custom_color_workflow": custom_color_workflow,
+            "color_fidelity": color_fidelity,
+            "layered_pixels": layered_pixels,
+            "base_colors": len(unique_base),
+            "overlay_colors": len(unique_overlay),
+            "white_skipped": white_skipped,
+            "stroke_weight": sum(_stroke_weight(stroke) for group in groups for stroke in group),
+            "cpu_backend": backend,
+            "cpu_chunks": chunks,
+            "gpu_color_meta": gpu_meta or {},
+        }
+        try:
+            meta["color_fidelity_diagnostics"]=_sample_mapping_diagnostics(
+                rgb_image,color_rendering=color_rendering,custom_color_workflow=custom_color_workflow,
+                color_fidelity=color_fidelity,skip_white=skip_white,color_layers=color_layers,
+                palette=palette,names=names)
+        except Exception:
+            meta["color_fidelity_diagnostics"]={"dark_bias_detected":False}
+        if cancelled():
+            return None, {"cancelled": True}
+        return groups, meta
 
 
 

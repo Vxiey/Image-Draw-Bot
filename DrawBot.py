@@ -16,6 +16,7 @@ from WorkerEventQueue import WorkerEventQueue
 from WorkerPlanOwnership import WorkerPlanPublication
 from UpdateRequest import UpdateRequest
 from RuntimeSafetyView import RuntimeSafetyView, capture_runtime_report
+from ResultRecheck import ResultRecheckRequest, ResultRecheckResult, recheck_result
 
 from Colors import allColors, enable_dpi_awareness, DATA_DIR, load_calibration, reset_palette, CALIBRATION_FILE, normalize_rgb
 from ProfileStorage import profile_palette_file, profile_settings_file, calibration_context_fingerprint
@@ -2807,6 +2808,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 comparison_size=compare_size, simulated_final=plan.get('preview'),
                 quantized_target=layers.get('quantized_target'),
                 profile_key=str(plan['options'].get('profile_key') or ''),
+                gpu_mode=plan['options'].get('gpu_mode','Auto'),
                 actual_elapsed_seconds=actual_elapsed, usable_deadline_seconds=usable,
                 visual_gate_percent=visual_gate,cancelled=stop.is_set)
             plan['options']['post_draw_accuracy_meta']=meta
@@ -5819,7 +5821,9 @@ class DrawBotApp:
             unlocked = bool(DrawBotApp._full_draw_unlocked(self))
         except Exception:
             unlocked = False
-        can_snapshot = bool(hasattr(getattr(self, 'mouse', None), 'snapshot_canvas'))
+        # Capture belongs to GuardedMouse, not the raw WindowsMouse backend.
+        can_snapshot = bool(getattr(self, 'mouse', None) is not None and
+                            getattr(self, 'target_window', None) and len(getattr(self, 'corners', ())) == 2)
         return can_snapshot, strict_ready, unlocked
 
     def refresh_correction_review_ui(self):
@@ -5841,7 +5845,8 @@ class DrawBotApp:
             actions = state.get('actions') if isinstance(state, dict) else {}
             for attr, key in (('correction_retry_button', 'retry_correction_only'),
                               ('correction_full_retry_button', 'retry_full_drawing'),
-                              ('correction_review_button', 'rerun_result_verification')):
+                              ('correction_review_button', 'rerun_result_verification'),
+                              ('result_recheck_button', 'rerun_result_verification')):
                 widget = getattr(self, attr, None)
                 if widget is None:
                     continue
@@ -5886,6 +5891,77 @@ class DrawBotApp:
             messagebox.showinfo('Correction History', format_correction_history(history), parent=self.root)
         except Exception as error:
             self.status.set(f'Correction History unavailable: {error}')
+
+    def _result_recheck_current(self, request):
+        """Read only plain controller state; this also runs on the worker."""
+        if (not isinstance(request, ResultRecheckRequest) or
+                request is not getattr(self, 'result_recheck_request', None) or
+                self.activity != 'result-recheck' or self.closing or self.stop.is_set() or
+                getattr(self, 'pending_clear_drawing', None) is not None or
+                getattr(self, 'profile_change_after', None) is not None or
+                getattr(self, 'profile_change_in_progress', False)):
+            return False
+        try:
+            profile = self._active_profile_name
+            return request.matches(plan=self.plan, source=self.original,
+                profile_name=profile, profile_key=PROFILES[profile][0],
+                target=self.target_window, area=self.area(),
+                client_rect=getattr(self, 'target_client_rect', ()),
+                dpi=getattr(self, 'target_dpi', None))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            return False
+
+    def _finish_result_recheck(self, request=None):
+        request = request if request is not None else getattr(self, 'result_recheck_request', None)
+        if isinstance(request, ResultRecheckRequest):
+            request.cancel()
+            request.release()
+            if request is getattr(self, 'result_recheck_request', None):
+                self.result_recheck_request = None
+
+    def recheck_drawing_result(self):
+        """Observe the current canvas without arming or sending native input."""
+        if not DrawBotApp._profile_action_ready(self):
+            return False
+        state = DrawBotApp.refresh_correction_review_ui(self)
+        action = (state.get('actions') or {}).get('rerun_result_verification') or {}
+        if not action.get('enabled'):
+            self.status.set('Result re-check unavailable: ' + str(action.get('reason') or 'complete a drawing first.'))
+            return False
+        DrawBotApp._finish_result_recheck(self)
+        # Clear a previous operation's Stop exactly once, before this request
+        # and its monitor/thread constructors acquire cancellation ownership.
+        self.stop.clear()
+        request = None
+        accepted = False
+        try:
+            profile = self._active_profile_name
+            key = PROFILES[profile][0]
+            options = self.plan.get('options') or {}
+            if (options.get('profile_key', key) != key or
+                    options.get('profile_name', profile) != profile):
+                raise ValueError('The retained drawing belongs to another profile. Draw again before re-checking.')
+            request = ResultRecheckRequest(self.plan, self.original, profile, key,
+                self.target_window, self.area(), getattr(self, 'target_client_rect', ()),
+                getattr(self, 'target_dpi', None))
+            self.result_recheck_request = request
+            from ScreenGuard import GuardedMouse, WindowMonitor
+            guarded = GuardedMouse(self.mouse, WindowMonitor(), request.target)
+            self.status.set('Checking the current result. Keep the target visible; no mouse input will be sent.')
+            def work():
+                result = recheck_result(request, guarded, self.stop,
+                    lambda seconds: self.stop.wait(seconds),
+                    lambda message: self.events.put(('result_recheck_status', (request, message))),
+                    current=lambda: DrawBotApp._result_recheck_current(self, request))
+                self.events.put(('result_recheck_complete', result))
+            accepted = bool(self.begin_worker('result-recheck', work, reset_stop=False))
+            return accepted
+        except (OSError, ValueError, RuntimeError, AttributeError, KeyError, TypeError) as error:
+            self.status.set(f'Result re-check could not start: {error}')
+            return False
+        finally:
+            if not accepted:
+                DrawBotApp._finish_result_recheck(self, request)
 
     def retry_full_after_review(self):
         """User-visible full retry entry point that never bypasses safety gates."""
@@ -5955,9 +6031,6 @@ class DrawBotApp:
                 return
         if not DrawBotApp._full_draw_unlocked(self):
             self.status.set('Correction-only retry ready: press Unlock full drawing first. Correction-only still sends native input.')
-            return
-        if not hasattr(self.mouse, 'snapshot_canvas'):
-            self.status.set('Correction-only retry unavailable: this mouse backend cannot take a safe canvas snapshot.')
             return
         # This explicit retry owns Esc from preflight through worker startup.
         self.stop.clear()
@@ -8233,6 +8306,10 @@ class DrawBotApp:
         if not reset_stop and self.stop.is_set():
             log_event(f'Worker {activity} not started: its preflight was stopped.')
             return False
+        if activity != 'result-recheck':
+            DrawBotApp._finish_result_recheck(self)
+        recheck_worker_request = (getattr(self, 'result_recheck_request', None)
+                                  if activity == 'result-recheck' else None)
         request=getattr(self,'browser_one_click_request',None)
         browser_worker_request=None
         if (activity=='browser-one-click-setup' and isinstance(request,dict) and
@@ -8278,6 +8355,7 @@ class DrawBotApp:
                     except Exception as cleanup_error:
                         log_event(f'Worker {activity} resource cleanup failed: {cleanup_error!r}')
                 completion=(activity,browser_worker_request) if browser_worker_request is not None else activity
+                if recheck_worker_request is not None:completion=(activity,recheck_worker_request)
                 self.events.put(('done',completion))
         try:
             if activity in SCREEN_ACTIVITIES:screen_window.hide()
@@ -8416,6 +8494,13 @@ class DrawBotApp:
             self.render_style.set('Standard / pixel')
             self.brush_px.set('1')
             self.status.set('Black contour sketch enabled. Use a thin black pencil. Build preview before Start; no colour fills will be drawn.')
+        elif self.game.get()!='Microsoft Paint' and uses_paint_color(self):
+            # Current ink outside Paint requires contours. An explicit Off
+            # choice must end that dependency before options normalizes it.
+            self.paint_simple.set(False)
+            self.status.set('Colour drawing restored. Verify the palette before Start.')
+            self._schedule_paint_configuration_refresh()
+            return
         self.options_changed()
 
     def subject_focus_changed(self, *args):
@@ -8783,6 +8868,8 @@ class DrawBotApp:
     def stop_mobile_preview(self, *, quiet=False):
         DrawBotApp._cancel_after_attr(self,'mobile_preview_after')
         self.mobile_preview_ticket=None
+        from MobilePreviewDialog import close_mobile_preview_dialog
+        close_mobile_preview_dialog(self)
         server=getattr(self,'mobile_preview_server',None)
         if server is not None:
             try:server.stop()
@@ -8814,48 +8901,17 @@ class DrawBotApp:
             url=urls[0] if urls else f'http://127.0.0.1:{server.port}/{server.token}/'
             self.mobile_preview_url.set(url)
             self.mobile_preview_status.set('Mobile Preview LIVE · same Wi-Fi/LAN required · auto-refresh 1s')
+            from MobilePreviewDialog import show_mobile_preview_dialog
+            window=show_mobile_preview_dialog(self,server,url)
         except Exception as error:
             self.stop_mobile_preview(quiet=True)
             self.status.set(f'Could not start Mobile Preview: {error}')
             log_event(f'Mobile Preview start failed safely: {error!r}')
             return
 
-        import customtkinter as ctk
-        window=ctk.CTkToplevel(self.root)
-        window.title('Mobile Preview')
-        from WorkspaceLayout import fit_window
-        fit_window(window,preferred=(620,610),minimum=(560,520));window.transient(self.root)
-        window.configure(fg_color='#101319')
-        card=ctk.CTkFrame(window,fg_color='#1a202b',corner_radius=18);card.pack(fill='both',expand=True,padx=18,pady=18)
-        ctk.CTkLabel(card,text='Mobile Preview',font=('Segoe UI',24,'bold'),text_color='#f0f4fb').pack(anchor='w',padx=22,pady=(20,3))
-        ctk.CTkLabel(card,text='Live preview over your local Wi-Fi/LAN. No cloud, account, telemetry or external scripts.',font=('Segoe UI',11),text_color='#a6b2c5',wraplength=550,justify='left').pack(anchor='w',padx=22,pady=(0,12))
-        url_box=ctk.CTkTextbox(card,height=64,fg_color='#101319',text_color='#98edce',font=('Consolas',12),corner_radius=10)
-        url_box.pack(fill='x',padx=22,pady=(0,10));url_box.insert('1.0',url);url_box.configure(state='disabled')
-        qr_label=ctk.CTkLabel(card,text='')
-        qr_label.pack(pady=(4,10))
-        qr_photo=None
-        try:
-            import qrcode
-            from PIL import ImageTk
-            qr=qrcode.QRCode(version=None,box_size=5,border=2)
-            qr.add_data(url);qr.make(fit=True)
-            qr_image=qr.make_image(fill_color='black',back_color='white').convert('RGB').resize((210,210))
-            qr_photo=ImageTk.PhotoImage(qr_image);qr_label.configure(image=qr_photo,text='');qr_label.image=qr_photo
-        except Exception:
-            qr_label.configure(text='QR code unavailable in this build. Copy the address above to your phone.',text_color='#a6b2c5',font=('Segoe UI',11),wraplength=500)
-        ctk.CTkLabel(card,text='Phone: connect to the same Wi-Fi/LAN, then scan the QR code or open the address. If Windows asks, allow Image Draw Bot on Private networks only.',font=('Segoe UI',11),text_color='#a6b2c5',wraplength=540,justify='left').pack(anchor='w',padx=22,pady=(0,14))
-        row=ctk.CTkFrame(card,fg_color='transparent');row.pack(fill='x',padx=22,pady=(0,18))
-        ctk.CTkButton(row,text='Copy address',command=self._copy_mobile_preview_url,fg_color='#315c50',hover_color='#3e7465').pack(side='left')
-        def open_local():
-            try:
-                import webbrowser;webbrowser.open(url)
-            except Exception as error:self.status.set(f'Could not open Mobile Preview in browser: {error}')
-        ctk.CTkButton(row,text='Open on this PC',command=open_local,fg_color='#252e3e',hover_color='#36445b').pack(side='left',padx=8)
-        def stop_and_close():
-            self.stop_mobile_preview();window.destroy()
-        ctk.CTkButton(row,text='Stop Mobile Preview',command=stop_and_close,fg_color='#6b3030',hover_color='#814040').pack(side='right')
-        window.protocol('WM_DELETE_WINDOW',window.destroy)
-        self.status.set('Mobile Preview is live. Open the local address on a phone connected to the same network.')
+        if window is not None:
+            self.status.set('Mobile Preview is live. Open the local address on a phone connected to the same network.')
+        return window
 
     def export_preview(self):
         if self.activity or self.closing:return False
@@ -9941,6 +9997,8 @@ class DrawBotApp:
         """Keyboard-thread-safe Stop: no Tk calls or resettable update token."""
         request=getattr(self,'update_request',None)
         if isinstance(request,UpdateRequest):request.cancel()
+        recheck=getattr(self,'result_recheck_request',None)
+        if isinstance(recheck,ResultRecheckRequest):recheck.cancel()
         # Publish the reusable global signal only after the request has its
         # permanent cancellation; another worker may clear Stop immediately.
         self.stop.set()
@@ -10294,32 +10352,64 @@ class DrawBotApp:
         finally:
             if not started:self.hardware_benchmark_running=False
 
-    def apply_performance_tune(self, result=None):
-        payload=result or load_tune_result()
-        if not payload:
-            self.status.set('No saved Universal Hardware Auto Benchmark recommendation is available yet.')
-            return False
-        rec=dict(payload.get('recommendation') or {})
+    def apply_performance_tune(self, result=None, *, _from_benchmark=False):
+        # Only the completed benchmark's handler may apply while its tracked
+        # worker still awaits done. The visible Apply button requires idle UI.
+        if _from_benchmark:
+            ready=(self.activity=='performance-auto-tuner' and not self.closing and
+                   not self.stop.is_set() and
+                   getattr(self,'pending_clear_drawing',None) is None and
+                   getattr(self,'profile_change_after',None) is None and
+                   not getattr(self,'profile_change_in_progress',False))
+        else:
+            ready=DrawBotApp._profile_action_ready(self)
+        if not ready:return False
+        previous={}
+        transition=getattr(self,'profile_change_in_progress',False)
         try:
-            # CPU workers stay Auto so Resource Scheduler can use the exact saved
-            # benchmark recommendation even when it is not one of the UI presets.
-            self.cpu_workers.set(str(rec.get('cpu_workers') or 'Auto'))
-            self.cpu_engine.set(str(rec.get('cpu_engine') or 'Threads'))
-            self.ram_budget.set(str(rec.get('ram_budget') or 'Auto'))
-            self.ram_custom_mb.set(str(rec.get('ram_custom_mb') or '4096'))
-            self.planning_resolution.set(str(rec.get('planning_resolution') or 'High'))
-            self.resource_scheduler.set(str(rec.get('resource_scheduler') or 'Benchmark recommendations'))
-            self.gpu_mode.set(str(rec.get('gpu_mode') or 'CPU'))
-            self.gpu_vram.set(str(rec.get('gpu_vram') or 'Auto'))
-            self.gpu_performance.set(str(rec.get('gpu_performance') or 'Balanced'))
-            self.save_settings()
-            self.refresh_auto_tuner_ui()
+            payload=result if result is not None else load_tune_result()
+            if not payload:
+                self.status.set('No saved Universal Hardware Auto Benchmark recommendation is available yet.')
+                return False
+            rec=dict(payload.get('recommendation') or {})
+            defaults={'cpu_workers':'Auto','cpu_engine':'Threads','ram_budget':'Auto',
+                      'ram_custom_mb':'4096','planning_resolution':'High',
+                      'resource_scheduler':'Benchmark recommendations','gpu_mode':'CPU',
+                      'gpu_vram':'Auto','gpu_performance':'Balanced'}
+            proposed={name:str(rec.get(name) or default) for name,default in defaults.items()}
             workers=int(rec.get('cpu_workers_effective',1) or 1)
-            self.status.set(f'Hardware profile applied: {workers} benchmark-selected planning workers · RAM {self.ram_budget.get()} · current renderer {self.gpu_mode.get()} · {self.planning_resolution.get()} planning.')
-            return True
-        except (tk.TclError, ValueError, OSError) as error:
+            previous={name:getattr(self,name).get() for name in proposed}
+            changed=any(previous[name]!=value for name,value in proposed.items())
+            # One accepted settings transaction, without intermediate trace
+            # callbacks invalidating the plan or scheduling work during rollback.
+            self.profile_change_in_progress=True
+            try:
+                for name,value in proposed.items():getattr(self,name).set(value)
+            finally:
+                self.profile_change_in_progress=transition
+            if self.save_settings() is False:
+                raise OSError('The recommendation could not be saved; current settings were restored.')
+        except (tk.TclError, ValueError, TypeError, OSError, RuntimeError) as error:
+            self.profile_change_in_progress=True
+            try:
+                for name,value in previous.items():
+                    try:getattr(self,name).set(value)
+                    except (tk.TclError,RuntimeError) as restore_error:
+                        log_event(f'Hardware recommendation rollback failed for {name}: {restore_error!r}')
+            finally:
+                self.profile_change_in_progress=transition
             self.status.set(f'Could not apply hardware benchmark recommendation: {error}')
             return False
+        if changed:
+            DrawBotApp._cancel_browser_one_click(self,'hardware recommendation applied')
+            DrawBotApp._mark_plan_stale(self,'Hardware planning settings changed. Build preview or Start Drawing to use the saved recommendation.')
+            if hasattr(self,'recovery_checkpoint_after'):
+                DrawBotApp._schedule_recovery_checkpoint(self,delay=300)
+            from NumericEntryCommit import sync_numeric_commits
+            sync_numeric_commits(self)
+        self.refresh_auto_tuner_ui()
+        self.status.set(f'Hardware profile applied: {workers} benchmark-selected planning workers · RAM {self.ram_budget.get()} · current renderer {self.gpu_mode.get()} · {self.planning_resolution.get()} planning.')
+        return True
 
     def test_gpu_acceleration(self):
         if self.closing:return False
@@ -10711,6 +10801,9 @@ class DrawBotApp:
 
     def _discard_worker_result(self,kind,value):
         """Release rejected worker-owned images while retaining live UI owners."""
+        if kind=='result_recheck_complete' and isinstance(value,ResultRecheckResult):
+            value.request.release()
+            return
         if kind=='recovery_image_prepared':
             try:value.cancel()
             except OSError as error:log_event(f'Recovery staging cleanup delayed: {error!r}')
@@ -10735,6 +10828,16 @@ class DrawBotApp:
             candidate.close()
 
     def _handle_event(self,kind,value):
+        recheck_done_request=None
+        if (kind=='done' and isinstance(value,tuple) and len(value)==2 and value[0]=='result-recheck'):
+            _,recheck_done_request=value
+            if recheck_done_request is not getattr(self,'result_recheck_request',None):
+                if isinstance(recheck_done_request,ResultRecheckRequest):recheck_done_request.release()
+                return
+            value='result-recheck'
+        elif kind=='done' and value=='result-recheck':
+            # A re-check completion always carries its private worker identity.
+            return
         browser_done_request=None
         if (kind=='done' and isinstance(value,tuple) and len(value)==2 and
                 value[0]=='browser-one-click-setup'):
@@ -10749,6 +10852,7 @@ class DrawBotApp:
             return
         if getattr(self,'pending_clear_drawing',None) is not None:
             if kind=='done':
+                if recheck_done_request is not None:DrawBotApp._finish_result_recheck(self,recheck_done_request)
                 if browser_done_request is not None:self.browser_one_click_worker_request=None
                 if value=='performance-auto-tuner':self.hardware_benchmark_running=False
                 if value=='recovery-clear':self._recovery_clear_previous_suppression=None
@@ -10903,7 +11007,7 @@ class DrawBotApp:
                     detail += ' ' + format_universal_hardware_summary(hardware)
                 self.auto_tune_detail.set(detail)
                 if payload.get('apply'):
-                    self.apply_performance_tune(result)
+                    self.apply_performance_tune(result,_from_benchmark=True)
                 elif payload.get('automatic'):
                     self.status.set('Automatic hardware benchmark complete. The local adaptive profile is ready; manual settings were not changed.')
                 else:
@@ -11578,6 +11682,31 @@ class DrawBotApp:
                 except (tk.TclError,AttributeError):pass
                 try:self.summary.set('Step 17 golden image regression (local synthetic fixtures only; no mouse/screen/network):\n'+text)
                 except (tk.TclError,AttributeError):pass
+        elif kind=='result_recheck_status':
+            request,message=value
+            if DrawBotApp._result_recheck_current(self,request):self.status.set(str(message))
+        elif kind=='result_recheck_complete':
+            if not isinstance(value,ResultRecheckResult):return
+            request=value.request
+            try:
+                if not DrawBotApp._result_recheck_current(self,request):return
+                from copy import deepcopy
+                options=request.plan['options']
+                options['post_draw_accuracy_meta']=deepcopy(value.metrics)
+                # A new observation is not a new correction and must not prefer
+                # an inherited correction's older post_* score or gain.
+                for name in ('post_draw_before_correction_accuracy_meta','pre_correction_accuracy_meta',
+                             'post_draw_correction_meta','correction_review_meta','correction_history_meta'):
+                    options.pop(name,None)
+                if value.history:options['correction_history_meta']=deepcopy(value.history)
+                self.correction_history_meta=deepcopy(value.history)
+                DrawBotApp.refresh_correction_review_ui(self)
+                message=('Result re-check complete. ' if value.metrics.get('available') else 'Result re-check unavailable. ')
+                message+=str(value.metrics.get('summary') or value.metrics.get('reason') or 'Fresh read-only result metrics are in Correction Review.')
+                if value.history_error:message+=' History could not be saved: '+value.history_error
+                self.status.set(message)
+            finally:
+                request.release()
         elif kind=='correction_review':
             try:
                 from CorrectionReviewRecovery import format_correction_review
@@ -11595,6 +11724,7 @@ class DrawBotApp:
             from StabilityRC import current_completion
             if current_completion(self.activity,value):
                 finished=self.activity
+                if recheck_done_request is not None:DrawBotApp._finish_result_recheck(self,recheck_done_request)
                 if finished in ('draw','dry-run'):self._draw_plan_publication=None
                 if browser_done_request is not None:self.browser_one_click_worker_request=None
                 if finished=='recovery-clear':
@@ -11698,6 +11828,7 @@ class DrawBotApp:
         self._recovery_image_job=None
         DrawBotApp._cancel_after_attr(self,'recovery_shutdown_after')
         self.shutdown_complete=True
+        DrawBotApp._finish_result_recheck(self)
         DrawBotApp._cancel_after_attr(self,'poll_after')
         DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
         self._remove_hotkeys()
