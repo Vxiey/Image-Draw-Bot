@@ -1,6 +1,12 @@
+from contextlib import contextmanager
+from pathlib import Path
+import tempfile
 import threading, unittest
+from unittest.mock import patch
 from PIL import Image
 
+import ColorCache
+import ProfileStorage
 from DrawBot import execute_plan
 from DynamicColors import build_dynamic_color_strokes, _custom_color_policy
 from test_drawbot import Mouse, NoWait, options
@@ -22,6 +28,33 @@ class RecoveryMouse(Mouse):
 
 
 class PaintColorRecoveryV10124Tests(unittest.TestCase):
+    @contextmanager
+    def isolated_color_storage(self):
+        """Exercise the real cache writer without using the source checkout."""
+        runtime_path=ColorCache.cache_path('microsoft-paint')
+        before=runtime_path.read_bytes() if runtime_path.exists() else None
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                directory=Path(directory).resolve()
+                with patch.object(ProfileStorage,'data_dir',return_value=directory):
+                    path=ColorCache.cache_path('microsoft-paint')
+                    self.assertEqual(path.parent,directory)
+                    self.assertNotEqual(path.resolve(),runtime_path.resolve())
+                    self.assertFalse(path.exists())
+                    yield
+                    self.assertTrue(path.is_file())
+                    colors=ColorCache.load_cache('microsoft-paint')
+                    self.assertEqual(set(colors),{'000000'})
+                    self.assertEqual(colors['000000']['requested_rgb'],[0,0,0])
+                    self.assertEqual(colors['000000']['created_rgb'],[0,0,0])
+                    self.assertEqual(colors['000000']['method'],'numeric')
+                    self.assertEqual(colors['000000']['confidence'],100.0)
+                    self.assertEqual(colors['000000']['delta_e2000'],0.0)
+                    self.assertTrue(colors['000000']['verified'])
+        finally:
+            after=runtime_path.read_bytes() if runtime_path.exists() else None
+            self.assertEqual(after,before,'Paint recovery tests changed the real runtime cache')
+
     def test_palette_mismatch_really_uses_numeric_rgb_recovery(self):
         mouse=RecoveryMouse([
             {'matched':False,'actual':(207,207,207),'error':207,'confidence':19,'sample_count':10,'reason':'wrong selected color'},
@@ -37,7 +70,8 @@ class PaintColorRecoveryV10124Tests(unittest.TestCase):
         plan={'options':opt,'image':Image.new('RGBA',(10,1)),'fitted':(50,10),'groups':[[(0,0,9,0)]],
               'execution_groups':None,'execution_sequence':[],'count':1,'colors':((0,0,0),),
               'color_selectors':({'kind':'palette','palette_index':0,'rgb':(0,0,0)},)}
-        execute_plan(plan,(100,100,50,10),[(900,900)],mouse,NoWait(),threading.Event(),lambda *e:events.append(e),keyboard=kb)
+        with self.isolated_color_storage():
+            execute_plan(plan,(100,100,50,10),[(900,900)],mouse,NoWait(),threading.Event(),lambda *e:events.append(e),keyboard=kb)
         self.assertIn(('write','0'),kb.actions)
         self.assertEqual(cache['000000']['method'],'numeric')
         self.assertTrue(any('Selection verification completed' in str(v) for k,v in events if k=='status'))
@@ -78,7 +112,8 @@ class PaintColorRecoveryV10124Tests(unittest.TestCase):
         plan={'options':opt,'image':Image.new('RGBA',(10,1)),'fitted':(50,10),'groups':[[(0,0,9,0)]],
               'execution_groups':None,'execution_sequence':[],'count':1,'colors':((0,0,0),),
               'color_selectors':({'kind':'palette','palette_index':0,'rgb':(0,0,0)},)}
-        execute_plan(plan,(100,100,50,10),[(900,900)],mouse,NoWait(),threading.Event(),lambda *e:events.append(e),keyboard=kb)
+        with self.isolated_color_storage():
+            execute_plan(plan,(100,100,50,10),[(900,900)],mouse,NoWait(),threading.Event(),lambda *e:events.append(e),keyboard=kb)
         self.assertIn(('write','0'),kb.actions)
         self.assertEqual(len(mouse.results),0)
         self.assertTrue(any('before any stroke' in str(v) for k,v in events if k=='status'))
