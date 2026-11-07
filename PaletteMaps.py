@@ -1,5 +1,6 @@
 """Versioned source palette plus conservative, click-free screen matching."""
 from dataclasses import dataclass
+from types import GeneratorType
 
 
 class NoColorSwatchesError(ValueError):
@@ -36,58 +37,101 @@ GARTIC_PHONE = Palette(
 PRESETS = {'skribbl': SKRIBBL, 'skribbl-fast': SKRIBBL, 'gartic-phone': GARTIC_PHONE}
 
 
-def detect_preset(image, preset, offset=(0,0)):
+
+def _run_rgb_scan(image, operation, *args, cancelled):
+    """Borrow RGB input; close only an owned conversion on every exit."""
+    work = None
+    try:
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
+        work = image if image.mode == 'RGB' else image.convert('RGB')
+        result = operation(work, *args, cancelled=cancelled)
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
+        return result
+    finally:
+        if work is not None and work is not image:
+            work.close()
+        work = None
+
+
+def detect_preset(image, preset, offset=(0,0), *, cancelled=lambda:False):
+    """Find an unambiguous fixed palette while allowing cooperative Stop."""
+    return _run_rgb_scan(image, _detect_preset_rgb, preset, offset, cancelled=cancelled)
+
+
+def sample_grid(image, rows, columns, offset=(0,0), *, cancelled=lambda:False):
+    """Read an equal-sized grid without taking ownership of its source."""
+    return _run_rgb_scan(image, _sample_grid_rgb, rows, columns, offset, cancelled=cancelled)
+
+
+def sample_paint_grid(image, rows, columns, offset=(0,0), *, cancelled=lambda:False):
+    """Read spaced Paint swatches with bounded cancellation checks."""
+    return _run_rgb_scan(image, _sample_paint_grid_rgb, rows, columns, offset, cancelled=cancelled)
+
+
+def detect_color_swatches(image, offset=(0,0), max_colors=96, *, cancelled=lambda:False):
+    """Find solid swatches in a selected region, preserving caller ownership."""
+    return _run_rgb_scan(image, _detect_color_swatches_rgb, offset, max_colors, cancelled=cancelled)
+
+
+def _detect_preset_rgb(image, preset, offset=(0,0), *, cancelled=lambda:False):
     """Find one solid rectangular component per exact RGB, or reject.
 
     Input must be a tightly selected palette region, never an entire game.
     No guessed coordinates, tolerance, missing-color substitution, or clicks.
     """
-    image=image.convert('RGB');w,h=image.size
-    if not (6<=w<=2000 and 6<=h<=1000) or w*h>1000000:
-        raise ValueError('Select only the color palette, up to 1 million pixels.')
-    pixels=image.load();wanted=set(preset.colors);visited=bytearray(w*h)
-    candidates={rgb:[] for rgb in preset.colors}
-    for y in range(h):
-        for x in range(w):
-            index=y*w+x;rgb=pixels[x,y]
-            if visited[index] or rgb not in wanted:continue
-            visited[index]=1;stack=[(x,y)];count=0
-            left=right=x;top=bottom=y
-            while stack:
-                a,b=stack.pop();count+=1
-                if a<left:left=a
-                elif a>right:right=a
-                if b<top:top=b
-                elif b>bottom:bottom=b
-                for nx,ny in ((a-1,b),(a+1,b),(a,b-1),(a,b+1)):
-                    if 0<=nx<w and 0<=ny<h:
-                        ni=ny*w+nx
-                        if not visited[ni] and pixels[nx,ny]==rgb:
-                            visited[ni]=1;stack.append((nx,ny))
-            cw,ch=right-left+1,bottom-top+1
-            if not (6<=cw<=100 and 6<=ch<=100 and .6<=cw/ch<=1.7):continue
-            if count<cw*ch*.85:continue
-            cx,cy=(left+right)//2,(top+bottom)//2
-            if all(pixels[a,b]==rgb for a in range(cx-2,cx+3) for b in range(cy-2,cy+3)):
-                candidates[rgb].append((cx+offset[0],cy+offset[1],cw,ch))
-    bad=[preset.names[i] for i,rgb in enumerate(preset.colors) if len(candidates[rgb])!=1]
-    if bad:raise ValueError('Could not identify all colors unambiguously: '+', '.join(bad)+'. Select more tightly or use manual capture.')
-    matches=[candidates[rgb][0] for rgb in preset.colors]
-    widths=[m[2] for m in matches];heights=[m[3] for m in matches]
-    if max(widths)>min(widths)*1.5 or max(heights)>min(heights)*1.5:
-        raise ValueError('Color swatches have different sizes. Check the selection.')
-    return [(m[0],m[1]) for m in matches]
+    pixels = visited = stack = None
+    try:
+        w,h=image.size
+        if not (6<=w<=2000 and 6<=h<=1000) or w*h>1000000:
+            raise ValueError('Select only the color palette, up to 1 million pixels.')
+        pixels=image.load();wanted=set(preset.colors);visited=bytearray(w*h)
+        candidates={rgb:[] for rgb in preset.colors}
+        for y in range(h):
+            if y % 16 == 0 and cancelled():raise InterruptedError('Palette scan cancelled.')
+            for x in range(w):
+                index=y*w+x;rgb=pixels[x,y]
+                if visited[index] or rgb not in wanted:continue
+                visited[index]=1;stack=[(x,y)];count=0
+                left=right=x;top=bottom=y
+                while stack:
+                    a,b=stack.pop();count+=1
+                    if count % 1024 == 0 and cancelled():raise InterruptedError('Palette scan cancelled.')
+                    if a<left:left=a
+                    elif a>right:right=a
+                    if b<top:top=b
+                    elif b>bottom:bottom=b
+                    for nx,ny in ((a-1,b),(a+1,b),(a,b-1),(a,b+1)):
+                        if 0<=nx<w and 0<=ny<h:
+                            ni=ny*w+nx
+                            if not visited[ni] and pixels[nx,ny]==rgb:
+                                visited[ni]=1;stack.append((nx,ny))
+                cw,ch=right-left+1,bottom-top+1
+                if not (6<=cw<=100 and 6<=ch<=100 and .6<=cw/ch<=1.7):continue
+                if count<cw*ch*.85:continue
+                cx,cy=(left+right)//2,(top+bottom)//2
+                if all(pixels[a,b]==rgb for a in range(cx-2,cx+3) for b in range(cy-2,cy+3)):
+                    candidates[rgb].append((cx+offset[0],cy+offset[1],cw,ch))
+        bad=[preset.names[i] for i,rgb in enumerate(preset.colors) if len(candidates[rgb])!=1]
+        if bad:raise ValueError('Could not identify all colors unambiguously: '+', '.join(bad)+'. Select more tightly or use manual capture.')
+        matches=[candidates[rgb][0] for rgb in preset.colors]
+        widths=[m[2] for m in matches];heights=[m[3] for m in matches]
+        if max(widths)>min(widths)*1.5 or max(heights)>min(heights)*1.5:
+            raise ValueError('Color swatches have different sizes. Check the selection.')
+        return [(m[0],m[1]) for m in matches]
+    finally:
+        pixels = visited = stack = None
 
 
-def sample_grid(image, rows, columns, offset=(0,0)):
+def _sample_grid_rgb(image, rows, columns, offset=(0,0), *, cancelled=lambda:False):
     """Read equal-sized grid cells. App indices are row-major, NOT game IDs."""
     if type(rows) is not int or type(columns) is not int or not 1<=rows*columns<=96 or min(rows,columns)<1:
         raise ValueError('The grid must contain 1–96 colors.')
-    image=image.convert('RGB');w,h=image.size
+    w,h=image.size
     if w<columns*8 or h<rows*8 or w*h>1000000:
         raise ValueError('Select a clear color palette with equally sized swatches.')
     positions=[];colors=[]
     for row in range(rows):
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
         for col in range(columns):
             x=int((col+.5)*w/columns);y=int((row+.5)*h/rows)
             rgb=image.getpixel((x,y))
@@ -99,7 +143,7 @@ def sample_grid(image, rows, columns, offset=(0,0)):
     return positions,colors
 
 
-def sample_paint_grid(image, rows, columns, offset=(0,0)):
+def _sample_paint_grid_rgb(image, rows, columns, offset=(0,0), *, cancelled=lambda:False):
     """Sample spaced Paint swatches; deduplicate exact RGBs, never near colors.
 
     Contrast against cell corners excludes likely empty/custom slots. Ambiguous
@@ -109,11 +153,12 @@ def sample_paint_grid(image, rows, columns, offset=(0,0)):
     from statistics import median
     if type(rows) is not int or type(columns) is not int or min(rows,columns)<1 or not 1<=rows*columns<=64:
         raise ValueError('Enter 1–64 color swatches in total.')
-    image=image.convert('RGB');w,h=image.size
+    w,h=image.size
     if w<columns*10 or h<rows*10 or w*h>1000000:
         raise ValueError("Select only Paint's palette with clear color swatches.")
     positions=[];colors=[];duplicates=0;skipped=0
     for row in range(rows):
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
         for col in range(columns):
             left,right=int(col*w/columns),int((col+1)*w/columns)
             top,bottom=int(row*h/rows),int((row+1)*h/rows)
@@ -139,88 +184,98 @@ def sample_paint_grid(image, rows, columns, offset=(0,0)):
 
 def _span_components(image, cancelled):
     """Label solid row spans; return None for noise that needs the bounded DFS."""
-    import numpy as np
-    a=np.asarray(image)
-    breaks=np.any(a[:,1:] != a[:,:-1],axis=2)
-    run_count=int(np.count_nonzero(breaks))+image.height
-    if run_count>max(4096,min(50000,image.width*image.height//8)):
-        # Every accepted swatch needs an exact 5×5 interior. If five horizontal
-        # runs cannot overlap for five rows, the noisy image has no candidate;
-        # avoid a Python component walk over thousands of isolated pixels.
-        same=~breaks
-        row_solid=same[:,:-3]&same[:,1:-2]&same[:,2:-1]&same[:,3:]
-        possible=row_solid[:-4]&row_solid[1:-3]&row_solid[2:-2]&row_solid[3:-1]&row_solid[4:]
-        if not bool(np.any(possible)):return []
-        return None
-    pixels=image.load();parents=[];stats=[];colors=[];previous=[]
-    def root(index):
-        while parents[index]!=index:
-            parents[index]=parents[parents[index]];index=parents[index]
-        return index
-    def merge(left,right):
-        left,right=root(left),root(right)
-        if left==right:return left
-        if right<left:left,right=right,left
-        parents[right]=left
-        s,t=stats[left],stats[right]
-        s[0]+=t[0];s[1]=min(s[1],t[1]);s[2]=min(s[2],t[2]);s[3]=max(s[3],t[3]);s[4]=max(s[4],t[4])
-        return left
-    for y in range(image.height):
-        if y%16==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
-        boundaries=[0,*((np.flatnonzero(breaks[y])+1).tolist()),image.width]
-        current=[];first=0
-        for x0,x1 in zip(boundaries,boundaries[1:]):
-            rgb=pixels[x0,y]
-            while first<len(previous) and previous[first][1]<=x0:first+=1
-            neighbor=first;matches=[]
-            while neighbor<len(previous) and previous[neighbor][0]<x1:
-                if previous[neighbor][3]==rgb:matches.append(root(previous[neighbor][2]))
-                neighbor+=1
-            if not matches:
-                label=len(parents);parents.append(label);colors.append(rgb)
-                stats.append([x1-x0,x0,y,x1-1,y])
-            else:
-                label=matches[0]
-                for other in matches[1:]:label=merge(label,other)
-                s=stats[label];s[0]+=x1-x0;s[1]=min(s[1],x0);s[3]=max(s[3],x1-1);s[4]=y
-            current.append((x0,x1,label,rgb))
-        previous=current
-    return [(colors[i],*stats[i]) for i in range(len(parents)) if parents[i]==i]
+    a = breaks = same = row_solid = possible = pixels = None
+    parents = stats = colors = previous = current = boundaries = matches = None
+    try:
+        import numpy as np
+        a=np.asarray(image)
+        breaks=np.any(a[:,1:] != a[:,:-1],axis=2)
+        run_count=int(np.count_nonzero(breaks))+image.height
+        if run_count>max(4096,min(50000,image.width*image.height//8)):
+            # Every accepted swatch needs an exact 5×5 interior. If five horizontal
+            # runs cannot overlap for five rows, the noisy image has no candidate;
+            # avoid a Python component walk over thousands of isolated pixels.
+            same=~breaks
+            row_solid=same[:,:-3]&same[:,1:-2]&same[:,2:-1]&same[:,3:]
+            possible=row_solid[:-4]&row_solid[1:-3]&row_solid[2:-2]&row_solid[3:-1]&row_solid[4:]
+            if not bool(np.any(possible)):return []
+            return None
+        pixels=image.load();parents=[];stats=[];colors=[];previous=[]
+        def root(index):
+            while parents[index]!=index:
+                parents[index]=parents[parents[index]];index=parents[index]
+            return index
+        def merge(left,right):
+            left,right=root(left),root(right)
+            if left==right:return left
+            if right<left:left,right=right,left
+            parents[right]=left
+            s,t=stats[left],stats[right]
+            s[0]+=t[0];s[1]=min(s[1],t[1]);s[2]=min(s[2],t[2]);s[3]=max(s[3],t[3]);s[4]=max(s[4],t[4])
+            return left
+        for y in range(image.height):
+            if y%16==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
+            boundaries=[0,*((np.flatnonzero(breaks[y])+1).tolist()),image.width]
+            current=[];first=0
+            for x0,x1 in zip(boundaries,boundaries[1:]):
+                rgb=pixels[x0,y]
+                while first<len(previous) and previous[first][1]<=x0:first+=1
+                neighbor=first;matches=[]
+                while neighbor<len(previous) and previous[neighbor][0]<x1:
+                    if previous[neighbor][3]==rgb:matches.append(root(previous[neighbor][2]))
+                    neighbor+=1
+                if not matches:
+                    label=len(parents);parents.append(label);colors.append(rgb)
+                    stats.append([x1-x0,x0,y,x1-1,y])
+                else:
+                    label=matches[0]
+                    for other in matches[1:]:label=merge(label,other)
+                    s=stats[label];s[0]+=x1-x0;s[1]=min(s[1],x0);s[3]=max(s[3],x1-1);s[4]=y
+                current.append((x0,x1,label,rgb))
+            previous=current
+        return [(colors[i],*stats[i]) for i in range(len(parents)) if parents[i]==i]
+    finally:
+        a = breaks = same = row_solid = possible = pixels = None
+        parents = stats = colors = previous = current = boundaries = matches = None
 
 
 def _pixel_components(image, cancelled):
     """Exact four-connected fallback with one byte of visit state per pixel."""
-    w,h=image.size;pixels=image.load();visited=bytearray(w*h)
-    for sy in range(h):
-        if sy%16==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
-        for sx in range(w):
-            start_index=sy*w+sx
-            if visited[start_index]:continue
-            rgb=pixels[sx,sy];visited[start_index]=1;stack=[(sx,sy)]
-            count=0;left=right=sx;top=bottom=sy
-            while stack:
-                x,y=stack.pop();count+=1
-                if count%4096==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
-                if x<left:left=x
-                elif x>right:right=x
-                if y<top:top=y
-                elif y>bottom:bottom=y
-                if x:
-                    ni=y*w+x-1
-                    if not visited[ni] and pixels[x-1,y]==rgb:visited[ni]=1;stack.append((x-1,y))
-                if x+1<w:
-                    ni=y*w+x+1
-                    if not visited[ni] and pixels[x+1,y]==rgb:visited[ni]=1;stack.append((x+1,y))
-                if y:
-                    ni=(y-1)*w+x
-                    if not visited[ni] and pixels[x,y-1]==rgb:visited[ni]=1;stack.append((x,y-1))
-                if y+1<h:
-                    ni=(y+1)*w+x
-                    if not visited[ni] and pixels[x,y+1]==rgb:visited[ni]=1;stack.append((x,y+1))
-            yield rgb,count,left,top,right,bottom
+    pixels = visited = stack = None
+    try:
+        w,h=image.size;pixels=image.load();visited=bytearray(w*h)
+        for sy in range(h):
+            if sy%16==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
+            for sx in range(w):
+                start_index=sy*w+sx
+                if visited[start_index]:continue
+                rgb=pixels[sx,sy];visited[start_index]=1;stack=[(sx,sy)]
+                count=0;left=right=sx;top=bottom=sy
+                while stack:
+                    x,y=stack.pop();count+=1
+                    if count%4096==0 and cancelled():raise InterruptedError('Palette scan cancelled.')
+                    if x<left:left=x
+                    elif x>right:right=x
+                    if y<top:top=y
+                    elif y>bottom:bottom=y
+                    if x:
+                        ni=y*w+x-1
+                        if not visited[ni] and pixels[x-1,y]==rgb:visited[ni]=1;stack.append((x-1,y))
+                    if x+1<w:
+                        ni=y*w+x+1
+                        if not visited[ni] and pixels[x+1,y]==rgb:visited[ni]=1;stack.append((x+1,y))
+                    if y:
+                        ni=(y-1)*w+x
+                        if not visited[ni] and pixels[x,y-1]==rgb:visited[ni]=1;stack.append((x,y-1))
+                    if y+1<h:
+                        ni=(y+1)*w+x
+                        if not visited[ni] and pixels[x,y+1]==rgb:visited[ni]=1;stack.append((x,y+1))
+                yield rgb,count,left,top,right,bottom
+    finally:
+        pixels = visited = stack = None
 
 
-def detect_color_swatches(image, offset=(0, 0), max_colors=96, *, cancelled=lambda:False):
+def _detect_color_swatches_rgb(image, offset=(0, 0), max_colors=96, *, cancelled=lambda:False):
     """Find solid color swatches inside a user-selected screen region.
 
     This intentionally works only inside the selected region and never scans the
@@ -228,95 +283,102 @@ def detect_color_swatches(image, offset=(0, 0), max_colors=96, *, cancelled=lamb
     gradients and antialiased controls are rejected rather than guessed as
     clickable colors.  The returned position is inside the solid component.
     """
-    if cancelled():raise InterruptedError('Palette scan cancelled.')
-    image = image if image.mode=='RGB' else image.convert('RGB')
-    w, h = image.size
-    area = w * h
-    if w < 8 or h < 8 or area > 1_000_000:
-        raise ValueError('Select a color sampling area between 8 px and 1 million pixels.')
-    if type(max_colors) is not int or not 1 <= max_colors <= 96:
-        raise ValueError('Maximum color count must be between 1 and 96.')
+    pixels = components = None
+    try:
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
+        w, h = image.size
+        area = w * h
+        if w < 8 or h < 8 or area > 1_000_000:
+            raise ValueError('Select a color sampling area between 8 px and 1 million pixels.')
+        if type(max_colors) is not int or not 1 <= max_colors <= 96:
+            raise ValueError('Maximum color count must be between 1 and 96.')
 
-    pixels = image.load()
-    found = []
-    rejected = 0
+        pixels = image.load()
+        found = []
+        rejected = 0
 
-    def solid_point(rgb, box):
-        left, top, right, bottom = box
-        cx, cy = (left + right) // 2, (top + bottom) // 2
-        # Prefer points near the component center with a 5x5 solid neighborhood.
-        candidates = []
-        for radius in range(0, max(right-left, bottom-top) + 1):
-            for x, y in ((cx-radius, cy), (cx+radius, cy), (cx, cy-radius), (cx, cy+radius)):
-                if left + 2 <= x <= right - 2 and top + 2 <= y <= bottom - 2:
+        def solid_point(rgb, box):
+            left, top, right, bottom = box
+            cx, cy = (left + right) // 2, (top + bottom) // 2
+            # Prefer points near the component center with a 5x5 solid neighborhood.
+            candidates = []
+            for radius in range(0, max(right-left, bottom-top) + 1):
+                for x, y in ((cx-radius, cy), (cx+radius, cy), (cx, cy-radius), (cx, cy+radius)):
+                    if left + 2 <= x <= right - 2 and top + 2 <= y <= bottom - 2:
+                        candidates.append((x, y))
+                if len(candidates) > 200:
+                    break
+            # Add a coarse interior sweep in case the shape is not center-filled.
+            step = max(1, min(right-left+1, bottom-top+1) // 8)
+            for y in range(top+2, bottom-1, step):
+                for x in range(left+2, right-1, step):
                     candidates.append((x, y))
-            if len(candidates) > 200:
-                break
-        # Add a coarse interior sweep in case the shape is not center-filled.
-        step = max(1, min(right-left+1, bottom-top+1) // 8)
-        for y in range(top+2, bottom-1, step):
-            for x in range(left+2, right-1, step):
-                candidates.append((x, y))
-        seen = set()
-        for x, y in candidates:
-            if (x, y) in seen:
-                continue
-            seen.add((x, y))
-            if all(pixels[xx, yy] == rgb
-                   for yy in range(y-2, y+3)
-                   for xx in range(x-2, x+3)):
-                return x, y
-        return None
+            seen = set()
+            for x, y in candidates:
+                if (x, y) in seen:
+                    continue
+                seen.add((x, y))
+                if all(pixels[xx, yy] == rgb
+                       for yy in range(y-2, y+3)
+                       for xx in range(x-2, x+3)):
+                    return x, y
+            return None
 
-    components=_span_components(image,cancelled)
-    if components is None:components=_pixel_components(image,cancelled)
-    for rgb,count,left,top,right,bottom in components:
-            cw, ch = right-left+1, bottom-top+1
-            bbox_area = cw * ch
-            touches = sum((left == 0, top == 0, right == w-1, bottom == h-1))
-            # Solid swatch interiors are compact rectangles. Reject text,
-            # borders, thin separators, huge backgrounds and tiny noise. A
-            # dominant component touching multiple selection edges is almost
-            # certainly the palette/toolbar background, not a swatch.
-            if (cw < 6 or ch < 6 or cw > 180 or ch > 180 or
-                    bbox_area < 36 or bbox_area > area * .35 or
-                    count > area * .35 or
-                    (touches >= 2 and count > area * .08) or
-                    count / bbox_area < .55 or not .35 <= cw/ch <= 2.8):
-                rejected += 1
-                continue
-            point = solid_point(rgb, (left, top, right, bottom))
-            if point is None:
-                rejected += 1
-                continue
-            found.append({
-                'rgb': rgb,
-                'position': (point[0] + offset[0], point[1] + offset[1]),
-                'box': (left, top, right, bottom),
-                'count': count,
-            })
+        components=_span_components(image,cancelled)
+        if components is None:components=_pixel_components(image,cancelled)
+        for rgb,count,left,top,right,bottom in components:
+                cw, ch = right-left+1, bottom-top+1
+                bbox_area = cw * ch
+                touches = sum((left == 0, top == 0, right == w-1, bottom == h-1))
+                # Solid swatch interiors are compact rectangles. Reject text,
+                # borders, thin separators, huge backgrounds and tiny noise. A
+                # dominant component touching multiple selection edges is almost
+                # certainly the palette/toolbar background, not a swatch.
+                if (cw < 6 or ch < 6 or cw > 180 or ch > 180 or
+                        bbox_area < 36 or bbox_area > area * .35 or
+                        count > area * .35 or
+                        (touches >= 2 and count > area * .08) or
+                        count / bbox_area < .55 or not .35 <= cw/ch <= 2.8):
+                    rejected += 1
+                    continue
+                point = solid_point(rgb, (left, top, right, bottom))
+                if point is None:
+                    rejected += 1
+                    continue
+                found.append({
+                    'rgb': rgb,
+                    'position': (point[0] + offset[0], point[1] + offset[1]),
+                    'box': (left, top, right, bottom),
+                    'count': count,
+                })
 
-    # Duplicate RGB swatches do not add drawing capability. Keep the largest,
-    # then return colors in visual row-major order for predictable UI output.
-    by_rgb = {}
-    duplicates = 0
-    for item in found:
-        old = by_rgb.get(item['rgb'])
-        if old is None or item['count'] > old['count']:
-            if old is not None: duplicates += 1
-            by_rgb[item['rgb']] = item
-        else:
-            duplicates += 1
-    unique = list(by_rgb.values())
-    if cancelled():raise InterruptedError('Palette scan cancelled.')
-    if not unique:
-        raise NoColorSwatchesError('No solid color swatches were found in the selected area. Try a tighter selection or use Grid mode.')
-    if len(unique) > max_colors:
-        # Prefer the largest solid components if decorative UI colors were also
-        # selected, then restore visual order.
-        unique = sorted(unique, key=lambda item: item['count'], reverse=True)[:max_colors]
-    unique.sort(key=lambda item: ((item['box'][1] + item['box'][3]) // 2,
-                                  (item['box'][0] + item['box'][2]) // 2))
-    return ([item['position'] for item in unique],
-            [item['rgb'] for item in unique],
-            {'found': len(unique), 'duplicates': duplicates, 'rejected': rejected})
+        # Duplicate RGB swatches do not add drawing capability. Keep the largest,
+        # then return colors in visual row-major order for predictable UI output.
+        by_rgb = {}
+        duplicates = 0
+        for item in found:
+            old = by_rgb.get(item['rgb'])
+            if old is None or item['count'] > old['count']:
+                if old is not None: duplicates += 1
+                by_rgb[item['rgb']] = item
+            else:
+                duplicates += 1
+        unique = list(by_rgb.values())
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
+        if not unique:
+            raise NoColorSwatchesError('No solid color swatches were found in the selected area. Try a tighter selection or use Grid mode.')
+        if len(unique) > max_colors:
+            # Prefer the largest solid components if decorative UI colors were also
+            # selected, then restore visual order.
+            unique = sorted(unique, key=lambda item: item['count'], reverse=True)[:max_colors]
+        unique.sort(key=lambda item: ((item['box'][1] + item['box'][3]) // 2,
+                                      (item['box'][0] + item['box'][2]) // 2))
+        return ([item['position'] for item in unique],
+                [item['rgb'] for item in unique],
+                {'found': len(unique), 'duplicates': duplicates, 'rejected': rejected})
+    finally:
+        try:
+            if isinstance(components, GeneratorType):
+                components.close()
+        finally:
+            pixels = components = None

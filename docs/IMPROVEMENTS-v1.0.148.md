@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 828 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **172 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 830 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **170 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -93,8 +93,12 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 826 | N2201 | Batch 22 bounded exact Paint spectrum search | 1 | [Spectrum ledger](v148-batch22-native-spectrum.md); independent scalar/tie/ownership review and paired measurements. |
 | 827 | C2301 | Batch 23 bounded mixed-colour score reuse | 1 | [Evidence](v148-batch23-colour-mixed-costs.md); independent source/actual-flow review. |
 | 828 | P2301 | Batch 23 actual-size local JSON input allocation | 1 | [Evidence](v148-batch23-json-reader.md); independent source/actual-flow review. |
+| 829 | U2401 | Batch 24 responsive manual palette analysis | 1 | [Evidence](v148-batch24-palette-scan.md); independent source/actual-flow review. |
+| 830 | R2401 | Batch 24 bounded Pixel component candidate queue | 1 | [Evidence](v148-batch24-component-queue.md); independent source/actual-flow review. |
 
 ## Integration evidence
+
+- Batch 24: 4,308 tests completed in 205.763 seconds: 4,242 passed and 66 platform/hardware cases skipped, with 900 source/configuration hashes unchanged. Two independently reviewed groups bring the total to 830, with 170 remaining. Manual palette analysis stays responsive and Pixel scheduling bounds active-list removal work. Prepared Paint workflow, Upscale keyboard, widget timers and retained image ownership complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical parity covers 54 palette-controller cases, 72 scheduler pairs and 24 complete public plans/independent rasters. Nine queue workloads have six balanced pairs and separate traced allocations, all bound to the same 850 root Python hashes. The preceding bb6dfa6 checkpoint passed all seven remote checks and Windows/package/native GUI gates; the new exact commit is verified separately in PR46. Version 1.0.148 is not released. [Final local validation](v148-batch24-validation.json).
 
 - Batch 23: 4,270 tests completed in 206.108 seconds: 4,211 passed and 59 platform/hardware cases skipped, with all 891 source/configuration hashes unchanged. Two independently reviewed groups bring the total to 828, with 172 remaining. Concurrent batch22 and its original 826 registry entries are preserved. Accepted profile Drop-In revocation and native-test window ownership complete existing contracts with zero IDs. The 5,000-cycle source gate, package hygiene and eight existing-raster geometry fixtures passed. Twenty-one workloads have six balanced pairs each and share 841 unchanged root Python hashes. Historical comparisons cover 582 colour cases (30 complete builder/public-plan pairs), 79 complete JSON reader cases and eleven reader/consumer workloads. The preceding 5c32b68 checkpoint passed all seven checks and Windows packaging/native GUI gates; new exact-commit CI is recorded separately in PR46. Version 1.0.148 is not released. [Final local validation](v148-batch23-validation.json).
 

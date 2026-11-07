@@ -689,16 +689,22 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
 
     for phase in PHASES:
         remaining = sorted((c for c in components if c.phase == phase and c.paths), key=lambda c: (-_priority(c), c.component_id))
+        # Only the first 72 pending components can be candidates. Keep that
+        # window separate so selecting one never shifts the entire unseen tail.
+        # Reverse the same stable sorted list, then consume from its end: there
+        # is no second full list and consumed component references are released.
+        remaining.reverse()
+        window = [remaining.pop() for _ in range(min(72, len(remaining)))]
         # execute_plan reselects the first colour at each retained phase.
-        if remaining and cost_model is not None:
+        if window and cost_model is not None:
             current_color = None
-        while remaining:
+        while window:
             if cancelled():
                 raise InterruptedError()
-            window_n = min(72, len(remaining))
+            window_n = len(window)
             best_i = 0; best_cost = float("inf")
             for i in range(window_n):
-                comp = remaining[i]
+                comp = window[i]
                 start = _component_entry_point(comp)
                 if cost_model is None:
                     travel = 0.0 if cursor is None else math.hypot(start[0] - cursor[0], start[1] - cursor[1])
@@ -727,7 +733,9 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
                     cost=(seconds/max(.001,value))+i*1e-9
                 if cost < best_cost:
                     best_i, best_cost = i, cost
-            comp = remaining.pop(best_i)
+            comp = window.pop(best_i)
+            if remaining:
+                window.append(remaining.pop())
             component_counts[phase] += 1
             for path in comp.paths:
                 execution_groups[comp.color_index].append(path)

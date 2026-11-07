@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 828,
+  "implemented": 830,
   "release_published": false,
-  "validation": "Batch 23: 4,270 tests completed in 206.108 seconds: 4,211 passed and 59 platform/hardware cases skipped, with all 891 source/configuration hashes unchanged. Two independently reviewed groups bring the total to 828, with 172 remaining. Concurrent batch22 and its original 826 registry entries are preserved. Accepted profile Drop-In revocation and native-test window ownership complete existing contracts with zero IDs. The 5,000-cycle source gate, package hygiene and eight existing-raster geometry fixtures passed. Twenty-one workloads have six balanced pairs each and share 841 unchanged root Python hashes. Historical comparisons cover 582 colour cases (30 complete builder/public-plan pairs), 79 complete JSON reader cases and eleven reader/consumer workloads. The preceding 5c32b68 checkpoint passed all seven checks and Windows packaging/native GUI gates; new exact-commit CI is recorded separately in PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 24: 4,308 tests completed in 205.763 seconds: 4,242 passed and 66 platform/hardware cases skipped, with 900 source/configuration hashes unchanged. Two independently reviewed groups bring the total to 830, with 170 remaining. Manual palette analysis stays responsive and Pixel scheduling bounds active-list removal work. Prepared Paint workflow, Upscale keyboard, widget timers and retained image ownership complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical parity covers 54 palette-controller cases, 72 scheduler pairs and 24 complete public plans/independent rasters. Nine queue workloads have six balanced pairs and separate traced allocations, all bound to the same 850 root Python hashes. The preceding bb6dfa6 checkpoint passed all seven remote checks and Windows/package/native GUI gates; the new exact commit is verified separately in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6443,6 +6443,22 @@
       "description": "Grow bounded local JSON input storage from actual bytes instead of reserving the full file allowance up front. Keep one descriptor, at most 64 KiB per request, the cumulative limit-plus-one sentinel and continuation after positive short reads; close the local accumulator before unchanged UTF/JSON/depth/node validation. Real timing, speed, scheduler, recovery and public planning consumers preserve complete results and file/error contracts. Small-file allocation reductions and near-limit overhead are measured separately, without another database-observation or universal memory/speed claim.",
       "batch": 23,
       "id": 828
+    },
+    {
+      "local_id": "U2401",
+      "area": "batch24-ui",
+      "ledger": "v148-batch24-palette-scan.md",
+      "description": "Keep the manual palette calibration dialog responsive by running the existing component/grid analysis and Pillow preview in a cancellable worker with an owned mailbox. Snapshot plain settings, isolate a rescan copy, and keep Tk PhotoImage creation and atomic adoption on the GUI thread. Cancel retires pending or late results without joining CPU work on Tk; stale settings, start/poll/presentation failures preserve the reviewed draft. Real native heartbeats/Cancel and complete historical-module output parity verify the handoff. Existing image ownership and atomic rescan completions add no duplicate IDs; a private rescan image and thread/poll overhead are disclosed.",
+      "batch": 24,
+      "id": 829
+    },
+    {
+      "local_id": "R2401",
+      "area": "batch24-rendering",
+      "ledger": "v148-batch24-component-queue.md",
+      "description": "Maintain only the current first 72 pending Pixel components in an active selection list, reusing the same stable sorted remainder in reverse order and replenishing from its end. Selection no longer shifts the entire unseen tail. Preserve exact candidate/cost-call order, ties, cursor/color state, phases, Stop, diagnostics and complete public plans. Actual list-work counters, full historical-module parity, independent rasters and executor replay verify the change; balanced whole-call timing and separate allocation probes retain slower controls and do not claim physical drawing or GPU gains.",
+      "batch": 24,
+      "id": 830
     }
   ]
 }

@@ -345,7 +345,15 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
         widget.event_generate('<KeyRelease-space>', when='now')
         self.assertIsNotNone(widget._keyboard_job)
         commands = self.owned_commands(widget)
+        owned_jobs = set()
+        for job in self.root.tk.call('after', 'info'):
+            script = self.root.tk.call('after', 'info', job)[0]
+            words = self.root.tk.splitlist(script)
+            if len(words) == 1 and words[0] in commands:
+                owned_jobs.add(job)
         widget.destroy()
+        remaining = set(self.root.tk.call('after', 'info'))
+        self.assertFalse(owned_jobs & remaining, 'Destroyed button left native timers')
         self.root.update()
         self.assertIsNone(widget._keyboard_job)
         self.assertEqual(command.call_count, count)

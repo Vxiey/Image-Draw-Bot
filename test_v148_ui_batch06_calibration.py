@@ -36,6 +36,19 @@ def palette_app():
     return app
 
 
+
+def finish_palette_scan(app):
+    """Wait for the real CPU worker, then deliver its normal GUI poll."""
+    job=getattr(app,'_scan_job',None)
+    if job is None:return
+    job.thread.join(timeout=5)
+    if job.thread.is_alive():raise AssertionError('Palette worker did not finish.')
+    token=getattr(app,'_scan_after',None)
+    if token is not None:app.root.after_cancel(token)
+    app._poll_scan(job)
+    if app._scan_job is not None:raise AssertionError('Palette result was not consumed.')
+
+
 class PaletteRescanTests(unittest.TestCase):
     def state(self,app):
         return (app.pending,app.rgbs,app.map_names,app.map_indices,app.photo,app.snapshot,app.anchor,app.anchor_handle)
@@ -66,6 +79,7 @@ class PaletteRescanTests(unittest.TestCase):
                 elif phase=='photo':photo.side_effect=MemoryError('photo allocation')
                 else:app.preview.configure.side_effect=tk.TclError('photo presentation')
                 app.start_scan()
+                finish_palette_scan(app)
                 self.assertEqual(self.state(app),old)
                 self.assertEqual(app.snapshot[1].getpixel((0,0)),(255,0,0))
                 with self.assertRaises(ValueError):new.getpixel((0,0))
@@ -79,6 +93,7 @@ class PaletteRescanTests(unittest.TestCase):
              patch.object(palette,'detect_color_swatches',return_value=([(120,120)],[(0,0,255)],{'found':1,'duplicates':0})),\
              patch.object(palette.ImageTk,'PhotoImage',return_value=photo):
             app.start_scan()
+            finish_palette_scan(app)
         self.assertEqual(app.pending,[(120,120)]);self.assertEqual(app.rgbs,[(0,0,255)])
         self.assertIs(app.snapshot[1],new);self.assertIs(app.photo,photo)
         self.assertEqual(app.anchor_handle,99);self.assertEqual(app.anchor['client_rect'],[100,100,900,700])
@@ -95,6 +110,7 @@ class PaletteRescanTests(unittest.TestCase):
         with patch.object(palette,'detect_color_swatches',return_value=([(20,20)],[(1,2,3)],{'found':1,'duplicates':0})),\
              patch.object(palette.ImageTk,'PhotoImage',side_effect=photo):
             self.assertTrue(app.read_snapshot())
+            finish_palette_scan(app)
         self.assertIs(app.snapshot,old);self.assertIs(app.anchor,anchor);self.assertEqual(app.anchor_handle,42)
         with self.assertRaises(ValueError):thumbnails[0].getpixel((0,0))
         self.assertEqual(app.snapshot[1].getpixel((0,0)),(255,0,0))

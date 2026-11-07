@@ -19,6 +19,59 @@ from CalibrationAnchors import make_anchor, ensure_same_layout
 from CalibrationValidation import screen_point, screen_rect, point_in_rect
 
 
+
+def _analyze_palette_snapshot(screenshot, settings, cancelled):
+    """CPU-only scan and Pillow preview; no Tk objects enter this function."""
+    left, top, _right, _bottom = settings['box']
+    mode, preset = settings['mode'], settings['preset']
+    rows, columns = settings['rows'], settings['columns']
+    shown = pen = None
+    complete = False
+    try:
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
+        if preset:
+            try:
+                positions=detect_preset(screenshot,preset,(left,top),cancelled=cancelled)
+                rgbs=[screenshot.getpixel((int(x-left),int(y-top))) for x,y in positions]
+                names=list(preset.names);indices=list(range(len(rgbs)))
+                note='Preset positions matched; actual on-screen RGB values were sampled. '
+            except ValueError:
+                positions,rgbs,stats=detect_color_swatches(screenshot,(left,top),max_colors=settings['max_colors'],cancelled=cancelled)
+                names=None;indices=None
+                note=f"Preset RGB changed; auto-detect recovered {stats['found']} visible colors. "
+        elif mode=='Auto detect':
+            positions,rgbs,stats=detect_color_swatches(screenshot,(left,top),max_colors=settings['max_colors'],cancelled=cancelled)
+            names=None;indices=None
+            note=f"Auto detect found {stats['found']} colors; {stats['duplicates']} duplicate swatches merged. "
+        elif settings['is_paint']:
+            positions,rgbs,stats=sample_paint_grid(screenshot,rows,columns,(left,top),cancelled=cancelled)
+            names=None;indices=None
+            note=f"Grid mode: {stats['duplicates']} duplicates merged, {stats['skipped']} empty/unclear swatches skipped. "
+        else:
+            positions,rgbs=sample_grid(screenshot,rows,columns,(left,top),cancelled=cancelled)
+            names=None;indices=None;note='Grid mode completed. '
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
+        shown=screenshot.copy()
+        shown.thumbnail((560,150))
+        if not preset and mode=='Grid':
+            pen=ImageDraw.Draw(shown)
+            for col in range(1,columns):
+                x=round(col*shown.width/columns);pen.line((x,0,x,shown.height),fill='#ff00bf',width=1)
+            for row in range(1,rows):
+                y=round(row*shown.height/rows);pen.line((0,y,shown.width,y),fill='#ff00bf',width=1)
+        if cancelled():raise InterruptedError('Palette scan cancelled.')
+        values=dict(positions=positions,rgbs=rgbs,names=names,indices=indices,note=note)
+        result=values,shown
+        complete=True
+        return result
+    finally:
+        # Pillow drawing handles retain native pixels independently of the
+        # Image wrapper, including through an exception traceback.
+        if pen is not None:pen.draw=pen.im=pen._image=None
+        if not complete and shown is not None:shown.close()
+        shown = pen = None
+
+
 class CalibrationApp:
     def __init__(self,root,on_close=None,path=CALIBRATION_FILE,profile="generic"):
         from WindowsMouse import WindowsMouse
@@ -26,6 +79,7 @@ class CalibrationApp:
         self.path=path;self.is_paint=profile=='microsoft-paint';self.profile_key=str(profile);self.preset=PRESETS.get(profile);self.max_colors=96 if str(profile)=='gartic-phone' else 64
         self.map_names=None;self.map_indices=None;self.pending=[];self.rgbs=[];self.job=None;self.snapshot=None
         self.anchor=None;self.anchor_handle=None;self.closed=False
+        self._scan_job=None;self._scan_context=None;self._scan_after=None;self._scan_controls=[]
         root.configure(bg=BG);root.title('Image Draw Bot · Read color palette')
         from WorkspaceLayout import fit_window
         from CalibrationDialogLayout import CalibrationDialogLayout
@@ -54,6 +108,7 @@ class CalibrationApp:
         if not self.preset:
             mode_menu=ttk.Combobox(mode_row,textvariable=self.detect_mode,values=['Auto detect','Grid'],state='readonly',width=15)
             mode_menu.pack(side='right');mode_menu.bind('<<ComboboxSelected>>',lambda _event:self.read_snapshot())
+            self._scan_controls.append((mode_menu,'readonly'))
         else:
             ttk.Label(mode_row,text='Preset map').pack(side='right')
         grid=ttk.Frame(body);grid.pack(fill='x',pady=8)
@@ -68,9 +123,11 @@ class CalibrationApp:
         except (OSError,ValueError,KeyError,TypeError):pass
         if not self.preset:
             ttk.Label(grid,text='Grid rows').pack(side='left')
-            ttk.Entry(grid,width=6,textvariable=self.rows).pack(side='left',padx=8)
+            rows_entry=ttk.Entry(grid,width=6,textvariable=self.rows);rows_entry.pack(side='left',padx=8)
+            self._scan_controls.append((rows_entry,'normal'))
             ttk.Label(grid,text='Columns').pack(side='left')
-            ttk.Entry(grid,width=6,textvariable=self.columns).pack(side='left',padx=8)
+            columns_entry=ttk.Entry(grid,width=6,textvariable=self.columns);columns_entry.pack(side='left',padx=8)
+            self._scan_controls.append((columns_entry,'normal'))
         else:
             preset_note='Preset profile: fixed color map'
             if self.profile_key=='gartic-phone': preset_note='Gartic Phone: 6 columns × 12 rows = 72 colors'
@@ -132,13 +189,17 @@ class CalibrationApp:
         self.table.delete(*self.table.get_children())
         for i,(p,rgb) in enumerate(zip(self.pending,self.rgbs)):self.table.insert('', 'end',iid=str(i),values=(str(tuple(rgb)),str(tuple(p))))
         self.count.set(f'{len(self.pending)} colors selected · maximum {self.max_colors}')
-        self.auto.configure(state='normal');self.rescan.configure(state='normal')
-        self.add.configure(state='normal' if len(self.pending)<self.max_colors else 'disabled')
-        self.add_code.configure(state='normal' if len(self.pending)<self.max_colors else 'disabled')
-        for b in (self.undo_button,self.save_button):b.configure(state='normal' if self.pending else 'disabled')
+        busy=self.job is not None or getattr(self,'_scan_job',None) is not None
+        state='disabled' if busy else 'normal'
+        self.auto.configure(state=state);self.rescan.configure(state=state)
+        self.add.configure(state='normal' if not busy and len(self.pending)<self.max_colors else 'disabled')
+        self.add_code.configure(state='normal' if not busy and len(self.pending)<self.max_colors else 'disabled')
+        for b in (self.undo_button,self.save_button):b.configure(state='normal' if not busy and self.pending else 'disabled')
+        for control,normal in getattr(self,'_scan_controls',()):
+            control.configure(state='disabled' if busy else normal)
 
     def capture(self,seconds):
-        if getattr(self,'closed',False) or self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None or getattr(self,'_scan_job',None) is not None:return
         if len(self.pending)>=self.max_colors:self.status.set('The palette is full. Remove a color before adding another.');return
         for b in (self.add,self.add_code,self.auto,self.rescan,self.undo_button,self.save_button):b.configure(state='disabled')
         if getattr(self,'capture_visibility',None) is None:
@@ -173,7 +234,7 @@ class CalibrationApp:
 
     def capture_code(self,seconds=3):
         """Associate an explicit RGB/ARGB value with the current cursor point."""
-        if getattr(self,'closed',False) or self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None or getattr(self,'_scan_job',None) is not None:return
         if len(self.pending)>=self.max_colors:self.status.set('The palette is full. Remove a color before adding another.');return
         if seconds:
             try:normalize_rgb(self.color_code.get())
@@ -202,7 +263,7 @@ class CalibrationApp:
         self.refresh()
 
     def start_scan(self):
-        if getattr(self,'closed',False) or self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None or getattr(self,'_scan_job',None) is not None:return
         from RegionPicker import select_region
         def selected(box,image):
             if getattr(self,'closed',False):image.close();return
@@ -213,79 +274,142 @@ class CalibrationApp:
                 anchor=make_anchor(meta['client_rect'])
             except (OSError,ValueError) as error:
                 image.close();self.status.set(str(error));return
-            try:
-                self.read_snapshot((box,image),anchor=anchor,anchor_handle=meta['handle'])
-            finally:
-                # The selected crop transfers to the dialog only after a full
-                # successful scan. Keep the previous frame/colours on failure.
-                if self.snapshot is None or self.snapshot[1] is not image:image.close()
+            # read_snapshot takes ownership of a new crop immediately. Its
+            # worker/retirement path releases it if it cannot be adopted.
+            self.read_snapshot((box,image),anchor=anchor,anchor_handle=meta['handle'])
         select_region(self.root,selected,lambda message:self.status.set(message))
 
+    def _discard_scan_input(self,snapshot):
+        if snapshot is None:return
+        try:image=snapshot[1]
+        except (TypeError,IndexError):return
+        current=self.snapshot[1] if self.snapshot is not None else None
+        context=getattr(self,'_scan_context',None)
+        pending=context['candidate'][1] if context is not None else None
+        if image is not current and image is not pending and callable(getattr(image,'close',None)):image.close()
+
+    def _scan_settings(self,box):
+        mode=self.detect_mode.get() if not self.preset else 'Preset map'
+        rows=columns=None
+        if not self.preset and mode=='Grid':
+            rows,columns=self.rows.get(),self.columns.get()
+            if min(rows,columns)<1 or not 1<=rows*columns<=self.max_colors:
+                raise ValueError('Enter a valid number of color swatches for this profile.')
+        return dict(box=tuple(box),mode=mode,preset=self.preset,rows=rows,columns=columns,
+                    is_paint=self.is_paint,max_colors=self.max_colors,profile_key=self.profile_key)
+
+    def _scan_failure(self,message):
+        if getattr(self,'closed',False):return
+        retained=' Previous colors and target were kept.' if self.pending else ''
+        try:
+            self.status.set(f'Could not scan: {message}.{retained}')
+            self.refresh()
+        except (tk.TclError,RuntimeError):pass
+
     def read_snapshot(self,snapshot=None,*,anchor=None,anchor_handle=None):
-        if getattr(self,'closed',False) or self.job is not None:return False
+        """Request an asynchronous scan, taking ownership of a supplied crop."""
+        if (getattr(self,'closed',False) or self.job is not None or
+                getattr(self,'_scan_job',None) is not None):
+            self._discard_scan_input(snapshot)
+            return False
         candidate=self.snapshot if snapshot is None else snapshot
         if candidate is None:self.status.set('Select the palette on screen first.');return False
+        working=job=None
         try:
             if snapshot is not None and anchor is None:
                 raise ValueError('The new palette area needs a target-window anchor.')
-            (left,top,right,bottom),screenshot=candidate
-            mode=self.detect_mode.get() if not self.preset else 'Preset map'
-            rows=columns=None
-            if not self.preset and mode=='Grid':
-                rows,columns=self.rows.get(),self.columns.get()
-                if min(rows,columns)<1 or not 1<=rows*columns<=self.max_colors:
-                    raise ValueError('Enter a valid number of color swatches for this profile.')
-            note=''
-            if self.preset:
-                try:
-                    positions=detect_preset(screenshot,self.preset,(left,top))
-                    # The screen is authoritative: save the RGB actually rendered
-                    # at each detected swatch, never blindly copy preset RGB.
-                    rgbs=[screenshot.getpixel((int(x-left),int(y-top))) for x,y in positions]
-                    names=list(self.preset.names);indices=list(range(len(rgbs)))
-                    note='Preset positions matched; actual on-screen RGB values were sampled. '
-                except ValueError:
-                    # UI themes/game revisions can change RGB values. Fall back to
-                    # geometry-based swatch detection instead of failing the profile.
-                    positions,rgbs,stats=detect_color_swatches(screenshot,(left,top),max_colors=self.max_colors)
-                    names=None;indices=None
-                    note=f"Preset RGB changed; auto-detect recovered {stats['found']} visible colors. "
-            elif mode=='Auto detect':
-                positions,rgbs,stats=detect_color_swatches(screenshot,(left,top),max_colors=self.max_colors)
-                names=None;indices=None
-                note=f"Auto detect found {stats['found']} colors; {stats['duplicates']} duplicate swatches merged. "
-            elif self.is_paint:
-                positions,rgbs,stats=sample_paint_grid(screenshot,rows,columns,(left,top));names=None;indices=None
-                note=f"Grid mode: {stats['duplicates']} duplicates merged, {stats['skipped']} empty/unclear swatches skipped. "
-            else:
-                positions,rgbs=sample_grid(screenshot,rows,columns,(left,top));names=None;indices=None
-                note='Grid mode completed. '
-            with closing(screenshot.copy()) as shown:
-                shown.thumbnail((560,150))
-                if not self.preset and mode=='Grid':
-                    pen=ImageDraw.Draw(shown)
-                    for col in range(1,columns):
-                        x=round(col*shown.width/columns);pen.line((x,0,x,shown.height),fill='#ff00bf',width=1)
-                    for row in range(1,rows):
-                        y=round(row*shown.height/rows);pen.line((0,y,shown.width,y),fill='#ff00bf',width=1)
-                photo=ImageTk.PhotoImage(shown,master=self.root)
-            self.preview.configure(image=photo,text='')
-        except (OSError,ValueError,AttributeError,tk.TclError,MemoryError) as error:
-            retained=' Previous colors and target were kept.' if self.pending else ''
-            self.status.set(f'Could not scan: {error}.{retained}')
+            box,screenshot=candidate
+            settings=self._scan_settings(box)
+            previous=self.snapshot
+            previous_image=previous[1] if previous is not None else None
+            owns_candidate=snapshot is not None and screenshot is not previous_image
+            # A rescan cannot borrow pixels that Close is allowed to release.
+            working=screenshot if owns_candidate else screenshot.copy()
+            from PaletteScanWorker import PaletteScanJob
+            job=PaletteScanJob(working,_analyze_palette_snapshot,settings)
+            working=None
+            context=dict(candidate=candidate,previous=previous,new=snapshot is not None,
+                         owns_candidate=owns_candidate,anchor=anchor,anchor_handle=anchor_handle,
+                         settings=settings)
+            self._scan_job=job;self._scan_context=context
+            self.status.set('Scanning palette… Cancel remains available while colors are analyzed.')
             self.refresh()
+            job.start()
+            self._scan_after=self.root.after(20,self._poll_scan,job)
+            return True
+        except (OSError,ValueError,AttributeError,tk.TclError,MemoryError,RuntimeError,TypeError) as error:
+            if job is not None:
+                job.retire()
+            elif working is not None:
+                working.close()
+                if snapshot is not None and working is not snapshot[1]:self._discard_scan_input(snapshot)
+            else:
+                self._discard_scan_input(snapshot)
+            self._scan_job=self._scan_context=None
+            self._scan_failure(str(error))
             return False
-        previous=self.snapshot
-        self.pending=positions;self.rgbs=rgbs;self.map_names=names;self.map_indices=indices;self.photo=photo
-        if snapshot is not None:
-            self.snapshot=candidate;self.anchor=anchor;self.anchor_handle=anchor_handle
-            if previous is not None and previous[1] is not screenshot:previous[1].close()
-        self.status.set(note+'Review the detected colors. Remove incorrect matches, then save.')
-        self.refresh()
-        return True
+        finally:
+            working=None
+
+    def _poll_scan(self,job):
+        if job is not getattr(self,'_scan_job',None):return
+        self._scan_after=None
+        if getattr(self,'closed',False):
+            self._retire_scan();return
+        if not job.done:
+            try:self._scan_after=self.root.after(20,self._poll_scan,job)
+            except (tk.TclError,RuntimeError) as error:
+                self._retire_scan()
+                self._scan_failure(str(error))
+            return
+        outcome=job.take()
+        context=self._scan_context
+        result=photo=None
+        try:
+            if outcome is None:return
+            kind,payload=outcome
+            if kind!='result':
+                self._scan_failure(payload)
+                return
+            result=payload
+            if (self.snapshot is not context['previous'] or
+                    self._scan_settings(context['settings']['box'])!=context['settings']):
+                self.status.set('Palette settings or image changed. Refresh scan to analyze the current selection.')
+                return
+            photo=ImageTk.PhotoImage(result.preview,master=self.root)
+            self.preview.configure(image=photo,text='')
+            values=result.values
+            previous=self.snapshot
+            self.pending=values['positions'];self.rgbs=values['rgbs']
+            self.map_names=values['names'];self.map_indices=values['indices'];self.photo=photo
+            if context['new']:
+                candidate=context['candidate']
+                if context['owns_candidate']:
+                    result.take_image()
+                self.snapshot=candidate;self.anchor=context['anchor'];self.anchor_handle=context['anchor_handle']
+                if previous is not None and previous[1] is not candidate[1]:previous[1].close()
+            self.status.set(values['note']+'Review the detected colors. Remove incorrect matches, then save.')
+        except (OSError,ValueError,AttributeError,tk.TclError,MemoryError,RuntimeError,TypeError) as error:
+            self._scan_failure(str(error))
+        finally:
+            if result is not None:result.close()
+            job.retire()
+            self._scan_job=self._scan_context=None
+            if not getattr(self,'closed',False):self.refresh()
+            outcome=context=result=photo=None
+
+    def _retire_scan(self):
+        token=getattr(self,'_scan_after',None)
+        self._scan_after=None
+        if token is not None:
+            try:self.root.after_cancel(token)
+            except (tk.TclError,ValueError,RuntimeError):pass
+        job=getattr(self,'_scan_job',None)
+        self._scan_job=self._scan_context=None
+        if job is not None:job.retire()
 
     def undo(self,event=None):
-        if getattr(self,'closed',False) or self.job is not None or not self.pending:return 'break'
+        if getattr(self,'closed',False) or self.job is not None or getattr(self,'_scan_job',None) is not None or not self.pending:return 'break'
         selected=self.table.selection()
         indices=sorted({int(value) for value in selected} if selected else {len(self.pending)-1},reverse=True)
         if any(index<0 or index>=len(self.pending) for index in indices):return 'break'
@@ -298,7 +422,7 @@ class CalibrationApp:
         return 'break'
 
     def save(self):
-        if self.job is not None:return
+        if getattr(self,'closed',False) or self.job is not None or getattr(self,'_scan_job',None) is not None:return
         try:
             if self.is_paint and self.anchor is None:
                 raise ValueError('Select/capture the Paint palette again so the colors can be anchored to the Paint window.')
@@ -313,6 +437,7 @@ class CalibrationApp:
     def close(self):
         if getattr(self,'closed',False):return
         self.closed=True
+        self._retire_scan()
         if self.job is not None:
             job=self.job;self.job=None
             try:self.root.after_cancel(job)

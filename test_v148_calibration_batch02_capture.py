@@ -16,7 +16,7 @@ class ManualCaptureRegressionTests(unittest.TestCase):
         app=palette.CalibrationApp.__new__(palette.CalibrationApp)
         app.anchor={'version':1,'client_rect':[0,0,600,400]};app.anchor_handle=42
         app.pending=[];app.rgbs=[];app.map_names=None;app.map_indices=None;app.max_colors=64
-        app.is_paint=False;app.job=None;app.closed=False;app.snapshot=None;app.on_close=None
+        app.is_paint=False;app.profile_key='generic';app.job=None;app.closed=False;app.snapshot=None;app.on_close=None
         app.mouse=SimpleNamespace(get_position=lambda:(250,150));app.root=Mock();app.status=Mock();app.refresh=Mock()
         app.capture_visibility=Mock()
         for name in ('add','add_code','auto','rescan','undo_button','save_button'):setattr(app,name,Mock())
@@ -58,6 +58,8 @@ class ManualCaptureRegressionTests(unittest.TestCase):
              patch.object(palette,'detect_color_swatches',return_value=([(50,40)],[(0,0,255)],{'found':1,'duplicates':0})),\
              patch.object(palette.ImageTk,'PhotoImage'):
             app.start_scan()
+            from test_v148_ui_batch06_calibration import finish_palette_scan
+            finish_palette_scan(app)
         with self.assertRaises(ValueError):old.getpixel((0,0))
         self.assertEqual(new.getpixel((0,0)),(0,0,255))
         app.close();app.close()

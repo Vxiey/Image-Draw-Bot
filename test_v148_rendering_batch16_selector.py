@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import tempfile
 import threading
+from types import MethodType
 import unittest
 from unittest.mock import patch
 
@@ -147,9 +148,25 @@ class SketchFillNativeSelectorTests(unittest.TestCase):
             app.time_budget_mode = ui_fixtures.Value('Unlimited / Accuracy')
             if prepared:
                 app.original = source
-                app.picture_custom_palette_state = {
+                app.closing = False
+                app.stop = threading.Event()
+                app.summary = ui_fixtures.Value('')
+                app._mark_plan_stale = MethodType(DrawBot.DrawBotApp._mark_plan_stale, app)
+                stack.callback(vars(app).clear)
+                payload = {
                     'profile_key': 'microsoft-paint', 'image_id': id(source),
                     'colors': prepared, 'prepared_count': len(prepared)}
+                # Preparation selects its workflow through the real accepted
+                # result handler, before the public options/planner handoff.
+                with patch.object(app, 'refresh_exact_color_status', create=True), \
+                        patch.object(app, 'save_settings', create=True) as save, \
+                        patch.object(app, 'show_previews', create=True) as show:
+                    DrawBot.DrawBotApp._handle_event(app, 'picture_palette_complete', payload)
+                    save.assert_called_once_with()
+                    show.assert_called_once_with()
+                self.assertEqual(app.picture_custom_palette_state, payload)
+                self.assertEqual(app.custom_color_workflow.get(), 'Adaptive exact (recommended)')
+                self.assertIsNone(app.plan)
             options = DrawBot.DrawBotApp.options(app)
             options['_execution_cost_calibration_override'] = {}
             inner = []

@@ -7232,6 +7232,7 @@ class DrawBotApp:
             self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
             from ProfileIsolation import reset_settings
             reset_settings(self)
+            self.picture_custom_palette_state=None
             key,accent,hint=PROFILES[selected]
             log_event(f'Applying drawing profile {selected!r}. Mouse input remains DISARMED.')
             self.calibration_path=profile_palette_file(key)
@@ -7720,9 +7721,9 @@ class DrawBotApp:
             result['exact_color_limit_profile_ceiling']=_effective_policy['exact_color_limit_profile_ceiling']
         from PicturePalettePlanning import active_picture_palette
         prepared=active_picture_palette(self)
-        if prepared and not result.get('paint_current_color') and not result.get('outline'):
+        if (prepared and not result.get('paint_current_color') and not result.get('outline') and
+                result['custom_color_workflow'] in ('Adaptive exact (recommended)', 'Exact custom + palette fallback')):
             result['picture_palette_rgb']=prepared
-            result['custom_color_workflow']='Adaptive exact (recommended)'
         return result
 
     def area(self):
@@ -8118,6 +8119,7 @@ class DrawBotApp:
             return
         import customtkinter as ctk
         from UiCompatibility import scoped_toplevel
+        from UiKeyboardNavigation import KeyboardButton,KeyboardOptionMenu
         from ImageUpscale import suggested_factor,upscale_size
         DrawBotApp._cancel_browser_one_click(self,'image editing')
         DrawBotApp._disarm_manual_drop_in(self,'image editing')
@@ -8137,18 +8139,27 @@ class DrawBotApp:
                 apply_button.configure(state='normal')
             except ValueError as error:
                 hint.set(str(error));apply_button.configure(state='disabled')
-        ctk.CTkOptionMenu(dialog,variable=factor,values=['2×','4×'],command=update).pack(pady=5)
-        ctk.CTkOptionMenu(dialog,variable=method,values=['Smooth','Pixel art']).pack(pady=5)
+        factor_menu=KeyboardOptionMenu(dialog,variable=factor,values=['2×','4×'],command=update)
+        factor_menu.pack(pady=5)
+        method_menu=KeyboardOptionMenu(dialog,variable=method,values=['Smooth','Pixel art'])
+        method_menu.pack(pady=5)
         ctk.CTkLabel(dialog,textvariable=hint,wraplength=380).pack(padx=24,pady=8)
         ctk.CTkLabel(dialog,text='Smooth: photos and illustrations. Pixel art: sharp blocks.\nNo AI: missing detail cannot be recovered.\nDrawing size is still controlled by your selected canvas.',wraplength=380).pack(padx=24,pady=8)
         def apply():
             scale=int(factor.get()[0]);selected_method=method.get()
             dialog.destroy()
             DrawBotApp._start_upscale(self,source,scale,selected_method)
-        apply_button=ctk.CTkButton(dialog,text='Upscale image',command=apply)
+        apply_button=KeyboardButton(dialog,text='Upscale image',command=apply)
         apply_button.pack(pady=(8,16))
         update()
-        dialog.bind('<Escape>',lambda event:dialog.destroy())
+        def dismiss(event=None):
+            dialog.destroy()
+            return 'break'
+        dialog.bind('<Escape>',dismiss)
+        # Selectors consume Escape locally for their popups. When the selector
+        # itself has focus, Escape still dismisses this editing dialog.
+        for selector in (factor_menu,method_menu):
+            tk.Misc.bind(selector,'<KeyPress-Escape>',dismiss,add='+')
         dialog.wait_visibility();dialog.grab_set()
 
     def _start_upscale(self,source,scale,method):

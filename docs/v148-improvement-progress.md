@@ -6,6 +6,15 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 24 implements **830 total distinct improvements, with 170 remaining**.
+
+Batch 24: 4,308 tests completed in 205.763 seconds: 4,242 passed and 66 platform/hardware cases skipped, with 900 source/configuration hashes unchanged. Two independently reviewed groups bring the total to 830, with 170 remaining. Manual palette analysis stays responsive and Pixel scheduling bounds active-list removal work. Prepared Paint workflow, Upscale keyboard, widget timers and retained image ownership complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical parity covers 54 palette-controller cases, 72 scheduler pairs and 24 complete public plans/independent rasters. Nine queue workloads have six balanced pairs and separate traced allocations, all bound to the same 850 root Python hashes. The preceding bb6dfa6 checkpoint passed all seven remote checks and Windows/package/native GUI gates; the new exact commit is verified separately in PR46. Version 1.0.148 is not released.
+
+[Final local evidence](v148-batch24-validation.json) binds all source and historical comparisons. [Palette analysis](v148-batch24-palette-scan.md) and [component scheduling](v148-batch24-component-queue.md) describe the two new groups. [UI workflow](v148-batch24-ui-workflow.md) and [widget lifetime](v148-batch24-widget-lifetime-completion.md) record existing-contract completions.
+
+<details>
+<summary>Previous batch23 checkpoint</summary>
+
 Batch 23 implements **828 total distinct improvements, with 172 remaining**.
 
 Final frozen-source integration completed **4,270 tests**: **4,211 passed and 59 platform/hardware cases skipped**, with all 891 source/configuration hashes unchanged. The two new groups reduce repeated mixed-colour scoring and oversized input allocation when reading small local JSON files. Accepted profile import/reset revokes the old Drop-In request, and older native CTk tests use the existing owned window lifetime; those completions add zero IDs.
@@ -13,6 +22,9 @@ Final frozen-source integration completed **4,270 tests**: **4,211 passed and 59
 The concurrently published `5c32b6883c454268e06e199a8f15264ca9ec26e9` batch22 is preserved, including all 826 preceding registry entries and its detail-protection, portrait-tile, spectrum-search and UI changes. The 5,000-cycle source gate, package hygiene, eight existing-raster geometry fixtures and independent reviews passed. Complete historical comparisons cover 582 colour cases, 79 reader cases and eleven full reader/consumer workloads. Twenty-one workloads share 841 root Python hashes and have six balanced timing pairs each, with separate traced-allocation evidence and slower controls retained. [Final local evidence](v148-batch23-validation.json) is separate from the new exact-commit Windows/CI gate in [PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
 
 The preceding `5c32b68` checkpoint passed all seven checks, including Windows tests, source/packaged self-tests, bundle validation and packaged GUI/native drag-and-drop. [Exact prior run](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42401939021). No 1.0.148 release has been published; the release condition remains 1,000 independently verified behavior changes.
+
+
+</details>
 
 <details>
 <summary>Previous batch22 checkpoint</summary>

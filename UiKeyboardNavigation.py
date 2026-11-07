@@ -280,6 +280,8 @@ class KeyboardButton(_KeyboardReleaseSupport, ctk.CTkButton):
     def destroy(self):
         self._keyboard_closed = True
         self._keyboard_cancel()
+        from UiWindowLifetime import cancel_widget_after_jobs
+        cancel_widget_after_jobs(self)
         super().destroy()
 
 
