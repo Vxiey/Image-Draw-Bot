@@ -8,6 +8,7 @@ server/app stops.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 import ipaddress
@@ -22,6 +23,7 @@ from urllib.parse import urlsplit
 MOBILE_PREVIEW_MAX_DIMENSION = 1600
 MOBILE_PREVIEW_MAX_CLIENTS = 12
 MOBILE_PREVIEW_CLIENT_TIMEOUT = 5.0
+MOBILE_PREVIEW_HEADER_DEADLINE = 5.0
 _PRIVATE_NETWORKS = tuple(ipaddress.IPv4Network(value) for value in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'))
 
 
@@ -104,20 +106,34 @@ class _PreviewHTTPServer(ThreadingHTTPServer):
 def _image_png_bytes(image) -> Optional[bytes]:
     if image is None:
         return None
-    copy = image.convert('RGBA')
-    if max(copy.size) > MOBILE_PREVIEW_MAX_DIMENSION:
-        ratio = MOBILE_PREVIEW_MAX_DIMENSION / float(max(copy.size))
-        target = (max(1, round(copy.width * ratio)), max(1, round(copy.height * ratio)))
-        from PIL import Image
-        copy = copy.resize(target, Image.Resampling.LANCZOS)
+    from PIL import Image
+    target = None
+    if max(image.size) > MOBILE_PREVIEW_MAX_DIMENSION:
+        ratio = MOBILE_PREVIEW_MAX_DIMENSION / float(max(image.size))
+        target = (max(1, round(image.width * ratio)), max(1, round(image.height * ratio)))
+    if target is not None and image.mode in ('RGB', 'L') and 'transparency' not in image.info:
+        # Opaque sources do not need a full-size RGBA conversion before reduction.
+        # Alpha/color-key sources retain the original premultiplied-alpha path.
+        with closing(image.resize(target, Image.Resampling.LANCZOS)) as reduced:
+            copy = reduced.convert('RGBA')
+    else:
+        copy = image.convert('RGBA')
+        if target is not None:
+            previous = copy
+            try:
+                copy = previous.resize(target, Image.Resampling.LANCZOS)
+            finally:
+                previous.close()
     # Flatten transparency because phone browsers can otherwise show a black
     # background depending on theme/rendering path.
-    from PIL import Image
-    background = Image.new('RGBA', copy.size, 'white')
-    background.alpha_composite(copy)
-    out = BytesIO()
-    background.convert('RGB').save(out, format='PNG', optimize=True)
-    return out.getvalue()
+    try:
+        with closing(Image.new('RGBA', copy.size, 'white')) as background:
+            background.alpha_composite(copy)
+            with closing(background.convert('RGB')) as flattened, BytesIO() as out:
+                flattened.save(out, format='PNG', optimize=True)
+                return out.getvalue()
+    finally:
+        copy.close()
 
 
 @dataclass(frozen=True)
@@ -143,6 +159,13 @@ class MobilePreviewServer:
         self._thread: Optional[threading.Thread] = None
         self._port = 0
         self._addresses: tuple[str, ...] = ()
+        from MobilePreviewQueue import LatestImageQueue
+        self._queued_identities = None
+        self._queued_ticket = None
+        self._encoded_identities = None
+        self._image_queue = LatestImageQueue(
+            encode=lambda image: _image_png_bytes(image), current=self._queue_current,
+            publish=self._publish_queued, failed=self._queue_failed)
 
     @property
     def running(self) -> bool:
@@ -157,25 +180,121 @@ class MobilePreviewServer:
         return int(self._port)
 
     def update_images(self, *, original=None, preview=None, safety=None) -> int:
+        """Synchronous compatibility API; each call rereads mutable inputs."""
         with self._lock:
-            generation = self._generation
             self._update_sequence += 1
-            sequence = self._update_sequence
+            ticket = (self._generation, self._update_sequence)
+            self._queued_ticket = self._queued_identities = None
+            self._encoded_identities = None
+        self._image_queue.discard_before(ticket)
         encoded = {
             'original': _image_png_bytes(original),
             'preview': _image_png_bytes(preview),
             'safety': _image_png_bytes(safety),
         }
+        return self._publish_images(ticket, encoded)
+
+    def _publish_images(self, ticket, encoded, identities=None):
         with self._lock:
-            # Encoding happens outside the lock. A stop must not be undone by
-            # an older, slower encode completing after its session was cleared.
-            if generation != self._generation or sequence != self._update_sequence:
+            # Both APIs reserve identity before capture/encoding. A late older
+            # completion cannot replace a newer request or a cleared session.
+            if ticket != (self._generation, self._update_sequence):
                 return self._revision
-            if encoded == self._images:
-                return self._revision
-            self._images.update(encoded)
-            self._revision += 1
+            self._encoded_identities = identities
+            if encoded != self._images:
+                self._images.update(encoded)
+                self._revision += 1
             return self._revision
+
+    def _queue_current(self, ticket):
+        with self._lock:
+            return self.running and ticket == (self._generation, self._update_sequence)
+
+    def _publish_queued(self, request, encoded):
+        return self._publish_images(request.ticket, encoded, request.identities)
+
+    def _queue_failed(self, ticket, error=None):
+        with self._lock:
+            if self._queued_ticket == ticket:
+                self._queued_ticket = self._queued_identities = None
+        if error is not None:
+            # No worker touches Tk. Do not copy filenames, image metadata or
+            # potentially private exception arguments into this new log entry.
+            try:
+                from CrashDiagnostics import log_event
+                log_event(f'Mobile Preview background encoding failed: {type(error).__name__}.')
+            except Exception:
+                pass
+
+    def queue_images(self, *, original=None, preview=None, safety=None) -> bool:
+        """Queue immutable app image generations using owned PIL snapshots.
+
+        Call this on the thread owning the input images. Source objects must
+        remain immutable between submissions; mutable callers use update_images.
+        Copy/occasional reduction happens here, while PNG encoding runs on one
+        worker. At most 32 MiB of retained snapshots per request and one active
+        plus one pending/capturing request are allowed. Native resize/PNG scratch
+        buffers are additional. False means stopped, superseded or unchanged.
+        """
+        from MobilePreviewQueue import ImageRequest, capture_snapshots, image_identities, same_images
+        images = {'original': original, 'preview': preview, 'safety': safety}
+        # Capture is serialized, but session cancellation never takes this lock.
+        with self._image_queue.submission_lock:
+            with self._lock:
+                if not self.running:
+                    return False
+                if (self._queued_ticket == (self._generation, self._update_sequence)
+                        and same_images(self._queued_identities, images)):
+                    return False
+                identities = image_identities(images)
+                self._update_sequence += 1
+                ticket = (self._generation, self._update_sequence)
+                self._queued_ticket, self._queued_identities = ticket, identities
+                cached = {}
+                captures = {}
+                for name, image in images.items():
+                    identity = self._encoded_identities
+                    if identity is not None and same_images({name: identity[name]}, {name: image}):
+                        cached[name] = self._images[name]
+                    elif image is None:
+                        cached[name] = None
+                    else:
+                        captures[name] = image
+            # Release the obsolete pending slot before building its replacement,
+            # so retained snapshots never grow to three requests during capture.
+            self._image_queue.discard_before(ticket)
+            request = None
+            try:
+                snapshots = capture_snapshots(captures, maximum=MOBILE_PREVIEW_MAX_DIMENSION,
+                                              current=lambda: self._queue_current(ticket))
+                if snapshots is None:
+                    self._queue_failed(ticket)
+                    return False
+                request = ImageRequest(ticket, identities, snapshots, cached)
+                if not self._queue_current(ticket):
+                    request.close()
+                    self._queue_failed(ticket)
+                    return False
+                if not snapshots:
+                    # Clearing views or returning to already encoded identities
+                    # requires no worker, but still invalidates an older request.
+                    self._publish_queued(request, cached)
+                else:
+                    self._image_queue.submit(request)
+                return True
+            except BaseException:
+                if request is not None:
+                    request.close()
+                self._queue_failed(ticket)
+                raise
+
+    def cancel_updates(self) -> None:
+        """Invalidate queued work without changing the currently served frame."""
+        with self._lock:
+            self._update_sequence += 1
+            ticket = (self._generation, self._update_sequence)
+            self._queued_ticket = self._queued_identities = None
+        self._image_queue.discard_before(ticket)
 
     def urls(self) -> list[str]:
         with self._lock:
@@ -225,19 +344,55 @@ class MobilePreviewServer:
             server_version = 'ImageDrawBotMobilePreview/1.0'
             sys_version = ''
 
+            def setup(self):
+                super().setup()
+                # Socket timeouts limit inactivity, not a client continuously
+                # trickling an unfinished header. Bound the whole header phase.
+                self._header_timer = threading.Timer(MOBILE_PREVIEW_HEADER_DEADLINE, self._expire_headers)
+                self._header_timer.daemon = True
+                self._header_timer.start()
+
+            def _expire_headers(self):
+                try:
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+            def parse_request(self):
+                try:
+                    return super().parse_request()
+                finally:
+                    self._header_timer.cancel()
+
+            def finish(self):
+                self._header_timer.cancel()
+                try:
+                    super().finish()
+                except OSError:
+                    pass
+
+            def handle_one_request(self):
+                try:
+                    super().handle_one_request()
+                except OSError:
+                    self.close_connection = True
+
             def log_message(self, _format, *_args):
                 return
 
             def _send(self, code: int, content_type: str, body: bytes):
-                self.send_response(code)
-                self.send_header('Content-Type', content_type)
-                self.send_header('Content-Length', str(len(body)))
-                self.send_header('Cache-Control', 'no-store, max-age=0')
-                self.send_header('X-Content-Type-Options', 'nosniff')
-                self.send_header('Referrer-Policy', 'no-referrer')
-                self.end_headers()
-                if self.command != 'HEAD':
-                    self.wfile.write(body)
+                try:
+                    self.send_response(code)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.send_header('Cache-Control', 'no-store, max-age=0')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.send_header('Referrer-Policy', 'no-referrer')
+                    self.end_headers()
+                    if self.command != 'HEAD':
+                        self.wfile.write(body)
+                except OSError:
+                    self.close_connection = True
 
             def do_HEAD(self):
                 self.do_GET()
@@ -247,7 +402,11 @@ class MobilePreviewServer:
                 if not _is_local_client(client_ip):
                     self._send(403, 'text/plain; charset=utf-8', b'Local network access only')
                     return
-                path = urlsplit(self.path).path
+                try:
+                    path = urlsplit(self.path).path
+                except ValueError:
+                    self._send(400, 'text/plain; charset=utf-8', b'Invalid request target')
+                    return
                 prefix = f'/{session_token}/'
                 if not path.startswith(prefix):
                     self._send(404, 'text/plain; charset=utf-8', b'Not found')
@@ -287,8 +446,8 @@ class MobilePreviewServer:
         self._token = session_token
         self._port = int(server.server_address[1])
         self._addresses = addresses
-        self._thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .1}, name='mobile-preview', daemon=True)
         try:
+            self._thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .1}, name='mobile-preview', daemon=True)
             self._thread.start()
         except BaseException:
             server.server_close()
@@ -310,8 +469,13 @@ class MobilePreviewServer:
             self._addresses = ()
             self._token = ''
             self._generation += 1
+            self._update_sequence += 1
+            ticket = (self._generation, self._update_sequence)
+            self._queued_ticket = self._queued_identities = None
+            self._encoded_identities = None
             self._images = {name: None for name in self._images}
             self._revision = 0
+        self._image_queue.discard_before(ticket)
         if server is not None:
             try:
                 server.shutdown()

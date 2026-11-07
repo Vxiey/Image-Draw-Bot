@@ -15,9 +15,16 @@ def choose_paint_tool(selected: str, strategy: str, calibration: dict | None, *,
     validate_tool_strategy(strategy)
     if selected != "Auto (recommended)" or strategy == "Respect selected":
         return selected
-    data = calibration or {}; tools = data.get("tools", {}) if isinstance(data, dict) else {}
-    pencil_ready = tools.get("Pencil") is not None
-    brush_ready = data.get("opacity_100") is not None and data.get("brush_menu") is not None and data.get("brush_preset") is not None
+    from CalibrationValidation import screen_point
+    data = calibration if isinstance(calibration, dict) else {}
+    tools = data.get("tools", {})
+    if not isinstance(tools, dict): tools = {}
+    def ready(value):
+        try: screen_point(value)
+        except ValueError: return False
+        return True
+    pencil_ready = ready(tools.get("Pencil"))
+    brush_ready = all(ready(data.get(key)) for key in ("opacity_100", "brush_menu", "brush_preset"))
     if strategy == "Precision first":
         if pencil_ready: return "Pencil"
         if brush_ready: return "Brush"

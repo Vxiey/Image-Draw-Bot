@@ -5,7 +5,9 @@ An explicit reliable mode can opt into absolute SendInput movement, but Image Dr
 never forces the more aggressive backend merely because Microsoft Paint is active.
 """
 import ctypes
+from functools import wraps
 import sys
+import threading
 import time
 from ctypes import wintypes
 
@@ -46,12 +48,27 @@ def normalize_position(x, y, rect):
     return round((x-left)*65535/(width-1)), round((y-top)*65535/(height-1))
 
 
+def _serialized_input(method):
+    @wraps(method)
+    def call(self, *args, **kwargs):
+        # Keep disarm a barrier: an already authorized command must finish
+        # before disarm returns, and a later command must see the revoked arm.
+        # Lazy creation also supports lightweight injected native test backends.
+        lock = getattr(self, '_native_input_lock', None)
+        if lock is None:
+            lock = self.__dict__.setdefault('_native_input_lock', threading.RLock())
+        with lock:
+            return method(self, *args, **kwargs)
+    return call
+
+
 class WindowsMouse:
     def __init__(self):
         if sys.platform != 'win32':
             raise OSError('Mouse control requires Windows.')
 
         self.api = ctypes.WinDLL('user32', use_last_error=True)
+        self._native_input_lock = threading.RLock()
         self.held = False
         # Input is opt-in. Merely creating Image Draw Bot or switching profiles can
         # never move/click the pointer. GuardedMouse arms input only after an
@@ -90,20 +107,22 @@ class WindowsMouse:
     def input_armed(self):
         return bool(getattr(self, '_input_armed', False))
 
+    @_serialized_input
     def arm_input(self):
+        self._input_armed = False
+        # A failed prior LEFTUP still belongs to this backend. Retry that
+        # cleanup before an explicit new action can authorize further input.
+        self.release()
         down=self.buttons_down()
         if down:
             raise InterruptedError('Release all mouse buttons before starting mouse control: '+', '.join(down)+'.')
         self._input_armed = True
 
+    @_serialized_input
     def disarm_input(self):
         # If a drawing was interrupted while the button was held, release first.
         try:
-            if getattr(self, 'held', False):
-                try:
-                    self._send(0x0004)
-                finally:
-                    self.held = False
+            self.release()
         finally:
             self._input_armed = False
 
@@ -157,6 +176,7 @@ class WindowsMouse:
                 'Run Paint and Image Draw Bot at the same privilege level and make sure the desktop is unlocked.'
             )
 
+    @_serialized_input
     def move(self, x, y):
         self._require_input_armed()
         if not self.held:
@@ -195,6 +215,7 @@ class WindowsMouse:
             'Select the area again and check Windows display scaling.'
         )
 
+    @_serialized_input
     def press(self):
         self._require_input_armed()
         down=self.buttons_down()
@@ -203,12 +224,17 @@ class WindowsMouse:
         self._send(0x0002)  # MOUSEEVENTF_LEFTDOWN
         self.held = True
 
+    @_serialized_input
     def release(self):
-        if self.held:
+        if getattr(self, 'held', False):
             try:
                 self._send(0x0004)  # MOUSEEVENTF_LEFTUP
-            finally:
-                self.held = False
+            except BaseException:
+                self._input_armed = False
+                raise
+            # SendInput failure does not release the button. Preserve ownership
+            # until an accepted LEFTUP so the next cleanup step can retry it.
+            self.held = False
 
     def click(self):
         try:

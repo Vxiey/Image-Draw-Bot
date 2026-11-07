@@ -8,7 +8,7 @@ import build_exe
 
 
 class BuildDocumentationDataTests(unittest.TestCase):
-    def build_command(self, root):
+    def build_command(self, root, *, gpu=False):
         bundled_help = {}
 
         def record_run(command, **kwargs):
@@ -40,7 +40,8 @@ class BuildDocumentationDataTests(unittest.TestCase):
              patch.object(build_exe.sys, 'platform', 'win32'), \
              patch.object(build_exe.sys, 'version_info', (3, 12, 0)), \
              patch.object(build_exe.sys, 'maxsize', 2**63 - 1), \
-             patch.object(build_exe.sys, 'argv', ['build_exe.py']), \
+             patch.object(build_exe.sys, 'argv', ['build_exe.py'] + (['--gpu'] if gpu else [])), \
+             patch.object(build_exe, 'prepare_builder', return_value=build_exe.Builder(builder, root.resolve(), {})), \
              patch.object(build_exe.subprocess, 'run', side_effect=record_run) as run, \
              patch('builtins.print'):
             build_exe.main()

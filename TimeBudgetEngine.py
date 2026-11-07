@@ -54,20 +54,24 @@ LEGACY_TOTALS = {
 
 
 def automatic_reserve(total_seconds: float) -> float:
-    """Smooth reserve used by Custom/legacy deadline presets."""
+    """Continuous reserve used by Custom/legacy deadline presets.
+
+    Interpolate established timer anchors instead of jumping to a new minimum
+    at 30, 80, 150 and 300 seconds. Every segment grows more slowly than the
+    timer, so increasing it cannot reduce the usable drawing budget. Built-in
+    game presets keep their separately specified reserves.
+    """
     total = float(total_seconds)
     if not math.isfinite(total) or total <= 0:
         raise ValueError("Time budget must be finite and positive.")
     total = max(5.0, total)
-    if total <= 30:
-        return max(3.0, total * .115)
-    if total <= 80:
-        return max(7.0, total * .105)
-    if total <= 150:
-        return max(10.0, total * .085)
-    if total <= 300:
-        return max(15.0, total * .065)
-    return min(30.0, max(20.0, total * .05))
+    anchors = ((5.0, 3.0), (30.0, 3.45), (60.0, 7.0), (80.0, 8.4),
+               (90.0, 10.0), (120.0, 10.2), (150.0, 12.75), (180.0, 15.0),
+               (300.0, 19.5), (400.0, 20.0), (600.0, 30.0))
+    for (start, reserve_start), (end, reserve_end) in zip(anchors, anchors[1:]):
+        if total <= end:
+            return reserve_start + (total - start) * (reserve_end - reserve_start) / (end - start)
+    return 30.0
 
 
 def _custom_reserve(raw: Any, total: float) -> float:

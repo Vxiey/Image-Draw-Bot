@@ -6,6 +6,7 @@ path order, planner choices, target input, or saved user settings.
 from __future__ import annotations
 
 import math
+from itertools import pairwise
 from typing import Any, Sequence
 
 Point = tuple[int, int]
@@ -24,7 +25,7 @@ def draw_distance_px(paths: Sequence[Path], *, scale_x: float = 1.0, scale_y: fl
     for path in paths:
         if len(path) < 2:
             continue
-        total += sum(_distance(a, b, scale_x, scale_y) for a, b in zip(path, path[1:]))
+        total += sum(_distance(a, b, scale_x, scale_y) for a, b in pairwise(path))
     return total
 
 
@@ -94,12 +95,14 @@ def execution_metrics(
     current = cursor
 
     for index in order:
-        group = [tuple(path) for path in groups[index] if path]
-        if not group:
-            continue
-        if count_color_selection:
-            color_changes += 1
-        for path in group:
+        selected = False
+        for raw_path in groups[index]:
+            if not raw_path:
+                continue
+            path = tuple(raw_path)
+            if count_color_selection and not selected:
+                color_changes += 1
+                selected = True
             path_count += 1
             point_count += len(path)
             draw_px += draw_distance_px([path], scale_x=scale_x, scale_y=scale_y)

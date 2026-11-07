@@ -1,0 +1,521 @@
+{
+  "baseline": "a8fabbc811029a8bfcbe8a5af2a848b034e5cd89",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One warm/parity pair, interleaved timing pairs in fixed before-then-after order, and separate traced peaks after garbage collection. Every timed/traced result is compared to the first warm result. Native-action replay is checked separately and is not timed.",
+  "timing_scope": "Whole public make_plan, visual-result fingerprinting and owned-image cleanup. This measures planning overhead, not physical drawing speed.",
+  "memory_scope": "Python/NumPy traced allocations, not process RSS or most native Pillow pixel-core storage.",
+  "isolation": "Only _brush_pack_candidate is loaded from the baseline into a copy of current module globals. Both variants use the same current layout helper, cost model, native coordinate transform, projection and public caller. The old function always uses the unchanged default 90%-gain local policy.",
+  "parity_scope": "Identical source/main/Coverage pixels, palette and fitted geometry on every measured call. Separately recorded native-action rasters are also identical. Complete paths, decision diagnostics and component costs intentionally differ where the new pack wins.",
+  "baseline_function_sha256": "20890cb1049bdc2ba1fee0a72250f0830734bd36d3677bad40cd292ed83eae18",
+  "source_sha256": {
+    "DrawBot": "9ea748520ad5bdcfa77d676f58f0c043a802b568b5ed391dfc96b3858910a340",
+    "AdaptiveRegionHybrid": "45f998d8c58750e65c801a582a7f4faea19fc3c8a6407b43d0d558309d06976e",
+    "NativeBrushProjection": "8b7f0dd1e53892d03adff620145c6265fa4675020770ab123effca4a271fe0c5",
+    "Precision": "77fb60d1bd4d3a3c3d52a1804a2c2c3f0b52aabd8c4056331b5a0b081f39f774",
+    "AutoDrawing": "7586e98075f879aa4c6445637844f2fe5783a1297e26833537bf1d393a7ad148",
+    "EndToEndAutoTuner": "87c24903a4b5f7a42b0d2825b190e192b8b4a41b21bbdcef31de58c0cbbe25d7",
+    "ExtraFastProfilePolicy": "575e89e30d09d6f6ecce231f857f80d08df9c07521e9ba1394c6e79f04bfe061",
+    "AdaptiveBrushEngine": "ffd7979bd94740ceae57010c4ba5671120aa8ca5822264adf91dc1c8b875a955",
+    "ExecutionCostModel": "075886156d70d1fea4d213a6bcc3cc8b7a5c51e70d361d9dd03b23a77e916b70",
+    "StrokeDelivery": "963cd6a5264c69f85ae899ebfe94ea606eb53204d8ef7fbd15f0bac1b319801c",
+    "PreviewSafety": "7b53509e71cb3fc3d36c557d84823459122cbd502f325871f4887beb948b357a",
+    "PixelAccuracyEngine": "e3f5bcbe03f244c0a19e628d5c53c423d44526a20c630ce78adae90b039ee19b",
+    "PixelStrokeEngine": "41014942aa3b409ef1511ef1503cf3d6c2d24276c0b60258dc592c1a72cabe50",
+    "ColorFidelity": "8a85606577672a7758dc58e208c4d60d084e5fab0bbec09d29d0bb44b8599513",
+    "ColorMatchingEngine": "a947fbe2faf71148178a9f0de8125cae73129731622dcb7429d87a08b872f7ae",
+    "ResourceAllocation": "76f91584995abf4aed230d6dbed119626304a10ab970f7cf1dc6b6eb1eb15c80",
+    "DrawTimeEstimate": "b6cb04e11cf2b95c55bd0afcf0748831192448fe2e6c7017514b9a5bcdbd5b44",
+    "DrawTimeCalibration": "5b44821686f17ad5dbb7d0d25ed5d7f8ff8b6c35b90e859b526dbac01c21367e",
+    "benchmark_v148_image_workflow": "ccba17da2b50a22c3c967e51994121bc23a95a7c4b2a496dc3eb1b2918346da5",
+    "benchmark_v148_rendering_batch10": "a822bba3fe7e1d27cab79988ee957dc34f9786dbe8642841ba19b2c60f681f55",
+    "benchmark_v148_rendering_batch11": "5b9e4452f1b7fcf32a294bdb7a6ac7c87620cf6f0f02ac4b2e91177347f733f8",
+    "test_v148_rendering_batch06_canvas": "8f65654e85fdfe50050eb11744625b67f82a735cfb1f9f3aee9bd558215fd60d",
+    "test_v148_rendering_batch07_transparency": "88c86adb39b18c10816b5744fa2cea26c4c86dbcf9df68966bd6f1c9c811cc9b",
+    "test_v148_rendering_batch09_subject": "9e5107b298a723229abd93c83666f1ab895d3bff1fd3ae4d0082922364f324b4",
+    "test_v148_rendering_batch10_candidates": "6eef1679a2afd94554117dc4928513db6900b3091c015bafdf28d644431bbb07",
+    "test_v148_rendering_batch10_single_brush": "4846a8a573876fb003b38c2b87bec12c99520c604ab5dab67d70a1b013cdf5d6",
+    "test_v148_rendering_batch10_physical": "fba0c71eb4f49ba66cb04a2b1e8cfe7acb5745f3fd9e8252095bbe97d3b072a4",
+    "test_v148_rendering_batch11_pack_choice": "7f72b0550c676d372e1a9b18236a8b75decc15762e9992ccca22df91e94c5af4",
+    "test_rc6_region_brush_packing": "5573d8145d4a683c8fd44a1428651bb1c6421447e2f46e3f5a5a34b807a099ed",
+    "test_drawbot": "d2508350202ec2c4c1d003c3610efe2953fa412b2492d4b875644a4b5eaa670c"
+  },
+  "measurements": {
+    "cheaper_complete_pack": {
+      "before_samples_ms": [
+        268.3555410003464,
+        291.747971001314,
+        296.30660799921316,
+        266.78944200102706,
+        267.9809790006402
+      ],
+      "after_samples_ms": [
+        345.9119780000037,
+        308.1126649994985,
+        319.19125500098744,
+        314.8929989984026,
+        325.67408999966574
+      ],
+      "before_median_ms": 268.3555410003464,
+      "after_median_ms": 319.19125500098744,
+      "exact_output_parity": true,
+      "output_sha256": "f7c4bafc4e5d1ee39ee20cb1857363dd26ab6656e40d1c971f2b9b54ec6fa2d7",
+      "before_peak_python_bytes": 10739882,
+      "after_peak_python_bytes": 10654211,
+      "parameters": {
+        "source_size": [
+          200,
+          150
+        ],
+        "canvas_size": [
+          400,
+          300
+        ],
+        "source_rectangle": [
+          48,
+          40,
+          143,
+          103
+        ],
+        "origin": [
+          100,
+          100
+        ],
+        "options": {
+          "detail": 10,
+          "delay": 0.02,
+          "speed": "Balanced",
+          "precision": "Ultra",
+          "lines": true,
+          "drawing_mode": "Smart paths (recommended)",
+          "smart_paths": true,
+          "render_style": "Standard / pixel",
+          "draw_quality": "High likeness",
+          "human_mode": "Off",
+          "gpu_mode": "CPU",
+          "gpu_vram": "Auto",
+          "gpu_performance": "High throughput",
+          "cpu_workers": "4",
+          "cpu_engine": "Threads",
+          "ram_budget": "2 GB",
+          "ram_custom_mb": "2048",
+          "planning_resolution": "Standard",
+          "resource_scheduler": "Off",
+          "background_fill": "Off",
+          "background_simplification": "Off",
+          "color_grouping": "Accurate",
+          "color_workflow": "Finish color first",
+          "stroke_optimizer": "Travel only",
+          "adaptive_detail": "Off",
+          "visual_verification": "Off",
+          "color_rendering": "RGB nearest",
+          "color_layers": "Off",
+          "custom_color_workflow": "Calibrated palette",
+          "exact_color_limit": "Auto",
+          "tool_strategy": "Auto",
+          "portrait_focus": true,
+          "skip_white": true,
+          "contrast": 1.0,
+          "outline": false,
+          "brush_px": 2,
+          "max_seconds": 600,
+          "manual_max_seconds": 600,
+          "time_budget_mode": "Unlimited",
+          "target_stroke_count": "Auto",
+          "target_stroke_custom": "2500",
+          "paint_current_color": false,
+          "erase_mode": false,
+          "paint_tool": "Use current tool",
+          "effective_paint_tool": "Use current tool",
+          "tool_actions": [],
+          "fill_tool_available": false,
+          "fill_tool_actions": [],
+          "fill_restore_actions": [],
+          "render_preset": "Manual",
+          "use_region_fill_engine": false,
+          "detail_zoom": "Off",
+          "color_fidelity": "Fast",
+          "unlimited_time": true,
+          "extra_fast": true,
+          "extra_fast_v2": true,
+          "profile_key": "gartic-phone",
+          "profile_name": "Gartic Phone",
+          "browser_brush_plan": {
+            "profile_key": "gartic-phone",
+            "target_position": [
+              -1000,
+              -1000
+            ],
+            "target_index": 0,
+            "effective_px": 2,
+            "confidence": 0.99,
+            "nominal_sizes": [
+              2,
+              4,
+              8,
+              16
+            ],
+            "verified_sizes": [
+              2,
+              4,
+              8,
+              16
+            ],
+            "control_positions": [
+              [
+                -1000,
+                -1000
+              ],
+              [
+                -990,
+                -1000
+              ],
+              [
+                -980,
+                -1000
+              ],
+              [
+                -970,
+                -1000
+              ]
+            ],
+            "safe_guard_px": 16
+          },
+          "_execution_cost_calibration_override": {},
+          "adaptive_color_verification": false,
+          "strict_color_verification": false,
+          "visual_verification_enabled": false,
+          "visual_verification_resolved": "Off",
+          "corners": [
+            [
+              100,
+              100
+            ],
+            [
+              500,
+              400
+            ]
+          ]
+        }
+      },
+      "before_execution": {
+        "paths": 47,
+        "used_brush_sizes": [
+          4,
+          8,
+          16
+        ],
+        "executed_brush_selections": [
+          16,
+          8,
+          4
+        ],
+        "component_estimated_seconds": 10.576774,
+        "policy": "gain-per-cost (historical)",
+        "policy_candidates": {},
+        "coverage_percent": 100.0,
+        "missing_pixels": 0,
+        "spill_pixels": 0,
+        "native_raster": {
+          "shape": [
+            300,
+            400
+          ],
+          "dtype": "int32",
+          "sha256": "91ccd6654dc512a04e2635710c5a6c8cc0d374a4cf4d40016d9d75ab8984a0fd"
+        },
+        "native_painted_pixels": 24576,
+        "runtime_path_counts": {
+          "processed": 47,
+          "sent": 47,
+          "guard_skipped": 0
+        }
+      },
+      "after_execution": {
+        "paths": 12,
+        "used_brush_sizes": [
+          16
+        ],
+        "executed_brush_selections": [
+          16
+        ],
+        "component_estimated_seconds": 8.546753,
+        "policy": "maximum-gain",
+        "policy_candidates": {
+          "gain-per-cost": {
+            "evaluated": 4,
+            "exact": 2,
+            "best_seconds": 10.576773842074575
+          },
+          "maximum-gain": {
+            "evaluated": 4,
+            "exact": 4,
+            "best_seconds": 8.546752857069972
+          }
+        },
+        "coverage_percent": 100.0,
+        "missing_pixels": 0,
+        "spill_pixels": 0,
+        "native_raster": {
+          "shape": [
+            300,
+            400
+          ],
+          "dtype": "int32",
+          "sha256": "91ccd6654dc512a04e2635710c5a6c8cc0d374a4cf4d40016d9d75ab8984a0fd"
+        },
+        "native_painted_pixels": 24576,
+        "runtime_path_counts": {
+          "processed": 12,
+          "sent": 12,
+          "guard_skipped": 0
+        }
+      },
+      "exact_native_raster_parity": true
+    },
+    "cheaper_original_pack": {
+      "before_samples_ms": [
+        158.4851110001182,
+        169.08201600017492,
+        161.13548900102614,
+        155.53023800021037,
+        152.08319300108997
+      ],
+      "after_samples_ms": [
+        256.13863400030823,
+        258.7474010015285,
+        252.83206300082384,
+        257.27981299860403,
+        259.2406590010796
+      ],
+      "before_median_ms": 158.4851110001182,
+      "after_median_ms": 257.27981299860403,
+      "exact_output_parity": true,
+      "output_sha256": "398c05651c937b4e1dddb67a11f853a483236f2fadb0e9c4127027e88612ae24",
+      "before_peak_python_bytes": 1847186,
+      "after_peak_python_bytes": 1909589,
+      "parameters": {
+        "source_size": [
+          128,
+          96
+        ],
+        "canvas_size": [
+          128,
+          96
+        ],
+        "source_rectangle": [
+          8,
+          8,
+          118,
+          86
+        ],
+        "origin": [
+          100,
+          100
+        ],
+        "options": {
+          "detail": 10,
+          "delay": 0.02,
+          "speed": "Balanced",
+          "precision": "Ultra",
+          "lines": true,
+          "drawing_mode": "Smart paths (recommended)",
+          "smart_paths": true,
+          "render_style": "Standard / pixel",
+          "draw_quality": "High likeness",
+          "human_mode": "Off",
+          "gpu_mode": "CPU",
+          "gpu_vram": "Auto",
+          "gpu_performance": "High throughput",
+          "cpu_workers": "4",
+          "cpu_engine": "Threads",
+          "ram_budget": "2 GB",
+          "ram_custom_mb": "2048",
+          "planning_resolution": "Standard",
+          "resource_scheduler": "Off",
+          "background_fill": "Off",
+          "background_simplification": "Off",
+          "color_grouping": "Accurate",
+          "color_workflow": "Finish color first",
+          "stroke_optimizer": "Travel only",
+          "adaptive_detail": "Off",
+          "visual_verification": "Off",
+          "color_rendering": "RGB nearest",
+          "color_layers": "Off",
+          "custom_color_workflow": "Calibrated palette",
+          "exact_color_limit": "Auto",
+          "tool_strategy": "Auto",
+          "portrait_focus": true,
+          "skip_white": true,
+          "contrast": 1.0,
+          "outline": false,
+          "brush_px": 2,
+          "max_seconds": 600,
+          "manual_max_seconds": 600,
+          "time_budget_mode": "Unlimited",
+          "target_stroke_count": "Auto",
+          "target_stroke_custom": "2500",
+          "paint_current_color": false,
+          "erase_mode": false,
+          "paint_tool": "Use current tool",
+          "effective_paint_tool": "Use current tool",
+          "tool_actions": [],
+          "fill_tool_available": false,
+          "fill_tool_actions": [],
+          "fill_restore_actions": [],
+          "render_preset": "Manual",
+          "use_region_fill_engine": false,
+          "detail_zoom": "Off",
+          "color_fidelity": "Fast",
+          "unlimited_time": true,
+          "extra_fast": true,
+          "extra_fast_v2": true,
+          "profile_key": "gartic-phone",
+          "profile_name": "Gartic Phone",
+          "browser_brush_plan": {
+            "profile_key": "gartic-phone",
+            "target_position": [
+              -1000,
+              -1000
+            ],
+            "target_index": 0,
+            "effective_px": 2,
+            "confidence": 0.99,
+            "nominal_sizes": [
+              2,
+              4,
+              8,
+              16
+            ],
+            "verified_sizes": [
+              2,
+              4,
+              8,
+              16
+            ],
+            "control_positions": [
+              [
+                -1000,
+                -1000
+              ],
+              [
+                -990,
+                -1000
+              ],
+              [
+                -980,
+                -1000
+              ],
+              [
+                -970,
+                -1000
+              ]
+            ],
+            "safe_guard_px": 16
+          },
+          "_execution_cost_calibration_override": {},
+          "adaptive_color_verification": false,
+          "strict_color_verification": false,
+          "visual_verification_enabled": false,
+          "visual_verification_resolved": "Off",
+          "corners": [
+            [
+              100,
+              100
+            ],
+            [
+              228,
+              196
+            ]
+          ]
+        }
+      },
+      "before_execution": {
+        "paths": 32,
+        "used_brush_sizes": [
+          2,
+          4,
+          8,
+          16
+        ],
+        "executed_brush_selections": [
+          16,
+          8,
+          4,
+          2
+        ],
+        "component_estimated_seconds": 4.851547,
+        "policy": "gain-per-cost (historical)",
+        "policy_candidates": {},
+        "coverage_percent": 100.0,
+        "missing_pixels": 0,
+        "spill_pixels": 0,
+        "native_raster": {
+          "shape": [
+            96,
+            128
+          ],
+          "dtype": "int32",
+          "sha256": "2ecf7c3f7345c9c3bd4c52ab290f975a435589625f2ce874d101b776efd3db3b"
+        },
+        "native_painted_pixels": 8769,
+        "runtime_path_counts": {
+          "processed": 32,
+          "sent": 32,
+          "guard_skipped": 0
+        }
+      },
+      "after_execution": {
+        "paths": 32,
+        "used_brush_sizes": [
+          2,
+          4,
+          8,
+          16
+        ],
+        "executed_brush_selections": [
+          16,
+          8,
+          4,
+          2
+        ],
+        "component_estimated_seconds": 4.851547,
+        "policy": "gain-per-cost",
+        "policy_candidates": {
+          "gain-per-cost": {
+            "evaluated": 4,
+            "exact": 4,
+            "best_seconds": 4.851547335954672
+          },
+          "maximum-gain": {
+            "evaluated": 4,
+            "exact": 4,
+            "best_seconds": 7.333242709276697
+          }
+        },
+        "coverage_percent": 100.0,
+        "missing_pixels": 0,
+        "spill_pixels": 0,
+        "native_raster": {
+          "shape": [
+            96,
+            128
+          ],
+          "dtype": "int32",
+          "sha256": "2ecf7c3f7345c9c3bd4c52ab290f975a435589625f2ce874d101b776efd3db3b"
+        },
+        "native_painted_pixels": 8769,
+        "runtime_path_counts": {
+          "processed": 32,
+          "sent": 32,
+          "guard_skipped": 0
+        }
+      },
+      "exact_native_raster_parity": true
+    }
+  },
+  "source_unchanged_during_measurement": true
+}

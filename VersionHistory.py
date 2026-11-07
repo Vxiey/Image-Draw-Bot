@@ -32,27 +32,38 @@ def candidate_roots() -> tuple[Path, ...]:
     return tuple(unique)
 
 
-def find_version_history_file() -> Path | None:
+def _history_files():
     for root in candidate_roots():
         for rel in CANDIDATE_FILES:
             path = root / rel
-            if path.is_file():
-                return path
-    return None
+            try:
+                if path.is_file():
+                    yield path
+            except OSError:
+                continue
+
+
+def find_version_history_file() -> Path | None:
+    return next(_history_files(), None)
 
 
 def read_version_history(max_chars: int = 70000) -> str:
-    path = find_version_history_file()
-    if path is None:
-        return f"Image Draw Bot {APP_VERSION}\n\nVersion history file was not found in this build."
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError as error:
-        return f"Image Draw Bot {APP_VERSION}\n\nCould not read version history: {error}"
-    text = text.strip()
-    if max_chars > 0 and len(text) > max_chars:
-        return text[:max_chars].rstrip() + "\n\n[Version history truncated in the viewer.]"
-    return text + "\n"
+    if type(max_chars) is not int or not 1 <= max_chars <= 1_000_000:
+        raise ValueError('Version history limit must be an integer from 1 to 1,000,000 characters.')
+    last_error = None
+    for path in _history_files():
+        try:
+            with path.open('r', encoding='utf-8', errors='replace') as stream:
+                text = stream.read(max_chars + 1)
+        except OSError as error:
+            last_error = error
+            continue
+        if len(text) > max_chars:
+            return text[:max_chars].strip() + "\n\n[Version history truncated in the viewer.]"
+        return text.strip() + "\n"
+    if last_error is not None:
+        return f"Image Draw Bot {APP_VERSION}\n\nCould not read version history: {last_error}"
+    return f"Image Draw Bot {APP_VERSION}\n\nVersion history file was not found in this build."
 
 
 def has_version_history() -> bool:

@@ -11,6 +11,7 @@ inside it, preserving every drawn segment while changing only pen-up order.
 from __future__ import annotations
 
 import math
+from itertools import islice
 from typing import Sequence
 
 Point = tuple[int, int]
@@ -66,7 +67,10 @@ def _clean_path(path) -> Path:
 def _nearest_order(paths: Sequence[Path], *, speed: str = 'Balanced', allow_reverse: bool = True,
                    cancelled=lambda: False) -> list[Path]:
     """Adaptive bounded nearest-neighbour ordering."""
+    from SpeedOptimizer import normalize_speed
+    speed = normalize_speed(speed or 'Balanced')
     remaining = [_clean_path(p) for p in paths if p]
+    original = remaining
     if len(remaining) < 3:
         return remaining
     if speed == 'Safe':
@@ -81,9 +85,14 @@ def _nearest_order(paths: Sequence[Path], *, speed: str = 'Balanced', allow_reve
         window = min(len(remaining), max(window, 128))
 
     output: list[Path] = []
-    first = remaining.pop(0)
+    source = iter(remaining)
+    first = next(source)
     output.append(first)
     cursor = first[-1]
+    # Only the bounded search window needs arbitrary-index removal. Keeping
+    # every future path in that list makes an already ordered route quadratic
+    # because each pop(0) shifts the entire remaining job.
+    remaining = list(islice(source, window))
 
     while remaining:
         if cancelled():
@@ -108,7 +117,12 @@ def _nearest_order(paths: Sequence[Path], *, speed: str = 'Balanced', allow_reve
             chosen = _reverse(chosen)
         output.append(chosen)
         cursor = chosen[-1]
-    return output
+        following = next(source, None)
+        if following is not None:
+            remaining.append(following)
+    # A local greedy choice can make the eventual pen-up route longer. Ordering
+    # changes no drawing work, so keep it only when the complete route improves.
+    return output if pen_up_distance(output) <= pen_up_distance(original) + 1e-9 else original
 
 
 def _two_opt_budget(speed: str, path_count: int) -> tuple[int, int]:
@@ -118,6 +132,8 @@ def _two_opt_budget(speed: str, path_count: int) -> tuple[int, int]:
     TSP solver. Very large jobs reduce their budget to protect preview/draw-start
     latency.
     """
+    from SpeedOptimizer import normalize_speed
+    speed = normalize_speed(speed or 'Balanced')
     if path_count < 4:
         return 0, 0
     if speed == 'Safe':
@@ -167,6 +183,15 @@ def _bounded_two_opt(paths: Sequence[Path], *, speed: str = 'Balanced',
         iterations += 1
         best_gain = 1e-9
         best_pair = None
+        # Candidate pairs replace two links in the same unchanged route. Price
+        # its existing adjacent links once for this pass instead of repeating
+        # both hypot calls for every pair. Rebuild after each accepted reversal;
+        # no costs survive this operation or describe another route order.
+        edge_costs = []
+        for edge_index in range(n - 1):
+            if edge_index % 256 == 0 and cancelled():
+                raise InterruptedError()
+            edge_costs.append(_distance(route[edge_index][-1], route[edge_index + 1][0]))
 
         for i in range(0, n - 1):
             if cancelled():
@@ -179,11 +204,11 @@ def _bounded_two_opt(paths: Sequence[Path], *, speed: str = 'Balanced',
                 old_cost = 0.0
                 new_cost = 0.0
                 if previous is not None:
-                    old_cost += _distance(previous, old_first)
+                    old_cost += edge_costs[i - 1]
                     new_cost += _distance(previous, route[j][-1])
                 if following is not None:
-                    old_cost += _distance(route[j][-1], following)
-                    new_cost += _distance(route[i][0], following)
+                    old_cost += edge_costs[j]
+                    new_cost += _distance(old_first, following)
                 evaluations += 1
                 gain = old_cost - new_cost
                 if gain > best_gain:
@@ -213,7 +238,7 @@ def _bounded_two_opt(paths: Sequence[Path], *, speed: str = 'Balanced',
     }
 
 
-def _merge_exact_neighbors(paths: Sequence[Path]) -> tuple[list[Path], int]:
+def _merge_exact_neighbors(paths: Sequence[Path], *, allow_reverse: bool = True) -> tuple[list[Path], int]:
     """Merge adjacent paths only when their endpoints are identical."""
     merged: list[Path] = []
     joins = 0
@@ -228,7 +253,7 @@ def _merge_exact_neighbors(paths: Sequence[Path]) -> tuple[list[Path], int]:
         if previous[-1] == path[0]:
             merged[-1] = previous + path[1:]
             joins += 1
-        elif len(path) > 1 and previous[-1] == path[-1]:
+        elif allow_reverse and len(path) > 1 and previous[-1] == path[-1]:
             rev = _reverse(path)
             merged[-1] = previous + rev[1:]
             joins += 1
@@ -237,17 +262,21 @@ def _merge_exact_neighbors(paths: Sequence[Path]) -> tuple[list[Path], int]:
     return merged, joins
 
 
-def _merge_exact_graph(paths: Sequence[Path], cancelled=lambda: False) -> tuple[list[Path], int]:
+def _merge_exact_graph(paths: Sequence[Path], cancelled=lambda: False, *,
+                       allow_reverse: bool = True) -> tuple[list[Path], int]:
     """Build safe chains from paths that share exact endpoints anywhere in a group."""
     paths = [_clean_path(p) for p in paths if p]
     endpoint_map: dict[Point, list[int]] = {}
     for i, path in enumerate(paths):
+        if i % 512 == 0 and cancelled():
+            raise InterruptedError()
         endpoint_map.setdefault(path[0], []).append(i)
-        if path[-1] != path[0]:
+        if allow_reverse and path[-1] != path[0]:
             endpoint_map.setdefault(path[-1], []).append(i)
     used: set[int] = set()
     chains: list[Path] = []
     joins = 0
+    endpoint_positions: dict[Point, int] = {}
 
     for seed in range(len(paths)):
         if seed in used:
@@ -260,17 +289,18 @@ def _merge_exact_graph(paths: Sequence[Path], cancelled=lambda: False) -> tuple[
             if cancelled():
                 raise InterruptedError()
             endpoint = chain[-1]
-            candidate = None
-            for idx in endpoint_map.get(endpoint, ()):
-                if idx not in used:
-                    candidate = idx
-                    break
-            if candidate is None:
+            candidates = endpoint_map.get(endpoint, ())
+            position = endpoint_positions.get(endpoint, 0)
+            while position < len(candidates) and candidates[position] in used:
+                position += 1
+            endpoint_positions[endpoint] = position + 1
+            if position >= len(candidates):
                 break
+            candidate = candidates[position]
             path = paths[candidate]
             if path[0] == endpoint:
                 oriented = path
-            elif path[-1] == endpoint:
+            elif allow_reverse and path[-1] == endpoint:
                 oriented = _reverse(path)
             else:
                 break
@@ -304,12 +334,12 @@ def optimize_path_group(paths: Sequence[Path], *, mode: str = 'Auto', drawing_mo
         working = original
         smart_merge = effective in ('Smart merge', 'Smart merge + 2-opt')
         if smart_merge:
-            working, joins = _merge_exact_graph(working, cancelled=cancelled)
+            working, joins = _merge_exact_graph(working, cancelled=cancelled, allow_reverse=allow_reverse)
         result = _nearest_order(
             working, speed=speed, allow_reverse=allow_reverse, cancelled=cancelled,
         )
         if smart_merge:
-            result, joins2 = _merge_exact_neighbors(result)
+            result, joins2 = _merge_exact_neighbors(result, allow_reverse=allow_reverse)
             joins += joins2
         if effective == 'Smart merge + 2-opt':
             result, two_opt_meta = _bounded_two_opt(
@@ -317,7 +347,7 @@ def optimize_path_group(paths: Sequence[Path], *, mode: str = 'Auto', drawing_mo
             )
             # A route improvement can make exact endpoints adjacent. Merge only
             # those zero-gap boundaries; no connector is invented.
-            result, joins2 = _merge_exact_neighbors(result)
+            result, joins2 = _merge_exact_neighbors(result, allow_reverse=allow_reverse)
             joins += joins2
 
     after_distance = pen_up_distance(result)

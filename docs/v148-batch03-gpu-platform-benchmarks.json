@@ -1,0 +1,171 @@
+{
+  "baseline": "2fb7abf470a4ef498df9c53f42cddda62d8b652b",
+  "python": "3.12.14",
+  "platform": "linux",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One exact parity/warm call; alternating before/after elapsed samples; separate traced peak after GC.",
+  "scope": "Synthetic CPU work only. Traced bytes exclude some native Pillow buffers and are neither RSS nor GPU memory. Baseline modules import current unchanged/shared dependencies.",
+  "after_source_sha256": {
+    "UniversalGpuAcceleration": "53a2501354d76281e924948795b2d8a6e72f990d3064779897bd1bb202de49e4",
+    "PortraitPlanner": "e65d88efb26e0b0b5941009d93fd86186c514267a424a8da074e10a858c79b7e",
+    "GpuAcceleration": "cb13fae0f8ebdcafcf730023ca978ac1f21ca8989ad0fbac7332153ecb64c5f1"
+  },
+  "measurements": {
+    "rgba_mixed_1024x768": {
+      "before_samples_ms": [
+        30.114511002466315,
+        26.737277999927755,
+        31.36757799802581,
+        33.78340000199387,
+        27.279519999865443
+      ],
+      "after_samples_ms": [
+        15.817845000128727,
+        17.05584500086843,
+        16.3695800001733,
+        16.92845599973225,
+        13.550973999372218
+      ],
+      "before_median_ms": 30.114511002466315,
+      "after_median_ms": 16.3695800001733,
+      "before_peak_traced_bytes": 36210680,
+      "after_peak_traced_bytes": 19662052,
+      "exact_output_parity": true,
+      "output_sha256": "d021cc069c98ebb0783a15a706d2bec7dc7c435932d9742f71937873e88f9bef"
+    },
+    "rgba_opaque_1024x768": {
+      "before_samples_ms": [
+        30.966220001573674,
+        29.49234100015019,
+        29.077708000841085,
+        29.38414199888939,
+        32.236867999017704
+      ],
+      "after_samples_ms": [
+        6.578005002666032,
+        7.386068999039708,
+        7.141598001908278,
+        8.259820999228396,
+        9.639912001148332
+      ],
+      "before_median_ms": 29.49234100015019,
+      "after_median_ms": 7.386068999039708,
+      "before_peak_traced_bytes": 36210680,
+      "after_peak_traced_bytes": 11011713,
+      "exact_output_parity": true,
+      "output_sha256": "c862e34e320ad1a1fe01c855daa9c00f2a6514b22c07ad5abc43e4273790c017"
+    },
+    "oklab_pairs_1024": {
+      "before_samples_ms": [
+        43.462289999297354,
+        38.30021300018416,
+        47.511544998997124,
+        65.17267000162974,
+        45.860399997764034
+      ],
+      "after_samples_ms": [
+        9.502638000412844,
+        7.176828999945428,
+        12.815696998586645,
+        8.981417999166297,
+        7.9558919969713315
+      ],
+      "before_median_ms": 45.860399997764034,
+      "after_median_ms": 8.981417999166297,
+      "before_peak_traced_bytes": 29453728,
+      "after_peak_traced_bytes": 8548544,
+      "exact_output_parity": true,
+      "output_sha256": "9159618552c09be260ac2b9c3b209546bb2ca13ea3014d6289d4d0c31ec240e7"
+    },
+    "portrait_contrast_1024x768": {
+      "before_samples_ms": [
+        267.09833499990054,
+        271.6680109988374,
+        314.95712000105414,
+        299.3081339991477,
+        299.5814789974247
+      ],
+      "after_samples_ms": [
+        11.643132998869987,
+        12.186105999717256,
+        14.715155000885716,
+        13.668556999618886,
+        15.38131999768666
+      ],
+      "before_median_ms": 299.3081339991477,
+      "after_median_ms": 13.668556999618886,
+      "before_peak_traced_bytes": 8250206,
+      "after_peak_traced_bytes": 2502858,
+      "exact_output_parity": true,
+      "output_sha256": "cdaf85629254c04548f3d1be6a9e5c54a328388759dc2525f63cdf164db6684c"
+    },
+    "portrait_select_30000_want_200": {
+      "before_samples_ms": [
+        245.87355200128513,
+        238.61155799750122,
+        284.6234450007614,
+        252.0956539992767,
+        235.89934800111223
+      ],
+      "after_samples_ms": [
+        207.9875580020598,
+        214.1683699992427,
+        223.92256099919905,
+        205.14439799808315,
+        214.29018499839003
+      ],
+      "before_median_ms": 245.87355200128513,
+      "after_median_ms": 214.1683699992427,
+      "before_peak_traced_bytes": 6839316,
+      "after_peak_traced_bytes": 47532,
+      "exact_output_parity": true,
+      "output_sha256": "fd83a166e6f88a63f2b2437e5c5fb455de25dcbb146681f3a7e080dfd36c3117"
+    },
+    "portrait_select_30000_want_26000": {
+      "before_samples_ms": [
+        256.5085230016848,
+        243.21853800211102,
+        242.40428899793187,
+        242.71967499953462,
+        241.40388099840493
+      ],
+      "after_samples_ms": [
+        247.27574099961203,
+        248.2774980016984,
+        243.04553700130782,
+        238.2758259991533,
+        244.28918099874863
+      ],
+      "before_median_ms": 242.71967499953462,
+      "after_median_ms": 244.28918099874863,
+      "before_peak_traced_bytes": 6839316,
+      "after_peak_traced_bytes": 6840196,
+      "exact_output_parity": true,
+      "output_sha256": "c67a029d27d5b2178fc1ee48edac7a9d3f7e66160041d70ab7410f16e300bb20"
+    },
+    "benchmark_stimulus_1024": {
+      "before_samples_ms": [
+        123.7019149994012,
+        136.59119799922337,
+        133.1613420006761,
+        145.95322799868882,
+        136.26439000290702
+      ],
+      "after_samples_ms": [
+        4.094945001270389,
+        3.0882659993949346,
+        4.099821002455428,
+        3.661463000753429,
+        3.9476470010413323
+      ],
+      "before_median_ms": 136.26439000290702,
+      "after_median_ms": 3.9476470010413323,
+      "before_peak_traced_bytes": 8449640,
+      "after_peak_traced_bytes": 1644752,
+      "exact_output_parity": true,
+      "output_sha256": "ccc6f01106a9674eedb951ceec7a8e9aa347c37b525bc65daf98d7a331a274fd"
+    }
+  }
+}

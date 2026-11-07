@@ -3,10 +3,37 @@ import numpy as np
 from PIL import Image
 from DrawingStyleProfiles import apply_drawing_style
 from ExtraFastProfilePolicy import apply_extra_fast_profile_policy
+from ImageGeometry import thumbnail_size
 
 PRESETS=('Auto','Manual','Masterpiece','Extra fast')
 
-def resolve_drawing(image,options):
+def _image_statistics(image):
+    """Analyze the same opaque thumbnail without redundant full-size copies."""
+    rgba=flat=rgb=None
+    try:
+        if image.mode=='RGB' and 'transparency' not in image.info:
+            size=thumbnail_size(image.size,(128,128))
+            flat=image if size==image.size else image.resize(size,Image.Resampling.BICUBIC,reducing_gap=2.0)
+        else:
+            rgba=image if image.mode=='RGBA' else image.convert('RGBA')
+            flat=Image.new('RGBA',rgba.size,'white')
+            flat.alpha_composite(rgba)
+        if flat is not image:flat.thumbnail((128,128))
+        rgb=flat if flat.mode=='RGB' else flat.convert('RGB')
+        a=np.asarray(rgb,dtype=np.int16)
+    finally:
+        if rgb is not None and rgb is not flat:rgb.close()
+        if flat is not None and flat is not image:flat.close()
+        if rgba is not None and rgba is not image:rgba.close()
+    white=float(np.mean(np.min(a,axis=2)>235))
+    chroma=float(np.mean(a.max(axis=2)-a.min(axis=2)>35))
+    bins=(a//32).astype(np.int32);codes=bins[:,:,0]*64+bins[:,:,1]*8+bins[:,:,2]
+    hist=np.bincount(codes.ravel(),minlength=512)
+    dominant=float(np.sort(hist)[-12:].sum()/hist.sum())
+    return white,chroma,dominant
+
+def resolve_drawing(image,options,*,cancelled=lambda: False):
+    if cancelled():raise InterruptedError('Automatic image analysis cancelled.')
     raw=dict(options);preset=raw.get('render_preset','Manual')
     if preset not in PRESETS:raise ValueError('Choose Auto, Manual, Masterpiece or Extra fast.')
     # Manual means the caller owns every setting. Auto Drawing Style must not
@@ -14,6 +41,7 @@ def resolve_drawing(image,options):
     # explicitly selected a non-Auto drawing style.
     if preset=='Manual' and raw.get('drawing_style','Auto')=='Auto':return raw
     out=apply_drawing_style(image,raw);preset=out.get('render_preset','Manual')
+    if cancelled():raise InterruptedError('Automatic image analysis cancelled.')
     if out.get('drawing_style')!='Auto' and preset in ('Auto','Manual'):
         out['auto_engine_resolved']=True
         out['auto_drawing_meta']={'preset':preset,'image_kind':out.get('drawing_style_resolved'),
@@ -49,13 +77,9 @@ def resolve_drawing(image,options):
             'engine':engine,'recognition_first':True,'extra_fast_strategy':fast_strategy,
         }
         return out
-    rgba=image.convert('RGBA');flat=Image.new('RGBA',rgba.size,'white');flat.alpha_composite(rgba)
-    flat.thumbnail((128,128));a=np.asarray(flat.convert('RGB'),dtype=np.int16)
-    white=float(np.mean(np.min(a,axis=2)>235))
-    chroma=float(np.mean(a.max(axis=2)-a.min(axis=2)>35))
     # Quantized colour occupancy is a texture heuristic, not object recognition.
-    bins=(a//32).astype(np.int32);codes=bins[:,:,0]*64+bins[:,:,1]*8+bins[:,:,2]
-    hist=np.bincount(codes.ravel(),minlength=512);dominant=float(np.sort(hist)[-12:].sum()/hist.sum())
+    white,chroma,dominant=_image_statistics(image)
+    if cancelled():raise InterruptedError('Automatic image analysis cancelled.')
     source_kind='line art' if white>.65 and chroma<.12 else 'flat illustration' if dominant>.90 else 'photo / texture'
     # Step 11: Auto is now an end-to-end quality/speed policy for full-colour
     # images. It composes the existing colour/deadline/calibration engines and
@@ -64,7 +88,7 @@ def resolve_drawing(image,options):
     if preset=='Auto' and source_kind!='line art' and not (out.get('paint_current_color') or out.get('outline') or out.get('erase_mode')):
         try:
             from EndToEndAutoTuner import tune_options
-            tuned=tune_options(image,out,source_kind_hint=source_kind)
+            tuned=tune_options(image,out,source_kind_hint=source_kind,cancelled=cancelled)
             meta=tuned.get('auto_tuner_meta') or {}
             if meta.get('active'):
                 engine='Shape paths' if tuned.get('drawing_mode')=='Shape paths' else 'Smart color paths'
@@ -81,7 +105,10 @@ def resolve_drawing(image,options):
     if out.get('paint_current_color') or out.get('outline'):
         engine='black contours';out.update(outline=True,subject_focus='Off',sketch_detail='Detailed' if preset=='Masterpiece' else 'Auto')
     elif preset=='Masterpiece' or out.get('unlimited_time') or out.get('time_budget_mode')=='Unlimited':
-        engine='Pixel Accurate';out.update(draw_quality='Pixel Accurate',brush_px=1,profile_engine='Manual settings')
+        # Renderer quality cannot change the target's physical brush. Keep the
+        # declared/preflight width; AdaptiveBrush uses verified controls when
+        # available and otherwise models this same fixed width.
+        engine='Pixel Accurate';out.update(draw_quality='Pixel Accurate',profile_engine='Manual settings')
     elif source_kind=='line art':
         engine='black contours';out.update(outline=True,subject_focus='Off',sketch_detail='Auto')
     elif source_kind=='flat illustration':

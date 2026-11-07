@@ -11,17 +11,19 @@ large outlines/forms survive before micro detail.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import contextmanager
 import json
 import math
 import time
 from pathlib import Path
 from typing import Sequence
 
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import atomic_write_text, data_dir, file_transaction, read_json
 from AdaptivePaletteFidelity import adaptive_palette_cap, select_adaptive_palette
 
 SPEED_FILE = data_dir() / 'real-speed-profiles.json'
 VERSION = 1
+MAX_SPEED_FILE_BYTES = 1024 * 1024
 SUPPORTED = frozenset({'gartic-phone','skribbl','skribbl-fast','sketchheads','sketchful'})
 
 # Conservative fallback rates used only until a real completed sample exists.
@@ -40,22 +42,74 @@ def _empty():
 
 def load_all(path: Path = SPEED_FILE) -> dict:
     try:
-        raw=json.loads(Path(path).read_text(encoding='utf-8'))
-        if not isinstance(raw,dict) or int(raw.get('version',0))!=VERSION or not isinstance(raw.get('profiles'),dict):
+        raw=read_json(Path(path),max_bytes=MAX_SPEED_FILE_BYTES)
+        if (not isinstance(raw,dict) or type(raw.get('version')) is not int
+                or raw['version']!=VERSION or not isinstance(raw.get('profiles'),dict)):
             return _empty()
         return {'version':VERSION,'profiles':dict(raw['profiles'])}
-    except (OSError,ValueError,TypeError):
+    except (OSError,ValueError,TypeError,RecursionError,OverflowError):
         return _empty()
 
 
 def save_all(data: dict, path: Path = SPEED_FILE) -> None:
-    atomic_write_text(Path(path),json.dumps({'version':VERSION,'profiles':data.get('profiles') or {}},ensure_ascii=False,indent=2))
+    with file_transaction(path):
+        atomic_write_text(Path(path),json.dumps({'version':VERSION,'profiles':data.get('profiles') or {}},ensure_ascii=False,indent=2,allow_nan=False))
+
+
+@contextmanager
+def profile_reset_changes(profile_key: str, *, path: Path | None = None):
+    """Prepare one profile's speed reset while holding the shared writer lock.
+
+    The caller publishes these replacements together with its own reset files
+    before leaving this context. Unreadable shared history must fail the reset,
+    rather than erase other profiles or claim an old speed sample is gone.
+    """
+    key = str(profile_key or '').lower()
+    if key not in SUPPORTED:
+        yield {}
+        return
+    resolved = Path(SPEED_FILE if path is None else path)
+    with file_transaction(resolved):
+        try:
+            raw = read_json(resolved, max_bytes=MAX_SPEED_FILE_BYTES)
+        except FileNotFoundError:
+            raw = _empty()
+        if (not isinstance(raw, dict) or type(raw.get('version')) is not int or
+                raw['version'] != VERSION or not isinstance(raw.get('profiles'), dict)):
+            raise ValueError('Real-Speed history cannot be reset safely: unsupported or invalid data.')
+        profiles = dict(raw['profiles'])
+        if key not in profiles:
+            yield {}
+            return
+        profiles.pop(key)
+        text = json.dumps({'version': VERSION, 'profiles': profiles},
+                          ensure_ascii=False, indent=2, allow_nan=False)
+        if len(text.encode('utf-8')) > MAX_SPEED_FILE_BYTES:
+            raise ValueError('Real-Speed history exceeds its storage limit.')
+        yield {resolved: text}
 
 
 def load_profile(profile_key: str, path: Path = SPEED_FILE) -> dict | None:
     key=str(profile_key or '').lower()
     item=load_all(path)['profiles'].get(key)
-    return dict(item) if isinstance(item,dict) else None
+    return _clean_profile(item)
+
+
+def _clean_profile(item):
+    if not isinstance(item, dict):
+        return None
+    try:
+        pps = float(item.get('paths_per_second', 0.0))
+        samples = int(item.get('samples', 0))
+        total_paths = int(item.get('total_paths', 0))
+        total_seconds = float(item.get('total_seconds', 0.0))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(pps) or not .2 <= pps <= 80.0 or samples < 0 or total_paths < 0 or not math.isfinite(total_seconds) or total_seconds < 0:
+        return None
+    out = dict(item)
+    out.update(paths_per_second=pps, samples=samples, total_paths=total_paths, total_seconds=total_seconds)
+    return out
 
 
 def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, *,
@@ -67,11 +121,19 @@ def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, 
     larger fraction of those runs.
     """
     key=str(profile_key or '').lower()
-    paths=max(0,int(paths));elapsed=float(elapsed_seconds)
-    if key not in SUPPORTED or paths < 3 or elapsed < .20:
+    try:
+        paths=max(0,int(paths));elapsed=float(elapsed_seconds);colors=max(0,int(colors))
+    except (TypeError, ValueError, OverflowError):
+        return {'recorded':False,'profile_key':key,'reason':'invalid timing sample'}
+    if key not in SUPPORTED or paths < 3 or not math.isfinite(elapsed) or elapsed < .20:
         return {'recorded':False,'profile_key':key,'reason':'sample too small or unsupported'}
     pps=max(.20,min(80.0,paths/elapsed))
-    db=load_all(path);profiles=db['profiles'];old=profiles.get(key) if isinstance(profiles.get(key),dict) else {}
+    with file_transaction(path):
+        return _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, path)
+
+
+def _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, path):
+    db=load_all(path);profiles=db['profiles'];old=_clean_profile(profiles.get(key)) or {}
     old_pps=float(old.get('paths_per_second') or 0.0)
     # More completed paths = more trust. Small test remains useful as a first
     # sample but cannot swing a mature profile sharply.
@@ -84,6 +146,8 @@ def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, 
     samples=int(old.get('samples') or 0)+1
     total_paths=int(old.get('total_paths') or 0)+paths
     total_seconds=float(old.get('total_seconds') or 0.0)+elapsed
+    if not math.isfinite(total_seconds):
+        return {'recorded':False,'profile_key':key,'reason':'invalid timing total'}
     profile={
         'profile_key':key,
         'paths_per_second':round(learned,5),

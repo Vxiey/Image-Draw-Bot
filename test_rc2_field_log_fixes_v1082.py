@@ -8,8 +8,8 @@ from Version import APP_VERSION, FILE_VERSION
 
 class Rc2FieldLogFixTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(FILE_VERSION,'1.0.148')
 
     def test_conservative_bottom_outset_is_safe(self):
         image = Image.new('RGB', (140, 130), (170, 170, 170))

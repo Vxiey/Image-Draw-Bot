@@ -15,8 +15,10 @@ import math
 import numpy as np
 from PIL import Image
 
-from PixelAccuratePlanner import PixelMap
-from AdaptiveBrushEngine import brush_for_entry
+from PixelAccuratePlanner import PixelMap, validated_pixel_indices
+from PixelMapValidation import validate_palette_count, validate_color_index
+from RasterGeometry import clipped_bresenham
+from AdaptiveBrushEngine import brush_for_entry, brush_sizes_for_sequence
 
 Point = tuple[int, int]
 Path = tuple[Point, ...]
@@ -25,6 +27,7 @@ ERROR_CORRECT = 0
 ERROR_MISSING = 1
 ERROR_WRONG_COLOR = 2
 ERROR_SPILL = 3
+UNPAINTED_WHITE = -1
 
 
 @dataclass
@@ -43,6 +46,16 @@ def nearest_background_index(palette_rgb: Sequence[Sequence[int]]) -> int:
     if not palette_rgb:
         return 0
     return min(range(len(palette_rgb)), key=lambda i: sum((255-int(v))**2 for v in palette_rgb[i][:3]))
+
+
+def _white_background_index(palette_rgb: Sequence[Sequence[int]]) -> int:
+    """Represent the actual white canvas without inventing a drawing color.
+
+    A calibrated white swatch can repaint spills. Otherwise the signed sentinel
+    is simulation state only and must never become an executable correction.
+    """
+    return next((i for i, rgb in enumerate(palette_rgb)
+                 if tuple(rgb[:3]) == (255, 255, 255)), UNPAINTED_WHITE)
 
 
 def _clip_rect(x0: int, y0: int, x1: int, y1: int, width: int, height: int):
@@ -85,12 +98,15 @@ def _bresenham(a: Point, b: Point):
         if e2<=dx:err+=dx;y0+=sy
 
 
-def _apply_path(sim: np.ndarray, counts: np.ndarray, color: int, path: Sequence[Point], brush_px: int) -> None:
+def _apply_path(sim: np.ndarray, counts: np.ndarray, color: int, path: Sequence[Point], brush_px: int,
+                *, cancelled=lambda: False) -> None:
+    if cancelled():raise InterruptedError()
     if not path:return
     before,after=_brush_extents(brush_px)
     if len(path)==1:
         x,y=map(int,path[0]);_paint_rect(sim,counts,color,x-before,y-before,x+after,y+after);return
-    for a,b in zip(path,path[1:]):
+    for segment_number,(a,b) in enumerate(zip(path,path[1:])):
+        if segment_number%128==0 and cancelled():raise InterruptedError()
         x0,y0=map(int,a);x1,y1=map(int,b)
         if y0==y1:
             lo,hi=sorted((x0,x1));_paint_rect(sim,counts,color,lo-before,y0-before,hi+after,y0+after)
@@ -99,31 +115,109 @@ def _apply_path(sim: np.ndarray, counts: np.ndarray, color: int, path: Sequence[
         else:
             # Safety fallback for future non-orthogonal engines. Block B emits
             # orthogonal paths, but the simulator must never silently skip data.
-            for x,y in _bresenham((x0,y0),(x1,y1)):
+            for point_number,(x,y) in enumerate(clipped_bresenham(
+                    (x0,y0),(x1,y1),sim.shape[1],sim.shape[0],before=before,after=after)):
+                if point_number%256==0 and cancelled():raise InterruptedError()
                 _paint_rect(sim,counts,color,x-before,y-before,x+after,y+after)
 
 
 def _apply_sequence(sim: np.ndarray, counts: np.ndarray, sequence: Sequence[dict], brush_px: int,
-                    *, cancelled=lambda: False) -> None:
+                    *, cancelled=lambda: False) -> int:
+    current_brush=max(1,int(brush_px))
     for n,entry in enumerate(sequence):
         if n%128==0 and cancelled():raise InterruptedError()
         try:
-            color=int(entry['color_index']);path=tuple(tuple(map(int,p)) for p in entry['path'])
-        except (KeyError,TypeError,ValueError):
+            raw_color=entry['color_index'];path=tuple(tuple(map(int,p)) for p in entry['path'])
+        except (KeyError,TypeError,ValueError,OverflowError):
             continue
-        if color<0:continue
-        _apply_path(sim,counts,color,path,brush_for_entry(entry,brush_px))
+        if not path:continue
+        color=validate_color_index(raw_color)
+        current_brush=brush_for_entry(entry,current_brush)
+        _apply_path(sim,counts,color,path,current_brush,cancelled=cancelled)
+    if cancelled():raise InterruptedError()
+    return current_brush
+
+
+def _validate_simulation_input(pixel_map, sequence, palette_rgb, background_index, cancelled):
+    if cancelled():raise InterruptedError()
+    count=validate_palette_count(len(palette_rgb))
+    validated_pixel_indices(pixel_map,count,cancelled=cancelled)
+    bg=_white_background_index(palette_rgb) if background_index is None else validate_color_index(background_index,palette_count=count)
+    for n,entry in enumerate(sequence):
+        if n%128==0 and cancelled():raise InterruptedError()
+        if isinstance(entry,dict) and entry.get('path'):
+            validate_color_index(entry.get('color_index'),palette_count=count)
+    return bg
 
 
 def _desired_index(pixel_map: PixelMap, background_index: int) -> np.ndarray:
     return np.where(pixel_map.drawable_mask,pixel_map.palette_index,int(background_index)).astype(np.int16,copy=False)
 
 
+class PixelScoreContext:
+    """Call-local source data for repeated scores of one unchanged PixelMap.
+
+    Keep this only through a refinement/checkpoint operation, never on a plan,
+    options dictionary or mutable PixelMap. Public calls without a supplied
+    context create their own, so later edits to a PixelMap are still observed.
+    Preparation is lazy: a successful GPU score does not prepare CPU features.
+    """
+    def __init__(self, pixel_map: PixelMap):
+        self.pixel_map=pixel_map
+        self._drawable=None
+        self._desired=None
+        self._background_index=None
+        self._features=None
+
+    def desired(self, background_index: int, cancelled) -> np.ndarray:
+        if cancelled():raise InterruptedError()
+        if self._desired is None or self._background_index!=background_index:
+            desired=_desired_index(self.pixel_map,background_index)
+            if cancelled():raise InterruptedError()
+            self._desired=desired
+            self._background_index=background_index
+        return self._desired
+
+    def drawable(self, cancelled) -> np.ndarray:
+        if cancelled():raise InterruptedError()
+        if self._drawable is None:
+            drawable=np.asarray(self.pixel_map.drawable_mask,dtype=bool)
+            if cancelled():raise InterruptedError()
+            self._drawable=drawable
+        return self._drawable
+
+    def features(self, cancelled):
+        if cancelled():raise InterruptedError()
+        if self._features is None:
+            drawable=self.drawable(cancelled)
+            edge=np.asarray(self.pixel_map.edge_map,dtype=np.float32)
+            edge_values=edge[drawable]
+            edge_threshold=max(.32,float(np.percentile(edge_values,70.0))) if edge_values.size else .32
+            del edge_values
+            if cancelled():raise InterruptedError()
+            edge_mask=drawable & (edge>=edge_threshold)
+            protected=np.asarray(self.pixel_map.protected_mask,dtype=bool) & drawable
+            features=(edge_mask,protected,edge_threshold,int(np.count_nonzero(drawable)),
+                      int(np.count_nonzero(edge_mask)),int(np.count_nonzero(protected)))
+            if cancelled():raise InterruptedError()
+            self._features=features
+        return self._features
+
+
+def _score_context(pixel_map, context):
+    if context is None:return PixelScoreContext(pixel_map)
+    if not isinstance(context,PixelScoreContext) or context.pixel_map is not pixel_map:
+        raise ValueError('A score context belongs to one unchanged PixelMap operation.')
+    return context
+
+
 def _score(pixel_map: PixelMap, simulated: np.ndarray, coverage_count: np.ndarray,
-           background_index: int) -> tuple[np.ndarray,dict]:
+           background_index: int, *, score_context: PixelScoreContext | None = None,
+           cancelled=lambda:False) -> tuple[np.ndarray,dict]:
+    source=_score_context(pixel_map,score_context)
     coverage=coverage_count>0
-    desired=_desired_index(pixel_map,background_index)
-    drawable=np.asarray(pixel_map.drawable_mask,dtype=bool)
+    desired=source.desired(background_index,cancelled)
+    drawable=source.drawable(cancelled)
     error=np.zeros(drawable.shape,dtype=np.uint8)
     missing=drawable & ~coverage
     wrong=drawable & coverage & (simulated!=desired)
@@ -133,30 +227,25 @@ def _score(pixel_map: PixelMap, simulated: np.ndarray, coverage_count: np.ndarra
     evaluation=drawable | coverage
     correct=evaluation & (simulated==desired)
     eval_count=int(np.count_nonzero(evaluation))
-    drawable_count=int(np.count_nonzero(drawable))
     correct_count=int(np.count_nonzero(correct))
     covered_target=int(np.count_nonzero(drawable & coverage))
     target_color_correct=int(np.count_nonzero(drawable & (simulated==desired)))
 
-    edge_values=np.asarray(pixel_map.edge_map,dtype=np.float32)[drawable]
-    edge_threshold=max(.32,float(np.percentile(edge_values,70.0))) if edge_values.size else .32
-    edge_mask=drawable & (np.asarray(pixel_map.edge_map,dtype=np.float32)>=edge_threshold)
-    edge_count=int(np.count_nonzero(edge_mask))
+    edge_mask,protected,edge_threshold,drawable_count,edge_count,protected_count=source.features(cancelled)
     edge_correct=int(np.count_nonzero(edge_mask & (simulated==desired)))
-    protected=np.asarray(pixel_map.protected_mask,dtype=bool) & drawable
-    protected_count=int(np.count_nonzero(protected))
     protected_correct=int(np.count_nonzero(protected & (simulated==desired)))
     overdraw_pixels=int(np.count_nonzero(coverage_count>1))
     total_hits=int(np.sum(coverage_count,dtype=np.uint64))
     touched=int(np.count_nonzero(coverage))
+    target_accuracy=100.0*target_color_correct/max(1,drawable_count)
 
     metrics={
         'plan_execution_accuracy_percent':round(100.0*correct_count/max(1,eval_count),4),
         'pixel_accuracy_percent':round(100.0*correct_count/max(1,eval_count),4),
-        'target_color_accuracy_percent':round(100.0*target_color_correct/max(1,drawable_count),4),
+        'target_color_accuracy_percent':round(target_accuracy,4),
         'coverage_percent':round(100.0*covered_target/max(1,drawable_count),4),
-        'edge_accuracy_percent':round(100.0*edge_correct/max(1,edge_count),4),
-        'protected_accuracy_percent':round(100.0*protected_correct/max(1,protected_count),4),
+        'edge_accuracy_percent':round(100.0*edge_correct/edge_count if edge_count else target_accuracy,4),
+        'protected_accuracy_percent':round(100.0*protected_correct/protected_count if protected_count else target_accuracy,4),
         'evaluation_pixels':eval_count,'drawable_pixels':drawable_count,'correct_pixels':correct_count,
         'missing_pixels':int(np.count_nonzero(missing)),'wrong_color_pixels':int(np.count_nonzero(wrong)),
         'spill_pixels':int(np.count_nonzero(spill)),'error_pixels':int(np.count_nonzero(error)),
@@ -164,6 +253,8 @@ def _score(pixel_map: PixelMap, simulated: np.ndarray, coverage_count: np.ndarra
         'touched_pixels':touched,'overdraw_pixels':overdraw_pixels,'total_brush_hits':total_hits,
         'mean_hits_per_touched_pixel':round(float(total_hits/max(1,touched)),5),
         'edge_threshold':round(edge_threshold,5),'background_index':int(background_index),
+        'background_repaint_available':background_index != UNPAINTED_WHITE,
+        'unrepairable_background_pixels':int(np.count_nonzero(spill)) if background_index == UNPAINTED_WHITE else 0,
     }
     return error,metrics
 
@@ -172,9 +263,11 @@ def simulate_strokes(pixel_map: PixelMap, execution_sequence: Sequence[dict], pa
                      brush_px: int = 1, background_index: int | None = None,
                      gpu_mode: str = "CPU", gpu_vram: str = "Auto",
                      gpu_performance: str = "High throughput",
+                     score_context: PixelScoreContext | None = None,
                      cancelled=lambda: False) -> SimulationResult:
     """Rasterize the exact planned order, preferring Block-D CUDA when requested."""
-    bg=nearest_background_index(palette_rgb) if background_index is None else int(background_index)
+    bg=_validate_simulation_input(pixel_map,execution_sequence,palette_rgb,background_index,cancelled)
+    score_context=_score_context(pixel_map,score_context)
     gpu_meta=None
     if gpu_mode != "CPU":
         try:
@@ -187,15 +280,20 @@ def simulate_strokes(pixel_map: PixelMap, execution_sequence: Sequence[dict], pa
                 score_gpu=None
                 try:
                     from PixelAccuracyGpu import score_cuda_host
-                    score_gpu=score_cuda_host(pixel_map,sim,counts,bg,gpu_mode=gpu_mode,gpu_vram=gpu_vram,gpu_performance=gpu_performance)
+                    score_gpu=score_cuda_host(pixel_map,sim,counts,bg,gpu_mode=gpu_mode,gpu_vram=gpu_vram,
+                                             gpu_performance=gpu_performance,cancelled=cancelled)
+                except InterruptedError:
+                    raise
                 except Exception:
                     score_gpu=None
+                if cancelled():raise InterruptedError()
                 if score_gpu is not None:error,metrics=score_gpu
-                else:error,metrics=_score(pixel_map,sim,counts,bg)
+                else:error,metrics=_score(pixel_map,sim,counts,bg,score_context=score_context,cancelled=cancelled)
                 metrics.update(gpu_meta)
-                _sizes=sorted({brush_for_entry(e,brush_px) for e in execution_sequence}) or [max(1,int(brush_px))]
+                _sizes=brush_sizes_for_sequence(execution_sequence,brush_px)
                 metrics.update({'brush_model':'adaptive-square-swept-footprint','brush_px':max(1,int(brush_px)),
                                 'brush_sizes_used':_sizes,'adaptive_brush':len(_sizes)>1})
+                if cancelled():raise InterruptedError()
                 return SimulationResult(sim,counts,counts>0,error,metrics)
         except InterruptedError:
             raise
@@ -204,8 +302,9 @@ def simulate_strokes(pixel_map: PixelMap, execution_sequence: Sequence[dict], pa
     sim=np.full((pixel_map.height,pixel_map.width),bg,dtype=np.int16)
     counts=np.zeros((pixel_map.height,pixel_map.width),dtype=np.uint16)
     _apply_sequence(sim,counts,execution_sequence,max(1,int(brush_px)),cancelled=cancelled)
-    error,metrics=_score(pixel_map,sim,counts,bg)
-    _sizes=sorted({brush_for_entry(e,brush_px) for e in execution_sequence}) or [max(1,int(brush_px))]
+    error,metrics=_score(pixel_map,sim,counts,bg,score_context=score_context,cancelled=cancelled)
+    if cancelled():raise InterruptedError()
+    _sizes=brush_sizes_for_sequence(execution_sequence,brush_px)
     metrics.update({'simulation_backend':'cpu-numpy-raster','brush_model':'adaptive-square-swept-footprint','brush_px':max(1,int(brush_px)),
                     'brush_sizes_used':_sizes,'adaptive_brush':len(_sizes)>1})
     if gpu_meta:metrics.update(gpu_meta)
@@ -271,25 +370,31 @@ def progressive_time_budget(execution_sequence: Sequence[dict], *, active: bool,
 
 def progressive_accuracy_checkpoints(pixel_map: PixelMap, execution_sequence: Sequence[dict],
                                      palette_rgb: Sequence[Sequence[int]], *, brush_px: int = 1,
+                                     score_context: PixelScoreContext | None = None,
                                      cancelled=lambda: False) -> list[dict]:
     """Measure accuracy after each progressive phase using one incremental CPU raster."""
-    bg=nearest_background_index(palette_rgb);sim=np.full((pixel_map.height,pixel_map.width),bg,dtype=np.int16)
+    bg=_validate_simulation_input(pixel_map,execution_sequence,palette_rgb,None,cancelled)
+    score_context=_score_context(pixel_map,score_context)
+    sim=np.full((pixel_map.height,pixel_map.width),bg,dtype=np.int16)
     counts=np.zeros((pixel_map.height,pixel_map.width),dtype=np.uint16);out=[]
     from itertools import groupby
+    current_brush=max(1,int(brush_px))
     # Checkpoints must follow contiguous execution phases, including a phase
     # that occurs again later. Regrouping changes overpainting and scores.
     for phase, entries_iter in groupby(execution_sequence, key=lambda e:str(e.get('phase') or 'other')):
         entries=list(entries_iter)
-        _apply_sequence(sim,counts,entries,max(1,int(brush_px)),cancelled=cancelled)
-        _err,m=_score(pixel_map,sim,counts,bg)
+        current_brush=_apply_sequence(sim,counts,entries,current_brush,cancelled=cancelled)
+        _err,m=_score(pixel_map,sim,counts,bg,score_context=score_context,cancelled=cancelled)
         out.append({'phase':phase,'paths':len(entries),'pixel_accuracy_percent':m['pixel_accuracy_percent'],
                     'coverage_percent':m['coverage_percent'],'error_pixels':m['error_pixels']})
+    if cancelled():raise InterruptedError()
     return out
 
 def _correction_runs(pixel_map: PixelMap, result: SimulationResult, background_index: int, *,
-                     pass_number: int, correction_brush_px: int = 1, cancelled=lambda: False) -> list[dict]:
+                     pass_number: int, correction_brush_px: int = 1,
+                     score_context: PixelScoreContext | None = None, cancelled=lambda: False) -> list[dict]:
     error=result.error_map
-    desired=_desired_index(pixel_map,background_index)
+    desired=_score_context(pixel_map,score_context).desired(background_index,cancelled)
     imp=np.asarray(pixel_map.importance_map,dtype=np.float32)
     protected=np.asarray(pixel_map.protected_mask,dtype=bool)
     h,w=error.shape
@@ -298,9 +403,13 @@ def _correction_runs(pixel_map: PixelMap, result: SimulationResult, background_i
         if y%32==0 and cancelled():raise InterruptedError()
         x=0
         while x<w:
-            if not error[y,x]:x+=1;continue
+            if x%256==0 and cancelled():raise InterruptedError()
+            # An absent white swatch cannot erase spill. Keep that error in the
+            # report instead of emitting the simulation-only negative sentinel.
+            if not error[y,x] or desired[y,x] < 0:x+=1;continue
             color=int(desired[y,x]);x0=x;score=float(imp[y,x]);protect=bool(protected[y,x]);x+=1
             while x<w and error[y,x] and int(desired[y,x])==color:
+                if x%256==0 and cancelled():raise InterruptedError()
                 score=max(score,float(imp[y,x]));protect=protect or bool(protected[y,x]);x+=1
             x1=x-1
             path=((x0,y),) if x0==x1 else ((x0,y),(x1,y))
@@ -321,33 +430,46 @@ def region_accuracy_scores(pixel_map: PixelMap, result: SimulationResult, *, max
                            cancelled=lambda: False) -> dict:
     """Measure planned execution accuracy per exact connected target region."""
     from PixelStrokeEngine import connected_components
-    components,cmap,_meta=connected_components(pixel_map,cpu_workers=1,cancelled=cancelled)
+    components,cmap,_meta=connected_components(pixel_map,cpu_workers=1,include_vertical_runs=False,cancelled=cancelled)
     desired=np.asarray(pixel_map.palette_index,dtype=np.int16)
     simulated=np.asarray(result.simulated_index,dtype=np.int16)
     covered=np.asarray(result.coverage_count)>0
     edge=np.asarray(pixel_map.edge_map,dtype=np.float32)>=.5
     protected=np.asarray(pixel_map.protected_mask,dtype=bool)
+    # Sum component statistics in bounded linear passes. A full-canvas mask for
+    # every component makes checkerboards and fine text quadratic in pixels.
+    component_counts=np.zeros((6,len(components)),dtype=np.int64)
+    planes=[np.asarray(plane).ravel() for plane in (cmap,simulated,desired,covered,edge,protected)]
+    for start in range(0,cmap.size,262_144):
+        if cancelled():raise InterruptedError()
+        ids,actual,wanted,hit,is_edge,is_detail=[plane[start:start+262_144] for plane in planes]
+        valid=ids>=0
+        if not np.any(valid):continue
+        ids=ids[valid]
+        correct=actual[valid]==wanted[valid]
+        flags=(correct,hit[valid],is_edge[valid],is_detail[valid],
+               correct & is_edge[valid],correct & is_detail[valid])
+        for index,flag in enumerate(flags):
+            component_counts[index] += np.bincount(ids[flag],minlength=len(components))
     rows=[];weighted=0.0;weighted_area=0
     def pct(n,d,fallback):
         return float(fallback) if int(d)<=0 else float(n)/float(d)*100.0
     for serial,comp in enumerate(components):
         if serial%64==0 and cancelled():raise InterruptedError()
-        mask=cmap==int(comp.component_id);area=int(np.count_nonzero(mask))
+        cid=int(comp.component_id);area=int(comp.area)
         if area<=0:continue
-        correct=mask & (simulated==desired)
-        coverage=mask & covered
-        color_acc=pct(np.count_nonzero(correct),area,0.0)
-        coverage_acc=pct(np.count_nonzero(coverage),area,0.0)
-        edge_mask=mask & edge;protected_mask=mask & protected
-        edge_acc=pct(np.count_nonzero(correct & edge_mask),np.count_nonzero(edge_mask),color_acc)
-        detail_acc=pct(np.count_nonzero(correct & protected_mask),np.count_nonzero(protected_mask),color_acc)
+        correct_n,covered_n,edge_n,detail_n,correct_edge_n,correct_detail_n=map(int,component_counts[:,cid])
+        color_acc=pct(correct_n,area,0.0)
+        coverage_acc=pct(covered_n,area,0.0)
+        edge_acc=pct(correct_edge_n,edge_n,color_acc)
+        detail_acc=pct(correct_detail_n,detail_n,color_acc)
         score=.40*color_acc+.25*coverage_acc+.20*edge_acc+.15*detail_acc
         row={'component_id':int(comp.component_id),'color_index':int(comp.color_index),'area':area,
              'bbox':tuple(map(int,comp.bbox)),'score':round(score,4),
              'color_accuracy_percent':round(color_acc,4),'coverage_percent':round(coverage_acc,4),
              'edge_accuracy_percent':round(edge_acc,4),'protected_detail_percent':round(detail_acc,4),
-             'error_pixels':int(area-np.count_nonzero(correct)),
-             'protected_pixels':int(np.count_nonzero(protected_mask))}
+             'error_pixels':int(area-correct_n),
+             'protected_pixels':detail_n}
         rows.append(row);weighted+=score*area;weighted_area+=area
     rows.sort(key=lambda row:(float(row['score']),-int(row['area']),int(row['component_id'])))
     limit=max(1,int(max_regions))
@@ -365,16 +487,18 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
                             max_total_paths: int | None = None, min_repaired_pixels_per_path: float = .05,
                             gpu_mode: str = "CPU",
                             gpu_vram: str = "Auto", gpu_performance: str = "High throughput",
+                            score_context: PixelScoreContext | None = None,
                             cancelled=lambda: False) -> dict:
     """Simulate, score and append correction passes only while accuracy improves."""
-    background_index=nearest_background_index(palette_rgb)
+    background_index=_white_background_index(palette_rgb)
+    score_context=_score_context(pixel_map,score_context)
     sequence=[dict(e) for e in execution_sequence]
     if correction_brush_px is None:
-        correction_brush_px=min([brush_for_entry(e,brush_px) for e in sequence] or [max(1,int(brush_px))])
+        correction_brush_px=min(brush_sizes_for_sequence(sequence,brush_px))
     correction_brush_px=max(1,int(correction_brush_px))
     current=simulate_strokes(pixel_map,sequence,palette_rgb,brush_px=brush_px,
-                             background_index=background_index,gpu_mode=gpu_mode,gpu_vram=gpu_vram,
-                             gpu_performance=gpu_performance,cancelled=cancelled)
+                             gpu_mode=gpu_mode,gpu_vram=gpu_vram,
+                             gpu_performance=gpu_performance,score_context=score_context,cancelled=cancelled)
     initial=dict(current.metrics)
     pass_meta=[];accepted_entries=[]
     for pass_number in range(1,max(0,int(max_passes))+1):
@@ -382,18 +506,21 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
         if int(current.metrics.get('error_pixels',0))<=0:break
         remaining=None if max_total_paths is None else max(0,int(max_total_paths)-len(sequence))
         if remaining is not None and remaining<=0:break
-        corrections=_correction_runs(pixel_map,current,background_index,pass_number=pass_number,correction_brush_px=correction_brush_px,cancelled=cancelled)
+        corrections=_correction_runs(pixel_map,current,background_index,pass_number=pass_number,
+            correction_brush_px=correction_brush_px,score_context=score_context,cancelled=cancelled)
         if remaining is not None:corrections=corrections[:remaining]
         if not corrections:break
         if gpu_mode!='CPU':
             candidate=simulate_strokes(pixel_map,sequence+corrections,palette_rgb,brush_px=brush_px,
-                                       background_index=background_index,gpu_mode=gpu_mode,gpu_vram=gpu_vram,
-                                       gpu_performance=gpu_performance,cancelled=cancelled)
+                                       gpu_mode=gpu_mode,gpu_vram=gpu_vram,
+                                       gpu_performance=gpu_performance,score_context=score_context,cancelled=cancelled)
         else:
             sim=current.simulated_index.copy();counts=current.coverage_count.copy()
             _apply_sequence(sim,counts,corrections,max(1,int(brush_px)),cancelled=cancelled)
-            error,metrics=_score(pixel_map,sim,counts,background_index)
-            _sizes=sorted({brush_for_entry(e,brush_px) for e in (sequence+corrections)}) or [max(1,int(brush_px))]
+            error,metrics=_score(pixel_map,sim,counts,background_index,
+                                 score_context=score_context,cancelled=cancelled)
+            from itertools import chain
+            _sizes=brush_sizes_for_sequence(chain(sequence,corrections),brush_px)
             metrics.update({'simulation_backend':'cpu-numpy-raster','brush_model':'adaptive-square-swept-footprint',
                             'brush_px':max(1,int(brush_px)),'brush_sizes_used':_sizes,
                             'adaptive_brush':len(_sizes)>1,'correction_brush_px':correction_brush_px})

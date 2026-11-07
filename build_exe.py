@@ -5,11 +5,16 @@ Usage:
     py -3 build_exe.py --onefile  # optional single-file build
 """
 from pathlib import Path
+import argparse
+import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 from Version import APP_VERSION, FILE_VERSION
+from BuildEnvironment import (BuildEnvironmentError, Builder, build_workspace,
+                              prepare_builder, require_build_workspace)
 
 
 def documentation_data(base: Path) -> list[tuple[Path, str]]:
@@ -17,16 +22,32 @@ def documentation_data(base: Path) -> list[tuple[Path, str]]:
     base = Path(base)
     docs = base / 'docs'
     data = []
-    for source in sorted(docs.rglob('*')):
-        relative = source.relative_to(docs)
-        if relative.parts[:2] == ('history', 'archives'):
-            continue
-        if source.is_file() and not source.is_symlink():
-            data.append((source, source.parent.relative_to(base).as_posix()))
+    if not docs.exists():
+        return data
+    def is_link(path):
+        info = path.lstat()
+        return stat.S_ISLNK(info.st_mode) or getattr(info, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)
+    if docs.exists() and is_link(docs):
+        raise ValueError('Bundled documentation must not be a linked directory.')
+    def walk_error(error):
+        raise error
+    for current, directories, filenames in os.walk(docs, followlinks=False, onerror=walk_error):
+        current = Path(current)
+        directories[:] = sorted(name for name in directories
+            if tuple(part.casefold() for part in (current / name).relative_to(docs).parts[:2]) != ('history', 'archives')
+            and not is_link(current / name))
+        for name in sorted(filenames):
+            source = current / name
+            if not is_link(source) and stat.S_ISREG(source.stat().st_mode):
+                data.append((source, source.parent.relative_to(base).as_posix()))
     return data
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Build the Windows Image Draw Bot application in its private environment.')
+    parser.add_argument('--onefile', action='store_true', help='Build a single-file EXE instead of the default application directory.')
+    parser.add_argument('--gpu', action='store_true', help='Bundle the optional NVIDIA CUDA/CuPy dependencies.')
+    args = parser.parse_args(argv)
     if sys.platform != 'win32':
         raise SystemExit('The Windows EXE build must run on Windows. Use Build-Release.bat or the GitHub Actions workflow.')
     if sys.version_info < (3, 11):
@@ -35,39 +56,31 @@ def main():
         raise SystemExit('Use 64-bit Python to build the Windows x64 release.')
 
     base = Path(__file__).resolve().parent
+    _validate_version_info(base)
+    try:
+        with build_workspace(base):
+            builder = prepare_builder(base, gpu=args.gpu)
+            build_application(base, builder, onefile=args.onefile, gpu_build=args.gpu)
+    except BuildEnvironmentError as error:
+        raise SystemExit(str(error)) from error
+
+
+def _validate_version_info(base):
     version_text=(base/'version_info.txt').read_text(encoding='utf-8')
     if f"FileVersion', '{FILE_VERSION}'" not in version_text or f"ProductVersion', '{FILE_VERSION}'" not in version_text:
         raise SystemExit('Version mismatch: update version_info.txt to match Version.py before building.')
-    onefile = '--onefile' in sys.argv[1:]
-    gpu_build = '--gpu' in sys.argv[1:]
-    builder = base / '.build-venv' / 'Scripts' / 'python.exe'
-    if not builder.exists():
-        subprocess.run([sys.executable, '-m', 'venv', str(base / '.build-venv')], check=True)
-    builder_check = subprocess.run([
-        str(builder), '-c',
-        'import sys; sys.exit(sys.version_info < (3, 11) or sys.maxsize <= 2**32)',
-    ], check=False)
-    if builder_check.returncode:
-        raise SystemExit(
-            'The private .build-venv must use 64-bit Python 3.11 or later. '
-            'Rename .build-venv and run the build again to recreate it.'
-        )
 
-    subprocess.run([str(builder), '-m', 'pip', 'install', '--upgrade', 'pip'], check=True)
-    subprocess.run([
-        str(builder), '-m', 'pip', 'install', '--upgrade', '--upgrade-strategy', 'eager', '-r', str(base / 'requirements.txt'),
-        '-r', str(base / 'requirements-build.txt')
-    ], check=True)
-    # Step 22 is part of the standard Windows build: bundle PyOpenCL so AMD,
-    # Intel and NVIDIA OpenCL devices can be benchmarked without modifying the
-    # user's Python environment. The vendor driver/ICD is still system-provided.
-    subprocess.run([str(builder), '-m', 'pip', 'install', '-r', str(base / 'requirements-gpu-universal.txt')], check=True)
-    if gpu_build:
-        subprocess.run([str(builder), '-m', 'pip', 'install', '-r', str(base / 'requirements-gpu-nvidia.txt')], check=True)
 
+def build_application(base: Path, builder: Builder, *, onefile=False, gpu_build=False):
+    """Package with the same prepared environment used by release tests."""
+    base = Path(base).resolve()
+    require_build_workspace(base)
+    if builder.root.resolve() != base:
+        raise BuildEnvironmentError('The prepared builder belongs to a different source workspace.')
+    _validate_version_info(base)
     mode = '--onefile' if onefile else '--onedir'
     command = [
-        str(builder), '-m', 'PyInstaller',
+        str(builder.python), '-m', 'PyInstaller',
         '--noconfirm', '--clean', '--noupx', '--log-level', 'WARN', mode, '--windowed',
         '--name', 'ImageDrawBot',
         '--icon', str(base / 'assets' / 'image-draw-bot-icon.ico'),
@@ -249,6 +262,10 @@ def main():
     ]
     if gpu_build:
         command.extend(['--collect-all', 'cupy', '--collect-all', 'cupyx', '--hidden-import', 'cupyx.scipy.ndimage'])
+    else:
+        # A reused builder may still have CuPy installed from a previous CUDA
+        # build. Preserve the explicit standard/CUDA variant boundary.
+        command.extend(['--exclude-module', 'cupy', '--exclude-module', 'cupyx'])
 
     # Keep the frozen application clean. Runtime-critical data above remains a
     # hard requirement; historical/help documentation here is optional and may
@@ -295,10 +312,14 @@ def main():
         if docs.is_dir():
             command.extend(['--add-data', str(docs) + ';docs'])
         command.append(str(base / 'DrawBot.py'))
-        subprocess.run(command, cwd=base, check=True)
+        subprocess.run(command, cwd=base, env=builder.source_environment(), check=True)
 
     output = base / 'dist' / ('ImageDrawBot.exe' if onefile else 'ImageDrawBot/ImageDrawBot.exe')
-    if not output.is_file() or output.read_bytes()[:2] != b'MZ':
+    valid_header = False
+    if output.is_file():
+        with output.open('rb') as executable:
+            valid_header = executable.read(2) == b'MZ'
+    if not valid_header:
         raise SystemExit('The build did not produce a valid Windows EXE.')
 
     print('\nDone!')

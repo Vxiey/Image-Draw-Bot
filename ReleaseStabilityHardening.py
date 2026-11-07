@@ -13,6 +13,8 @@ from typing import Any, Callable
 import math
 import time
 
+from RuntimePaths import is_finite_number
+
 
 @dataclass(frozen=True)
 class PreviewLimitResult:
@@ -41,7 +43,7 @@ class PreviewLimitResult:
 def _finite(value: Any, default: float) -> float:
     try:
         out = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return float(default)
     return out if math.isfinite(out) else float(default)
 
@@ -65,19 +67,28 @@ def apply_preview_memory_limits(requested_pixels: int, requested_dimension: int,
     This does not touch final rendering resolution. It only prevents diagnostic
     preview planning from allocating many full-resolution OKLab/heatmap buffers.
     """
-    req_px = max(1, int(requested_pixels))
-    req_dim = max(1, int(requested_dimension))
-    budget = max(192.0, _finite(memory_budget_mb, 768.0))
-    target_mb = max(96.0, budget * max(0.20, min(0.90, float(safety_ratio))))
+    for value in (requested_pixels, requested_dimension, min_pixels, min_dimension):
+        if type(value) is not int or not 1 <= value <= 1_000_000_000:
+            raise ValueError('Preview dimensions and pixel limits must be positive bounded integers.')
+    req_px, req_dim = requested_pixels, requested_dimension
+    budget = 768.0 if memory_budget_mb is None else memory_budget_mb
+    if not is_finite_number(budget) or budget <= 0:
+        raise ValueError('Preview memory budget must be a finite positive number.')
+    if not is_finite_number(safety_ratio) or not 0 < safety_ratio <= 1:
+        raise ValueError('Preview memory safety ratio must be between zero and one.')
+    budget = float(budget)
+    target_mb = budget * max(0.20, min(0.90, float(safety_ratio)))
+    if target_mb < estimate_preview_working_set_mb(1):
+        raise ValueError('Available preview memory is below the minimum working set. Increase the RAM budget or close other applications.')
     estimate = estimate_preview_working_set_mb(req_px)
     if estimate <= target_mb:
         return PreviewLimitResult(req_px, req_dim, req_px, req_dim, budget, estimate, False, "within budget")
-    # Approximate usable pixels by removing fixed overhead first. Clamp to avoid
-    # destroying preview usefulness on low-memory systems.
-    usable_for_arrays = max(1.0, (target_mb - 96.0) * 1024.0 * 1024.0)
-    resolved_px = int(max(min_pixels, min(req_px, usable_for_arrays / (14 * 4))))
+    # Pixel/dimension preferences cannot override the caller's hard RAM limit
+    # or enlarge the preview dimensions it requested.
+    usable_for_arrays = (target_mb - 96.0) * 1024.0 * 1024.0
+    resolved_px = max(1, min(req_px, int(usable_for_arrays / (14 * 4))))
     scale = math.sqrt(resolved_px / max(1.0, float(req_px)))
-    resolved_dim = int(max(min_dimension, min(req_dim, round(req_dim * scale))))
+    resolved_dim = min(req_dim, max(min(min_dimension, req_dim), round(req_dim * scale)))
     new_estimate = estimate_preview_working_set_mb(resolved_px)
     return PreviewLimitResult(req_px, req_dim, resolved_px, resolved_dim, budget, new_estimate, True, "preview memory limit applied")
 
@@ -95,16 +106,26 @@ class PreviewAttemptGuard:
     cancelled_by_user: bool = False
 
     def __post_init__(self) -> None:
+        if not is_finite_number(self.timeout_seconds) or self.timeout_seconds <= 0:
+            raise ValueError('Preview timeout must be finite and positive.')
         self.timeout_seconds = max(0.05, float(self.timeout_seconds))
         if self.started is None:
-            self.started = float(self.clock())
+            self.started = self.clock()
+        if not is_finite_number(self.started):
+            raise ValueError('Preview start time must be finite.')
         self.deadline = float(self.started) + self.timeout_seconds
+        if not math.isfinite(self.deadline):
+            raise ValueError('Preview deadline is outside the supported range.')
 
     def remaining_seconds(self) -> float:
+        if self.timed_out or self.cancelled_by_user:
+            return 0.0
         return max(0.0, self.deadline - float(self.clock()))
 
     def cancelled(self) -> bool:
         self.checks += 1
+        if self.cancelled_by_user or self.timed_out:
+            return True
         if bool(self.external_cancelled()):
             self.cancelled_by_user = True
             return True

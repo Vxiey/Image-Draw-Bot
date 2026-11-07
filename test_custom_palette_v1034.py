@@ -63,6 +63,7 @@ class CustomPaletteV1034Tests(unittest.TestCase):
     def test_modal_spectrum_sampling_finds_nearest_pixel(self):
         class Monitor:
             def rectangle(self,handle):return (0,0,500,500)
+            def verify_modal(self,target,point):pass  # This fixture isolates pixel selection.
         class RawMouse:
             def get_position(self):return (0,0)
         guard=GuardedMouse(RawMouse(),Monitor(),(123,(0,0,500,500)))

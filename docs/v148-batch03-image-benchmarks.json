@@ -1,0 +1,288 @@
+{
+  "baseline": "2fb7abf470a4ef498df9c53f42cddda62d8b652b",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One warm/parity pair, alternating before/after elapsed samples, separate Python traced peaks after garbage collection.",
+  "scope": "Synthetic CPU helpers only; not total drawing, UI, network, GPU or Windows input performance. Python tracing excludes most native Pillow allocation. Baseline changed modules import current shared dependencies.",
+  "after_source_sha256": {
+    "BackgroundRemoval": "dfa4864ebbcea25ecb60e012afcbf419b2ef4cab1d7882874b7ea319569dd0e5",
+    "DrawingStyleProfiles": "65d437f8d061efb7b8e710b6e50cd39ff2049a3b0da335c113838f3fc0a169bd",
+    "SubjectFocus": "832a76eaf796eaa279df8bc485bdc296d21404e35246f549a52a8d917c033368",
+    "ImageFormatInfo": "1329ff9a86ea65d6377846c0ce733dd938df892ea3cf565976155f912f801be3",
+    "DrawBot": "fb35c118403538e17ea830b6863174f7caeb726bacab3b64368439576c816051",
+    "ImageImport": "89ed833ad0e23a3c533bf82476e4a1520551c87d77f595d38446986b671e4128",
+    "ImageGeometry": "34bccf137dc31f7136d6b904e4fa41ce074fefd27121ee35cbe65ab202583467"
+  },
+  "measurements": {
+    "cluster_minima_900x700_four_centres": {
+      "before_samples_ms": [
+        22.75627900235122,
+        22.37907000017003,
+        22.276920000877,
+        22.055421002733056,
+        22.186535999935586
+      ],
+      "after_samples_ms": [
+        22.890407002705615,
+        23.818708999897353,
+        23.187587001302745,
+        23.4500049991766,
+        23.23305399841047
+      ],
+      "before_median_ms": 22.276920000877,
+      "after_median_ms": 23.23305399841047,
+      "exact_output_parity": true,
+      "output_sha256": "0c00f7462a62b956e6deb39ffaa4fdee3ccfcab1e5185867c78efe80da8d7192",
+      "before_peak_python_bytes": 35283128,
+      "after_peak_python_bytes": 25201572,
+      "parameters": {
+        "size": [
+          900,
+          700
+        ],
+        "centres": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            255.0,
+            255.0,
+            255.0
+          ],
+          [
+            190.0,
+            45.0,
+            30.0
+          ],
+          [
+            20.0,
+            120.0,
+            210.0
+          ]
+        ],
+        "spreads": [
+          6.0,
+          12.0,
+          18.0,
+          24.0
+        ],
+        "seed": 1480301
+      }
+    },
+    "background_flood_240x180_white": {
+      "before_samples_ms": [
+        161.21184599978733,
+        159.77168700192124,
+        159.53595799874165,
+        159.0547769992554,
+        160.77763400244294
+      ],
+      "after_samples_ms": [
+        41.35270600090735,
+        47.150458998657996,
+        43.03419299685629,
+        41.45667000193498,
+        46.25328199836076
+      ],
+      "before_median_ms": 159.77168700192124,
+      "after_median_ms": 43.03419299685629,
+      "exact_output_parity": true,
+      "output_sha256": "8d8c2122375eba2197f90f1cf8efbd01fdad2ee2f40e60fb32d00a84f4e63f5b",
+      "parameters": {
+        "size": [
+          240,
+          180
+        ],
+        "background": "white",
+        "edge": 0
+      },
+      "memory_scope": "Timing only; Python flood tracing would dominate this fixture."
+    },
+    "largest_component_350x250": {
+      "before_samples_ms": [
+        69.18886600033147,
+        70.0318929993955,
+        68.41950899979565,
+        70.72138199873734,
+        69.31519299905631
+      ],
+      "after_samples_ms": [
+        63.48621399956755,
+        62.39315800121403,
+        62.59866099935607,
+        61.924483998154756,
+        63.97634799941443
+      ],
+      "before_median_ms": 69.31519299905631,
+      "after_median_ms": 62.59866099935607,
+      "exact_output_parity": true,
+      "output_sha256": "9f22f732c11dff5113cd188e612f6731068adbd001609f5f230556f122a94696",
+      "before_peak_python_bytes": 936628,
+      "after_peak_python_bytes": 106500,
+      "parameters": {
+        "size": [
+          350,
+          250
+        ],
+        "rectangle": [
+          40,
+          25,
+          300,
+          225
+        ]
+      }
+    },
+    "drawing_style_4000x3000_rgb": {
+      "before_samples_ms": [
+        32.16285799862817,
+        31.486968000535853,
+        31.69190199696459,
+        32.85198700177716,
+        31.814553000003798
+      ],
+      "after_samples_ms": [
+        13.03596599973389,
+        13.672316999873146,
+        13.150344999303343,
+        13.603114999568788,
+        13.403649998508627
+      ],
+      "before_median_ms": 31.814553000003798,
+      "after_median_ms": 13.403649998508627,
+      "exact_output_parity": true,
+      "output_sha256": "07b578598c44ceb3a6e274cd5efe5e44ec614cc51e11fe35df1ede999b531880",
+      "before_peak_python_bytes": 1543077,
+      "after_peak_python_bytes": 141405,
+      "parameters": {
+        "size": [
+          4000,
+          3000
+        ],
+        "source": "96x128 RGB tile enlarged with NEAREST",
+        "seed": 1480301
+      }
+    },
+    "subject_mask_2000x1500_rgb": {
+      "before_samples_ms": [
+        85.04002500194474,
+        85.57784100048593,
+        84.10152799842763,
+        85.8477399997355,
+        85.01486799650593
+      ],
+      "after_samples_ms": [
+        81.78609300011885,
+        81.87420300237136,
+        81.43152999764425,
+        81.04466700024204,
+        84.0921540002455
+      ],
+      "before_median_ms": 85.04002500194474,
+      "after_median_ms": 81.78609300011885,
+      "exact_output_parity": true,
+      "output_sha256": "1ab428b42c0e421517dbc4cba9ebcada5cff3049c988598bc946ba5e702084ab",
+      "before_peak_python_bytes": 9997209,
+      "after_peak_python_bytes": 7110274,
+      "parameters": {
+        "size": [
+          2000,
+          1500
+        ],
+        "subject": "red rectangle 600,400,1399,1099 on white"
+      }
+    },
+    "complete_background_removal_240x180": {
+      "before_samples_ms": [
+        148.8761370019347,
+        152.8526870024507,
+        151.33445199899143,
+        148.4412739991967,
+        158.5741170019901
+      ],
+      "after_samples_ms": [
+        53.025416997115826,
+        53.523362999840174,
+        52.29842100015958,
+        51.74584500127821,
+        52.89444200025173
+      ],
+      "before_median_ms": 151.33445199899143,
+      "after_median_ms": 52.89444200025173,
+      "exact_output_parity": true,
+      "output_sha256": "530919efa7eced6812de6ab213ec384627cc3fb430c430d5d75010865c9b519c",
+      "parameters": {
+        "size": [
+          240,
+          180
+        ],
+        "subject": "blue ellipse and rust rectangle on white"
+      },
+      "memory_scope": "Timing only; output pixel bytes and full metadata are compared."
+    },
+    "palette_image_label_3000x2000": {
+      "before_samples_ms": [
+        7.454231999872718,
+        7.796719000907615,
+        7.304500999453012,
+        7.587298998259939,
+        7.352551998337731
+      ],
+      "after_samples_ms": [
+        2.569578999100486,
+        2.0362310024211183,
+        2.6117220004380215,
+        2.041428000666201,
+        2.0025310004712082
+      ],
+      "before_median_ms": 7.454231999872718,
+      "after_median_ms": 2.041428000666201,
+      "exact_output_parity": true,
+      "output_sha256": "bf35988a6b6bf1924a8bd4701f014556f26a266308b45a1576c4ba21fec6507f",
+      "before_peak_python_bytes": 1093,
+      "after_peak_python_bytes": 78378,
+      "parameters": {
+        "size": [
+          3000,
+          2000
+        ],
+        "palette": "greyscale",
+        "transparency": "index 1 only, used at final pixel"
+      }
+    },
+    "base64_import_8mib_encoded_source": {
+      "before_samples_ms": [
+        22.497056001157034,
+        23.952777999511454,
+        22.86162399832392,
+        22.72286899824394,
+        21.511998998903437
+      ],
+      "after_samples_ms": [
+        23.043883997161174,
+        23.440059998392826,
+        24.319481002748944,
+        23.26473100038129,
+        21.66465400296147
+      ],
+      "before_median_ms": 22.72286899824394,
+      "after_median_ms": 23.26473100038129,
+      "exact_output_parity": true,
+      "output_sha256": "e8bf36da1a2f9802b05ce26485fbae766fd7a67ca44558bf098752df2fcc2be8",
+      "before_peak_python_bytes": 30758792,
+      "after_peak_python_bytes": 2338842,
+      "parameters": {
+        "image_size": [
+          10,
+          8
+        ],
+        "trailing_fixture_bytes": 8388608,
+        "source_bytes": 8388687
+      }
+    }
+  }
+}

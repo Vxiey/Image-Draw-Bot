@@ -107,6 +107,35 @@ def _detail_signal(rgb):
     return ImageChops.subtract(local_hi, local_lo)
 
 
+def _restore_source_alpha(source, visible_rgb, processed_rgb, cancelled):
+    """Apply a visible-colour change once while preserving source alpha.
+
+    Filtering is performed against white, where transparent pixels have their
+    actual visible colour. Reattaching alpha to that flattened RGB would blend
+    white a second time. Transfer only the visible delta back to the original
+    unassociated channels; unchanged and hard-protected pixels stay exact.
+    """
+    import numpy as np
+    from PIL import Image
+
+    rgba = np.array(source, dtype=np.uint8, copy=True)
+    before = np.asarray(visible_rgb, dtype=np.uint8)
+    after = np.asarray(processed_rgb, dtype=np.uint8)
+    for y in range(0, source.height, 128):
+        if cancelled():
+            raise InterruptedError()
+        rows = rgba[y:y + 128]
+        alpha = rows[..., 3:4].astype(np.int32)
+        delta = after[y:y + 128].astype(np.int32) - before[y:y + 128]
+        numerator = delta * 255
+        adjustment = np.sign(numerator) * ((np.abs(numerator) + alpha // 2) // np.maximum(alpha, 1))
+        adjustment[rows[..., 3] == 0] = 0
+        rows[..., :3] = np.clip(rows[..., :3].astype(np.int32) + adjustment, 0, 255).astype(np.uint8)
+    if cancelled():
+        raise InterruptedError()
+    return Image.fromarray(rgba)
+
+
 def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = False,
                           drawing_mode: str | None = None, preview: bool = False,
                           cancelled=lambda: False):
@@ -118,11 +147,15 @@ def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = Fa
     from PIL import Image, ImageFilter, ImageChops, ImageDraw
 
     validate_adaptive_detail(mode)
+    if cancelled():
+        raise InterruptedError()
     source = image.convert("RGBA")
     if mode == "Off" or source.width < 4 or source.height < 4:
         total = source.width * source.height
         mask = Image.new("L", source.size, 255)
         stats = AdaptiveDetailStats(mode, "Off", 0.0, total, 0, total, 100.0, 1, 255)
+        if cancelled():
+            raise InterruptedError()
         return source, mask, stats
     if cancelled():
         raise InterruptedError()
@@ -168,8 +201,10 @@ def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = Fa
     # Use the soft 96-valued focus area as a blend instead of a hard mask; hard
     # detail edges remain 255 and are copied exactly from the source.
     processed_rgb = Image.composite(rgb, simplified, protected)
-    processed = processed_rgb.convert("RGBA")
-    processed.putalpha(alpha)
+    if alpha.getextrema() == (255, 255):
+        processed = processed_rgb.convert("RGBA")
+    else:
+        processed = _restore_source_alpha(source, rgb, processed_rgb, cancelled)
 
     hist = protected.histogram()
     # Any nonzero protection contributes; 255 pixels are hard-protected.
@@ -179,6 +214,8 @@ def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = Fa
         mode, effective, complexity, protected_pixels, total - protected_pixels,
         total, protected_pixels * 100.0 / total, smooth_kernel, threshold,
     )
+    if cancelled():
+        raise InterruptedError()
     return processed, protected, stats
 
 
@@ -213,10 +250,25 @@ def prune_flat_micro_strokes(groups: Sequence[Sequence[tuple[int, int, int, int]
             length = max(abs(x2 - x1), abs(y2 - y1)) + 1
             remove = False
             if length <= max_micro:
-                # Horizontal row runs are the normal planner representation. For
-                # any future vertical run, sample both endpoints + midpoint.
-                samples = ((x1, y1), (x2, y2), ((x1 + x2) // 2, (y1 + y2) // 2))
-                remove = all(0 <= x < width and 0 <= y < height and pix[x, y] < 64 for x, y in samples)
+                # Check every raster pixel of these at-most-four-pixel runs.
+                # Endpoint/midpoint sampling misses the third pixel of a run
+                # of length four and can erase protected thin detail.
+                x, y = x1, y1
+                dx, dy = abs(x2 - x1), -abs(y2 - y1)
+                sx, sy = (1 if x1 < x2 else -1), (1 if y1 < y2 else -1)
+                error = dx + dy
+                remove = True
+                while True:
+                    if not (0 <= x < width and 0 <= y < height and pix[x, y] < 64):
+                        remove = False
+                        break
+                    if (x, y) == (x2, y2):
+                        break
+                    twice = 2 * error
+                    if twice >= dy:
+                        error += dy; x += sx
+                    if twice <= dx:
+                        error += dx; y += sy
             if remove:
                 removed += 1
                 removed_pixels += length

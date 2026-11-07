@@ -233,7 +233,7 @@ def _downstream_plan_cost(groups, options, model, cancelled) -> tuple[float, dic
 def build_fast_paths(groups, options, *, portrait_edge_count=None, cancelled=lambda: False):
     """Choose a bounded lossless path plan using downstream-aware cost."""
     from ContinuousPaths import build_execution_paths, execution_groups_with_portrait_semantics
-    from ExecutionCostModel import build_cost_model
+    from ExecutionCostModel import build_cost_model, EXECUTION_MODEL_VERSION
 
     rows, points, policy = path_limits(options)
     limits = _candidate_limits(rows, points, policy)
@@ -349,14 +349,25 @@ def build_fast_paths(groups, options, *, portrait_edge_count=None, cancelled=lam
     proposal_downstream_meta: dict[str, Any] = {}
     downstream_accepted = True
 
-    semantic_proposed = execution_groups_with_portrait_semantics(proposed, portrait_edge_count)
+    unchanged = not any(changed for _limit, _h, _v, _vpaths, changed in selected_rows)
+    semantic_proposed = (baseline if unchanged else
+                         execution_groups_with_portrait_semantics(proposed, portrait_edge_count))
     if travel_aware:
         baseline_downstream, baseline_downstream_meta = _downstream_plan_cost(
             baseline, options, model, cancelled,
         )
-        proposal_downstream, proposal_downstream_meta = _downstream_plan_cost(
-            semantic_proposed, options, model, cancelled,
-        )
+        if cancelled():
+            raise InterruptedError()
+        if unchanged:
+            # Every group retained its original paths and semantic barriers.
+            # Capping, reordering and pricing that same plan twice cannot
+            # change the final guard; retain its one complete evaluation.
+            proposal_downstream = baseline_downstream
+            proposal_downstream_meta = baseline_downstream_meta
+        else:
+            proposal_downstream, proposal_downstream_meta = _downstream_plan_cost(
+                semantic_proposed, options, model, cancelled,
+            )
         no_more_paths = sum(map(len, proposed)) <= sum(map(len, baseline))
         downstream_accepted = bool(
             no_more_paths and proposal_downstream <= baseline_downstream + 1e-9
@@ -447,7 +458,7 @@ def build_fast_paths(groups, options, *, portrait_edge_count=None, cancelled=lam
         selected_path_limit_histogram={
             f'{r}x{p}': count for (r, p), count in sorted(selected_limits.items())
         },
-        execution_cost_model='ExecutionCostModel stateful v3',
+        execution_cost_model=f'ExecutionCostModel stateful v{EXECUTION_MODEL_VERSION}',
         execution_scale=[round(float(getattr(model,'scale_x',1.0)),6),round(float(getattr(model,'scale_y',1.0)),6)],
         cost_scope=(
             'post-target-cap + current StrokeOptimizer through ExecutionCostModel; intra-color travel + color selection; '

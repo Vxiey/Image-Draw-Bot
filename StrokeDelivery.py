@@ -11,6 +11,7 @@ updates while preserving the existing safety/compatibility behaviour elsewhere.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,19 @@ class StrokeDeliveryPolicy:
             'ui_control_delay': float(self.ui_control_delay),
             'profile_key': self.profile_key,
         }
+
+
+def interpolation_step(step_px, brush_px, *, pixel_accurate=False):
+    """The native drag spacing after its physical detail-brush limit."""
+    if pixel_accurate:
+        return min(float(step_px), max(1.0, float(brush_px) * 1.5))
+    return step_px
+
+
+def brush_switch_delays(policy):
+    """Existing move/click settling for a verified in-sequence brush change."""
+    return (max(.025, policy.ui_control_delay * .45),
+            max(.10, policy.ui_control_delay))
 
 
 def _profile_key(options: dict) -> str:
@@ -72,8 +86,11 @@ def _pixel_accurate_requested(options: dict) -> bool:
 
 def resolve_stroke_delivery(options: dict | None, *, dry_run: bool = False) -> StrokeDeliveryPolicy:
     options = options or {}
-    requested = float(options.get('stroke_step_px', 8) or 8)
-    if requested <= 0:
+    try:
+        requested = float(options.get('stroke_step_px', 8) or 8)
+    except (TypeError, ValueError, OverflowError):
+        requested = 8.0
+    if not math.isfinite(requested) or requested <= 0:
         requested = 8.0
 
     key = _profile_key(options)

@@ -1,0 +1,333 @@
+{
+  "baseline": "f59a57c6fc1eef1ace07e872ba50ed834e1bb924",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One exact-parity/warm pair, alternating before/after elapsed samples, separate traced peaks after garbage collection.",
+  "scope": "CPU generated path plans, actual make_plan Line Art and both production Fill detectors; no native input or GPU performance claim. ExtraFast2 and FillOptimizer are loaded separately from the baseline. Both sides use the same current downstream cap, optimizer, execution model, palette and application caller.",
+  "parity_exclusion": "Only execution_cost_model label: RP02 completion replaces hard-coded v3 with actual model version5. All remaining ExtraFast metadata, paths, semantic hints and protected prefixes must match exactly.",
+  "after_source_sha256": {
+    "ExtraFast2": "b6f29643bc2e33dd7f2f720c0357ddd347fdffff8f9ae8c573462158ea7c1fad",
+    "FillOptimizer": "95263bf7e3a861631e12f065421efa1f92b552f56a73336007881100aa1c305b"
+  },
+  "shared_dependency_sha256": {
+    "DrawBot": "5737906980bd603b692997a9c7c0ce43d9c85d7092c625d64753803f8b78f967",
+    "ContinuousPaths": "1a93251e00e80152d2a971425edc521bdb303f866219dbcb6b47aaddc689f9ea",
+    "ExecutionCostModel": "4ebc67f1cdb29e7c9af61be1f240f5e6aa9b1b9f79724d3a4a5495615e5c0192",
+    "StrokeOptimizer": "ed71f43d95ff30396254f88bbf5e25499b0284f051319237d90ea2300ec53eee",
+    "TimeBudget": "c68ba2186c387fcd67d5c04820dba05fa10af12d3d9e35a34a1e72a1bae4d96c",
+    "AxisRegionPlanner": "3ab06db16eeadf51d11629f7fd17fa7a58c88b271391a0bb4953b72906f09181",
+    "Sketch2Planner": "f4271b40277912919eb3a2dd609f7f3d893cdcbd33b8253bf673690b83da1e08",
+    "Colors": "a89301a8397484092714431771a3d9cb5fe1ab7e22aa6ebe9755a3d3dbd0f942",
+    "ColorCache": "646ae6933ac0d7de88182ecf74f8666dfb7673cfefd3a40e6fbc1f761aec6f95",
+    "ColorFidelity": "8a85606577672a7758dc58e208c4d60d084e5fab0bbec09d29d0bb44b8599513",
+    "PreviewSafety": "7b53509e71cb3fc3d36c557d84823459122cbd502f325871f4887beb948b357a",
+    "PreviewLayers": "72d9394ad80d4630b46a9f718e84d26ed8977c66ad054c7da7d854a68536c980",
+    "SafetyDebugOverlay": "ddcc1dfdcdcfd21c2f006a82cea174725b4ed9f4836a5ea5697206012d693ef8"
+  },
+  "measurements": {
+    "unchanged_disconnected_240": {
+      "before_samples_ms": [
+        25.80359100102214,
+        26.161861002037767,
+        26.395706001494545,
+        27.489544001582544,
+        26.56428599584615
+      ],
+      "after_samples_ms": [
+        22.396425003535114,
+        18.432996002957225,
+        18.196246994193643,
+        20.106791002035607,
+        17.969742002605926
+      ],
+      "before_median_ms": 26.395706001494545,
+      "after_median_ms": 18.432996002957225,
+      "exact_output_parity": true,
+      "output_sha256": "878c278017cad8176a95ffb7d27414c916f120175083e3cdc24f0fd908e2d93f",
+      "before_peak_python_bytes": 319405,
+      "after_peak_python_bytes": 319389,
+      "parameters": {
+        "source_runs": 240,
+        "portrait_prefix": null,
+        "target_cap": null,
+        "options": {
+          "stroke_optimizer": "Travel only",
+          "drawing_mode": "Smart paths (recommended)",
+          "speed": "Balanced",
+          "_hybrid_cost_calibration_override": {},
+          "target_stroke_count_resolved": null
+        }
+      },
+      "complete_final_cost_evaluations": {
+        "before": 2,
+        "after": 1
+      }
+    },
+    "unchanged_portrait_480_capped": {
+      "before_samples_ms": [
+        28.863293999165762,
+        28.022831000271253,
+        28.91718399769161,
+        28.601947000424843,
+        33.22690400091233
+      ],
+      "after_samples_ms": [
+        26.18685799825471,
+        28.810706004151143,
+        26.54541800438892,
+        26.12465600395808,
+        26.993220002623275
+      ],
+      "before_median_ms": 28.863293999165762,
+      "after_median_ms": 26.54541800438892,
+      "exact_output_parity": true,
+      "output_sha256": "0a10b49ec7f586c49f8012d76b275b798c4bf6cfd14d377db1aae61fb8223d00",
+      "before_peak_python_bytes": 642321,
+      "after_peak_python_bytes": 642321,
+      "parameters": {
+        "source_runs": 480,
+        "portrait_prefix": 16,
+        "target_cap": 120,
+        "options": {
+          "stroke_optimizer": "Travel only",
+          "drawing_mode": "Smart paths (recommended)",
+          "speed": "Balanced",
+          "_hybrid_cost_calibration_override": {},
+          "target_stroke_count_resolved": 120
+        }
+      },
+      "complete_final_cost_evaluations": {
+        "before": 2,
+        "after": 1
+      }
+    },
+    "changed_vertical_160": {
+      "before_samples_ms": [
+        21.17105400247965,
+        22.17587899940554,
+        21.874382997339126,
+        21.671504000551067,
+        22.94222100317711
+      ],
+      "after_samples_ms": [
+        21.6161110001849,
+        23.078774000168778,
+        22.733313002390787,
+        22.365960001479834,
+        24.10772500297753
+      ],
+      "before_median_ms": 21.874382997339126,
+      "after_median_ms": 22.733313002390787,
+      "exact_output_parity": true,
+      "output_sha256": "3d957f0515141bec724ef5e4ee3a4414f040d141a8f929fa1883d1e8278752ab",
+      "before_peak_python_bytes": 230277,
+      "after_peak_python_bytes": 231149,
+      "parameters": {
+        "source_runs": 160,
+        "portrait_prefix": null,
+        "target_cap": null,
+        "options": {
+          "stroke_optimizer": "Travel only",
+          "drawing_mode": "Smart paths (recommended)",
+          "speed": "Balanced",
+          "_hybrid_cost_calibration_override": {},
+          "target_stroke_count_resolved": null
+        }
+      },
+      "complete_final_cost_evaluations": {
+        "before": 2,
+        "after": 2
+      }
+    },
+    "actual_make_plan_paint_line_art": {
+      "before_samples_ms": [
+        138.4818250007811,
+        142.1035480016144,
+        131.11998299427796,
+        125.26688200159697,
+        136.1669130055816
+      ],
+      "after_samples_ms": [
+        118.60330299532507,
+        119.66608300281223,
+        121.265517998836,
+        124.0344300022116,
+        125.5878459996893
+      ],
+      "before_median_ms": 136.1669130055816,
+      "after_median_ms": 121.265517998836,
+      "exact_output_parity": true,
+      "output_sha256": "7e0391aa9e9554dc15a9e472979c9161cec20a9c7a89955a2a505f8cfb551a89",
+      "before_peak_python_bytes": 3226311,
+      "after_peak_python_bytes": 3226418,
+      "parameters": {
+        "size": [
+          160,
+          120
+        ],
+        "source": "35 separated black rectangle outlines",
+        "options": {
+          "render_preset": "Extra fast",
+          "drawing_style": "Line Art",
+          "profile_name": "Microsoft Paint",
+          "profile_key": "microsoft-paint",
+          "fill_tool_available": false,
+          "detail": 8,
+          "delay": 0.01,
+          "speed": "Fast",
+          "precision": "High",
+          "lines": true,
+          "skip_white": true,
+          "contrast": 1.0,
+          "outline": false,
+          "paint_current_color": false,
+          "brush_px": 1,
+          "time_budget_mode": "Unlimited",
+          "unlimited_time": true,
+          "max_seconds": 80,
+          "gpu_mode": "CPU",
+          "planning_resolution": "Standard",
+          "custom_color_workflow": "Calibrated palette",
+          "exact_color_available": false,
+          "color_rendering": "Perceptual match",
+          "color_fidelity": "Faithful",
+          "detail_zoom": "Off",
+          "adaptive_detail": "Off",
+          "preview_plan": true,
+          "_hybrid_cost_calibration_override": {}
+        }
+      },
+      "complete_final_cost_evaluations": {
+        "before": 2,
+        "after": 1
+      },
+      "comparison": "Full source/planned preview bytes, source/execution paths and sequence, counts, estimate, path statistics and all ExtraFast metadata except corrected model-version label."
+    },
+    "fill_image_border": {
+      "before_samples_ms": [
+        118.69339500117349,
+        117.11706499772845,
+        120.49859399849083,
+        120.18940599955386,
+        127.81735000316985
+      ],
+      "after_samples_ms": [
+        113.29400500108022,
+        117.14738999580732,
+        114.98413299705135,
+        122.2730470035458,
+        116.48903499735752
+      ],
+      "before_median_ms": 120.18940599955386,
+      "after_median_ms": 116.48903499735752,
+      "exact_output_parity": true,
+      "output_sha256": "272ac874b6af7359236d4094ab8cef5df470a7f85831d343088e229111fc0456",
+      "before_peak_python_bytes": 7677085,
+      "after_peak_python_bytes": 4416797,
+      "parameters": {
+        "size": [
+          384,
+          384
+        ],
+        "scene": "border",
+        "source_runs": 384
+      },
+      "comparison": "Every accepted region field, source row span, seed, contour, guard sample and component/rejection/selection counter."
+    },
+    "fill_groups_border": {
+      "before_samples_ms": [
+        117.11769999965327,
+        119.47348700050497,
+        105.08652599673951,
+        104.75034899718594,
+        108.8685400027316
+      ],
+      "after_samples_ms": [
+        116.5484680022928,
+        103.37023800093448,
+        99.79161799856229,
+        100.31474200513912,
+        103.76153700053692
+      ],
+      "before_median_ms": 108.8685400027316,
+      "after_median_ms": 103.37023800093448,
+      "exact_output_parity": true,
+      "output_sha256": "c3a89d6df84495a13ddaab626cc0b75cb5fa1352872ed414e8895099012d5910",
+      "before_peak_python_bytes": 7572897,
+      "after_peak_python_bytes": 4312609,
+      "parameters": {
+        "size": [
+          384,
+          384
+        ],
+        "scene": "border",
+        "source_runs": 384
+      },
+      "comparison": "Every accepted region field, source row span, seed, contour, guard sample and component/rejection/selection counter."
+    },
+    "fill_image_mixed": {
+      "before_samples_ms": [
+        57.810573001916055,
+        56.17994200292742,
+        53.81866200332297,
+        56.07358599809231,
+        57.35758300579619
+      ],
+      "after_samples_ms": [
+        53.51010600134032,
+        52.7937969964114,
+        54.503885003214236,
+        52.054034000320826,
+        52.1568850017502
+      ],
+      "before_median_ms": 56.17994200292742,
+      "after_median_ms": 52.7937969964114,
+      "exact_output_parity": true,
+      "output_sha256": "56e9ced497ebc179af55686a216db82feb1cf05eb4ba212b81619f8fc1fc8157",
+      "before_peak_python_bytes": 2220917,
+      "after_peak_python_bytes": 2220949,
+      "parameters": {
+        "size": [
+          256,
+          192
+        ],
+        "scene": "mixed",
+        "source_runs": 746
+      },
+      "comparison": "Every accepted region field, source row span, seed, contour, guard sample and component/rejection/selection counter."
+    },
+    "fill_groups_mixed": {
+      "before_samples_ms": [
+        51.12260700116167,
+        49.864847998833284,
+        50.12800699478248,
+        50.82196299917996,
+        54.44643000373617
+      ],
+      "after_samples_ms": [
+        59.5504289958626,
+        46.381068001210224,
+        48.21279500174569,
+        48.13153500435874,
+        46.87058200215688
+      ],
+      "before_median_ms": 50.82196299917996,
+      "after_median_ms": 48.13153500435874,
+      "exact_output_parity": true,
+      "output_sha256": "f145eab4f9318ce936fa4b786b20a02f1dcfa19a8b930eac3bbda0cc0fa2184e",
+      "before_peak_python_bytes": 2218533,
+      "after_peak_python_bytes": 2218565,
+      "parameters": {
+        "size": [
+          256,
+          192
+        ],
+        "scene": "mixed",
+        "source_runs": 746
+      },
+      "comparison": "Every accepted region field, source row span, seed, contour, guard sample and component/rejection/selection counter."
+    }
+  }
+}

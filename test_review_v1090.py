@@ -25,7 +25,9 @@ class ReviewRegressionTests(unittest.TestCase):
         mouse._send=fail
         with self.assertRaises(OSError):mouse.disarm_input()
         self.assertFalse(mouse.input_armed)
-        self.assertFalse(mouse.held)
+        # Failed LEFTUP still belongs to this backend. Keep cleanup ownership
+        # while denying any further input, so a later release can retry it.
+        self.assertTrue(mouse.held)
 
     def test_marker_pid_prefix_is_not_ownership(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -106,5 +108,5 @@ class ReviewRegressionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             (Path(folder)/'settings.json').write_text(json.dumps({'quality':'High detail','api_key':'secret-key','password':'secret-password'}))
             with patch.object(dp,'data_dir',return_value=Path(folder)):
-                summary=dp._settings_summary()['settings.json']
+                summary=dp._settings_summary()['settings-001.json']
                 self.assertEqual(summary,{'quality':'High detail'})

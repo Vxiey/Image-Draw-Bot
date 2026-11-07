@@ -6,10 +6,10 @@ and click the point whose rendered RGB is nearest the requested drawing color.
 Numeric R/G/B fields remain a deterministic fallback.
 """
 from __future__ import annotations
-import json,tempfile
+import json
 from pathlib import Path
 from CalibrationAnchors import validate_anchor,resolve_point
-from RuntimePaths import data_dir
+from RuntimePaths import atomic_write_text, data_dir, read_json
 from ProfileStorage import safe_profile_key
 
 SCHEMA=2
@@ -29,7 +29,7 @@ def file_for(profile_key):
 
 
 def _point(v,name):
-    if not isinstance(v,(list,tuple)) or len(v)!=2 or any(type(n) is not int for n in v):
+    if not isinstance(v,(list,tuple)) or len(v)!=2 or any(type(n) is not int or abs(n) > 100000 for n in v):
         raise ValueError(f'Invalid {name} position. Recalibrate exact color controls.')
     return [int(v[0]),int(v[1])]
 
@@ -39,14 +39,22 @@ def _has(controls,names):
 
 
 def validate(data,profile_key=None):
-    if not isinstance(data,dict) or int(data.get('version',0)) not in SUPPORTED_SCHEMAS:
+    if not isinstance(data,dict) or type(data.get('version')) is not int or data['version'] not in SUPPORTED_SCHEMAS:
         raise ValueError('Invalid exact color calibration.')
     if profile_key is not None and data.get('profile')!=profile_key:
         raise ValueError('Exact color calibration belongs to another profile.')
     anchor=validate_anchor(data.get('anchor'))
-    controls=data.get('controls') or {};clean={}
+    controls=data.get('controls');clean={}
+    if not isinstance(controls, dict):
+        raise ValueError('Exact color controls must be a JSON object.')
     for name in ALL_FIELDS:
         if controls.get(name) is not None:clean[name]=_point(controls[name],name)
+    if _has(clean, SPECTRUM_FIELDS):
+        left, top = clean['SpectrumTopLeft']; right, bottom = clean['SpectrumBottomRight']
+        if right <= left or bottom <= top:
+            raise ValueError('The calibrated color spectrum must have a positive area.')
+    if _has(clean, BRIGHTNESS_FIELDS) and clean['BrightnessTop'] == clean['BrightnessBottom']:
+        raise ValueError('The brightness slider endpoints must be different.')
     # Normalize old schema files to current in-memory representation.
     return {'version':SCHEMA,'profile':str(data.get('profile','')),'anchor':anchor,'controls':clean}
 
@@ -57,18 +65,12 @@ def save(profile_key,controls,*,anchor,path=None):
         if name not in ALL_FIELDS:raise ValueError(f'Unsupported exact color control: {name}')
         data['controls'][name]=_point(value,name)
     clean=validate(data,profile_key);path=Path(path or file_for(profile_key));path.parent.mkdir(parents=True,exist_ok=True)
-    tmp=None
-    try:
-        with tempfile.NamedTemporaryFile('w',encoding='utf-8',delete=False,dir=path.parent,suffix='.tmp') as f:
-            tmp=Path(f.name);json.dump(clean,f,ensure_ascii=False,indent=2);f.flush()
-        tmp.replace(path)
-    finally:
-        if tmp:tmp.unlink(missing_ok=True)
+    atomic_write_text(path, json.dumps(clean, ensure_ascii=False, indent=2, allow_nan=False))
     return clean
 
 
 def load(profile_key,path=None):
-    path=Path(path or file_for(profile_key));return validate(json.loads(path.read_text(encoding='utf-8')),profile_key)
+    path=Path(path or file_for(profile_key));return validate(read_json(path, max_bytes=128 * 1024),profile_key)
 
 
 def numeric_rgb_available(profile_key,path=None):
@@ -91,7 +93,9 @@ def brightness_available(profile_key,path=None):
 
 def custom_rgb_available(profile_key,path=None):
     """Exact-color capability via visual spectrum or numeric RGB fields."""
-    return spectrum_available(profile_key,path) or numeric_rgb_available(profile_key,path)
+    try:controls=load(profile_key,path)['controls']
+    except (OSError,ValueError):return False
+    return _has(controls,BASE_FIELDS+SPECTRUM_FIELDS) or _has(controls,BASE_FIELDS+RGB_FIELDS)
 
 
 def resolve_image_custom_color_workflow(profile_name, profile_key, requested_workflow, *, render_preset='Auto', path=None):

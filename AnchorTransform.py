@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from typing import Mapping, Sequence
+from CalibrationValidation import LONG_MIN,LONG_MAX,bounded_number,nonnegative_integer,screen_point
 
 Point = tuple[int, int]
 FloatPoint = tuple[float, float]
@@ -41,10 +42,11 @@ class AnchorTransformResult:
         return abs(self.sx - 1.0) > 1e-7 or abs(self.sy - 1.0) > 1e-7
 
     def apply_point(self, point: Sequence[int | float]) -> FloatPoint:
-        if len(point) != 2:
+        _validate_transform(self)
+        if not isinstance(point,(list,tuple)) or len(point) != 2:
             raise ValueError('Point must contain x and y.')
-        return (float(point[0]) * self.sx + self.dx,
-                float(point[1]) * self.sy + self.dy)
+        x,y=(_finite_coordinate(value) for value in point)
+        return (_finite_coordinate(x*self.sx+self.dx),_finite_coordinate(y*self.sy+self.dy))
 
     def as_dict(self) -> dict:
         return {
@@ -61,11 +63,24 @@ class AnchorTransformResult:
         }
 
 
+def _finite_coordinate(value):
+    return bounded_number(value,'coordinate',minimum=LONG_MIN,maximum=LONG_MAX)
+
+
+def _validate_transform(transform):
+    if not isinstance(transform,AnchorTransformResult) or transform.accepted is not True:
+        raise ValueError('A rejected anchor transform cannot be applied.')
+    _finite_coordinate(transform.dx);_finite_coordinate(transform.dy)
+    for scale in (transform.sx,transform.sy):
+        if bounded_number(scale,'anchor scale',minimum=0,maximum=LONG_MAX)<=0:
+            raise ValueError('Anchor scale must be positive.')
+
+
 def _rect(value: Sequence[int | float], label: str = 'client rectangle') -> Rect:
     if not isinstance(value, (list, tuple)) or len(value) != 4:
         raise ValueError(f'Invalid {label}.')
     try:
-        left, top, right, bottom = (int(round(float(v))) for v in value)
+        left, top, right, bottom = (round(_finite_coordinate(v)) for v in value)
     except (TypeError, ValueError) as error:
         raise ValueError(f'Invalid {label}.') from error
     if right <= left or bottom <= top:
@@ -77,11 +92,12 @@ def _area(value: Sequence[int | float], label: str = 'canvas area') -> Area:
     if not isinstance(value, (list, tuple)) or len(value) != 4:
         raise ValueError(f'Invalid {label}.')
     try:
-        x, y, w, h = (int(round(float(v))) for v in value)
+        x, y, w, h = (round(_finite_coordinate(v)) for v in value)
     except (TypeError, ValueError) as error:
         raise ValueError(f'Invalid {label}.') from error
     if w <= 0 or h <= 0:
         raise ValueError(f'Invalid {label}.')
+    screen_point((x+w,y+h),label)
     return x, y, w, h
 
 
@@ -114,6 +130,10 @@ def _anchor_points_from_options(options: Mapping[str, object] | None, area: Area
 def _fit_axis_aligned(reference: Sequence[FloatPoint], current: Sequence[FloatPoint]) -> tuple[float, float, float, float, float, float]:
     if len(reference) != len(current) or not reference:
         raise ValueError('Anchor point sets must have the same non-zero length.')
+    for points in (reference,current):
+        for point in points:
+            if not isinstance(point,(list,tuple)) or len(point)!=2:raise ValueError('Invalid anchor point.')
+            for value in point:_finite_coordinate(value)
     if len(reference) == 1:
         sx = sy = 1.0
         dx = current[0][0] - reference[0][0]
@@ -147,6 +167,8 @@ def estimate_client_transform(
     """Estimate a conservative axis-aligned transform from one client rect to another."""
     old = _rect(old_client_rect, 'old client rectangle')
     current = _rect(current_client_rect, 'current client rectangle')
+    max_scale_delta=bounded_number(max_scale_delta,'Maximum scale delta',minimum=0,maximum=1)
+    max_size_delta_px=nonnegative_integer(max_size_delta_px,'Maximum client size delta')
     old_w, old_h = old[2] - old[0], old[3] - old[1]
     new_w, new_h = current[2] - current[0], current[3] - current[1]
     if abs(new_w - old_w) > int(max_size_delta_px) or abs(new_h - old_h) > int(max_size_delta_px):
@@ -172,14 +194,16 @@ def transform_area(area: Sequence[int | float], transform: AnchorTransformResult
     top = int(round(min(y0, y1)))
     right = int(round(max(x0, x1)))
     bottom = int(round(max(y0, y1)))
-    return left, top, max(1, right - left), max(1, bottom - top)
+    if right<=left or bottom<=top:raise ValueError('The transform collapsed the canvas area.')
+    return _area((left,top,right-left,bottom-top))
 
 
 def transform_points(points: Sequence[Sequence[int | float]], transform: AnchorTransformResult) -> tuple[Point, ...]:
+    _validate_transform(transform)
     result: list[Point] = []
     for point in points:
         x, y = transform.apply_point(point)
-        result.append((int(round(x)), int(round(y))))
+        result.append(screen_point((round(x),round(y))))
     return tuple(result)
 
 
@@ -199,6 +223,8 @@ def estimate_canvas_anchor_transform(
     """
     old = _area(old_area, 'old canvas area')
     candidate = _area(candidate_area, 'candidate canvas area')
+    _validate_transform(fallback)
+    max_residual_px=bounded_number(max_residual_px,'Maximum anchor residual',minimum=0,maximum=LONG_MAX)
     ref, triangles = _anchor_points_from_options(anchor_options, old)
     cur, _ = _anchor_points_from_options(anchor_options, candidate)
     if len(ref) < 2 or len(ref) != len(cur):
@@ -224,17 +250,19 @@ def rebase_canvas_area(
 ) -> tuple[Area, AnchorTransformResult]:
     """Return a safely rebased canvas area and transform metadata."""
     old_area = _area(area)
+    if not area_inside_client(old_area,old_client_rect):raise ValueError('The saved canvas is outside its target client area.')
     base = estimate_client_transform(old_client_rect, current_client_rect,
                                      max_scale_delta=max_scale_delta,
                                      max_size_delta_px=max_size_delta_px)
     candidate = transform_area(old_area, base)
     refined = estimate_canvas_anchor_transform(old_area, candidate, anchor_options, fallback=base)
     refined_area = transform_area(old_area, refined)
+    if not area_inside_client(refined_area,current_client_rect):raise ValueError('The transformed canvas is outside the current target client area.')
     return refined_area, refined
 
 
 def area_inside_client(area: Sequence[int | float], client_rect: Sequence[int | float], margin: int = 0) -> bool:
     x, y, w, h = _area(area)
     left, top, right, bottom = _rect(client_rect)
-    m = int(margin)
+    m = nonnegative_integer(margin,'Canvas containment margin')
     return left + m <= x and top + m <= y and x + w <= right - m and y + h <= bottom - m

@@ -62,30 +62,34 @@ class SafetyDebugEvent:
 
 
 def _round_point(point: Sequence[int | float]) -> Point:
+    if isinstance(point, tuple) and len(point) == 2 and type(point[0]) is int and type(point[1]) is int:
+        return point
     return (int(round(float(point[0]))), int(round(float(point[1]))))
 
 
 def _limit_path(points: Sequence[Sequence[int | float]], limit: int = MAX_DEBUG_POINTS_PER_EVENT) -> tuple[Point, ...]:
-    rounded = tuple(_round_point(p) for p in points)
-    if len(rounded) <= limit:
-        return rounded
-    step = max(1, len(rounded) // limit)
-    sampled = list(rounded[::step][:limit - 1])
-    if rounded[-1] not in sampled:
-        sampled.append(rounded[-1])
+    if limit <= 0:
+        return ()
+    if len(points) <= limit:
+        return tuple(_round_point(p) for p in points)
+    step = max(1, len(points) // limit)
+    sampled = [_round_point(points[i*step]) for i in range(limit-1)]
+    last = _round_point(points[-1])
+    if last not in sampled:
+        sampled.append(last)
     return tuple(sampled)
 
 
 def classify_edge_result(edge_result, raw_points: Sequence[Sequence[int | float]]) -> tuple[str, str]:
     """Return user-facing action/reason from an EdgeBehaviorResult."""
     strategy = str(getattr(edge_result, 'strategy', '') or '')
-    subpaths = tuple(tuple(_round_point(p) for p in path) for path in getattr(edge_result, 'subpaths', ()) or ())
-    original = tuple(_round_point(p) for p in raw_points)
-    original_points = int(getattr(edge_result, 'original_points', len(original)) or len(original))
-    output_points = int(getattr(edge_result, 'output_points', sum(len(p) for p in subpaths)) or 0)
-
     if strategy == 'hard_clip':
-        same_points = output_points == original_points and len(subpaths) == 1 and subpaths[0] == original if subpaths and original else False
+        subpaths = getattr(edge_result, 'subpaths', ()) or ()
+        original_points = int(getattr(edge_result, 'original_points', len(raw_points)) or len(raw_points))
+        output_points = int(getattr(edge_result, 'output_points', sum(len(p) for p in subpaths)) or 0)
+        same_points = (bool(raw_points) and output_points == original_points and len(subpaths) == 1
+                       and len(subpaths[0]) == len(raw_points)
+                       and all(_round_point(a) == _round_point(b) for a, b in zip(subpaths[0], raw_points)))
         if same_points:
             return 'drawn', 'All source points were already inside the brush-inset safe polygon.'
         return 'clipped', 'Stroke crossed or touched the brush-inset safe polygon and was mathematically clipped.'
@@ -121,8 +125,19 @@ def make_debug_event(
             output_points=0,
         )
     action, reason = classify_edge_result(edge_result, raw_points)
-    subpaths = tuple(_limit_path(path) for path in (getattr(edge_result, 'subpaths', ()) or ()))
-    output_points = int(getattr(edge_result, 'output_points', sum(len(p) for p in subpaths)) or 0)
+    outputs = getattr(edge_result, 'subpaths', ()) or ()
+    nonempty = [path for path in outputs if path]
+    if len(nonempty) > MAX_DEBUG_POINTS_PER_EVENT//2:
+        cap = MAX_DEBUG_POINTS_PER_EVENT//2
+        nonempty = [nonempty[i*(len(nonempty)-1)//(cap-1)] for i in range(cap)]
+    sampled = []
+    remaining = MAX_DEBUG_POINTS_PER_EVENT
+    for index, path in enumerate(nonempty):
+        item = _limit_path(path, max(1, remaining//(len(nonempty)-index)))
+        sampled.append(item)
+        remaining -= len(item)
+    subpaths = tuple(sampled)
+    output_points = int(getattr(edge_result, 'output_points', sum(len(p) for p in outputs)) or 0)
     return SafetyDebugEvent(
         path_index=path_index,
         color_index=color_index,
@@ -136,15 +151,30 @@ def make_debug_event(
 
 
 def add_debug_event(meta: dict, event: SafetyDebugEvent) -> None:
-    counts = meta.setdefault('debug_counts', {'drawn': 0, 'clipped': 0, 'skipped': 0, 'edge-follow': 0, 'blocked': 0})
-    counts[event.action] = int(counts.get(event.action, 0)) + 1
-    # Also mirror common keys at top level for older status code and tests.
-    meta[f'debug_{event.action.replace("-", "_")}'] = int(meta.get(f'debug_{event.action.replace("-", "_")}', 0)) + 1
+    _note_debug_action(meta, event.action)
     events = meta.setdefault('debug_events', [])
     if len(events) < MAX_DEBUG_EVENTS:
         events.append(event.as_dict())
     else:
         meta['debug_events_truncated'] = int(meta.get('debug_events_truncated', 0)) + 1
+
+
+def _note_debug_action(meta, action):
+    counts = meta.setdefault('debug_counts', {'drawn': 0, 'clipped': 0, 'skipped': 0, 'edge-follow': 0, 'blocked': 0})
+    counts[action] = int(counts.get(action, 0)) + 1
+    # Also mirror common keys at top level for older status code and tests.
+    key = f'debug_{action.replace("-", "_")}'
+    meta[key] = int(meta.get(key, 0)) + 1
+
+
+def record_debug_event(meta, path_index, color_index, raw_points, edge_result=None, *, exception=None):
+    """Keep aggregate counts without constructing discarded geometry samples."""
+    if len(meta.get('debug_events') or ()) < MAX_DEBUG_EVENTS:
+        add_debug_event(meta, make_debug_event(path_index, color_index, raw_points, edge_result, exception=exception))
+        return
+    action = 'blocked' if exception is not None else classify_edge_result(edge_result, raw_points)[0]
+    _note_debug_action(meta, action)
+    meta['debug_events_truncated'] = int(meta.get('debug_events_truncated', 0)) + 1
 
 
 def summarize_debug(meta: dict) -> dict:
@@ -169,8 +199,8 @@ def _canvas_to_preview(point: Sequence[int | float], fitted: Sequence[int | floa
     return (float(point[0]) * pw / fw, float(point[1]) * ph / fh)
 
 
-def _draw_polyline(draw: ImageDraw.ImageDraw, points: Sequence[Sequence[int | float]], fitted, preview_size, *, fill, width=2, dashed=False) -> None:
-    mapped = [_canvas_to_preview(p, fitted, preview_size) for p in points]
+def _draw_polyline(draw: ImageDraw.ImageDraw, points: Sequence[Sequence[int | float]], fitted, preview_size, *, fill, width=2, dashed=False, image_offset=(0, 0)) -> None:
+    mapped = [_canvas_to_preview((p[0]-image_offset[0], p[1]-image_offset[1]), fitted, preview_size) for p in points]
     if len(mapped) == 1:
         x, y = mapped[0]
         r = max(2, width + 1)
@@ -199,13 +229,16 @@ def render_safety_debug_overlay(preview_size, safety_plan, palette_rgb, brush: i
       - solid output paths for drawn/clipped/adaptive results
       - a concise legend and first few exact reasons
     """
+    if cancelled():
+        raise InterruptedError()
     w, h = int(preview_size[0]), int(preview_size[1])
     base = Image.new('RGB', (max(1, w), max(1, h)), (12, 16, 24))
     draw = ImageDraw.Draw(base)
     meta = getattr(safety_plan, 'meta', {}) or {}
     guard_meta = meta.get('canvas_guard') or {}
     fitted = guard_meta.get('area') or (0, 0, w, h)
-    fitted_size = (max(1, int(fitted[2])), max(1, int(fitted[3]))) if len(fitted) == 4 else preview_size
+    fitted_size = meta.get('fitted_size') or ((max(1, int(fitted[2])), max(1, int(fitted[3]))) if len(fitted) == 4 else preview_size)
+    image_offset = meta.get('image_offset') or (0, 0)
 
     # Safe polygon context.
     for key, color, width in (('polygon', (82, 100, 125), 1), ('safe_polygon', (98, 226, 146), 2)):
@@ -213,7 +246,7 @@ def render_safety_debug_overlay(preview_size, safety_plan, palette_rgb, brush: i
         mapped = []
         for p in poly:
             try:
-                mapped.append(_canvas_to_preview(p, fitted_size, preview_size))
+                mapped.append(_canvas_to_preview((p[0]-image_offset[0], p[1]-image_offset[1]), fitted_size, preview_size))
             except Exception:
                 continue
         if len(mapped) >= 2:
@@ -228,13 +261,13 @@ def render_safety_debug_overlay(preview_size, safety_plan, palette_rgb, brush: i
         raw = event.get('original_points') or ()
         outputs = event.get('output_subpaths') or ()
         if action in ('skipped', 'blocked'):
-            _draw_polyline(draw, raw, fitted_size, preview_size, fill=color, width=max(1, min(3, int(brush))), dashed=True)
+            _draw_polyline(draw, raw, fitted_size, preview_size, fill=color, width=max(1, min(3, int(brush))), dashed=True, image_offset=image_offset)
         else:
             # Draw a faint raw reference below the actual executable result for clipped paths.
             if action in ('clipped', 'edge-follow'):
-                _draw_polyline(draw, raw, fitted_size, preview_size, fill=(64, 76, 94), width=1, dashed=True)
+                _draw_polyline(draw, raw, fitted_size, preview_size, fill=(64, 76, 94), width=1, dashed=True, image_offset=image_offset)
             for path in outputs:
-                _draw_polyline(draw, path, fitted_size, preview_size, fill=color, width=max(1, min(5, int(brush))))
+                _draw_polyline(draw, path, fitted_size, preview_size, fill=color, width=max(1, min(5, int(brush))), image_offset=image_offset)
 
     counts = summarize_debug(meta)
     y = 8

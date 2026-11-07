@@ -7,14 +7,17 @@ image pixels, screenshots, OCR, AI/ML data or telemetry.
 from __future__ import annotations
 
 from collections import Counter
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import time
+import threading
+from uuid import uuid4
 from typing import Sequence
 
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import data_dir, read_json, replace_text_files, is_finite_number
 from SafetyDebugOverlay import classify_edge_result
 from Version import APP_VERSION
 
@@ -48,6 +51,8 @@ class RuntimeSafetySession:
     stop_reason: str = ""
     stop_type: str = ""
     _saved: bool = False
+    _saved_payload: dict | None = field(default=None, init=False, repr=False)
+    _save_lock: object = field(default_factory=threading.RLock, init=False, repr=False)
 
     def note_edge_result(self, edge_result, raw_points: Sequence[Sequence[int | float]]) -> str:
         action, reason = classify_edge_result(edge_result, raw_points)
@@ -158,19 +163,24 @@ class RuntimeSafetySession:
         return "\n".join(lines).rstrip() + "\n"
 
     def save(self, directory: Path | None = None) -> dict:
+        with self._save_lock:
+            if self._saved_payload is not None:
+                return deepcopy(self._saved_payload)
+            return self._save_once(directory)
+
+    def _save_once(self, directory: Path | None = None) -> dict:
         payload = self.as_dict()
-        if self._saved:
-            return payload
         target_dir = Path(directory) if directory is not None else REPORT_DIR
         target_dir.mkdir(parents=True, exist_ok=True)
-        base = f"ImageDrawBot-Safety-{_stamp()}-{'dry-run' if self.dry_run else 'drawing'}"
+        base = f"ImageDrawBot-Safety-{_stamp()}-{uuid4().hex}-{'dry-run' if self.dry_run else 'drawing'}"
         json_path = target_dir / f"{base}.json"
         text_path = target_dir / f"{base}.txt"
-        atomic_write_text(json_path, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
-        atomic_write_text(text_path, self.to_text(payload))
+        replace_text_files({json_path: json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
+                            text_path: self.to_text(payload)})
         self._saved = True
         payload["json_path"] = str(json_path)
         payload["text_path"] = str(text_path)
+        self._saved_payload = deepcopy(payload)
         return payload
 
 
@@ -179,22 +189,63 @@ def safe_save(session: RuntimeSafetySession, directory: Path | None = None) -> d
     try:
         return session.save(directory)
     except Exception as error:
-        payload = session.as_dict()
+        try:
+            payload = session.as_dict()
+        except Exception:
+            # A malformed diagnostic field must not replace an execution error.
+            # Preserve independently available fill/counter evidence for learning.
+            try:
+                counts = session.summary_counts()
+            except Exception:
+                counts = {}
+            try:
+                fills = {str(k): int(v) for k, v in session.fill_counts.items()
+                         if type(v) is int and v >= 0}
+            except Exception:
+                fills = {}
+            payload = {'schema': REPORT_SCHEMA, 'completed': getattr(session, 'completed', False) is True,
+                       'counts': counts, 'fills': fills}
         payload["save_error"] = _clean_reason(error)
         return payload
+
+
+def _valid_report(payload):
+    if not isinstance(payload, dict) or type(payload.get('completed')) is not bool:
+        return False
+    if 'schema' in payload and (type(payload['schema']) is not int or payload['schema'] != REPORT_SCHEMA):
+        return False
+    if payload.get('mode') not in ('drawing', 'dry-run'):
+        return False
+    if not isinstance(payload.get('counts'),dict):
+        return False
+    for field in ('counts', 'fills', 'strategies'):
+        values = payload.get(field, {})
+        if not isinstance(values, dict) or any(type(v) is not int or not 0 <= v <= 10**12 for v in values.values()):
+            return False
+    elapsed = payload.get('elapsed_seconds', 0)
+    return is_finite_number(elapsed) and elapsed >= 0
 
 
 def latest_report(directory: Path | None = None) -> dict | None:
     """Load the newest runtime safety JSON report. Local read-only helper."""
     target_dir = Path(directory) if directory is not None else REPORT_DIR
     try:
-        files = sorted(target_dir.glob("ImageDrawBot-Safety-*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        files = []
+        for path in target_dir.glob("ImageDrawBot-Safety-*.json"):
+            try:
+                files.append((path.stat().st_mtime_ns, path))
+            except OSError:
+                continue
+        files.sort(key=lambda entry: (entry[0], entry[1].name), reverse=True)
     except OSError:
         return None
-    for path in files:
+    for _, path in files:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(payload, dict):
+            payload = read_json(path, max_bytes=512*1024)
+            if _valid_report(payload):
+                # File destinations come from the selected local report pair,
+                # never from path fields embedded in diagnostic JSON.
+                payload.pop("text_path", None)
                 payload["json_path"] = str(path)
                 txt = path.with_suffix(".txt")
                 if txt.is_file(): payload["text_path"] = str(txt)
@@ -205,7 +256,7 @@ def latest_report(directory: Path | None = None) -> dict | None:
 
 
 def compact_summary(payload: dict | None) -> str:
-    if not isinstance(payload, dict):
+    if not _valid_report(payload):
         return "No runtime safety report yet. Run Fast Dry run or Start drawing."
     counts=payload.get("counts") or {}
     state="PASS" if payload.get("completed") else "STOPPED"

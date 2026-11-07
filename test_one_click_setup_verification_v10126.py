@@ -78,9 +78,10 @@ class OneClickSetupVerificationTests(unittest.TestCase):
             path=Path(td)/'palette.json'
             points=[(20+i*20,50+(i//10)*20) for i in range(20)]
             colors=[(i*10%256,i*20%256,i*30%256) for i in range(20)]
-            save_calibration(points,colors,path,profile_key='microsoft-paint',state='verified',verification={'confidence':.90})
-            tools={'version':3,'tools':{'Pencil':[10,10],'Fill':[20,20]},'anchor':{'client_rect':[0,0,1200,800]}}
-            detected={'canvas_box':(102,102,898,598),'palette_count':20,'confidence':.90}
+            anchor={'version':1,'client_rect':[0,0,1200,800]}
+            save_calibration(points,colors,path,profile_key='microsoft-paint',state='verified',verification={'confidence':.90},anchor=anchor)
+            tools={'version':3,'tools':{'Pencil':[10,10],'Fill':[20,20]},'anchor':anchor}
+            detected={'canvas_box':(102,102,898,598),'palette_count':20,'confidence':.90,'positions':points,'rgbs':colors,'tools':tools['tools']}
             with patch('PaintTools.load_tool_calibration',return_value=tools), patch('PaintFullCalibration.detect_setup',return_value=detected):
                 result=verify_paint_live({'client_rect':(0,0,1200,800)},(100,100,900,600),path,screenshot=FakeImage((1200,800)))
             self.assertTrue(result.passed)
@@ -92,9 +93,10 @@ class OneClickSetupVerificationTests(unittest.TestCase):
             path=Path(td)/'palette.json'
             points=[(20+i*20,50+(i//10)*20) for i in range(20)]
             colors=[(i*10%256,i*20%256,i*30%256) for i in range(20)]
-            save_calibration(points,colors,path,profile_key='microsoft-paint',state='verified',verification={'confidence':.90})
-            tools={'version':3,'tools':{'Pencil':[10,10],'Fill':[20,20]},'anchor':{'client_rect':[0,0,1200,800]}}
-            detected={'canvas_box':(130,100,930,600),'palette_count':20,'confidence':.90}
+            anchor={'version':1,'client_rect':[0,0,1200,800]}
+            save_calibration(points,colors,path,profile_key='microsoft-paint',state='verified',verification={'confidence':.90},anchor=anchor)
+            tools={'version':3,'tools':{'Pencil':[10,10],'Fill':[20,20]},'anchor':anchor}
+            detected={'canvas_box':(130,100,930,600),'palette_count':20,'confidence':.90,'positions':points,'rgbs':colors,'tools':tools['tools']}
             with patch('PaintTools.load_tool_calibration',return_value=tools), patch('PaintFullCalibration.detect_setup',return_value=detected):
                 result=verify_paint_live({'client_rect':(0,0,1200,800)},(100,100,900,600),path,screenshot=FakeImage((1200,800)))
             self.assertFalse(result.passed)

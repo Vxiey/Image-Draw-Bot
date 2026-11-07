@@ -1,0 +1,220 @@
+{
+  "baseline_commit": "47777158e5b1daf759993190e638fe507e7691da",
+  "implemented": 821,
+  "target": 1000,
+  "remaining": 179,
+  "added_behavior_groups": [
+    "C2001",
+    "P2001",
+    "U2001"
+  ],
+  "release_published": false,
+  "uncounted_completions": [
+    "BA01: accepted file imports/background changes/upscales hand automatic previews to idle poll; Manual, explicit drawing continuations and Esc retain ownership and authorization",
+    "Private preview/Picture/Dynamic Pillow owners and shared source-array aliases release on completion, Stop, failed startup and retained exceptions; no new IDs for existing ownership contracts",
+    "RT53/CanvasGuard: bind an explicit browser drawing region separately from freshly verified full-canvas geometry across setup, cache, target refresh, independent preflight and toolbar detection; keep final planning/execution constrained to the selected region",
+    "SR08/AX05/SS04: reset selected shared Real-Speed history alongside existing profile/timing reset with writer serialization and staged rollback; no crash-atomic multi-file guarantee",
+    "Regression tests, historical comparison tooling, documentation and preceding exact-commit CI evidence are not additional behavior IDs"
+  ],
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 4162,
+    "runner_seconds": 200.541,
+    "wall_seconds": 201.539,
+    "status": "OK (skipped=58)",
+    "skipped": 58,
+    "source_files": 869,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "d1b653faf0929b07759357f7edc83419ccaf6a76b0e67ce107a5d7eaf082f517"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1199,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch20-engine-benchmarks.json",
+    "fixtures": 8,
+    "mismatched_plan_pixels": {
+      "icon": 0,
+      "line-art": 0,
+      "text-small-detail": 0,
+      "cartoon-large-colour": 0,
+      "photo-gradient": 0,
+      "fill-risk": 0,
+      "thin-diagonals": 0,
+      "many-islands": 0
+    },
+    "all_exact_palette_geometry": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "comparisons": {
+    "colour": {
+      "artifact": "v148-batch20-colour-benchmarks.json",
+      "sha256": "fd99453a0e329b206f98c21db9fed35c0a308b9ed3c7dc3ac4e0655ef6caa028",
+      "workloads": 8,
+      "balanced_pairs_per_workload": 6,
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 819,
+      "source_hash_manifest_sha256": "32d88cc73bf427735e361550fcaaa2942063a62de5ae8fefee3baf79dfb122f5",
+      "historical_parity": {
+        "complete_dynamic_pairs": 108,
+        "independent_drawable_rasters": 12,
+        "complete_palette_pairs": 9,
+        "complete_measurement_pairs": 9,
+        "complete_region_pairs": 9,
+        "complete_output_sha256": "66c8f979ec6955391fc78046acb082c9371aef4ee7a8ecc93ee6d65c64ab933b"
+      },
+      "allocation_fixture_note": null,
+      "scope": "CPU source/color planning, complete result fingerprinting and plan cleanup. No physical drawing, native GPU, GUI, network or application-throughput timing.",
+      "memory_scope": "Python/NumPy traced peaks, excluding process RSS and most native Pillow cores. created_logical_pixel_bytes is the cumulative pixel payload of unique observed image results, not a native allocation or peak estimate. Work observers deliberately retain wrappers and never run during timing/tracing."
+    },
+    "ui_estimate": {
+      "artifact": "v148-batch20-ui-estimate-benchmarks.json",
+      "sha256": "610b6bdd9c96752dd2da59790d0b8da2ed2b843a1348536a48130185fc38dbe5",
+      "workloads": 6,
+      "balanced_pairs_per_workload": 6,
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 819,
+      "source_hash_manifest_sha256": "32d88cc73bf427735e361550fcaaa2942063a62de5ae8fefee3baf79dfb122f5",
+      "historical_parity": null,
+      "allocation_fixture_note": "Earlier 320x240 and 192x144 complete-pipeline tracing preflights activated the unchanged 14-second product preview watchdog and produced different fallback plans. Those rejected preflights are not timing/allocation samples. The complete dense pipeline uses its source size, 96x72, for both timing and allocation parity; the separate adoption workload still uses 320x240.",
+      "scope": "Historical complete DrawBot controller versus current controller, sharing current dependencies. Adoption measures real queued planned/done consumption and real Tcl-bound labels. Pipeline also measures real preview worker/public make_plan. Native GUI painting, actual mouse drawing, Windows/CUDA timing and native Pillow allocations are not measured. The available-RAM OS probe is fixed at 8,192 MB; all scheduling decisions remain real. The benchmark worker has a 60-second wait bound for dense allocation tracing; ordinary preview regressions retain their 10-second bound. The pipeline includes the accompanying zero-count preview-snapshot cleanup.",
+      "memory_scope": "Separate Python/NumPy tracemalloc; excludes most native Pillow memory."
+    }
+  },
+  "independent_source_reviews": "Color source ownership, GPU maintenance, estimator handoff and existing UI/reset contracts were reviewed against actual callers and independently exercised; final whole-suite results remain separate from focused runs.",
+  "superseded_integration_attempts": [
+    {
+      "local_regressions": {
+        "command": ".venv/bin/python -m unittest discover -v",
+        "exit_code": -4,
+        "tests": null,
+        "runner_seconds": null,
+        "wall_seconds": 126.93,
+        "status": null,
+        "skipped": 0,
+        "source_files": 867,
+        "source_changed": [],
+        "source_hash_manifest_sha256": "e9096b814c4290f3badc465ba3ca6a3196470614f24451678b0c92557e96fb18"
+      },
+      "log": "v148-batch20-fullsuite-attempt1.log",
+      "cause": "The headless process aborted during the first browser drawing-region flow with Tcl_AsyncDelete and no preceding assertion error. A deterministic child subsequently reproduced wrong-thread destruction from a successful older readout fixture retaining four Tcl variables in a Mock call-history cycle.",
+      "evidence_log": "batch20-tcl-readouts-before.log",
+      "related_before_proofs": [
+        {
+          "fixture": "numeric entry",
+          "retained_tcl_owners": 1,
+          "retained_variables": 1,
+          "log": "batch20-tcl-numeric-before.log",
+          "exit_code": 132
+        },
+        {
+          "fixture": "keyboard switches",
+          "retained_tcl_owners": 1,
+          "retained_variables": 12,
+          "log": "batch20-tcl-switch-before.log",
+          "exit_code": 132
+        },
+        {
+          "fixture": "contrast slider",
+          "retained_tcl_owners": 1,
+          "retained_variables": 2,
+          "log": "batch20-tcl-contrast-before.log",
+          "exit_code": 132
+        },
+        {
+          "fixture": "HTML drop",
+          "retained_tcl_owners": 1,
+          "log": "batch20-html-tcl-before.log",
+          "exit_code": 132
+        },
+        {
+          "fixture": "Mobile dialog",
+          "retained_tcl_owners": 1,
+          "retained_variables": 9,
+          "log": "batch20-mobile-tcl-before.log",
+          "exit_code": 132
+        },
+        {
+          "fixture": "Getting Started guide",
+          "retained_tcl_owners": 1,
+          "retained_variables": 1,
+          "log": "batch20-guide-tcl-before.log",
+          "exit_code": 132
+        }
+      ],
+      "correction_scope": "Only the demonstrated older test-fixture ownership graphs are repaired. Actual native variables, controller/factory calls and behavior assertions remain; product garbage collection and input behavior are unchanged. Related fixture proofs and the final independent review are recorded in v148-batch20-ui-workflow.md.",
+      "completed_suite_result": false
+    }
+  ],
+  "native_fixture_recheck": {
+    "platform": "Linux/Xorg",
+    "tk": "9.0.4",
+    "windowing_system": "x11",
+    "cases": 4,
+    "passed": 4,
+    "source_skips_unchanged": true,
+    "log": "batch20-native-factory-xorg-final.log",
+    "scope": "Actual existing numeric entry, keyboard switch, contrast and switch-pointer method bodies in separate native processes; not a Windows result."
+  },
+  "superseded_focused_attempt": {
+    "completed": false,
+    "exit_code": 132,
+    "log": "batch20-browser-region-independent.log",
+    "cause": "The Canvas Drop fixture restored sys.modules while the real loader imported ImageImport, and a retained scheduler graph kept an extra raw Tcl interpreter owner beyond creator-thread teardown.",
+    "correction": "Use the installed DnD wrapper behind the native overlay stub; detach the borrowed root.tk in creator-thread finally. Product code and original route assertions are unchanged.",
+    "independent_recheck": {
+      "flow_tests": 15,
+      "flow_runner_seconds": 61.891,
+      "flow_log": "batch20-browser-region-independent-final.log",
+      "lifetime_tests": 1,
+      "lifetime_runner_seconds": 2.978,
+      "lifetime_log": "batch20-browser-region-ownership-independent.log"
+    },
+    "fixture_lifetime_scope": "The child retains successful callbacks and a real exception traceback, observes actual Tcl Variable destruction only on the creator thread, then completes worker-thread cyclic collection. Delayed collection is diagnostic-only."
+  },
+  "prior_checkpoint_validation": {
+    "commit": "47777158e5b1daf759993190e638fe507e7691da",
+    "all_seven_checks_passed": true,
+    "windows_tests": 4083,
+    "windows_runner_seconds": 232.429,
+    "windows_skipped": 3,
+    "native_root_dialog_cases_passed": 4,
+    "creator_thread_tcl_regression_passed": true,
+    "windows_selftest_passed": true,
+    "bundle_validation_passed": true,
+    "packaged_gui_and_native_drop_passed": true,
+    "run_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42389040724",
+    "windows_job_id": 128452533278
+  },
+  "remote_validation": "The preceding 4777715 checkpoint is green. New exact published-commit Windows/Linux, dependency and CodeQL checks remain separate and are recorded in PR46.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46"
+}

@@ -13,7 +13,7 @@ from typing import Sequence
 from ContinuousPaths import build_execution_paths
 from GarticEngineV2 import stroke_graph_order
 from ColorFidelity import palette_match_cost, color_metrics, validate_color_fidelity
-from AdaptivePaletteFidelity import select_adaptive_palette
+from AdaptivePaletteFidelity import select_adaptive_palette, _map_indices, palette_quality_metrics
 
 Segment = tuple[int, int, int, int]
 Path = tuple[tuple[int, int], ...]
@@ -36,7 +36,7 @@ def _is_white(rgb) -> bool:
 
 
 def _coalesce_rows(strokes: Sequence[Segment], *, gap_join: int = 1,
-                   min_run: int = 2, keep_short: bool = False) -> list[Segment]:
+                   min_run: int = 2, keep_short: bool = False, return_coverage=False):
     rows: dict[int, list[tuple[int, int]]] = defaultdict(list)
     passthrough: list[Segment] = []
     for stroke in strokes:
@@ -49,27 +49,33 @@ def _coalesce_rows(strokes: Sequence[Segment], *, gap_join: int = 1,
         rows[y1].append((x1, x2))
 
     out: list[Segment] = []
+    retained_pixels = 0
     for y in sorted(rows):
         runs = sorted(rows[y])
         if not runs:
             continue
         sx, ex = runs[0]
+        source_pixels = ex - sx + 1
         for nx1, nx2 in runs[1:]:
             if nx1 <= ex + max(0, int(gap_join)) + 1:
+                source_pixels += max(0, nx2 - max(ex, nx1 - 1))
                 ex = max(ex, nx2)
             else:
                 if keep_short or ex - sx + 1 >= max(1, int(min_run)):
                     out.append((sx, y, ex, y))
+                    retained_pixels += source_pixels
                 sx, ex = nx1, nx2
+                source_pixels = ex - sx + 1
         if keep_short or ex - sx + 1 >= max(1, int(min_run)):
             out.append((sx, y, ex, y))
+            retained_pixels += source_pixels
     out.extend(passthrough)
-    return out
+    return (out, retained_pixels) if return_coverage else out
 
 
 def _vertical_runs_from_rows(strokes: Sequence[Segment], *, gap_join: int = 0,
                              min_run: int = 2, keep_short: bool = False,
-                             pixel_limit: int = 250_000) -> list[Segment] | None:
+                             pixel_limit: int = 250_000, return_coverage=False):
     """Build vertical runs from horizontal raster coverage.
 
     Returns ``None`` when the source would require expanding an unexpectedly
@@ -88,28 +94,34 @@ def _vertical_runs_from_rows(strokes: Sequence[Segment], *, gap_join: int = 0,
             x1, x2 = x2, x1
         pixels += x2 - x1 + 1
         if pixels > max(1, int(pixel_limit)):
-            return None
+            return (None, 0) if return_coverage else None
         for x in range(x1, x2 + 1):
             columns[x].append(y1)
 
     out: list[Segment] = []
+    retained_pixels = 0
     join = max(0, int(gap_join))
     for x in sorted(columns):
         ys = sorted(set(columns[x]))
         if not ys:
             continue
         sy = ey = ys[0]
+        source_pixels = 1
         for y in ys[1:]:
             if y <= ey + join + 1:
                 ey = y
+                source_pixels += 1
             else:
                 if keep_short or ey - sy + 1 >= max(1, int(min_run)):
                     out.append((x, sy, x, ey))
+                    retained_pixels += source_pixels
                 sy = ey = y
+                source_pixels = 1
         if keep_short or ey - sy + 1 >= max(1, int(min_run)):
             out.append((x, sy, x, ey))
+            retained_pixels += source_pixels
     out.extend(passthrough)
-    return out
+    return (out, retained_pixels) if return_coverage else out
 
 
 def _orientation_cost(strokes: Sequence[Segment]) -> tuple[int, int]:
@@ -124,12 +136,12 @@ def optimize_gartic_phone_groups(groups: Sequence[Sequence[Segment]],
                                  vertical_pixel_limit: int = 250_000,
                                  color_fidelity: str = "Balanced"
                                  ) -> tuple[list[list[Segment]], dict]:
-    """Reduce colour switches and choose the cheapest raster orientation.
+    """Reduce colour switches and retain coverage when choosing an orientation.
 
     Rare colours are remapped to the nearest retained calibrated swatch.  The
     darkest structural colour is always retained.  Each retained colour then
-    chooses horizontal or vertical runs based primarily on how many separate
-    mouse-down/up strokes would be required.
+    chooses the orientation retaining the most original pixels, then the one
+    requiring fewer mouse-down/up strokes and less pen distance.
     """
     validate_color_fidelity(color_fidelity)
     work = [list(map(tuple, group)) for group in groups]
@@ -138,8 +150,10 @@ def optimize_gartic_phone_groups(groups: Sequence[Sequence[Segment]],
         palette.extend([(0, 0, 0)] * (len(work) - len(palette)))
 
     weights = [sum(_run_weight(s) for s in group) for group in work]
-    active = [i for i, w in enumerate(weights)
-              if w and i < len(palette) and not _is_white(palette[i])]
+    # The caller has already applied skip_white. Any supplied white geometry
+    # is deliberate ink (including repairs over a coloured background).
+    active = [i for i, w in enumerate(weights) if w and i < len(palette)]
+    white = [i for i in active if _is_white(palette[i])]
     before_colors = len(active)
     before_runs = sum(len(g) for g in work)
     if not active:
@@ -157,28 +171,33 @@ def optimize_gartic_phone_groups(groups: Sequence[Sequence[Segment]],
     max_colors = max(2, int(max_colors))
     darkest = min(active, key=lambda i: (color_metrics(tuple(palette[i]))[0], -weights[i], i))
     brightest = max(active, key=lambda i: (color_metrics(tuple(palette[i]))[0], weights[i], -i))
+    white_anchor = max(white, key=lambda i: (color_metrics(tuple(palette[i]))[0], weights[i], -i)) if white else None
 
     # v1.0.123 anti-posterization: select the useful subset by tone/hue/spatial
-    # coverage and visual gain per colour switch. White is excluded from the
-    # drawable candidate set exactly as before.
+    # coverage and visual gain per colour switch, retaining requested white
+    # alongside the structural dark anchor within the same colour ceiling.
     selector_groups=[list(g) if i in active else [] for i,g in enumerate(work)]
     keep, mapping, palette_quality = select_adaptive_palette(
         selector_groups, palette, max_colors, fidelity=color_fidelity)
     if not keep:
         keep=[darkest]
-        mapping={i:darkest for i in active}
         palette_quality={}
-    else:
-        # The fast game path may reduce many colours, but the darkest structural
-        # swatch is a non-negotiable anchor for silhouettes/text.  Step 4/5
-        # adaptive selection can legitimately choose higher-gain hue anchors; keep
-        # this legacy invariant here so old Gartic/Skribbl structure tests and
-        # user expectations remain stable.
-        keep=list(dict.fromkeys([int(darkest), *[int(k) for k in keep if int(k) != int(darkest)]]))
-        while len(keep) > max_colors:
-            keep.pop()
-        mapping=dict(mapping)
-        mapping[int(darkest)] = int(darkest)
+    anchors = [darkest] + ([white_anchor] if white_anchor is not None else [])
+    keep = list(dict.fromkeys([*anchors, *map(int, keep)]))[:max_colors]
+    # Rebuild after inserting anchors. White variants may reduce only to a
+    # retained white swatch, never disappear or become dark paint.
+    mapping, errors = _map_indices([i for i in active if i not in white], keep,
+                                   palette, weights, color_fidelity)
+    if white:
+        white_mapping, white_errors = _map_indices(white, [i for i in keep if i in white],
+                                                  palette, weights, color_fidelity)
+        mapping.update(white_mapping)
+        errors.extend(white_errors)
+    palette_quality = {**palette_quality, **palette_quality_metrics(
+        active, keep, palette, weights, mapping, errors,
+        fidelity=color_fidelity, max_colors=max_colors)}
+    palette_quality['region_detail_anchors_kept'] = tuple(
+        i for i in palette_quality.get('region_detail_anchor_indexes', ()) if i in keep)
     mapped: list[list[Segment]] = [[] for _ in work]
     remapped = 0
     for index in active:
@@ -191,15 +210,23 @@ def optimize_gartic_phone_groups(groups: Sequence[Sequence[Segment]],
     orientations: dict[str, str] = {}
     horizontal_counts: dict[str, int] = {}
     vertical_counts: dict[str, int] = {}
+    horizontal_coverage: dict[str, int] = {}
+    vertical_coverage: dict[str, int] = {}
     vertical_wins = 0
     for index in keep:
-        keep_short = index == darkest
-        horizontal = _coalesce_rows(mapped[index], gap_join=gap_join,
-                                    min_run=min_run, keep_short=keep_short)
-        vertical = _vertical_runs_from_rows(mapped[index], gap_join=gap_join,
+        keep_short = index == darkest or index in white
+        join = 0 if index in white else gap_join
+        horizontal, h_pixels = _coalesce_rows(mapped[index], gap_join=join,
+                                    min_run=min_run, keep_short=keep_short, return_coverage=True)
+        vertical, v_pixels = _vertical_runs_from_rows(mapped[index], gap_join=join,
                                             min_run=min_run, keep_short=keep_short,
-                                            pixel_limit=vertical_pixel_limit)
-        if vertical is not None and _orientation_cost(vertical) < _orientation_cost(horizontal):
+                                            pixel_limit=vertical_pixel_limit, return_coverage=True)
+        # Min-run pruning differs by orientation. Dropping the long coloured
+        # line into many rejected dots must not make an empty candidate win on
+        # cost. Count retained source pixels (not newly bridged gap pixels),
+        # then choose the cheaper equally complete orientation. Passthrough
+        # geometry is identical in both candidates and needs no extra scan.
+        if vertical is not None and (-v_pixels, _orientation_cost(vertical)) < (-h_pixels, _orientation_cost(horizontal)):
             chosen = vertical
             orientation = 'vertical'
             vertical_wins += 1
@@ -210,6 +237,8 @@ def optimize_gartic_phone_groups(groups: Sequence[Sequence[Segment]],
         orientations[str(index)] = orientation
         horizontal_counts[str(index)] = len(horizontal)
         vertical_counts[str(index)] = -1 if vertical is None else len(vertical)
+        horizontal_coverage[str(index)] = h_pixels
+        vertical_coverage[str(index)] = -1 if vertical is None else v_pixels
 
     after_runs = sum(len(g) for g in result)
     after_colors = sum(bool(g) for g in result)
@@ -227,6 +256,7 @@ def optimize_gartic_phone_groups(groups: Sequence[Sequence[Segment]],
         'min_run': int(min_run),
         'darkest_color_index': int(darkest),
         'brightest_color_index': int(brightest),
+        'white_color_index': white_anchor,
         'color_fidelity': color_fidelity,
         'kept_color_indexes': tuple(map(int, keep)),
         'color_mapping': {str(k): int(v) for k, v in mapping.items()},
@@ -244,6 +274,8 @@ def optimize_gartic_phone_groups(groups: Sequence[Sequence[Segment]],
         'orientations': orientations,
         'horizontal_run_counts': horizontal_counts,
         'vertical_run_counts': vertical_counts,
+        'horizontal_retained_pixels': horizontal_coverage,
+        'vertical_retained_pixels': vertical_coverage,
         'vertical_wins': vertical_wins,
     }
 

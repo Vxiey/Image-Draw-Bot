@@ -7,6 +7,7 @@ returns a low-confidence result instead of guessing clickable coordinates.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import closing
 import math
 from typing import Iterable, Sequence
 
@@ -115,7 +116,9 @@ def _flood_largest_white(mask: list[bytearray], *, min_area: int) -> tuple[Box |
 
 
 def _frame_score(image, box: Box, pad: int = 7) -> float:
-    image = image.convert('RGB')
+    if image.mode != 'RGB':
+        with closing(image.convert('RGB')) as rgb:
+            return _frame_score(rgb,box,pad)
     w, h = image.size
     left, top, right, bottom = box
     samples = []
@@ -131,12 +134,13 @@ def _frame_score(image, box: Box, pad: int = 7) -> float:
 
 
 
-def _flood_components(mask: list[bytearray], *, min_area: int, limit: int = 48) -> list[tuple[Box, int]]:
+def _flood_components(mask: list[bytearray], *, min_area: int, limit: int = 48, cancelled=lambda: False) -> list[tuple[Box, int]]:
     """Return the largest connected mask components without assuming the largest is canvas."""
     h=len(mask);w=len(mask[0]) if h else 0
     visited=[bytearray(w) for _ in range(h)]
     out=[]
     for sy in range(h):
+        if cancelled():raise InterruptedError()
         for sx in range(w):
             if not mask[sy][sx] or visited[sy][sx]:
                 continue
@@ -144,6 +148,7 @@ def _flood_components(mask: list[bytearray], *, min_area: int, limit: int = 48) 
             left=right=sx;top=bottom=sy;area=0
             while stack:
                 x,y=stack.pop();area+=1
+                if area%1024==0 and cancelled():raise InterruptedError()
                 left=min(left,x);right=max(right,x);top=min(top,y);bottom=max(bottom,y)
                 for nx,ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
                     if 0<=nx<w and 0<=ny<h and mask[ny][nx] and not visited[ny][nx]:
@@ -155,7 +160,10 @@ def _flood_components(mask: list[bytearray], *, min_area: int, limit: int = 48) 
 
 
 def _sample_white_fraction(image, box: Box, *, step: int = 6) -> float:
-    image=image.convert('RGB');l,t,r,b=box
+    if image.mode != 'RGB':
+        with closing(image.convert('RGB')) as rgb:
+            return _sample_white_fraction(rgb,box,step=step)
+    l,t,r,b=box
     hit=total=0
     stride=max(2,int(step))
     for y in range(max(0,t),min(image.height,b),stride):
@@ -163,7 +171,8 @@ def _sample_white_fraction(image, box: Box, *, step: int = 6) -> float:
             total+=1;hit+=1 if _near_white(image.getpixel((x,y))) else 0
     return hit/max(1,total)
 
-def detect_gartic_canvas(image, *, downsample: int = 2, min_canvas_area_ratio: float = 0.08) -> CanvasDetection:
+def detect_gartic_canvas(image, *, downsample: int = 2, min_canvas_area_ratio: float = 0.08,
+                         cancelled=lambda: False) -> CanvasDetection:
     """Detect Gartic's drawable canvas without assuming the largest white area wins.
 
     Blank canvases are ranked from all sizeable near-white components. If the
@@ -171,7 +180,19 @@ def detect_gartic_canvas(image, *, downsample: int = 2, min_canvas_area_ratio: f
     non-frame component bounded by Gartic's violet frame. Aspect, frame evidence
     and area must agree before coordinates are returned.
     """
-    image=image.convert('RGB');w,h=image.size
+    if cancelled():raise InterruptedError()
+    try:minimum=float(min_canvas_area_ratio)
+    except (TypeError,ValueError,OverflowError) as error:raise ValueError('Canvas area ratio must be finite and between zero and one.') from error
+    if not math.isfinite(minimum) or not 0<=minimum<=1:
+        raise ValueError('Canvas area ratio must be finite and between zero and one.')
+    if image.mode != 'RGB':
+        with closing(image.convert('RGB')) as rgb:
+            return _detect_gartic_canvas_rgb(rgb,downsample=downsample,min_canvas_area_ratio=minimum,cancelled=cancelled)
+    return _detect_gartic_canvas_rgb(image,downsample=downsample,min_canvas_area_ratio=minimum,cancelled=cancelled)
+
+
+def _detect_gartic_canvas_rgb(image, *, downsample, min_canvas_area_ratio, cancelled):
+    w,h=image.size
     if w<200 or h<120:
         return CanvasDetection(False,None,0.0,0.0,0.0,0.0,'image too small')
     step=max(1,int(downsample));sw,sh=(w+step-1)//step,(h+step-1)//step
@@ -179,6 +200,7 @@ def detect_gartic_canvas(image, *, downsample: int = 2, min_canvas_area_ratio: f
     def make_mask(predicate):
         mask=[bytearray(sw) for _ in range(sh)]
         for yy in range(sh):
+            if yy%8==0 and cancelled():raise InterruptedError()
             y=min(h-1,yy*step)
             for xx in range(sw):
                 x=min(w-1,xx*step)
@@ -193,18 +215,19 @@ def detect_gartic_canvas(image, *, downsample: int = 2, min_canvas_area_ratio: f
     # Do not let a larger white page/panel hide a correctly-shaped canvas.
     white_mask=make_mask(_near_white)
     white_min=max(24,int(sw*sh*min(.035,max(.012,float(min_canvas_area_ratio)*.45))))
-    for small,area in _flood_components(white_mask,min_area=white_min):
+    for small,area in _flood_components(white_mask,min_area=white_min,cancelled=cancelled):
         candidates.append(('white',full_box(small),area))
 
     # A drawing can fragment the white background. Gartic's violet frame usually
     # still isolates the entire drawable surface, so rank non-frame components too.
     structural_mask=make_mask(lambda rgb:not _purple_frame(rgb))
     structural_min=max(36,int(sw*sh*.035))
-    for small,area in _flood_components(structural_mask,min_area=structural_min):
+    for small,area in _flood_components(structural_mask,min_area=structural_min,cancelled=cancelled):
         candidates.append(('frame',full_box(small),area))
 
-    best=None
+    best=None;best_eligible=None
     for source,box,component_area in candidates:
+        if cancelled():raise InterruptedError()
         l,t,r,b=box;bw,bh=r-l,b-t
         if bw<max(180,int(w*.22)) or bh<max(105,int(h*.16)):
             continue
@@ -227,13 +250,18 @@ def detect_gartic_canvas(image, *, downsample: int = 2, min_canvas_area_ratio: f
             evidence_ok=frame>=.018
         confidence=max(0.0,min(1.0,confidence))
         rank=confidence + min(.025,frame*.08)
+        candidate=(rank,source,box,confidence,aspect,white,frame,aspect_score,area_ratio,evidence_ok)
         if best is None or rank>best[0]:
-            best=(rank,source,box,confidence,aspect,white,frame,aspect_score,area_ratio,evidence_ok)
+            best=candidate
+        if (confidence>=.68 and aspect_score>=.58 and area_ratio>=max(.055,min_canvas_area_ratio) and evidence_ok
+                and (best_eligible is None or rank>best_eligible[0])):
+            best_eligible=candidate
 
+    if cancelled():raise InterruptedError()
     if best is None:
         return CanvasDetection(False,None,0.0,0.0,0.0,0.0,'no plausible Gartic canvas region')
-    _,source,box,confidence,aspect,white,frame,aspect_score,area_ratio,evidence_ok=best
-    found=(confidence>=.68 and aspect_score>=.58 and area_ratio>=.055 and evidence_ok)
+    _,source,box,confidence,aspect,white,frame,aspect_score,area_ratio,evidence_ok=best_eligible or best
+    found=best_eligible is not None
     if found:
         reason='gartic canvas matched' if source=='white' else 'gartic canvas matched by structural frame fallback'
         return CanvasDetection(True,box,confidence,aspect,white,frame,reason)

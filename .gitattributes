@@ -1,0 +1,2 @@
+# This archived fixture has an exact-byte regression contract on every platform.
+tests/fixtures/verified-color-cache-v2.json -text

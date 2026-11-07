@@ -56,10 +56,11 @@ class Step24AdaptiveDetailZoomTests(unittest.TestCase):
         self.assertGreater(meta['detail_paths_added'], 0)
         self.assertGreater(len(ne[1]), 0)
         self.assertGreater(len(ng[1]), 0)
-        # Important safety property: an otherwise colour-batched plan with no
-        # progressive sequence must stay sequence-less, or execution would draw
-        # only the newly appended details and skip the base plan.
-        self.assertEqual(ns, [])
+        # The late pass now materializes the entire base before the new detail.
+        # This fixture has an empty base, so all sequence rows are detail rows.
+        self.assertTrue(meta['sequence_created_for_detail_pass'])
+        self.assertEqual(len(ns), sum(len(g) for g in ne))
+        self.assertTrue(all(row.get('detail_zoom') for row in ns))
 
     def test_progressive_sequence_gets_optional_detail_entries(self):
         src = self.micro_source()

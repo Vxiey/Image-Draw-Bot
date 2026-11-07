@@ -68,7 +68,7 @@ def _bounded_sample(image: Image.Image, max_side: int = 176) -> Image.Image:
     src = visible_rgb_image(image)
     w, h = src.size
     if max(w, h) <= max_side:
-        return src.copy()
+        return src
     scale = float(max_side) / float(max(w, h))
     size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
     # BOX is deterministic and preserves coverage better than a sharpening
@@ -131,7 +131,9 @@ def _quality_bounds(ceiling: int, fidelity: str) -> tuple[int, int]:
     return max(2, floor), cap
 
 
-def _distance_matrix(colors: Sequence[RGB]) -> np.ndarray:
+def _distance_matrix(colors: Sequence[RGB], *, cancelled=lambda: False) -> np.ndarray:
+    if cancelled():
+        raise InterruptedError('Adaptive color count cancelled.')
     if not colors:
         return np.zeros((0,0),dtype=np.float32)
     # Step 23 routes quantization-distance work through the Step 22 palette
@@ -139,22 +141,33 @@ def _distance_matrix(colors: Sequence[RGB]) -> np.ndarray:
     # overhead is larger; unusually large reducers can use the measured GPU.
     try:
         from UniversalGpuAcceleration import pairwise_oklab_distance
-        matrix, _route = pairwise_oklab_distance(colors, gpu_mode='Auto')
+        matrix, _route = pairwise_oklab_distance(colors, gpu_mode='Auto', cancelled=cancelled)
+        if cancelled():
+            raise InterruptedError('Adaptive color count cancelled.')
         return np.asarray(matrix,dtype=np.float32)
+    except InterruptedError:
+        raise
     except Exception:
+        if cancelled():
+            raise InterruptedError('Adaptive color count cancelled.')
         labs=np.asarray([rgb_to_oklab(tuple(map(int,c[:3]))) for c in colors],dtype=np.float32)
         diff=labs[:,None,:]-labs[None,:,:]
-        return (np.sqrt(np.sum(diff*diff,axis=2,dtype=np.float32))*100.0).astype(np.float32,copy=False)
+        result=(np.sqrt(np.sum(diff*diff,axis=2,dtype=np.float32))*100.0).astype(np.float32,copy=False)
+        if cancelled():
+            raise InterruptedError('Adaptive color count cancelled.')
+        return result
 
 
 def _greedy_error_curve(colors: Sequence[RGB], weights: Sequence[float], ceiling: int,
-                        fidelity: str) -> tuple[list[tuple[int, float, float]], list[int]]:
+                        fidelity: str, *, cancelled=lambda: False) -> tuple[list[tuple[int, float, float]], list[int]]:
     """Return (count,error,marginal_gain) rows and deterministic retained indexes.
 
     Pairwise OKLab distances are computed once into a tiny <=64x64 float matrix.
     Adding a colour then becomes a vectorized minimum update instead of repeatedly
     converting the same RGB values inside nested Python loops.
     """
+    if cancelled():
+        raise InterruptedError('Adaptive color count cancelled.')
     if not colors:
         return [(1, 0.0, 0.0)], [0]
     cap = max(1, min(int(ceiling), len(colors)))
@@ -162,7 +175,7 @@ def _greedy_error_curve(colors: Sequence[RGB], weights: Sequence[float], ceiling
     if float(w.sum())<=0.0:
         w[:]=1.0
     w/=float(w.sum())
-    dist=_distance_matrix(colors)
+    dist=_distance_matrix(colors, cancelled=cancelled)
     ranked = sorted(range(len(colors)), key=lambda i: (-float(weights[i]), i))
     hue_summaries = summarize_hue_families(colors, weights, fidelity=fidelity, max_families=cap)
     keep: list[int] = []
@@ -183,6 +196,8 @@ def _greedy_error_curve(colors: Sequence[RGB], weights: Sequence[float], ceiling
     curve: list[tuple[int, float, float]] = []
     previous = None
     while len(keep) <= cap:
+        if cancelled():
+            raise InterruptedError('Adaptive color count cancelled.')
         error=float(np.dot(current.astype(np.float64,copy=False),w))
         gain = 0.0 if previous is None else max(0.0, previous - error)
         curve.append((len(keep), error, gain))
@@ -191,6 +206,8 @@ def _greedy_error_curve(colors: Sequence[RGB], weights: Sequence[float], ceiling
             break
         best=None
         for candidate in ranked:
+            if cancelled():
+                raise InterruptedError('Adaptive color count cancelled.')
             if candidate in keep:
                 continue
             trial=np.minimum(current,dist[:,candidate])
@@ -202,6 +219,8 @@ def _greedy_error_curve(colors: Sequence[RGB], weights: Sequence[float], ceiling
         if best is None:
             break
         add(best[1]); current=best[2]
+    if cancelled():
+        raise InterruptedError('Adaptive color count cancelled.')
     return curve, keep
 
 def _family(rgb: RGB) -> str | None:
@@ -230,6 +249,8 @@ def recommend_adaptive_color_count(image: Image.Image, *, ceiling: int,
 
     candidate_cap = min(64, max(cap * 2, 16))
     colors, weights = _quantized_candidates(sample, candidate_cap)
+    if cancelled():
+        raise InterruptedError('Adaptive color count cancelled.')
     if not colors:
         result = AdaptiveColorCountResult(
             recommended=floor, minimum=floor, ceiling=cap, complexity_score=0.0,
@@ -252,6 +273,8 @@ def recommend_adaptive_color_count(image: Image.Image, *, ceiling: int,
 
     entropy = _entropy(sig_weights)
     edge = _edge_density(sample)
+    if cancelled():
+        raise InterruptedError('Adaptive color count cancelled.')
     tones = len({_tone_bin(rgb) for rgb in sig_colors})
     hue_summaries = summarize_hue_families(sig_colors, sig_weights, fidelity=fidelity, max_families=cap)
     hue_names = tuple(s.family for s in hue_summaries)
@@ -267,7 +290,7 @@ def recommend_adaptive_color_count(image: Image.Image, *, ceiling: int,
     complexity = max(0.0, min(1.0,
         .38 * entropy + .28 * diversity + .15 * tone_score + .11 * hue_score + .08 * edge))
 
-    curve, _keep = _greedy_error_curve(sig_colors, sig_weights, cap, fidelity)
+    curve, _keep = _greedy_error_curve(sig_colors, sig_weights, cap, fidelity, cancelled=cancelled)
     by_count = {count: (error, gain) for count, error, gain in curve}
     available_counts = sorted(by_count)
     max_available = max(available_counts) if available_counts else 1
@@ -318,4 +341,6 @@ def recommend_adaptive_color_count(image: Image.Image, *, ceiling: int,
         dominant_hue_families=hue_names, significant_color_buckets=len(sig_colors),
         candidate_color_buckets=len(colors), weighted_error=error, marginal_gain=gain,
         stop_reason=reason, sample_size=sample.size)
+    if cancelled():
+        raise InterruptedError('Adaptive color count cancelled.')
     return chosen, result.as_dict()

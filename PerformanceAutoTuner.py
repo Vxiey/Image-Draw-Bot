@@ -7,11 +7,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import inspect
+import math
 import time
 from pathlib import Path
 from typing import Any, Callable
 
-from RuntimePaths import data_dir
+from RuntimePaths import atomic_write_text, data_dir, is_finite_number, read_json, replace_text_files
 from ResourceAllocation import available_ram_mb, logical_cpu_count, resolve_allocation
 from ResourceScheduler import benchmark_scheduler
 from UniversalHardwareBenchmark import (run_universal_hardware_benchmark, load_hardware_profile,
@@ -19,6 +21,27 @@ from UniversalHardwareBenchmark import (run_universal_hardware_benchmark, load_h
 
 TUNER_VERSION = 1
 TUNER_FILE = data_dir() / "performance-auto-tuner-v1.json"
+
+
+def _benchmark_payload(value):
+    """Keep optional driver results JSON-safe before recommendation or storage."""
+    if not isinstance(value, dict):
+        raise ValueError('Benchmark result must be an object.')
+    try:
+        text = json.dumps(value, allow_nan=False)
+        if len(text) > 4 * 1024 * 1024:
+            raise ValueError('Benchmark result is too large.')
+        return json.loads(text)
+    except (TypeError, ValueError, OverflowError, RecursionError) as error:
+        raise ValueError('Benchmark result contains invalid metadata.') from error
+
+
+def _positive_integer(value):
+    return value if type(value) is int and 0 < value <= 1_000_000_000 else None
+
+
+def _nonnegative_number(value, default=0.0):
+    return float(value) if is_finite_number(value) and value >= 0 else default
 
 
 @dataclass(frozen=True)
@@ -60,8 +83,12 @@ def _ram_recommendation(available_mb: int | None) -> tuple[str, str, int]:
 
     Leave substantial memory for Windows, the target app and preview images.
     """
-    if not available_mb:
+    if available_mb is None:
         return "2 GB", "2048", 2048
+    if available_mb < 128:
+        raise ValueError('Less than 128 MB of RAM is available for planning.')
+    if available_mb < 512:
+        return 'Custom', str(int(available_mb)), int(available_mb)
     avail = max(512, int(available_mb))
     target = max(512, min(12288, int(avail * 0.35)))
     # Keep at least 2 GiB of currently available memory unreserved when possible.
@@ -78,7 +105,7 @@ def _ram_recommendation(available_mb: int | None) -> tuple[str, str, int]:
 
 
 def _vram_recommendation(total_mb: int | None, free_mb: int | None) -> str:
-    if not total_mb or not free_mb:
+    if not _positive_integer(total_mb) or not _positive_integer(free_mb) or free_mb > total_mb:
         return "Auto"
     total, free = int(total_mb), int(free_mb)
     # Use percentages so the setting remains sane after driver/desktop changes.
@@ -109,16 +136,21 @@ def _reason_text(*, workers: int, ram_mb: int, gpu_ok: bool, planning: str) -> s
 def build_recommendation(*, scheduler_result: dict[str, Any], available_mb: int | None,
                          gpu_result: dict[str, Any] | None = None,
                          hardware_result: dict[str, Any] | None = None) -> TuneRecommendation:
-    logical = max(1, int(scheduler_result.get("logical_cpus", logical_cpu_count()) or 1))
-    workers = max(1, min(logical, int(scheduler_result.get("recommended_workers", 1) or 1)))
+    scheduler_result = scheduler_result if isinstance(scheduler_result, dict) else {}
+    logical = _positive_integer(scheduler_result.get('logical_cpus')) or logical_cpu_count()
+    workers = min(logical, _positive_integer(scheduler_result.get('recommended_workers')) or 1)
     ram_setting, ram_custom, ram_mb = _ram_recommendation(available_mb)
-    gpu = gpu_result or {}
-    gpu_ok = bool(gpu.get("used_gpu") and gpu.get("accelerated", True))
-    gpu_detected = bool(gpu.get("hardware_detected") or gpu_ok)
-    gpu_mp_s = float(gpu.get("throughput_mp_s", 0.0) or 0.0)
-    hardware = hardware_result or {}
-    detected_adapters = [item for item in (hardware.get("detected_gpus") or []) if isinstance(item, dict)]
-    primary = dict(hardware.get("primary_backend") or {})
+    try: gpu = _benchmark_payload(gpu_result or {})
+    except ValueError: gpu = {}
+    gpu_mp_s = _nonnegative_number(gpu.get('throughput_mp_s'))
+    gpu_ok = gpu.get('used_gpu') is True and gpu.get('accelerated', True) is True and gpu_mp_s > 0
+    gpu_detected = gpu.get('hardware_detected') is True or gpu_ok
+    try: hardware = _benchmark_payload(hardware_result or {})
+    except ValueError: hardware = {}
+    adapters = hardware.get('detected_gpus')
+    detected_adapters = [item for item in adapters if isinstance(item, dict)] if isinstance(adapters, list) else []
+    primary = hardware.get('primary_backend')
+    primary = primary if isinstance(primary, dict) else {}
     universal_gpu_detected = bool(detected_adapters)
     primary_backend = str(primary.get("backend") or "CPU/NumPy")
     primary_vendor = str(primary.get("vendor") or "CPU")
@@ -145,7 +177,7 @@ def build_recommendation(*, scheduler_result: dict[str, Any], available_mb: int 
         gpu_device=str(gpu.get("hardware_device") or gpu.get("device") or ("CPU" if not gpu_detected else "NVIDIA GPU")),
         gpu_driver_version=str(gpu.get("driver_version") or ""),
         gpu_reason=str(gpu.get("reason") or ""),
-        cpu_score=float(scheduler_result.get("best_score", 0.0) or 0.0),
+        cpu_score=_nonnegative_number(scheduler_result.get('best_score')),
         gpu_throughput_mp_s=gpu_mp_s,
         logical_cpus=logical,
         available_ram_mb=available_mb,
@@ -156,45 +188,73 @@ def build_recommendation(*, scheduler_result: dict[str, Any], available_mb: int 
         primary_compute_backend=primary_backend,
         primary_compute_vendor=primary_vendor,
         primary_compute_device=primary_device,
-        safe_gpu_memory_mb=int(safe_gpu_memory) if isinstance(safe_gpu_memory, (int, float)) and safe_gpu_memory else None,
-        hardware_tile_size=int(hardware_tile) if isinstance(hardware_tile, (int, float)) and hardware_tile else None,
+        safe_gpu_memory_mb=_positive_integer(safe_gpu_memory),
+        hardware_tile_size=_positive_integer(hardware_tile),
     )
 
 
 def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
                   save: bool = True, path: Path | None = None,
-                  scheduler_loops: int = 56_000, gpu_size: int = 768) -> dict[str, Any]:
+                  scheduler_loops: int = 56_000, gpu_size: int = 768,
+                  cancelled=lambda: False) -> dict[str, Any]:
     """Benchmark the machine and return a safe planning recommendation.
 
     gpu_benchmark is injected by DrawBot to keep this module testable on systems
     without CUDA/CuPy.
     """
+    def check_cancelled():
+        if cancelled():raise InterruptedError()
+    def benchmark(function, *args, **kwargs):
+        check_cancelled()
+        # Preserve older injected benchmark callbacks while forwarding Stop to
+        # implementations that explicitly accept the new optional keyword.
+        try:
+            inspect.signature(function).bind(*args,**kwargs,cancelled=cancelled)
+        except (TypeError,ValueError):
+            value=function(*args,**kwargs)
+        else:
+            value=function(*args,**kwargs,cancelled=cancelled)
+        check_cancelled()
+        return value
+    check_cancelled()
     started = time.perf_counter()
     logical = logical_cpu_count()
     available = available_ram_mb()
     allocation = resolve_allocation("Auto", "Threads", "Auto", "4096")
-    scheduler = benchmark_scheduler(allocation, loops_per_worker=max(8_000, int(scheduler_loops)), save=True)
+    scheduler = benchmark(benchmark_scheduler,allocation,loops_per_worker=max(8_000,int(scheduler_loops)),save=False)
 
     gpu_result: dict[str, Any] = {}
     gpu_error = ""
     if gpu_benchmark is not None:
         try:
-            gpu_result = dict(gpu_benchmark("Auto", max(256, int(gpu_size)), "Auto", "High throughput") or {})
+            gpu_result = _benchmark_payload(benchmark(gpu_benchmark,"Auto",max(256,int(gpu_size)),"Auto","High throughput") or {})
+        except InterruptedError:
+            raise
         except Exception as exc:  # CUDA is optional; fail safely to CPU.
             gpu_error = f"{type(exc).__name__}: {exc}"
             gpu_result = {"used_gpu": False, "accelerated": False, "device": "CPU", "reason": gpu_error}
 
     hardware_result: dict[str, Any] = {}
     hardware_error = ""
+    hardware_completed = False
     try:
-        hardware_result = run_universal_hardware_benchmark(
-            save=save, small_size=128, large_size=max(256, min(768, int(gpu_size))), repeats=2, refresh_hardware=True)
+        hardware_result = _benchmark_payload(benchmark(run_universal_hardware_benchmark,
+            save=False,small_size=128,large_size=max(256,min(768,int(gpu_size))),repeats=2,refresh_hardware=True))
+        hardware_completed = True
+    except InterruptedError:
+        raise
     except Exception as exc:
         # The tuner must remain fully usable on CPU if an optional GPU runtime
         # or vendor driver misbehaves.
         hardware_error = f"{type(exc).__name__}: {exc}"
-        hardware_result = load_hardware_profile(validate_current=False) or {}
+        try:
+            hardware_result = _benchmark_payload(load_hardware_profile(validate_current=True) or {})
+        except InterruptedError:
+            raise
+        except Exception:
+            hardware_result = {}
 
+    check_cancelled()
     recommendation = build_recommendation(
         scheduler_result=scheduler,
         available_mb=available,
@@ -213,29 +273,57 @@ def run_auto_tune(*, gpu_benchmark: Callable[..., dict[str, Any]] | None = None,
         "hardware_error": hardware_error,
     }
     if save:
-        save_tune_result(result, path=path)
+        from ResourceScheduler import SCHEDULER_FILE, _valid_recommendation
+        from UniversalHardwareBenchmark import PROFILE_FILE, PROFILE_VERSION, _profile_structure_valid
+        target=Path(path or TUNER_FILE)
+        documents={target:result}
+        if _valid_recommendation(scheduler):
+            documents[Path(SCHEDULER_FILE)]=dict(scheduler,created_at=int(time.time()))
+        if hardware_completed and hardware_result.get("version")==PROFILE_VERSION and _profile_structure_valid(hardware_result):
+            documents[Path(PROFILE_FILE)]=hardware_result
+        if documents.get(target) is not result:
+            raise ValueError("The tuner output path conflicts with another performance profile")
+        changes={destination:json.dumps(payload,ensure_ascii=False,indent=2,allow_nan=False)
+                 for destination,payload in documents.items()}
+        if any(len(text.encode("utf-8"))>4*1024*1024 for text in changes.values()):
+            raise ValueError("Performance profile exceeds its supported read limit")
+        check_cancelled()
+        replace_text_files(changes)
     return result
 
 
 def save_tune_result(result: dict[str, Any], path: Path | None = None) -> Path:
     target = Path(path or TUNER_FILE)
     target.parent.mkdir(parents=True, exist_ok=True)
-    temp = target.with_suffix(target.suffix + ".tmp")
-    temp.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(target)
+    atomic_write_text(target, json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
     return target
 
 
 def load_tune_result(path: Path | None = None) -> dict[str, Any] | None:
     target = Path(path or TUNER_FILE)
     try:
-        value = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        value = read_json(target)
+    except (OSError, ValueError, TypeError):
         return None
-    if not isinstance(value, dict) or int(value.get("version", 0) or 0) != TUNER_VERSION:
+    if not isinstance(value, dict) or type(value.get('version')) is not int or value['version'] != TUNER_VERSION:
         return None
     if not isinstance(value.get("recommendation"), dict):
         return None
+    rec = value['recommendation']
+    logical = rec.get('logical_cpus')
+    workers = rec.get('cpu_workers_effective')
+    if type(logical) is not int or type(workers) is not int or not 1 <= workers <= logical:
+        return None
+    if 'gpu_available' in rec and type(rec['gpu_available']) is not bool:
+        return None
+    elapsed = value.get('elapsed_ms', 0.0)
+    if not is_finite_number(elapsed) or elapsed < 0:
+        return None
+    from ResourceAllocation import CPU_ENGINE_MODES, CPU_WORKER_CHOICES, PLANNING_RESOLUTION_MODES, RAM_BUDGETS
+    for key, choices in (('cpu_engine', CPU_ENGINE_MODES), ('cpu_workers', CPU_WORKER_CHOICES),
+                         ('planning_resolution', PLANNING_RESOLUTION_MODES), ('ram_budget', RAM_BUDGETS)):
+        if key in rec and rec[key] not in choices:
+            return None
     return value
 
 

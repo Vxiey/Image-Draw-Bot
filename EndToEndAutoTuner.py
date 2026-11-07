@@ -77,18 +77,41 @@ class SourceFeatures:
 def _finite(value: Any, default: float = 0.0) -> float:
     try:
         v = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return float(default)
     return v if math.isfinite(v) else float(default)
 
 
 def _bounded_stats(image: Image.Image, max_side: int = 128) -> tuple[float, float]:
-    rgb = image.convert('RGB')
-    w, h = rgb.size
+    if image.mode not in ('RGB', 'L') or 'transparency' in image.info:
+        # The automatic renderer sees the white canvas composite, just like
+        # the colour analyser. Hidden RGB must not turn transparent line art
+        # into a supposedly chromatic photograph.
+        from ColorMatchingEngine import visible_rgb_image
+        with visible_rgb_image(image) as visible:
+            return _bounded_stats(visible, max_side)
+    w, h = image.size
+    rgb = image
     if max(w, h) > max_side:
         scale = float(max_side) / float(max(w, h))
-        rgb = rgb.resize((max(1, int(round(w * scale))), max(1, int(round(h * scale)))), Image.Resampling.BOX)
+        size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+        # RGB and greyscale resampling commutes with conversion. Avoid a full
+        # source-size RGB copy for the common RGB screenshot/photo input.
+        if image.mode in ('RGB', 'L'):
+            rgb = image.resize(size, Image.Resampling.BOX)
+        else:
+            with image.convert('RGB') as converted:
+                rgb = converted.resize(size, Image.Resampling.BOX)
+    owned = rgb is not image
+    if rgb.mode != 'RGB':
+        converted = rgb.convert('RGB')
+        if owned:
+            rgb.close()
+        rgb = converted
+        owned = True
     a = np.asarray(rgb, dtype=np.int16)
+    if owned:
+        rgb.close()
     if not a.size:
         return 1.0, 0.0
     white = float(np.mean(np.min(a, axis=2) >= 238))
@@ -121,7 +144,11 @@ def analyze_source(image: Image.Image, *, fidelity: str = 'Faithful', source_kin
         raise InterruptedError()
     count, meta = recommend_adaptive_color_count(image, ceiling=32, fidelity=fidelity,
                                                  preview=True, cancelled=cancelled)
+    if cancelled():
+        raise InterruptedError()
     white, chromatic = _bounded_stats(image)
+    if cancelled():
+        raise InterruptedError()
     source_kind = _classify_source(white, chromatic, meta, source_kind_hint)
     return SourceFeatures(
         complexity=max(0.0, min(1.0, _finite(meta.get('complexity_score'), .5))),
@@ -413,10 +440,10 @@ def tune_options(image: Image.Image, options: dict[str, Any], *, source_kind_hin
 
 def _metric(meta: dict[str, Any], key: str) -> float | None:
     value = meta.get(key)
-    if value is None:
+    if type(value) not in (int, float):
         return None
     v = _finite(value, float('nan'))
-    return v if math.isfinite(v) else None
+    return v if math.isfinite(v) and 0 <= v <= 100 else None
 
 
 def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
@@ -435,18 +462,26 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
     edge = _metric(accuracy, 'edge_accuracy_percent')
     coverage = _metric(accuracy, 'coverage_percent')
     plan_exec = _metric(accuracy, 'plan_execution_accuracy_percent')
-    projected = _finite(draw_time.get('projected_seconds', plan.get('estimate')), 0.0)
+    raw_projected = draw_time.get('projected_seconds', plan.get('estimate'))
+    projected = _finite(raw_projected, float('nan'))
+    projected = projected if math.isfinite(projected) and projected >= 0 else None
     usable = gates.get('usable_deadline_seconds')
-    usable_f = None if usable is None else max(0.001, _finite(usable, 0.001))
+    usable_f = _finite(usable, float('nan'))
+    usable_f = usable_f if math.isfinite(usable_f) and usable_f > 0 else None
+    def passes(value, gate):
+        threshold = _metric(gates, gate)
+        return None if value is None or threshold is None else value + ACCEPTANCE_TOLERANCE_PERCENT >= threshold
 
     checks: dict[str, bool | None] = {
-        'visual': None if visual is None else visual + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('visual_accuracy_min_percent'), 0),
-        'perceptual_color': None if perceptual is None else perceptual + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('perceptual_color_min_percent'), 0),
-        'edge': None if edge is None else edge + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('edge_accuracy_min_percent'), 0),
-        'coverage': None if coverage is None else coverage + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('coverage_min_percent'), 0),
-        'plan_execution': None if plan_exec is None else plan_exec + ACCEPTANCE_TOLERANCE_PERCENT >= _finite(gates.get('plan_execution_min_percent'), 0),
-        'deadline': True if not gates.get('deadline_required') else (projected <= usable_f if usable_f is not None else None),
+        'visual': passes(visual, 'visual_accuracy_min_percent'),
+        'perceptual_color': passes(perceptual, 'perceptual_color_min_percent'),
+        'edge': passes(edge, 'edge_accuracy_min_percent'),
+        'coverage': passes(coverage, 'coverage_min_percent'),
+        'plan_execution': passes(plan_exec, 'plan_execution_min_percent'),
+        'deadline': True if not gates.get('deadline_required') else (projected <= usable_f if usable_f is not None and projected is not None else None),
     }
+    if 'deadline_required' in gates and type(gates['deadline_required']) is not bool:
+        checks['deadline'] = None
     # Step 11 acceptance is intentionally driven by the combined source-relative
     # Visual Accuracy from Step 1. Perceptual/edge/coverage components remain
     # visible diagnostics and must not be double-counted as separate hard gates,
@@ -457,7 +492,7 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
     # Only catastrophic renderer divergence blocks acceptance independently.
     # Values below the stricter advisory target remain surfaced as warnings.
     renderer_ok = True if plan_exec is None else plan_exec >= 70.0
-    deadline_ok = checks['deadline'] is not False
+    deadline_ok = checks['deadline'] is True
     accepted = bool(metrics_available and quality_ok and renderer_ok and deadline_ok)
     warnings=[]
     for key in ('perceptual_color','edge','coverage','plan_execution'):
@@ -477,7 +512,7 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
     else:
         status = 'RENDERER_CORRECTNESS_FAIL'
 
-    headroom = None if usable_f is None else usable_f - projected
+    headroom = None if usable_f is None or projected is None else usable_f - projected
     return {
         'version': AUTO_TUNER_VERSION, 'status': status, 'accepted': accepted,
         'metrics_available': metrics_available, 'quality_gate_passed': bool(quality_ok),
@@ -486,7 +521,7 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
         'visual_accuracy_percent': visual, 'perceptual_color_accuracy_percent': perceptual,
         'edge_accuracy_percent': edge, 'coverage_percent': coverage,
         'plan_execution_accuracy_percent': plan_exec,
-        'projected_draw_seconds': round(projected, 3),
+        'projected_draw_seconds': None if projected is None else round(projected, 3),
         'usable_deadline_seconds': None if usable_f is None else round(usable_f, 3),
         'schedule_headroom_seconds': None if headroom is None else round(headroom, 3),
         'selected_strategy': tuner.get('selected_strategy'), 'source_kind': features_meta.get('source_kind'),
@@ -495,12 +530,37 @@ def evaluate_plan_acceptance(plan: dict[str, Any]) -> dict[str, Any]:
 
 
 def _clear_plan_transients(out: dict[str, Any]) -> None:
+    # A rescue starts from the original image and can change its planning grid,
+    # palette and renderer. A finished plan's geometry is not input policy: if
+    # copied through, finish_plan can execute old coordinates against the new
+    # raster. Drop only known derived outputs. In particular, keep prepared
+    # picture_palette_rgb, calibration/tool actions, preview/safety inputs and
+    # the tuner's bounded-attempt state. Popping references must not mutate or
+    # close resources still owned by the usable first plan.
     for key in (
         'pixel_accuracy_meta', 'adaptive_accuracy_meta', 'preview_delta_e_meta', 'preview_diagnostics_meta',
         'region_fill_meta', 'fill_regions', 'fill_timing_meta', 'extra_fast_meta', 'extra_fast_v2_meta',
         'operation_timing_meta', 'performance_profile', 'resource_scheduler_plan', 'deadline_runtime_meta',
         '_pixel_coverage_preview', '_pixel_error_preview', '_preview_quantized_target',
         '_accuracy_quantized_target_available', 'color_render_meta', 'adaptive_color_count_meta',
+        # Compiled renderer results and their private recursion/ownership flags.
+        '_pixel_execution_groups', '_pixel_execution_sequence', 'pixel_accurate',
+        'pixel_map_meta', 'pixel_stroke_meta', 'pixel_stroke_engine',
+        '_adaptive_hybrid_execution_groups', '_adaptive_hybrid_execution_sequence',
+        '_adaptive_hybrid_inner', 'adaptive_hybrid_active', 'adaptive_hybrid_meta', 'adaptive_hybrid_version',
+        '_sketch_fill_execution_groups', '_sketch_fill_execution_sequence', '_sketch_fill_inner',
+        'sketch_fill_active', 'sketch_fill_meta', 'sketch_fill_version',
+        'sketch_execution_groups', 'gartic_sketch_meta', 'sketch2_meta',
+        'skribbl_fast_direct_paths', 'skribbl_fast_meta', 'gartic_phone_direct_paths', 'gartic_phone_fast_meta',
+        # These describe the old palette, grid or retained executable geometry.
+        'plan_palette_rgb', 'color_selectors', 'color_order', 'color_grouping_meta', 'picture_palette_meta',
+        'background_fill_plan', 'fill_engine_meta', 'safe_fill_mask_margin_px',
+        '_hybrid_scale_x', '_hybrid_scale_y', '_preview_safety_groups', '_visual_importance_map',
+        'adaptive_brush_meta', 'adaptive_deadline_meta', 'detail_zoom_meta',
+        'real_speed_budget_meta', 'real_speed_color_meta', 'source_transparency_meta',
+        # A replacement plan owns its own diagnostic images and profiler state.
+        '_accuracy_original_source', '_accuracy_quantized_target', '_accuracy_normalized_source_cache',
+        '_performance_profile',
     ):
         out.pop(key, None)
 
@@ -579,14 +639,18 @@ def propose_rescue_options(plan: dict[str, Any], acceptance: dict[str, Any] | No
         # This is intentionally disabled for Paint (custom RGB/tool overhead can
         # dominate there) and for large/unknown target rasters.
         pixel_rescue = (source_kind == 'photo / texture' and profile_group in ('browser','skribbl-fast','generic')
-                        and 0 < plan_pixels <= 220_000 and projected <= usable * .32)
+                        and 0 < plan_pixels <= 220_000
+                        and (acceptance.get('usable_deadline_seconds') is None or projected <= usable * .32))
         if pixel_rescue:
+            # A quality rescue has no authority to select a new physical brush.
+            # Preserve the declared/preflight width; the Pixel planner assigns
+            # smaller widths only from independently verified target controls.
             out.update({
                 'draw_quality':'Pixel Accurate','planning_resolution':'Extreme',
                 'quality':'Maximum detail','detail':10,'adaptive_detail':'Off',
                 'background_simplification':'Off','color_grouping':'Accurate',
                 'stroke_optimizer':'Travel only','speed':'Balanced','delay':base_delay('Balanced'),
-                'precision':'High','extra_fast':False,'extra_fast_v2':False,'brush_px':1,
+                'precision':'High','extra_fast':False,'extra_fast_v2':False,
             })
             current = max(8, int(_finite(out.get('_auto_tuner_color_ceiling', out.get('exact_color_limit_profile_ceiling')), 16)))
             raised = min(32, max(current + 4, 24))
@@ -595,7 +659,9 @@ def propose_rescue_options(plan: dict[str, Any], acceptance: dict[str, Any] | No
         else:
             q = str(out.get('draw_quality') or 'High likeness')
             out['draw_quality'] = {'Balanced':'High likeness', 'High likeness':'Maximum likeness'}.get(q, q)
-            out['planning_resolution'] = 'High' if str(out.get('planning_resolution')) == 'Standard' else 'Ultra'
+            resolution = str(out.get('planning_resolution') or 'Auto')
+            out['planning_resolution'] = {'Auto':'High', 'Standard':'High', 'High':'Ultra',
+                                          'Ultra':'Extreme', 'Extreme':'Extreme'}.get(resolution, 'High')
             out['quality'] = 'Maximum detail'; out['detail'] = 10; out['adaptive_detail'] = 'Preserve detail'
             out['speed'] = 'Balanced'; out['delay'] = base_delay('Balanced'); out['precision'] = 'High'
             if source_kind == 'flat illustration':
@@ -607,6 +673,13 @@ def propose_rescue_options(plan: dict[str, Any], acceptance: dict[str, Any] | No
             rescue_name = 'quality-rescue'
     else:
         return None
+
+    # Rescue owns the renderer selected above. A previous Quick Sketch policy
+    # would otherwise reapply its lower detail settings on the next make_plan.
+    if out.get('quick_sketch_auto') or out.get('render_style') == 'Quick Sketch Fill + Contour':
+        out['render_style'] = 'Standard / pixel'
+        out['quick_sketch_auto'] = False
+        out.pop('quick_sketch_meta', None)
 
     new_tuner = dict(tuner)
     new_tuner.update({

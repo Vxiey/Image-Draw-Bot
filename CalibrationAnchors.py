@@ -7,9 +7,19 @@ rejected before native input because Paint can reflow its toolbar/palette.
 """
 from __future__ import annotations
 
+_LONG_MIN = -(2 ** 31)
+_LONG_MAX = 2 ** 31 - 1
+
+def _coordinate(value):
+    return type(value) is int and _LONG_MIN <= value <= _LONG_MAX
+
+def _point(value):
+    if not isinstance(value, (list, tuple)) or len(value) != 2 or not all(_coordinate(v) for v in value):
+        raise ValueError('Invalid calibrated screen position. Recalibrate.')
+    return tuple(value)
 
 def _rect(value, label='client rectangle'):
-    if not isinstance(value, (list, tuple)) or len(value) != 4 or any(type(v) is not int for v in value):
+    if not isinstance(value, (list, tuple)) or len(value) != 4 or not all(_coordinate(v) for v in value):
         raise ValueError(f'Invalid calibration {label}. Recalibrate.')
     left, top, right, bottom = value
     if right <= left or bottom <= top:
@@ -23,7 +33,7 @@ def make_anchor(client_rect):
 
 
 def validate_anchor(anchor):
-    if not isinstance(anchor, dict) or anchor.get('version') != 1:
+    if not isinstance(anchor, dict) or type(anchor.get('version')) is not int or anchor['version'] != 1:
         raise ValueError('Calibration is not anchored to a target window. Recalibrate.')
     rect = _rect(anchor.get('client_rect'))
     return {'version': 1, 'client_rect': list(rect)}
@@ -40,6 +50,8 @@ def ensure_same_layout(anchor, current_client_rect, tolerance=3):
     Translation is safe: controls move with the window. Resizing is not safe
     because Paint can reflow/collapse toolbar controls and sliders.
     """
+    if type(tolerance) is not int or tolerance < 0:
+        raise ValueError('Calibration layout tolerance must be a non-negative integer.')
     clean = validate_anchor(anchor)
     old = tuple(clean['client_rect'])
     current = _rect(current_client_rect, 'current client rectangle')
@@ -52,17 +64,15 @@ def ensure_same_layout(anchor, current_client_rect, tolerance=3):
 
 
 def resolve_point(point, anchor, current_client_rect):
-    if not isinstance(point, (list, tuple)) or len(point) != 2 or any(type(v) is not int for v in point):
-        raise ValueError('Invalid calibrated screen position. Recalibrate.')
+    point = _point(point)
     dx, dy = ensure_same_layout(anchor, current_client_rect)
-    return int(point[0])+dx, int(point[1])+dy
+    return _point((point[0]+dx, point[1]+dy))
 
 
 def resolve_points(points, anchor, current_client_rect):
     dx, dy = ensure_same_layout(anchor, current_client_rect)
     result=[]
     for point in points:
-        if not isinstance(point, (list, tuple)) or len(point)!=2 or any(type(v) is not int for v in point):
-            raise ValueError('Invalid calibrated screen position. Recalibrate.')
-        result.append((int(point[0])+dx, int(point[1])+dy))
+        point = _point(point)
+        result.append(_point((point[0]+dx, point[1]+dy)))
     return result

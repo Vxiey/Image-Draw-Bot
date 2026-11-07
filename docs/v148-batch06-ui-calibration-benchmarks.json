@@ -1,0 +1,212 @@
+{
+  "baseline_commit": "f59a57c6fc1eef1ace07e872ba50ed834e1bb924",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "scope": "Actual production renderer with deterministic variable/widget adapters and real Tcl setvar writes; no native CTk redraw, GUI frame-rate, hardware/input or GPU claim.",
+  "iterations": 1000,
+  "samples": 7,
+  "baseline_source_sha256": "14073967e012de8a71df243fa2e7cddd320e23675ec77cb5b75f61672e6f29b3",
+  "current_source_sha256": "9993f0cec8256fe3e6f9f883b7864184c14cf64a445b9ef84dbfeec54546a652",
+  "before": [
+    {
+      "seconds": 0.07242079599382123,
+      "presentation_configure_calls": 38000,
+      "presentation_tcl_writes": 55000,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.07314060100179631,
+      "presentation_configure_calls": 38000,
+      "presentation_tcl_writes": 55000,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.07576957400306128,
+      "presentation_configure_calls": 38000,
+      "presentation_tcl_writes": 55000,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.0775788780010771,
+      "presentation_configure_calls": 38000,
+      "presentation_tcl_writes": 55000,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.0791550770009053,
+      "presentation_configure_calls": 38000,
+      "presentation_tcl_writes": 55000,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.07602688499900978,
+      "presentation_configure_calls": 38000,
+      "presentation_tcl_writes": 55000,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.0754943279971485,
+      "presentation_configure_calls": 38000,
+      "presentation_tcl_writes": 55000,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    }
+  ],
+  "after": [
+    {
+      "seconds": 0.03916256000229623,
+      "presentation_configure_calls": 38,
+      "presentation_tcl_writes": 55,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.04192644899740117,
+      "presentation_configure_calls": 38,
+      "presentation_tcl_writes": 55,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.040317881997907534,
+      "presentation_configure_calls": 38,
+      "presentation_tcl_writes": 55,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.0377264139970066,
+      "presentation_configure_calls": 38,
+      "presentation_tcl_writes": 55,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.03613155700440984,
+      "presentation_configure_calls": 38,
+      "presentation_tcl_writes": 55,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.04001010800129734,
+      "presentation_configure_calls": 38,
+      "presentation_tcl_writes": 55,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    },
+    {
+      "seconds": 0.03639673900033813,
+      "presentation_configure_calls": 38,
+      "presentation_tcl_writes": 55,
+      "controller_start_updates": 1000,
+      "readiness_calls": {
+        "_paint_tool_preflight_ready": 1000,
+        "_target_lock_valid": 1000,
+        "_safety_preflight_valid": 1000,
+        "_dry_run_valid": 1000,
+        "_full_draw_unlocked": 1000
+      },
+      "visible_result_sha256": "26983f661b269e210c340c09211adb506c26d304928221fd98e0cb59b13efd02"
+    }
+  ],
+  "before_median_seconds": 0.07576957400306128,
+  "after_median_seconds": 0.03916256000229623
+}

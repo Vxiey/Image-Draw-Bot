@@ -1,0 +1,130 @@
+{
+  "baseline_commit": "f7b561f479d94f307924dbc779e5c8e365422f8d",
+  "implemented": 796,
+  "target": 1000,
+  "remaining": 204,
+  "added_behavior_groups": [
+    "A1401",
+    "A1402",
+    "A1403",
+    "A1404",
+    "A1405",
+    "R1401",
+    "R1402",
+    "R1403",
+    "U1401",
+    "U1402",
+    "U1403",
+    "P1401",
+    "P1402",
+    "P1403",
+    "P1404"
+  ],
+  "uncounted_completions": [
+    "R901/R1004 Subject-only physical footprint, scoring, guarded previews and owned diagnostic buffers",
+    "UW03/MP03 AVIF admission across existing import entry points",
+    "AX03 late deadline/timer display after Stop",
+    "Review corrections within new groups, including raw checkpoint API compatibility and explicit-empty sequence intent"
+  ],
+  "release_published": false,
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 3768,
+    "runner_seconds": 98.292,
+    "wall_seconds": 99.166,
+    "status": "OK (skipped=46)",
+    "skipped": 46,
+    "source_files": 806,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "c93ef1bebfdfa6b4830eea69be348be789f0a627b77372c7b97ab88bba4ab14c"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1083,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "exact_raster_results": {
+    "fixtures": 8,
+    "all_zero_mismatches": true,
+    "cases": [
+      {
+        "case": "icon",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "a6fc697e824aa67471bab2cd7b4c633a903e97eaf4284345d438859f25cbf278"
+      },
+      {
+        "case": "line-art",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "2c6189080be20fbdbba0f7b431660e4e00e50bae9b75c5d418472a8941e76d89"
+      },
+      {
+        "case": "text-small-detail",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "21445bb7fc41d0bd96ed0a80012c2ab9c5c45acfb3f0d7d20e03a9aa785bc30d"
+      },
+      {
+        "case": "cartoon-large-colour",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "35dbe6bd1a5a4c847244429d9a5bc119c8cd8934092e9da8d4305b288da55b48"
+      },
+      {
+        "case": "photo-gradient",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "5924872090b3c09e678bf27a0124a17a77f8cac0f19eb8ff88738540b2ddc4de"
+      },
+      {
+        "case": "fill-risk",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "34f088f4c28aa77d2bca7bdf59f604110478ad08da87539815962a715c78d1c7"
+      },
+      {
+        "case": "thin-diagonals",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "44c392e55081c69a725d7c0438329221fc4d53b02d70bcdb572d55c346e6af7e"
+      },
+      {
+        "case": "many-islands",
+        "mismatched_plan_pixels": 0,
+        "source_sha256": "dd0053014043bca7b5c80fb0d483a3885f6228838d0b50a2bec0b2c2e9af6858"
+      }
+    ]
+  },
+  "python": "3.12.14",
+  "numpy": "2.3.5",
+  "pillow": "13.0.0",
+  "tkinterdnd2": "0.7.0",
+  "independent_source_reviews": "All fifteen new groups and uncounted Subject/import/Stop completions reviewed without remaining blockers; includes actual executor, browser start/verify ownership, native raster, public checkpoint API, source launch and diagnostic privacy checks.",
+  "resolved_initial_integration_failures": [
+    "Repeated-color test corrected to actual executor order [0,0,1].",
+    "Public checkpoint writer now translates unambiguous raw entry keys without accepting old ambiguous saved catalogs."
+  ],
+  "remote_validation": "The exact published commit must pass its GitHub checks. PR46 links current Windows/Linux, dependencies, CodeQL and bundled GUI/native drag-and-drop results. Local Linux verification alone does not establish native Windows behavior or physical GPU performance.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46",
+  "benchmark": "v148-batch14-rendering-benchmarks.json",
+  "benchmark_sha256": "bc196c430321afd7b60943574a3e182b54494b301e9447ee100485dff6b03c5c",
+  "source_unchanged_before_publication": true
+}

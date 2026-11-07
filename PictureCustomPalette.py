@@ -38,8 +38,8 @@ def _sync_legacy_environment() -> None:
     _legacy.atomic_write_text = atomic_write_text
 
 
-def image_fingerprint(image) -> str:
-    return _legacy.image_fingerprint(image)
+def image_fingerprint(image, *, cancelled=lambda: False) -> str:
+    return _legacy.image_fingerprint(image, cancelled=cancelled)
 
 
 def cache_path(image_fp: str, calibration_fp: str = ""):
@@ -73,7 +73,7 @@ def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
                               colors: Iterable[Sequence[int]], *, cancelled=lambda: False,
                               wait=time.sleep, progress=None, dialog_ready=None,
                               dialog_closed=None, color_ready=None, retry_limit: int = 1,
-                              state_callback=None) -> int:
+                              state_callback=None, input_guard=None) -> int:
     """Enter a picture palette into Paint with bounded verified retries.
 
     A colour is never committed with Paint's ``+`` button until the live RGB
@@ -101,17 +101,44 @@ def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
     def check_cancelled() -> None:
         transaction.check_cancelled("Picture custom palette cancelled.")
 
-    def click(name: str, delay: float = 0.04) -> None:
-        point = tuple(map(int, controls[name]))
+    from CalibrationValidation import screen_point
+
+    def guard(point, *, modal=False):
+        check_cancelled()
+        if input_guard is not None:
+            input_guard(point, modal=modal)
+        else:
+            verifier=getattr(mouse,'check_keyboard',None)
+            if callable(verifier):verifier(modal_point=point if modal else None)
+        check_cancelled()
+
+    def click(name: str, delay: float = 0.04):
+        point = screen_point(controls[name],label='Paint color control')
+        modal=name!='OpenCustomColor'
+        guard(point,modal=modal)
         mouse.move(*point)
+        check_cancelled()
         wait(0.015)
+        check_cancelled()
+        actual=getattr(mouse,'get_position',lambda:point)()
+        guard(screen_point(actual,label='Paint pointer'),modal=modal)
         mouse.click()
+        check_cancelled()
         wait(delay)
+        check_cancelled()
+        return point
+
+    def keyboard_command(point, operation, *args, **kwargs):
+        guard(point,modal=True)
+        operation(*args,**kwargs)
+        check_cancelled()
 
     def refresh_dialog_controls() -> None:
         if dialog_ready is None:
             return
+        check_cancelled()
         fresh = dialog_ready()
+        check_cancelled()
         if fresh:
             controls.update(fresh)
         if "AddCustomColor" not in controls:
@@ -120,8 +147,10 @@ def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
     if not values:
         return 0
 
-    mouse.arm_input()
     try:
+        check_cancelled()
+        guard(screen_point(controls['OpenCustomColor'],label='Paint Edit colors opener'))
+        mouse.arm_input()
         check_cancelled()
         transaction.transition("OPEN_DIALOG", detail="open Paint Edit colors")
         click("OpenCustomColor", 0.16)
@@ -146,16 +175,19 @@ def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
                 settle = max(0.025, float(transaction.pacer.current_delay))
                 for name, value in zip(("RedField", "GreenField", "BlueField"), rgb):
                     check_cancelled()
-                    click(name, settle)
-                    keyboard_backend.press_and_release("ctrl+a")
-                    keyboard_backend.write(str(int(value)), delay=0.01)
+                    point=click(name, settle)
+                    keyboard_command(point,keyboard_backend.press_and_release,"ctrl+a")
+                    keyboard_command(point,keyboard_backend.write,str(int(value)),delay=0.01)
                     wait(settle)
+                    check_cancelled()
 
                 transaction.transition(
                     "VERIFY_VALUE", attempt=attempt, item_index=index, detail=f"RGB {rgb}"
                 )
                 if color_ready is not None:
+                    check_cancelled()
                     fresh = color_ready(rgb)
+                    check_cancelled()
                     if fresh:
                         controls.update(fresh)
                 return True
@@ -181,7 +213,9 @@ def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
                 "VERIFY_COMMIT", attempt=1, item_index=index, detail=f"RGB {rgb}"
             )
             if dialog_ready is not None:
+                check_cancelled()
                 fresh = dialog_ready()
+                check_cancelled()
                 if fresh:
                     controls.update(fresh)
 
@@ -193,8 +227,10 @@ def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
         click("ConfirmColor", 0.12)
         if dialog_closed is not None:
             dialog_closed()
+            check_cancelled()
         dialog_open = False
         transaction.transition("DONE", item_index=completed, detail=f"{completed} colors prepared")
+        check_cancelled()
     except Exception:
         if transaction.state not in ("FAILED", "DONE"):
             try:
@@ -203,13 +239,19 @@ def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
                 pass
         raise
     finally:
-        if dialog_open:
-            try:
-                keyboard_backend.press_and_release("esc")
-                wait(0.04)
-            except Exception:
-                pass
-        mouse.disarm_input()
+        try:
+            if dialog_open and not cancelled():
+                # A failed transaction may leave a modal open. Cleanup is only
+                # allowed while its current ownership can still be established;
+                # Stop never authorizes another keyboard command.
+                if input_guard is not None or callable(getattr(mouse,'check_keyboard',None)):
+                    point=screen_point(controls['ConfirmColor'],label='Paint color dialog')
+                    keyboard_command(point,keyboard_backend.press_and_release,"esc")
+                    wait(0.04)
+        except Exception:
+            pass
+        finally:
+            mouse.disarm_input()
 
     return completed
 

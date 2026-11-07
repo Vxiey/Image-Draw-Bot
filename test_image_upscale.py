@@ -39,7 +39,7 @@ class UpscaleTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import Mock,patch
         image=Image.new('RGBA',(3,3),'red')
-        app=SimpleNamespace(stop=SimpleNamespace(is_set=lambda:False),color_session_cache={},file_label=Mock(),
+        app=SimpleNamespace(original=image,stop=SimpleNamespace(is_set=lambda:False),color_session_cache={},file_label=Mock(),
             _mark_plan_stale=Mock(),status=Mock(),show_previews=Mock(),_schedule_recovery_checkpoint=Mock())
         with patch.object(DrawBotApp,'_clear_render_resume'),patch.object(DrawBotApp,'_queue_drop_in_start') as drop,patch.object(DrawBotApp,'_queue_browser_one_click_after_import') as browser:
             DrawBotApp._handle_event(app,'upscaled',(image,image))

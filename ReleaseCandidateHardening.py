@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import hashlib
 import json
+import os
 import re
 import stat
 import zipfile
@@ -77,24 +78,29 @@ def _assert_contains(text: str, token: str, label: str, errors: list[str]) -> No
 
 def find_one_shot_source_files(root: Path) -> list[str]:
     """Return temporary integration/patch files that must never ship from main."""
+    from ReleasePackage import EXCLUDED_DIR_NAMES, _is_link
     root = Path(root)
     found: list[str] = []
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        try:
-            rel = path.relative_to(root).as_posix()
-        except ValueError:
-            continue
-        lowered = rel.lower()
-        if lowered.startswith(".git/") or "/.git/" in lowered:
-            continue
-        base = path.name.lower()
-        if base.endswith("_once.py"):
-            found.append(rel)
-            continue
-        if lowered.startswith(".github/workflows/") and re.search(r"(?:^|[-_])once(?:[-_.]|$)", base) and base.endswith((".yml", ".yaml")):
-            found.append(rel)
+    def walk_error(error):
+        raise ReleaseGateError('The included source tree could not be fully inspected.') from error
+    for current, directories, filenames in os.walk(root, followlinks=False, onerror=walk_error):
+        current = Path(current)
+        # Private builders/output trees are not source-release contents. Inspect
+        # neither their dependency filenames nor their potentially huge trees.
+        directories[:] = [name for name in directories if name.casefold() not in EXCLUDED_DIR_NAMES
+                           and not _is_link(current / name)]
+        relative_directory = current.relative_to(root).as_posix().casefold()
+        in_workflows = (relative_directory == '.github/workflows'
+                        or relative_directory.startswith('.github/workflows/'))
+        for filename in filenames:
+            base = filename.casefold()
+            temporary = (base.endswith('_once.py') or
+                         (in_workflows and base.endswith(('.yml', '.yaml'))
+                          and re.search(r'(?:^|[-_])once(?:[-_.]|$)', base)))
+            if temporary:
+                path = current / filename
+                if path.is_file():
+                    found.append(path.relative_to(root).as_posix())
     return sorted(set(found))
 
 
@@ -108,18 +114,24 @@ def collect_source_gate_errors(root: Path, *, app_version: str, file_version: st
     updater = _read(root / "UpdateCenter.py")
     build_release = _read(root / "build_release.py")
     workflow = _read(root / ".github" / "workflows" / "build-windows.yml")
+    if not (root / 'ReleaseIdentity.py').is_file():
+        errors.append('release identity: ReleaseIdentity.py is missing')
 
     one_shot_files = find_one_shot_source_files(root)
     if one_shot_files:
         errors.append("source tree: temporary one-shot files are present: " + ", ".join(one_shot_files[:12]))
 
     major, minor, patch = _version_tuple(file_version)
+    base_version = app_version.split('-', 1)[0]
+    if base_version != file_version:
+        errors.append('Version.py: APP_VERSION base must match FILE_VERSION.')
     _assert_contains(version_info, f"filevers=({major},{minor},{patch},0)", "version_info", errors)
     _assert_contains(version_info, f"prodvers=({major},{minor},{patch},0)", "version_info", errors)
     _assert_contains(version_info, f"StringStruct('FileVersion', '{file_version}')", "version_info", errors)
     _assert_contains(version_info, f"StringStruct('ProductVersion', '{file_version}')", "version_info", errors)
 
     _assert_contains(installer, f'#define MyAppVersion "{app_version}"', "installer", errors)
+    _assert_contains(installer, f'VersionInfoVersion={major}.{minor}.{patch}.0', 'installer', errors)
     _assert_contains(installer, "AppId={{6A4AD303-4F16-4ED7-A9AF-5B912352D83E}", "installer", errors)
     _assert_contains(installer, "PrivilegesRequired=lowest", "installer", errors)
 
@@ -317,19 +329,19 @@ def validate_windows_zip(path: Path) -> dict:
         raise ReleaseGateError(f"Windows ZIP is missing: {path}")
     with zipfile.ZipFile(path, "r") as archive:
         _validate_zip_entries(archive.infolist())
-        bad = archive.testzip()
-        if bad:
-            raise ReleaseGateError(f"Windows ZIP integrity failed at {bad}")
         names = archive.namelist()
         exe_name = next((name for name in names if name.replace("\\", "/") == "ImageDrawBot/ImageDrawBot.exe"), None)
         if not exe_name:
             raise ReleaseGateError("Windows ZIP is missing ImageDrawBot/ImageDrawBot.exe")
-        with archive.open(exe_name) as executable:
-            if executable.read(2) != b"MZ":
-                raise ReleaseGateError("Packaged ImageDrawBot.exe is not a PE executable")
         leaked = [name for name in names if _forbidden_archive_name(name)]
         if leaked:
             raise ReleaseGateError("Runtime/source-only files leaked into Windows ZIP: " + ", ".join(leaked[:8]))
+        with archive.open(exe_name) as executable:
+            if executable.read(2) != b"MZ":
+                raise ReleaseGateError("Packaged ImageDrawBot.exe is not a PE executable")
+        bad = archive.testzip()
+        if bad:
+            raise ReleaseGateError(f"Windows ZIP integrity failed at {bad}")
     return {"path": str(path), "sha256": _sha256(path), "entries": len(names), "integrity": "PASS"}
 
 

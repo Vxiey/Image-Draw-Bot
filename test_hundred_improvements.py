@@ -225,7 +225,10 @@ class PreviewTests(unittest.TestCase):
         for zoom,pan in [('bad',None),(float('nan'),(1,)),(float('inf'),(float('inf'),0))]:
             actual,actual_scale=viewport_image(source,(60,60),zoom=zoom,pan=pan)
             self.assertEqual(actual.tobytes(),baseline.tobytes());self.assertEqual(actual_scale,scale)
-        full_preview_options({'ram_budget_mb':'bad'},(100,100))
+        # Viewport preferences may fall back, but an invalid resource limit
+        # cannot silently authorize native-resolution planning.
+        with self.assertRaises(ValueError):
+            full_preview_options({'ram_budget_mb':'bad'},(100,100))
         with self.assertRaises(ValueError):viewport_image(Image.new('RGB',(0,0)),(20,20))
 
     def test_image_label_does_not_convert_opaque_or_alpha_sources(self):
@@ -249,9 +252,9 @@ class ResumeTests(unittest.TestCase):
                     groups=[[(0,0,1,0)],[(0,1,1,1)]],execution_groups=[[((0,0),(1,0))],[((0,1),(1,1))]],
                     colors=[(0,0,0),(255,0,0)],fitted=(2,2),count=2)
 
-    def test_color_order_is_unique_and_supports_execution_only(self):
-        plan=self.plan();self.assertEqual(resume.active_color_order(plan),[0,1])
-        plan.pop('groups');self.assertEqual(resume.active_color_order(plan),[0,1])
+    def test_color_order_preserves_visits_and_supports_execution_only(self):
+        plan=self.plan();self.assertEqual(resume.active_color_order(plan),[0,0,1])
+        plan.pop('groups');self.assertEqual(resume.active_color_order(plan),[0,0,1])
         with self.assertRaises(ValueError):resume.batch_key(plan,-1)
 
     def test_alpha_changes_invalidate_checkpoint(self):
@@ -260,7 +263,7 @@ class ResumeTests(unittest.TestCase):
         self.assertFalse(resume.resolve_resume(plan,state)['compatible'])
 
     def test_corrupt_checkpoint_fields_are_rejected(self):
-        plan=self.plan();state=resume.checkpoint_before_path(plan,2,0,1,ordered_items=plan['execution_groups'][1])
+        plan=self.plan();state=resume.checkpoint_before_path(plan,2,0,1,ordered_items=plan['execution_groups'][0])
         self.assertIsNotNone(resume.validate_progress(state))
         invalid=[('schema',True),('plan_fingerprint','z'*64),('total_colors',-1),('completed_count',3),
                  ('completed_count',1.0),('prelude_complete','false'),('path_level','false'),

@@ -29,6 +29,7 @@ from typing import Any
 NORMAL = "NORMAL"
 CATCH_UP = "CATCH_UP"
 PANIC = "PANIC"
+DRAWING_OPERATIONS = frozenset(("stroke", "dot", "short_stroke", "long_stroke", "outline"))
 
 # Centralized thresholds.  Keeping these in one place makes future profile
 # tuning/test coverage straightforward and prevents magic numbers in DrawBot.
@@ -135,6 +136,10 @@ class DeadlineScheduler:
     @staticmethod
     def _op_type(entry: dict[str, Any]) -> str:
         return str(entry.get("operation_type") or "stroke")
+
+    @classmethod
+    def _is_drawing(cls, entry: dict[str, Any]) -> bool:
+        return cls._op_type(entry) in DRAWING_OPERATIONS
 
     @staticmethod
     def _phase(entry):
@@ -381,7 +386,7 @@ class DeadlineScheduler:
         transitions=0;last_color=object();last_brush=object();started=False
         for raw in entries or ():
             entry=dict(raw)
-            if str(entry.get("operation_type") or "stroke") != "stroke":
+            if not DeadlineScheduler._is_drawing(entry):
                 continue
             color=entry.get("color_index");brush=entry.get("brush_px")
             if started and (color!=last_color or brush!=last_brush):transitions+=1
@@ -403,6 +408,36 @@ class DeadlineScheduler:
         # Original index is the final tie-breaker, keeping the sort deterministic.
         return (tier,-round(value,6),round(adjusted,6),original_index)
 
+    def replan_ready(self, remaining_count: int, *, force: bool = False) -> bool:
+        """Check the existing policy without traversing or copying future paths."""
+        if remaining_count < 2 or self.budget_seconds is None or self.mode == NORMAL:
+            return False
+        if not force:
+            if self._global_samples < 2:
+                return False
+            sample_gap = self._global_samples - self._last_replan_sample
+            scale_delta = abs(self._runtime_scale() - self._last_replan_scale)
+            if self.mode == self._last_replan_mode and sample_gap < 2 and scale_delta < .12:
+                return False
+        return True
+
+    def replan_in_place(self, sequence: list, start: int, *, force: bool = False) -> bool:
+        """Apply an eligible runtime replan, leaving the executed prefix intact.
+
+        Normal, unlimited and throttled paths take constant time and allocate no
+        tail. The public copy-returning replan API retains its existing contract.
+        """
+        if type(start) is not int or not 0 <= start <= len(sequence):
+            raise ValueError('Replan start must identify the unexecuted suffix.')
+        if not self.replan_ready(len(sequence) - start, force=force):
+            return False
+        remaining = sequence[start:]
+        reordered = self.replan_remaining(remaining, force=force)
+        if reordered == remaining:
+            return False
+        sequence[start:] = reordered
+        return True
+
     def replan_remaining(self, remaining, *, force: bool = False):
         """Reorder only already-safe remaining paths inside contiguous phase barriers.
 
@@ -411,27 +446,27 @@ class DeadlineScheduler:
         colour/brush transitions, so catch-up cannot become slower by UI thrashing.
         """
         rows=[dict(entry) for entry in (remaining or ())]
-        if len(rows)<2 or self.budget_seconds is None or self.mode == NORMAL:return rows
+        if not self.replan_ready(len(rows), force=force):return rows
         scale=self._runtime_scale()
-        if not force:
-            if self._global_samples < 2:return rows
-            sample_gap=self._global_samples-self._last_replan_sample
-            scale_delta=abs(scale-self._last_replan_scale)
-            if self.mode==self._last_replan_mode and sample_gap<2 and scale_delta<.12:return rows
         output=[];moved=0;rejected=0;start=0
         while start<len(rows):
             first=rows[start];op=self._op_type(first);phase=self._phase(first)
-            if op!='stroke':
+            if not self._is_drawing(first):
                 output.append(first);start+=1;continue
             end=start+1
-            while end<len(rows) and self._op_type(rows[end])=='stroke' and self._phase(rows[end])==phase:
+            while end<len(rows) and self._is_drawing(rows[end]) and self._phase(rows[end])==phase:
                 end+=1
             block=rows[start:end]
             indexed=list(enumerate(block))
             ranked=sorted(indexed,key=lambda pair:self._replan_priority(pair[1],pair[0]))
             candidate=[entry for _idx,entry in ranked]
             if [idx for idx,_entry in ranked] != list(range(len(block))):
-                if self._transition_count(candidate) <= self._transition_count(block):
+                previous = next((entry for entry in reversed(output) if self._is_drawing(entry)), None)
+                following = next((rows[index] for index in range(end, len(rows))
+                                  if self._is_drawing(rows[index])), None)
+                prefix = [previous] if previous is not None else []
+                suffix = [following] if following is not None else []
+                if self._transition_count(prefix + candidate + suffix) <= self._transition_count(prefix + block + suffix):
                     moved += sum(1 for pos,(idx,_entry) in enumerate(ranked) if pos!=idx)
                     block=candidate
                 else:

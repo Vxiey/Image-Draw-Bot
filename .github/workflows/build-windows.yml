@@ -15,8 +15,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: image-draw-bot-release-${{ github.ref }}
+  # Main, tag and manual runs can publish the same versioned draft. Serialize
+  # every publisher so --clobber cannot mix assets from independent builds.
+  group: image-draw-bot-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   build-windows:
@@ -24,10 +27,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           architecture: 'x64'
@@ -117,7 +120,7 @@ jobs:
           if ($uninstallProcess.ExitCode -ne 0) { throw "Silent uninstall failed: $($uninstallProcess.ExitCode)" }
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ImageDrawBot-${{ github.ref_name }}-Windows-x64
           path: |
@@ -148,15 +151,19 @@ jobs:
             if ($release.targetCommitish -ne $env:GITHUB_SHA) { throw 'Draft belongs to a different commit; use a new version.' }
             $resumeDraft = $true
           }
+          python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA --create-missing-tag
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag does not match the build commit' }
           $notes = "RELEASE-NOTES-v$version.md"
           $flags = @()
           if ($version -match '-') { $flags += '--prerelease' }
           if (-not $resumeDraft) {
-            gh release create $tag --target $env:GITHUB_SHA --draft --title "Image Draw Bot $tag" --notes-file $notes @flags
+            gh release create $tag --verify-tag --target $env:GITHUB_SHA --draft --title "Image Draw Bot $tag" --notes-file $notes @flags
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release draft' }
           }
           gh release upload $tag --clobber release/ImageDrawBot-*-Windows-x64.zip release/ImageDrawBot-*-Windows-x64-Setup.exe release/ImageDrawBot-*-SHA256.txt release/ImageDrawBot-*-manifest.json
           if ($LASTEXITCODE -ne 0) { throw 'Could not upload verified release assets' }
+          python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag changed before publication' }
           gh release edit $tag --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }
 
@@ -175,7 +182,7 @@ jobs:
 
       - name: Preserve release and tag retirement inventory
         if: env.RC3_CLEANUP_READY == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ImageDrawBot-v1.0.146-rc3-retirement-inventory
           path: |

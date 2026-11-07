@@ -1,11 +1,12 @@
 """One app per Windows user session. OS releases the mutex after a crash."""
 import ctypes
 from ctypes import wintypes
+from WindowsSystem import load_system_library
 
 
 class InstanceLock:
     def __init__(self):
-        self.api=ctypes.WinDLL('kernel32',use_last_error=True)
+        self.api=load_system_library('kernel32',use_last_error=True)
         self.api.CreateMutexW.argtypes=[ctypes.c_void_p,wintypes.BOOL,wintypes.LPCWSTR]
         self.api.CreateMutexW.restype=wintypes.HANDLE
         self.api.CloseHandle.argtypes=[wintypes.HANDLE]

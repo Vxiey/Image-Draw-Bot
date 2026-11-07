@@ -10,7 +10,7 @@ from Version import APP_VERSION
 
 class Rc29StabilityPlannerValidationTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION, "1.0.146-rc4")
+        self.assertEqual(APP_VERSION, "1.0.148")
 
     def test_incomplete_draw_cannot_train_eta(self):
         result = timing_sample_gate({}, completed_paths=80, planned_paths=100)

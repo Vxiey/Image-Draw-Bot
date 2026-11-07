@@ -148,89 +148,211 @@ def explain(title, fallback=''):
     return title + '\n\n' + (fallback or 'Leave the default for your first drawing. Change one setting at a time and rebuild the preview to compare.')
 
 
-def guide_pages(profile):
+def guide_pages(profile, *, prepare_on_start=True):
     pages = [(title, list(cards)) for title, cards in PAGES]
-    if profile == 'Microsoft Paint':
+    if profile == 'Microsoft Paint' and prepare_on_start:
         pages[1][1][1] = ('Prepare Paint', 'Open Paint with an empty canvas and keep its toolbar visible. Choose the Microsoft Paint profile. Prepare Paint & draw prepares the canvas, pencil size and RGB controls before drawing.')
         pages[4][1][0] = ('Start in Paint', 'Load an image, then press Prepare Paint & draw. This performs setup and then draws; it is not just a calibration button. Preview and small tests are optional but useful for a first attempt.')
+    elif profile == 'Microsoft Paint':
+        pages[1][1][1] = ('Manual Paint tool', 'Keep your selected Paint tool and size. Calibrate its required controls, read colors when needed and select only the drawable canvas. Start preserves this manual tool choice.')
+        pages[2][1][1] = ('Setup and drawing area', 'Use Calibrate Paint tools for the selected tool, Read colors when the tool uses palette colors, and Select drawing area around only the canvas. Auto (recommended) is the separate automatic Paint preparation mode.')
+        pages[4][1][0] = ('Start with the selected Paint tool', 'Complete the manual setup, then use Unlock full drawing and Start drawing. Keep the target visible and follow the countdown. Tests and previews remain optional. Start does not switch your manual tool to Pencil.')
+    else:
+        from GameProfiles import PROFILES
+        from TargetCapabilities import requires_manual_setup
+        key = PROFILES.get(profile, ('generic',))[0]
+        if requires_manual_setup(key):
+            pages[1][1][1] = ('Manual target setup', 'This profile uses manual setup. Keep the normal brush and palette visible, read the colors and select only the drawable canvas. Leave Drop-In Start unarmed while learning the setup.')
+            pages[2][1][1] = ('Setup and drawing area', 'Use Read colors to calibrate the visible palette, then Select drawing area around only the canvas. Calibrate Brush / Fill when you want those optional tools. This profile has no verified automatic browser detector.')
     return pages
+
+
+def _guide_wrap_length(body):
+    """Convert the actual Tk width to the logical pixels CTkLabel expects."""
+    import math
+    width = body.winfo_width()
+    if width <= 1:
+        return None
+    scale = 1.0
+    getter = getattr(body, '_get_widget_scaling', None)
+    if callable(getter):
+        try:
+            candidate = float(getter())
+            if math.isfinite(candidate) and candidate > 0:
+                scale = candidate
+        except (TypeError, ValueError, OverflowError):
+            pass
+    return max(1, int(width / scale) - 56)
 
 
 def show_guide(app):
     import customtkinter as ctk
     import logging
+    import tkinter as tk
     from ReleaseState import mark_welcome_seen
     existing = getattr(app, '_getting_started_window', None)
-    if existing is not None and existing.winfo_exists():
-        existing.lift()
-        return existing
-    window = ctk.CTkToplevel(app.root)
-    app._getting_started_window = window
-    window.title('Get started - Image Draw Bot')
-    width = min(840, max(480, window.winfo_screenwidth() - 80))
-    height = min(760, max(420, window.winfo_screenheight() - 100))
-    window.geometry(f'{width}x{height}')
-    window.minsize(min(480, width), min(420, height))
-    window.configure(fg_color='#101319')
-    window.transient(app.root)
-    # Non-modal so instructions can be followed in the main app.
-    ctk.CTkLabel(window, text='Get started', font=('Segoe UI', 26, 'bold')).pack(anchor='w', padx=24, pady=(20, 4))
-    progress = ctk.CTkLabel(window, text='', text_color='#a6b2c5')
-    progress.pack(anchor='w', padx=24, pady=(0, 8))
-    titles = [title for title, cards in PAGES]
-    nav = ctk.CTkOptionMenu(window, values=titles, command=lambda title: render(titles.index(title)))
-    nav.pack(fill='x', padx=24, pady=(0, 12))
-    body = ctk.CTkScrollableFrame(window, fg_color='#1a202b')
-    body.pack(fill='both', expand=True, padx=20)
-    footer = ctk.CTkFrame(window, fg_color='transparent')
-    footer.pack(fill='x', padx=24, pady=16)
-    state = {'page': 0}
+    if existing is not None:
+        try:
+            if existing.winfo_exists():
+                existing.deiconify()
+                existing.lift()
+                return existing
+        except tk.TclError:
+            pass
+    window = None
+    state = {'page': 0, 'closed': False, 'resize_job': None,
+             'profile_job': None, 'traces': [], 'last_wrap': None}
     labels = []
 
-    def resize(event=None):
+    def cleanup(event=None):
+        if event is not None and event.widget is not window:
+            return
+        state['closed'] = True
+        for name in ('resize_job', 'profile_job'):
+            job = state[name]
+            state[name] = None
+            if job is not None and window is not None:
+                try:
+                    window.after_cancel(job)
+                except (tk.TclError, RuntimeError):
+                    pass
+        traces, state['traces'] = state['traces'], []
+        for variable, trace in traces:
+            try:
+                variable.trace_remove('write', trace)
+            except (tk.TclError, RuntimeError):
+                pass
+        if getattr(app, '_getting_started_window', None) is window:
+            app._getting_started_window = None
+
+    def resize_now():
+        state['resize_job'] = None
+        if state['closed']:
+            return
+        wrap = _guide_wrap_length(body)
+        if wrap is None or wrap == state['last_wrap']:
+            return
         for label in labels:
-            label.configure(wraplength=max(240, body.winfo_width() - 56))
+            label.configure(wraplength=wrap)
+        state['last_wrap'] = wrap
+
+    def resize(event=None):
+        if state['closed'] or state['resize_job'] is not None:
+            return
+        if event is not None and event.widget is not body:
+            return
+        state['resize_job'] = window.after_idle(resize_now)
 
     def render(index):
-        state['page'] = index
-        for child in body.winfo_children():
+        if state['closed']:
+            return
+        profile = app.game.get()
+        prepare_on_start = bool(getattr(app, '_automatic_paint_preparation',
+            lambda: profile == 'Microsoft Paint')())
+        title, cards = guide_pages(profile, prepare_on_start=prepare_on_start)[index]
+        old_children = body.winfo_children()
+        page = ctk.CTkFrame(body, fg_color='transparent')
+        new_labels = []
+        try:
+            for heading, text in cards:
+                card = ctk.CTkFrame(page, fg_color='#252e3e', corner_radius=12)
+                card.pack(fill='x', padx=6, pady=6)
+                for content, font, color in ((heading, ('Segoe UI', 15, 'bold'), '#f0f4fb'), (text, ('Segoe UI', 13), '#c3cedf')):
+                    label = ctk.CTkLabel(card, text=content, font=font, text_color=color, justify='left', anchor='w', wraplength=max(1, width - 100))
+                    label.pack(fill='x', padx=16, pady=(10, 8))
+                    new_labels.append(label)
+            page.pack(fill='both', expand=True)
+        except BaseException:
+            page.destroy()
+            raise
+        for child in old_children:
             child.destroy()
-        labels.clear()
-        title, cards = guide_pages(app.game.get())[index]
+        labels[:] = new_labels
+        state['page'] = index
+        state['last_wrap'] = None
         nav.set(title)
-        progress.configure(text=f'{index + 1} / {len(PAGES)} - Profile: {app.game.get()}')
-        for heading, text in cards:
-            card = ctk.CTkFrame(body, fg_color='#252e3e', corner_radius=12)
-            card.pack(fill='x', padx=6, pady=6)
-            for content, font, color in ((heading, ('Segoe UI', 15, 'bold'), '#f0f4fb'), (text, ('Segoe UI', 13), '#c3cedf')):
-                label = ctk.CTkLabel(card, text=content, font=font, text_color=color, justify='left', anchor='w', wraplength=max(240, width - 100))
-                label.pack(fill='x', padx=16, pady=(10, 8))
-                labels.append(label)
+        progress.configure(text=f'{index + 1} / {len(PAGES)} - Profile: {profile}')
         back.configure(state='normal' if index else 'disabled')
         next_button.configure(text='Done' if index == len(PAGES)-1 else 'Next')
         body._parent_canvas.yview_moveto(0)
         resize()
 
-    def done():
+    def done(event=None):
+        if state['closed']:
+            return
+        cleanup()
         try:
             mark_welcome_seen()
         except OSError:
             logging.getLogger(__name__).exception('Could not save welcome state')
-        app._getting_started_window = None
-        window.destroy()
+        finally:
+            window.destroy()
 
-    def next_page():
+    def next_page(event=None):
+        if state['closed']:
+            return
         if state['page'] == len(PAGES)-1:
             done()
         else:
             render(state['page']+1)
 
-    back = ctk.CTkButton(footer, text='Back', width=90, command=lambda: render(state['page']-1))
-    back.pack(side='left')
-    ctk.CTkButton(footer, text='Close guide', width=110, command=done).pack(side='left', padx=8)
-    next_button = ctk.CTkButton(footer, text='Next', width=100, command=next_page)
-    next_button.pack(side='right')
-    body.bind('<Configure>', resize, add='+')
-    window.protocol('WM_DELETE_WINDOW', done)
-    render(0)
-    return window
+    def previous_page(event=None):
+        if not state['closed'] and state['page']:
+            render(state['page']-1)
+
+    def refresh_profile():
+        state['profile_job'] = None
+        if not state['closed']:
+            render(state['page'])
+
+    def profile_changed(*_):
+        if not state['closed'] and state['profile_job'] is None:
+            state['profile_job'] = window.after_idle(refresh_profile)
+
+    try:
+        from UiCompatibility import scoped_toplevel
+        window = scoped_toplevel(app.root)
+        app._getting_started_window = window
+        window.title('Get started - Image Draw Bot')
+        from WorkspaceLayout import fit_window
+        width, height = fit_window(window, preferred=(840, 760), minimum=(480, 420), margin=(80, 100))
+        window.configure(fg_color='#101319')
+        window.transient(app.root)
+        # Non-modal so instructions can be followed in the main app.
+        ctk.CTkLabel(window, text='Get started', font=('Segoe UI', 26, 'bold')).pack(anchor='w', padx=24, pady=(20, 4))
+        progress = ctk.CTkLabel(window, text='', text_color='#a6b2c5')
+        progress.pack(anchor='w', padx=24, pady=(0, 8))
+        titles = [title for title, cards in PAGES]
+        nav = ctk.CTkOptionMenu(window, values=titles, command=lambda title: render(titles.index(title)))
+        nav.pack(fill='x', padx=24, pady=(0, 12))
+        from UiCompatibility import scoped_scrollable_frame
+        body = scoped_scrollable_frame(window, fg_color='#1a202b')
+        body.pack(fill='both', expand=True, padx=20)
+        footer = ctk.CTkFrame(window, fg_color='transparent')
+        footer.pack(fill='x', padx=24, pady=16)
+        back = ctk.CTkButton(footer, text='Back', width=90, command=previous_page)
+        back.pack(side='left')
+        ctk.CTkButton(footer, text='Close guide · Esc', width=130, command=done).pack(side='left', padx=8)
+        next_button = ctk.CTkButton(footer, text='Next', width=100, command=next_page)
+        next_button.pack(side='right')
+        ctk.CTkLabel(window, text='Alt+Left / Alt+Right: previous / next topic', text_color='#a6b2c5').pack(pady=(0, 8))
+        body.bind('<Configure>', resize, add='+')
+        window.bind('<Alt-Left>', previous_page)
+        window.bind('<Alt-Right>', next_page)
+        window.bind('<Escape>', done)
+        window.bind('<Destroy>', cleanup, add='+')
+        window.protocol('WM_DELETE_WINDOW', done)
+        variables = (app.game, getattr(app, 'paint_tool', None))
+        for variable in variables:
+            if variable is not None and all(variable is not prior for prior, _ in state['traces']):
+                state['traces'].append((variable, variable.trace_add('write', profile_changed)))
+        render(0)
+        return window
+    except BaseException:
+        cleanup()
+        if window is not None:
+            try:
+                window.destroy()
+            except (tk.TclError, RuntimeError):
+                pass
+        raise

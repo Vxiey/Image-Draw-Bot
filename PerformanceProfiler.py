@@ -5,6 +5,7 @@ watchdog fallback and final plans without touching mouse execution.
 """
 from __future__ import annotations
 import time
+from RuntimePaths import is_finite_number
 
 PHASES = (
     'preprocessing',
@@ -32,8 +33,20 @@ def start(options, phase):
 def stop(options, phase, token=None):
     now = time.perf_counter()
     data = options.setdefault('_performance_profile', {'started': now, 'timings': {}, 'marks': {}, 'total_planning': 0.0})
+    marks = data.setdefault('marks', {})
     if token is None:
-        token = data.get('marks', {}).pop(phase, now)
+        if phase not in marks:
+            return 0.0
+        token = marks[phase]
+    # Explicit stop tokens must be consumed once without erasing a newer
+    # nested mark for the same phase. Keep plan metadata JSON-serializable.
+    consumed = data.setdefault('stopped_tokens', [])
+    identity = [phase, token]
+    if identity in consumed:
+        return 0.0
+    consumed.append(identity)
+    if marks.get(phase) == token:
+        marks.pop(phase)
     elapsed = max(0.0, now - token)
     timings = data.setdefault('timings', {})
     timings[phase] = timings.get(phase, 0.0) + elapsed
@@ -85,5 +98,8 @@ def dominant_phase(profile):
     timings = (profile or {}).get('timings') or {}
     if not timings:
         return None, 0.0
-    key = max(PHASES, key=lambda name: float(timings.get(name, 0.0)))
-    return key, float(timings.get(key, 0.0))
+    measured = {name: value for name in PHASES if is_finite_number(value := timings.get(name)) and value > 0}
+    if not measured:
+        return None, 0.0
+    key = max(measured, key=measured.get)
+    return key, float(measured[key])

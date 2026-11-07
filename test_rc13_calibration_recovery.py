@@ -27,6 +27,7 @@ class Rc13CalibrationRecoveryTests(unittest.TestCase):
         self.assertEqual(plan.action, 'full')
 
     def test_retry_is_bounded_and_adaptive(self):
+        from PIL import Image
         class Result: pass
         calls=[]; sleeps=[]
         def fake(*args, **kwargs):
@@ -37,7 +38,7 @@ class Rc13CalibrationRecoveryTests(unittest.TestCase):
         with patch('BrowserAutoCalibration.auto_calibrate_browser', side_effect=fake):
             result,meta=calibrate_browser_with_retry(
                 'gartic-phone', {'client_rect':(0,0,100,100)}, Path('x'),
-                screenshot=object(), recapture=lambda:object(), sleep_fn=sleeps.append)
+                screenshot=Image.new('RGB',(100,100)), recapture=lambda:Image.new('RGB',(100,100)), sleep_fn=sleeps.append)
         self.assertIsInstance(result, Result)
         self.assertEqual(meta['attempts'], 2)
         self.assertEqual(len(sleeps), 1)
@@ -75,7 +76,7 @@ class Rc13CalibrationRecoveryTests(unittest.TestCase):
         self.assertIn("'recalibration_plan':recalibration_plan.as_dict()", src)
 
     def test_version(self):
-        self.assertEqual(APP_VERSION, '1.0.146-rc4')
+        self.assertEqual(APP_VERSION, '1.0.148')
 
 
 if __name__ == '__main__':

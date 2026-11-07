@@ -20,8 +20,8 @@ import time
 from typing import Iterable
 
 from GpuHardware import best_nvidia_gpu
-from GpuSetupRuntime import (SetupEnvironmentError, process_failure, require_virtual_environment,
-                             running_in_virtual_environment)
+from GpuSetupRuntime import (SetupEnvironmentError, checked_requirements, pip_command,
+                             pip_environment, process_failure, running_in_virtual_environment)
 
 BASE = Path(__file__).resolve().parent
 GPU_REQUIREMENTS = BASE / "requirements-gpu-nvidia.txt"
@@ -52,18 +52,20 @@ def _creationflags() -> int:
     return int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if os.name == "nt" else 0
 
 
-def _run(command: list[str], *, timeout: float = 180.0) -> subprocess.CompletedProcess[str]:
+def _run(command: list[str], *, timeout: float = 180.0, env=None,
+         capture_stderr: bool = False) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
         cwd=BASE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE if capture_stderr else subprocess.STDOUT,
         text=True,
         encoding="utf-8",
         errors="replace",
         timeout=timeout,
         creationflags=_creationflags(),
         check=False,
+        env=env,
     )
 
 
@@ -95,8 +97,8 @@ def _write_state(result: SetupResult) -> None:
         pass
 
 
-def _read_pip_packages(python: str) -> set[str]:
-    completed = _run([python, "-m", "pip", "list", "--format=json"], timeout=45.0)
+def _read_pip_packages(python: str, *, env=None) -> set[str]:
+    completed = _run(pip_command(python, "list", "--format=json"), timeout=45.0, env=env)
     if completed.returncode != 0:
         raise RuntimeError("pip could not inspect installed packages before GPU setup")
     try:
@@ -114,11 +116,8 @@ def conflicting_cupy_packages(installed: Iterable[str], *, desired: str = "cupy-
     return [name for name in CONFLICTING_CUPY_DISTS if name != desired and name in normalized]
 
 
-def _desired_cupy_distribution() -> str:
-    try:
-        lines = GPU_REQUIREMENTS.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return "cupy-cuda12x"
+def _desired_cupy_distribution(text: str | None = None) -> str:
+    lines = (checked_requirements(GPU_REQUIREMENTS) if text is None else text).splitlines()
     for raw in lines:
         line = raw.strip().lower()
         if not line or line.startswith("#"):
@@ -127,7 +126,7 @@ def _desired_cupy_distribution() -> str:
             return "cupy-cuda13x"
         if line.startswith("cupy-cuda12x"):
             return "cupy-cuda12x"
-    return "cupy-cuda12x"
+    raise SetupEnvironmentError("The GPU requirements file does not select a supported CuPy distribution.")
 
 
 def _smoke_test(python: str) -> tuple[bool, str]:
@@ -137,31 +136,36 @@ def _smoke_test(python: str) -> tuple[bool, str]:
 
 
 def _pip_install_backend(python: str, *, upgrade_pip: bool = True) -> tuple[bool, str]:
-    require_virtual_environment(python, _run)
+    with pip_environment(python, _run) as environment:
+        desired = _desired_cupy_distribution(checked_requirements(GPU_REQUIREMENTS))
+        return _install_backend(python, environment, desired, upgrade_pip=upgrade_pip)
+
+
+def _install_backend(python: str, environment, desired: str, *, upgrade_pip: bool) -> tuple[bool, str]:
     output: list[str] = []
     if upgrade_pip:
-        completed = _run([
-            python, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel",
+        completed = _run(pip_command(python,
+            "install", "--upgrade", "pip", "setuptools", "wheel",
             "--disable-pip-version-check", "--timeout", "30", "--retries", "2",
-        ], timeout=240.0)
+        ), timeout=240.0, env=environment.for_command("install"))
         output.append(completed.stdout or "")
         # A pip self-upgrade failure should not prevent trying the actual GPU
         # install with the already-installed pip.
 
-    desired = _desired_cupy_distribution()
-    installed = _read_pip_packages(python)
+    installed = _read_pip_packages(python, env=environment.for_command("list"))
     conflicts = conflicting_cupy_packages(installed, desired=desired)
     if conflicts:
-        completed = _run([python, "-m", "pip", "uninstall", "-y", *conflicts], timeout=120.0)
+        completed = _run(pip_command(python, "uninstall", "-y", *conflicts), timeout=120.0,
+                         env=environment.for_command("uninstall"))
         output.append(completed.stdout or "")
         if completed.returncode != 0:
             return False, "\n".join(output).strip()
 
-    completed = _run([
-        python, "-m", "pip", "install", "--upgrade", "--upgrade-strategy", "only-if-needed",
+    completed = _run(pip_command(python,
+        "install", "--upgrade", "--upgrade-strategy", "only-if-needed",
         "--disable-pip-version-check", "--timeout", "45", "--retries", "2",
         "-r", str(GPU_REQUIREMENTS),
-    ], timeout=900.0)
+    ), timeout=900.0, env=environment.for_command("install"))
     output.append(completed.stdout or "")
     return completed.returncode == 0, "\n".join(output).strip()
 

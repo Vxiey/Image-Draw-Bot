@@ -15,6 +15,7 @@ from math import sqrt
 from typing import Iterable, Sequence
 
 from Colors import allColors
+from PlanningRowTasks import read_only_rgba, RgbaRowTasks
 from ColorFidelity import (COLOR_FIDELITY_MODES, validate_color_fidelity, palette_match_cost,
                            mapping_pair_metrics, finalize_mapping_stats, rgb_to_oklab)
 
@@ -87,9 +88,9 @@ def _is_custom_color(index: int, palette_names: Sequence[str]) -> bool:
     return name not in default_names
 
 
-def _candidate_indices(palette_names: Sequence[str], custom_mode: str) -> list[int]:
+def _candidate_indices(palette_names: Sequence[str], custom_mode: str, palette_size: int | None = None) -> list[int]:
     validate_custom_color_workflow(custom_mode)
-    total = len(allColors)
+    total = len(palette_names) if palette_size is None else palette_size
     if custom_mode != "Custom colors only":
         return list(range(total))
     custom = [i for i in range(total) if _is_custom_color(i, palette_names)]
@@ -111,7 +112,7 @@ def _closest_palette_index_cached(rgb: tuple[int, int, int], palette: tuple[tupl
                                   color_fidelity: str = "Balanced") -> int:
     if not palette:
         raise ValueError("No calibrated colours are available.")
-    candidates = [i for i in _candidate_indices(names, custom_mode) if i < len(palette)] or list(range(len(palette)))
+    candidates = _candidate_indices(names, custom_mode, len(palette))
     validate_color_fidelity(color_fidelity)
     scores = [(palette_match_cost(rgb, palette[i], color_rendering=color_rendering, fidelity=color_fidelity), i) for i in candidates]
     best_score, best_index = min(scores, key=lambda item: (item[0], item[1]))
@@ -142,7 +143,7 @@ def _best_layer_cached(rgb: tuple[int, int, int], palette: tuple[tuple[int, int,
     base_distance = palette_match_cost(rgb, palette[base], color_rendering=metric_mode, fidelity=color_fidelity)
     if layer_mode == "Off" or color_rendering == "RGB nearest" or len(palette) < 2:
         return base, None, 0.0, 0.0
-    allowed = [i for i in _candidate_indices(names, custom_mode) if i < len(palette)] or list(range(len(palette)))
+    allowed = _candidate_indices(names, custom_mode, len(palette))
     max_candidates = 12 if layer_mode == "Light shading" else (18 if layer_mode == "Dual-color mix" else 26)
     ranked = sorted(allowed, key=lambda i: palette_match_cost(rgb, palette[i], color_rendering="Perceptual match", fidelity=color_fidelity))[:max_candidates]
     ratios = (0.25,) if layer_mode == "Light shading" else ((0.25, 0.50) if layer_mode == "Dual-color mix" else (0.20, 0.35, 0.50, 0.65))
@@ -233,7 +234,7 @@ def _color_rows_worker(args):
                 offset = row_offset + x * 4
                 r, g, b, alpha = raw[offset], raw[offset + 1], raw[offset + 2], raw[offset + 3]
                 source_rgb = _visible_rgb(r, g, b, alpha)
-                if skip_white and min(source_rgb) >= 245:
+                if alpha <= 0 or (skip_white and min(source_rgb) >= 245):
                     white_skipped += 1
                 else:
                     if color_rendering == "Layered color mix" or color_layers != "Off":
@@ -242,11 +243,17 @@ def _color_rows_worker(args):
                             custom_color_workflow, color_layers, color_fidelity)
                         if secondary is not None and _should_overlay(x, y, ratio, color_layers):
                             overlay_index = secondary
+                            # The public plan is executed by colour, not in a
+                            # global base-then-overlay order. Assign each Bayer
+                            # pixel to exactly one colour so a later base batch
+                            # cannot erase an earlier secondary stipple.
+                            base_index = None
                     else:
                         base_index = _closest_palette_index_cached(
                             tuple(map(int, source_rgb[:3])), palette, names,
                             color_rendering, custom_color_workflow, color_fidelity)
-                    unique_base.add(base_index)
+                    if base_index is not None:
+                        unique_base.add(base_index)
                     if overlay_index is not None:
                         unique_overlay.add(overlay_index); layered_pixels += 1
             if not lines:
@@ -271,12 +278,14 @@ def _color_rows_worker(args):
 
 
 
-def _groups_from_index_map(index_map, drawable_mask, palette_count: int, *, lines: bool):
+def _groups_from_index_map(index_map, drawable_mask, palette_count: int, *, lines: bool, cancelled=lambda: False):
     groups = [[] for _ in range(palette_count)]
     height, width = index_map.shape
     unique_base = set()
     white_skipped = 0
     for y in range(height):
+        if cancelled():
+            raise InterruptedError()
         previous = None
         start = None
         for x in range(width + 1):
@@ -297,7 +306,8 @@ def _groups_from_index_map(index_map, drawable_mask, palette_count: int, *, line
 
 
 def _gpu_color_strokes(rgb_image, *, lines, skip_white, color_rendering, color_layers,
-                       custom_color_workflow, color_fidelity, gpu_mode, gpu_vram, gpu_performance):
+                       custom_color_workflow, color_fidelity, gpu_mode, gpu_vram, gpu_performance,
+                       cancelled=lambda: False):
     if color_layers != "Off" or color_rendering == "Layered color mix":
         return None
     # Step 23: Auto routes this real palette workload through the fastest
@@ -319,12 +329,16 @@ def _gpu_color_strokes(rgb_image, *, lines, skip_white, color_rendering, color_l
         result, route = palette_indices_rgba(
             rgb_image, palette, candidates, custom_flags,
             color_rendering=color_rendering, custom_mode=custom_color_workflow,
-            color_fidelity=color_fidelity, skip_white=skip_white, gpu_mode=gpu_mode)
+            color_fidelity=color_fidelity, skip_white=skip_white, gpu_mode=gpu_mode,
+            cancelled=cancelled)
         index_map, drawable_mask = result
-        groups, unique_base, white_skipped = _groups_from_index_map(index_map, drawable_mask, len(palette), lines=lines)
+        groups, unique_base, white_skipped = _groups_from_index_map(
+            index_map, drawable_mask, len(palette), lines=lines, cancelled=cancelled)
         backend_id=str(route.get("backend_id") or "cpu:numpy")
         backend="universal-" + ("cpu" if backend_id=="cpu:numpy" else backend_id.split(':',1)[0])
         return groups, [[] for _ in palette], 0, tuple(sorted(unique_base)), tuple(), white_skipped, backend, 1, dict(route)
+    except InterruptedError:
+        raise
     except Exception:
         return None
 
@@ -342,24 +356,21 @@ def _parallel_color_strokes(rgb_image, *, lines, skip_white, color_rendering, co
             return None
         palette = tuple(tuple(c.RGB) for c in allColors)
         names = tuple(c.name for c in allColors)
-        raw = rgb_image.tobytes(); stride = rgb_image.width * 4
         ranges = row_chunk_ranges(rgb_image.height, rgb_image.width, workers=workers,
                                   ram_budget_mb=ram_mb,
                                   bytes_per_pixel=96 if (color_rendering == "Layered color mix" or color_layers != "Off") else 40,
                                   min_rows=8, max_rows=192)
         if len(ranges) <= 1:
             return None
-        tasks=[]
-        for y0, y1 in ranges:
-            if cancelled():
-                return None
-            tasks.append((y0, rgb_image.width, raw[y0 * stride:y1 * stride], bool(lines),
-                          bool(skip_white), color_rendering, color_layers,
-                          custom_color_workflow, color_fidelity, palette, names))
-        chunks = parallel_map(_color_rows_worker, tasks, backend=backend, workers=workers)
+        tasks = RgbaRowTasks(rgb_image, ranges,
+            (bool(lines), bool(skip_white), color_rendering, color_layers,
+             custom_color_workflow, color_fidelity, palette, names), cancelled=cancelled)
+        chunks = parallel_map(_color_rows_worker, tasks, backend=backend, workers=workers, cancelled=cancelled)
         if cancelled():
             return None
         return _merge_color_chunks(chunks, len(palette)) + (backend, len(tasks))
+    except InterruptedError:
+        raise
     except Exception:
         # Fall back to the old serial implementation. Planning must remain safe
         # even on Python installations where process spawning is restricted.
@@ -385,112 +396,167 @@ def build_color_strokes(image, *, lines: bool = True, skip_white: bool = True,
     validate_color_layers(color_layers)
     validate_custom_color_workflow(custom_color_workflow)
     validate_color_fidelity(color_fidelity)
+    if cancelled():
+        return None, {"cancelled": True}
     if color_rendering == "Layered color mix" and color_layers == "Off":
         color_layers = "Dual-color mix"
-    rgb_image = image.convert("RGBA")
+    with read_only_rgba(image) as rgb_image:
+        palette = tuple(tuple(c.RGB) for c in allColors)
+        names = tuple(c.name for c in allColors)
 
-    gpu_meta = None
-    parallel = _gpu_color_strokes(
-        rgb_image, lines=lines, skip_white=skip_white,
-        color_rendering=color_rendering, color_layers=color_layers,
-        custom_color_workflow=custom_color_workflow, color_fidelity=color_fidelity, gpu_mode=gpu_mode,
-        gpu_vram=gpu_vram, gpu_performance=gpu_performance)
-    if parallel is None and cpu_workers and int(cpu_workers) > 1:
-        parallel = _parallel_color_strokes(
-            rgb_image, lines=lines, skip_white=skip_white,
-            color_rendering=color_rendering, color_layers=color_layers,
-            custom_color_workflow=custom_color_workflow, color_fidelity=color_fidelity, cancelled=cancelled,
-            cpu_workers=cpu_workers, cpu_engine=cpu_engine,
-            ram_budget_mb=ram_budget_mb, preview_plan=preview_plan)
-    if parallel is not None:
-        if len(parallel) == 9:
-            groups, overlay_groups, layered_pixels, unique_base, unique_overlay, white_skipped, backend, chunks, gpu_meta = parallel
+        gpu_meta = None
+        try:
+            parallel = _gpu_color_strokes(
+                rgb_image, lines=lines, skip_white=skip_white,
+                color_rendering=color_rendering, color_layers=color_layers,
+                custom_color_workflow=custom_color_workflow, color_fidelity=color_fidelity, gpu_mode=gpu_mode,
+                gpu_vram=gpu_vram, gpu_performance=gpu_performance, cancelled=cancelled)
+        except InterruptedError:
+            return None, {"cancelled": True}
+        if parallel is None and cpu_workers and int(cpu_workers) > 1:
+            parallel = _parallel_color_strokes(
+                rgb_image, lines=lines, skip_white=skip_white,
+                color_rendering=color_rendering, color_layers=color_layers,
+                custom_color_workflow=custom_color_workflow, color_fidelity=color_fidelity, cancelled=cancelled,
+                cpu_workers=cpu_workers, cpu_engine=cpu_engine,
+                ram_budget_mb=ram_budget_mb, preview_plan=preview_plan)
+        if parallel is not None:
+            if len(parallel) == 9:
+                groups, overlay_groups, layered_pixels, unique_base, unique_overlay, white_skipped, backend, chunks, gpu_meta = parallel
+            else:
+                groups, overlay_groups, layered_pixels, unique_base, unique_overlay, white_skipped, backend, chunks = parallel
         else:
-            groups, overlay_groups, layered_pixels, unique_base, unique_overlay, white_skipped, backend, chunks = parallel
-    else:
-        pixels = rgb_image.load()
-        groups = [[] for _ in allColors]
-        overlay_groups = [[] for _ in allColors]
-        layered_pixels = 0
-        unique_base = set()
-        unique_overlay = set()
-        white_skipped = 0
-        backend = "serial"
-        chunks = 1
-        for y in range(rgb_image.height):
-            if cancelled():
-                return None, {"cancelled": True}
-            previous = None
-            start = None
-            overlay_previous = None
-            overlay_start = None
-            for x in range(rgb_image.width + 1):
-                base_index = None
-                overlay_index = None
-                if x < rgb_image.width:
-                    r, g, b, alpha = pixels[x, y]
-                    source_rgb = _visible_rgb(r, g, b, alpha)
-                    if skip_white and min(source_rgb) >= 245:
-                        white_skipped += 1
-                    else:
-                        if color_rendering == "Layered color mix" or color_layers != "Off":
-                            base_index, secondary, ratio, _improvement = best_layer_for_rgb(
-                                source_rgb, color_rendering=color_rendering,
-                                color_layers=color_layers, custom_mode=custom_color_workflow, color_fidelity=color_fidelity)
-                            if secondary is not None and _should_overlay(x, y, ratio, color_layers):
-                                overlay_index = secondary
+            pixels = rgb_image.load()
+            groups = [[] for _ in palette]
+            overlay_groups = [[] for _ in palette]
+            layered_pixels = 0
+            unique_base = set()
+            unique_overlay = set()
+            white_skipped = 0
+            backend = "serial"
+            chunks = 1
+            for y in range(rgb_image.height):
+                if cancelled():
+                    return None, {"cancelled": True}
+                previous = None
+                start = None
+                overlay_previous = None
+                overlay_start = None
+                for x in range(rgb_image.width + 1):
+                    base_index = None
+                    overlay_index = None
+                    if x < rgb_image.width:
+                        r, g, b, alpha = pixels[x, y]
+                        source_rgb = _visible_rgb(r, g, b, alpha)
+                        if alpha <= 0 or (skip_white and min(source_rgb) >= 245):
+                            white_skipped += 1
                         else:
-                            base_index = closest_palette_index(source_rgb, color_rendering=color_rendering,
-                                                               custom_mode=custom_color_workflow, color_fidelity=color_fidelity)
-                        unique_base.add(base_index)
+                            if color_rendering == "Layered color mix" or color_layers != "Off":
+                                base_index, secondary, ratio, _improvement = _best_layer_cached(
+                                    source_rgb, palette, names, color_rendering,
+                                    custom_color_workflow, color_layers, color_fidelity)
+                                if secondary is not None and _should_overlay(x, y, ratio, color_layers):
+                                    overlay_index = secondary
+                                    base_index = None
+                            else:
+                                base_index = _closest_palette_index_cached(
+                                    source_rgb, palette, names, color_rendering,
+                                    custom_color_workflow, color_fidelity)
+                            if base_index is not None:
+                                unique_base.add(base_index)
+                            if overlay_index is not None:
+                                unique_overlay.add(overlay_index); layered_pixels += 1
+                    if not lines:
+                        if base_index is not None:
+                            groups[base_index].append((x, y, x, y))
                         if overlay_index is not None:
-                            unique_overlay.add(overlay_index); layered_pixels += 1
-                if not lines:
-                    if base_index is not None:
-                        groups[base_index].append((x, y, x, y))
-                    if overlay_index is not None:
-                        overlay_groups[overlay_index].append((x, y, x, y))
-                else:
-                    if base_index != previous:
-                        _add_run(groups, previous, start, y, x - 1)
-                        previous, start = base_index, x if base_index is not None else None
-                    if overlay_index != overlay_previous:
-                        _add_run(overlay_groups, overlay_previous, overlay_start, y, x - 1)
-                        overlay_previous, overlay_start = overlay_index, x if overlay_index is not None else None
-    for index, strokes in enumerate(overlay_groups):
-        groups[index].extend(strokes)
-    meta = {
-        "color_rendering": color_rendering,
-        "color_layers": color_layers,
-        "custom_color_workflow": custom_color_workflow,
-        "color_fidelity": color_fidelity,
-        "layered_pixels": layered_pixels,
-        "base_colors": len(unique_base),
-        "overlay_colors": len(unique_overlay),
-        "white_skipped": white_skipped,
-        "stroke_weight": sum(_stroke_weight(stroke) for group in groups for stroke in group),
-        "cpu_backend": backend,
-        "cpu_chunks": chunks,
-        "gpu_color_meta": gpu_meta or {},
-    }
-    try:
-        meta["color_fidelity_diagnostics"]=_sample_mapping_diagnostics(
-            rgb_image,color_rendering=color_rendering,custom_color_workflow=custom_color_workflow,
-            color_fidelity=color_fidelity,skip_white=skip_white)
-    except Exception:
-        meta["color_fidelity_diagnostics"]={"dark_bias_detected":False}
-    return groups, meta
+                            overlay_groups[overlay_index].append((x, y, x, y))
+                    else:
+                        if base_index != previous:
+                            _add_run(groups, previous, start, y, x - 1)
+                            previous, start = base_index, x if base_index is not None else None
+                        if overlay_index != overlay_previous:
+                            _add_run(overlay_groups, overlay_previous, overlay_start, y, x - 1)
+                            overlay_previous, overlay_start = overlay_index, x if overlay_index is not None else None
+        if cancelled():
+            return None, {"cancelled": True}
+        for index, strokes in enumerate(overlay_groups):
+            groups[index].extend(strokes)
+        meta = {
+            "color_rendering": color_rendering,
+            "color_layers": color_layers,
+            "custom_color_workflow": custom_color_workflow,
+            "color_fidelity": color_fidelity,
+            "layered_pixels": layered_pixels,
+            "base_colors": len(unique_base),
+            "overlay_colors": len(unique_overlay),
+            "white_skipped": white_skipped,
+            "stroke_weight": sum(_stroke_weight(stroke) for group in groups for stroke in group),
+            "cpu_backend": backend,
+            "cpu_chunks": chunks,
+            "gpu_color_meta": gpu_meta or {},
+        }
+        try:
+            meta["color_fidelity_diagnostics"]=_sample_mapping_diagnostics(
+                rgb_image,color_rendering=color_rendering,custom_color_workflow=custom_color_workflow,
+                color_fidelity=color_fidelity,skip_white=skip_white,color_layers=color_layers,
+                palette=palette,names=names)
+        except Exception:
+            meta["color_fidelity_diagnostics"]={"dark_bias_detected":False}
+        if cancelled():
+            return None, {"cancelled": True}
+        return groups, meta
 
+
+
+def _layered_sample_coordinates(width: int, height: int, sample_limit: int):
+    """Sample whole Bayer cells, so a regular stride cannot select one phase.
+
+    Small images are measured completely. Larger images use evenly spaced
+    four-by-four cells, including both ends of the image. Partial edge cells
+    contribute only their real pixels; the total work stays within the budget.
+    """
+    limit = max(0, int(sample_limit))
+    if width <= 0 or height <= 0 or limit <= 0:
+        return
+    if width * height <= limit:
+        for y in range(height):
+            for x in range(width):
+                yield x, y
+        return
+    columns = (width + 3) // 4
+    cell_count = columns * ((height + 3) // 4)
+    cell_pixels = min(4, width) * min(4, height)
+    selected = min(cell_count, max(1, limit // cell_pixels))
+    remaining = limit
+    for slot in range(selected):
+        cell = ((cell_count - 1) // 2 if selected == 1
+                else slot * (cell_count - 1) // (selected - 1))
+        left, top = (cell % columns) * 4, (cell // columns) * 4
+        for y in range(top, min(top + 4, height)):
+            for x in range(left, min(left + 4, width)):
+                yield x, y
+                remaining -= 1
+                if remaining <= 0:
+                    return
 
 
 def _sample_mapping_diagnostics(rgb_image, *, color_rendering: str, custom_color_workflow: str,
-                                color_fidelity: str, skip_white: bool, sample_limit: int = 768) -> dict:
-    """Cheap deterministic tone/fidelity audit for preview/final-plan metadata."""
-    palette = tuple(tuple(c.RGB) for c in allColors)
+                                color_fidelity: str, skip_white: bool, sample_limit: int = 768,
+                                color_layers: str = "Off", palette=None, names=None) -> dict:
+    """Measure the palette pixels the planner will actually emit, not a mix RGB."""
+    palette = tuple(tuple(c.RGB) for c in allColors) if palette is None else palette
+    names = tuple(c.name for c in allColors) if names is None else names
     if not palette:
         return finalize_mapping_stats({"mapped_pixels": 0})
+    if color_rendering == "Layered color mix" and color_layers == "Off":
+        color_layers = "Dual-color mix"
+    layered = color_rendering != "RGB nearest" and color_layers != "Off"
     pixels = rgb_image.load(); total=max(1, rgb_image.width * rgb_image.height)
     stride=max(1, int((total / max(1, int(sample_limit))) ** 0.5))
+    coordinates = (_layered_sample_coordinates(rgb_image.width, rgb_image.height, sample_limit)
+                   if layered else ((x, y) for y in range(0, rgb_image.height, stride)
+                                    for x in range(0, rgb_image.width, stride)))
     stats={
         "mapped_pixels":0,"source_lightness_sum":0.0,"mapped_lightness_sum":0.0,
         "source_saturation_sum":0.0,"mapped_saturation_sum":0.0,
@@ -498,23 +564,29 @@ def _sample_mapping_diagnostics(rgb_image, *, color_rendering: str, custom_color
         "delta_e_sum":0.0,"delta_e_max":0.0,"delta_e2000_sum":0.0,"delta_e2000_max":0.0,
         "delta_e_oklab_sum":0.0,"delta_e_oklab_max":0.0,"hue_error_sum":0.0,
     }
-    for y in range(0, rgb_image.height, stride):
-        for x in range(0, rgb_image.width, stride):
-            r,g,b,a=pixels[x,y]; src=_visible_rgb(r,g,b,a)
-            if skip_white and min(src) >= 245:
-                continue
-            idx=closest_palette_index(src,color_rendering=color_rendering,custom_mode=custom_color_workflow,color_fidelity=color_fidelity)
-            pair=mapping_pair_metrics(src,palette[idx])
-            stats["mapped_pixels"]+=1
-            stats["source_lightness_sum"]+=pair["source_lightness"];stats["mapped_lightness_sum"]+=pair["mapped_lightness"]
-            stats["source_saturation_sum"]+=pair["source_saturation"];stats["mapped_saturation_sum"]+=pair["mapped_saturation"]
-            stats["source_luminance_sum"]+=pair["source_luminance"];stats["mapped_luminance_sum"]+=pair["mapped_luminance"]
-            stats["delta_e_sum"]+=pair["delta_e76"];stats["delta_e_max"]=max(stats["delta_e_max"],pair["delta_e76"])
-            stats["delta_e2000_sum"]+=pair["delta_e2000"];stats["delta_e2000_max"]=max(stats["delta_e2000_max"],pair["delta_e2000"])
-            stats["delta_e_oklab_sum"]+=pair["delta_e_oklab"];stats["delta_e_oklab_max"]=max(stats["delta_e_oklab_max"],pair["delta_e_oklab"])
-            stats["hue_error_sum"]+=pair.get("hue_error",0.0)
-            if stats["mapped_pixels"] >= sample_limit:
-                return finalize_mapping_stats(stats)
+    for x, y in coordinates:
+        r,g,b,a=pixels[x,y]; src=_visible_rgb(r,g,b,a)
+        if a <= 0 or (skip_white and min(src) >= 245):
+            continue
+        if layered:
+            idx, secondary, ratio, _improvement = _best_layer_cached(
+                src, palette, names, color_rendering, custom_color_workflow,
+                color_layers, color_fidelity)
+            if secondary is not None and _should_overlay(x, y, ratio, color_layers):
+                idx = secondary
+        else:
+            idx=_closest_palette_index_cached(src,palette,names,color_rendering,custom_color_workflow,color_fidelity)
+        pair=mapping_pair_metrics(src,palette[idx])
+        stats["mapped_pixels"]+=1
+        stats["source_lightness_sum"]+=pair["source_lightness"];stats["mapped_lightness_sum"]+=pair["mapped_lightness"]
+        stats["source_saturation_sum"]+=pair["source_saturation"];stats["mapped_saturation_sum"]+=pair["mapped_saturation"]
+        stats["source_luminance_sum"]+=pair["source_luminance"];stats["mapped_luminance_sum"]+=pair["mapped_luminance"]
+        stats["delta_e_sum"]+=pair["delta_e76"];stats["delta_e_max"]=max(stats["delta_e_max"],pair["delta_e76"])
+        stats["delta_e2000_sum"]+=pair["delta_e2000"];stats["delta_e2000_max"]=max(stats["delta_e2000_max"],pair["delta_e2000"])
+        stats["delta_e_oklab_sum"]+=pair["delta_e_oklab"];stats["delta_e_oklab_max"]=max(stats["delta_e_oklab_max"],pair["delta_e_oklab"])
+        stats["hue_error_sum"]+=pair.get("hue_error",0.0)
+        if stats["mapped_pixels"] >= sample_limit:
+            return finalize_mapping_stats(stats)
     return finalize_mapping_stats(stats)
 
 def suggested_color_workflow(calibrated_count: int, image_mode: str = "RGB") -> str:

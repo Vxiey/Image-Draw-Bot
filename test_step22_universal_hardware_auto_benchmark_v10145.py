@@ -110,8 +110,11 @@ class Step22UniversalHardwareTests(unittest.TestCase):
         base = Path(__file__).resolve().parent
         start = (base / "Start.bat").read_text(encoding="utf-8", errors="replace")
         req = (base / "requirements-gpu-universal.txt").read_text(encoding="utf-8", errors="replace").lower()
-        self.assertIn("AutoUniversalGpuSetup.py --ensure", start)
-        self.assertIn("AMD / Intel", start)
+        self.assertIn("-E -s SourceStartup.py", start)
+        startup = (base / "SourceStartup.py").read_text(encoding="utf-8")
+        self.assertIn("'AutoUniversalGpuSetup.py'", startup)
+        self.assertIn("'--ensure'", startup)
+        self.assertIn("AMD / Intel", startup)
         self.assertIn("pyopencl", req)
 
     def test_windows_release_bundles_universal_opencl_benchmark(self):

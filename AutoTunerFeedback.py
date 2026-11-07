@@ -17,19 +17,22 @@ import math
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
+from CompletedDrawLearning import has_completed_drawing_work
 from ProfileStorage import profile_auto_tuner_feedback_file, safe_profile_key
-from RuntimePaths import atomic_write_text
+from RuntimePaths import atomic_write_text, file_transaction, is_finite_number, read_json
 
 VERSION = 1
 MIN_LEARNING_SAMPLES = 3
 MAX_HISTORY = 12
+MAX_CONTEXTS = 256
 
 
 def _finite(value: Any, default: float = 0.0) -> float:
     try:
         value = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return float(default)
     return value if math.isfinite(value) else float(default)
 
@@ -83,14 +86,33 @@ def _load(options: dict[str, Any], path: Path | None = None) -> tuple[Path, dict
     resolved = _resolved_path(options, path)
     profile = _profile(options)
     try:
-        raw = json.loads(resolved.read_text(encoding="utf-8"))
-        if (not isinstance(raw, dict) or int(raw.get("version", 0)) != VERSION or
+        raw = read_json(resolved)
+        if (not isinstance(raw, dict) or type(raw.get("version")) is not int or raw["version"] != VERSION or
                 safe_profile_key(raw.get("profile_key")) != profile or
                 not isinstance(raw.get("contexts"), dict)):
             return resolved, _empty(profile)
-        return resolved, {"version": VERSION, "profile_key": profile, "contexts": dict(raw["contexts"])}
+        contexts = {key: item for key, item in raw['contexts'].items()
+                    if isinstance(key, str) and _valid_context(item)}
+        contexts = dict(sorted(contexts.items(), key=lambda pair: _finite(pair[1].get('updated_at')))[-MAX_CONTEXTS:])
+        return resolved, {"version": VERSION, "profile_key": profile, "contexts": contexts}
     except (OSError, ValueError, TypeError):
         return resolved, _empty(profile)
+
+
+def _valid_context(item):
+    if not isinstance(item, dict):
+        return False
+    for key in ('samples', 'snapshot_samples'):
+        value = item.get(key, 0)
+        if type(value) is not int or not 0 <= value <= 1_000_000_000:
+            return False
+    if not isinstance(item.get('history', []), list):
+        return False
+    for key, value in item.items():
+        if key.endswith('_ema') and value is not None:
+            if not is_finite_number(value):
+                return False
+    return True
 
 
 def _context_dimensions(options: dict[str, Any], source_kind: str, strategy: str,
@@ -108,11 +130,9 @@ def _context_dimensions(options: dict[str, Any], source_kind: str, strategy: str
 
 def _context_key(dim: dict[str, Any]) -> str:
     # Values are sanitized/bounded and the file itself is already profile scoped.
-    return "|".join((
-        f"source={dim['source_kind']}", f"budget={dim['budget_class']}",
-        f"strategy={dim['strategy']}", f"tool={dim['tool']}",
-        f"brush={dim['brush_px']}", f"color={dim['workflow']}",
-    ))
+    return '|'.join(f'{name}={quote(str(dim[field]), safe="-_. /")}' for name, field in (
+        ('source', 'source_kind'), ('budget', 'budget_class'), ('strategy', 'strategy'),
+        ('tool', 'tool'), ('brush', 'brush_px'), ('color', 'workflow')))
 
 
 def _alpha(samples: int) -> float:
@@ -154,27 +174,31 @@ def _actual_snapshot_accuracy(options: dict[str, Any]) -> dict[str, Any]:
     meta = options.get("post_draw_accuracy_meta") if isinstance(options, dict) else {}
     if not isinstance(meta, dict):
         return {"available": False, "trusted": False}
-    visual = meta.get("visual_accuracy_percent")
-    try:
-        visual = float(visual) if visual is not None else None
-    except Exception:
-        visual = None
+    def metric(name):
+        value = meta.get(name)
+        if not is_finite_number(value) or not 0 <= value <= 100:
+            return None
+        return float(value)
+    visual = metric('visual_accuracy_percent')
     trust = str(meta.get("feedback_trust") or "none").lower()
     state = str(meta.get("scoring_state") or "").lower()
-    trusted = visual is not None and trust in ("high", "medium") and state not in ("unavailable", "rejected")
+    available = visual is not None and ('available' not in meta or meta['available'] is True)
+    trusted = (available and trust in ("high", "medium")
+               and ('trusted' not in meta or meta['trusted'] is True)
+               and state not in ("unavailable", "rejected"))
     return {
-        "available": visual is not None or bool(meta.get("available")),
+        "available": available,
         "trusted": bool(trusted),
         "trust": trust,
         "scoring_state": state or None,
-        "confidence_percent": meta.get("confidence_percent"),
+        "confidence_percent": metric("confidence_percent"),
         "visual": None if visual is None else _clamp(visual, 0.0, 100.0),
-        "perceptual": meta.get("perceptual_color_accuracy_percent"),
-        "edge": meta.get("edge_accuracy_percent"),
-        "source_pixel": meta.get("source_pixel_accuracy_percent"),
-        "actual_coverage_percent": meta.get("actual_coverage_percent"),
-        "actual_vs_simulated_visual_percent": meta.get("actual_vs_simulated_visual_percent"),
-        "unexpected_ink_percent": meta.get("unexpected_ink_percent"),
+        "perceptual": metric("perceptual_color_accuracy_percent"),
+        "edge": metric("edge_accuracy_percent"),
+        "source_pixel": metric("source_pixel_accuracy_percent"),
+        "actual_coverage_percent": metric("actual_coverage_percent"),
+        "actual_vs_simulated_visual_percent": metric("actual_vs_simulated_visual_percent"),
+        "unexpected_ink_percent": metric("unexpected_ink_percent"),
         "blank_canvas": bool(meta.get("blank_canvas")),
         "visual_gate_passed": meta.get("visual_gate_passed"),
         "evidence": meta.get("evidence"),
@@ -199,7 +223,9 @@ def _runtime_result(plan: dict[str, Any], completed_paths: int) -> dict[str, Any
     if structural is None:
         structural = completion * 100.0
     structural = _clamp(_finite(structural, completion * 100.0), 0.0, 100.0) / 100.0
-    drawn = max(0, int(counts.get("drawn") or 0))
+    # RuntimeSafetyReport classifies these as exclusive delivered path kinds.
+    # A boundary-clipped or edge-following path still delivered drawing input.
+    drawn = sum(max(0, int(counts.get(name) or 0)) for name in ('drawn', 'clipped', 'edge_follow'))
     blocked = max(0, int(counts.get("blocked") or 0))
     safe_skipped = max(0, int(counts.get("skipped") or 0))
     safety_total = drawn + blocked + safe_skipped
@@ -258,6 +284,12 @@ def record_completed_feedback(plan: dict[str, Any], actual_seconds: float, *, co
         return {"recorded": False, "reason": "Auto tuner inactive"}
     if bool(options.get("test_run")) or bool(options.get("dry_run_sampled")) or options.get("render_resume_state"):
         return {"recorded": False, "reason": "test/dry-run/resume sample"}
+    from CompletedDrawLearning import paused_learning_reason
+    pause_reason = paused_learning_reason(options)
+    if pause_reason:
+        return {"recorded": False, "reason": pause_reason}
+    if not has_completed_drawing_work(options, completed_paths):
+        return {"recorded": False, "reason": "no completed drawing work"}
     actual = _finite(actual_seconds, 0.0)
     if actual < 1.0:
         return {"recorded": False, "reason": "sample too small"}
@@ -266,8 +298,15 @@ def record_completed_feedback(plan: dict[str, Any], actual_seconds: float, *, co
     predicted = _finite(draw_time.get("projected_seconds", plan.get("estimate")), 0.0)
     if predicted < 1.0:
         return {"recorded": False, "reason": "missing predicted time"}
-    source_kind = str((tuner.get("source_features") or {}).get("source_kind") or "unknown")
-    strategy = str(tuner.get("selected_strategy") or "unknown")
+    source_features = tuner.get('source_features')
+    source_features = source_features if isinstance(source_features, dict) else {}
+    source_kind = str(source_features.get("source_kind") or "unknown")
+    selected_strategy = str(tuner.get("selected_strategy") or "unknown")
+    base_strategy = tuner.get('base_strategy')
+    # The next tuning decision reads the base policy's context. Feed adjusted
+    # outcomes back into that context, while keeping rescue strategies separate.
+    strategy = (base_strategy if isinstance(base_strategy, str) and base_strategy
+                and selected_strategy.startswith(base_strategy + '+feedback-') else selected_strategy)
     usable = _usable_deadline(plan)
     dim = _context_dimensions(options, source_kind, strategy, usable)
     key = _context_key(dim)
@@ -302,90 +341,97 @@ def record_completed_feedback(plan: dict[str, Any], actual_seconds: float, *, co
     abs_pct = _clamp(abs(actual - predicted) / max(1.0, actual), 0.0, 2.0)
     headroom = None if usable is None else usable - actual
 
-    resolved, db = _load(options, path)
-    old = db["contexts"].get(key)
-    if not isinstance(old, dict):
-        old = {}
-    samples = max(0, int(old.get("samples") or 0))
-    deadline_value = 1.0 if deadline_pass else 0.0
-    acceptance_value = 1.0 if accepted else 0.0
-    panic_value = 1.0 if runtime["panic_activations"] > 0 else 0.0
-    catchup_value = 1.0 if runtime["catch_up_activations"] > 0 else 0.0
+    with file_transaction(_resolved_path(options, path)):
+        resolved, db = _load(options, path)
+        old = db["contexts"].get(key)
+        if not isinstance(old, dict):
+            old = {}
+        samples = max(0, int(old.get("samples") or 0))
+        deadline_value = 1.0 if deadline_pass else 0.0
+        acceptance_value = 1.0 if accepted else 0.0
+        panic_value = 1.0 if runtime["panic_activations"] > 0 else 0.0
+        catchup_value = 1.0 if runtime["catch_up_activations"] > 0 else 0.0
 
-    item = dict(dim)
-    item.update({
-        "samples": samples + 1,
-        "time_ratio_ema": round(_ema(old.get("time_ratio_ema"), ratio, samples, lo=.45, hi=4.0), 6),
-        "time_abs_error_ema": round(_ema(old.get("time_abs_error_ema"), abs_pct, samples, lo=0.0, hi=2.0), 6),
-        "deadline_pass_rate_ema": round(_ema(old.get("deadline_pass_rate_ema"), deadline_value, samples, lo=0.0, hi=1.0), 6),
-        "acceptance_pass_rate_ema": round(_ema(old.get("acceptance_pass_rate_ema"), acceptance_value, samples, lo=0.0, hi=1.0), 6),
-        "completion_ratio_ema": round(_ema(old.get("completion_ratio_ema"), runtime["completion_ratio"], samples, lo=0.0, hi=1.0), 6),
-        "structural_completion_ema": round(_ema(old.get("structural_completion_ema"), runtime["structural_completion_ratio"], samples, lo=0.0, hi=1.0), 6),
-        "safety_delivery_ema": round(_ema(old.get("safety_delivery_ema"), runtime["safety_delivery_ratio"], samples, lo=0.0, hi=1.0), 6),
-        "panic_rate_ema": round(_ema(old.get("panic_rate_ema"), panic_value, samples, lo=0.0, hi=1.0), 6),
-        "catchup_rate_ema": round(_ema(old.get("catchup_rate_ema"), catchup_value, samples, lo=0.0, hi=1.0), 6),
-        "last_predicted_seconds": round(predicted, 4),
-        "last_actual_seconds": round(actual, 4),
-        "last_time_ratio": round(ratio, 6),
-        "last_deadline_met": bool(deadline_pass),
-        "last_accepted": bool(accepted),
-        "last_result_source": result_source,
-        "last_result_visual_percent": None if result_visual is None else round(float(result_visual), 3),
-        "last_plan_visual_percent": None if planned_visual is None else round(float(planned_visual), 3),
-        "last_actual_snapshot_visual_percent": None if not snapshot.get("available") else round(float(snapshot.get("visual")), 3),
-        "last_actual_snapshot_trust": snapshot.get("trust", "none"),
-        "last_snapshot_scoring_state": snapshot.get("scoring_state"),
-        "last_snapshot_confidence_percent": snapshot.get("confidence_percent"),
-        "last_actual_snapshot_coverage_percent": snapshot.get("actual_coverage_percent"),
-        "last_actual_vs_simulated_visual_percent": snapshot.get("actual_vs_simulated_visual_percent"),
-        "last_snapshot_unexpected_ink_percent": snapshot.get("unexpected_ink_percent"),
-        "last_completion_percent": round(runtime["completion_ratio"] * 100.0, 2),
-        "last_structural_completion_percent": round(runtime["structural_completion_ratio"] * 100.0, 2),
-        "last_safety_delivery_percent": round(runtime["safety_delivery_ratio"] * 100.0, 2),
-        "last_headroom_seconds": None if headroom is None else round(headroom, 3),
-        "updated_at": time.time(),
-    })
-    if result_visual is not None:
-        item["result_visual_ema"] = round(_ema(old.get("result_visual_ema"), float(result_visual), samples, lo=0.0, hi=100.0), 4)
-    if planned_visual is not None:
-        item["planned_visual_ema"] = round(_ema(old.get("planned_visual_ema"), float(planned_visual), samples, lo=0.0, hi=100.0), 4)
-    if snapshot.get("trusted"):
-        item["snapshot_visual_ema"] = round(_ema(old.get("snapshot_visual_ema"), float(snapshot["visual"]), samples, lo=0.0, hi=100.0), 4)
-        item["snapshot_samples"] = max(0, int(old.get("snapshot_samples") or 0)) + 1
-    else:
-        item["snapshot_samples"] = max(0, int(old.get("snapshot_samples") or 0))
+        item = dict(dim)
+        item.update({
+            "samples": samples + 1,
+            "time_ratio_ema": round(_ema(old.get("time_ratio_ema"), ratio, samples, lo=.45, hi=4.0), 6),
+            "time_abs_error_ema": round(_ema(old.get("time_abs_error_ema"), abs_pct, samples, lo=0.0, hi=2.0), 6),
+            "deadline_pass_rate_ema": round(_ema(old.get("deadline_pass_rate_ema"), deadline_value, samples, lo=0.0, hi=1.0), 6),
+            "acceptance_pass_rate_ema": round(_ema(old.get("acceptance_pass_rate_ema"), acceptance_value, samples, lo=0.0, hi=1.0), 6),
+            "completion_ratio_ema": round(_ema(old.get("completion_ratio_ema"), runtime["completion_ratio"], samples, lo=0.0, hi=1.0), 6),
+            "structural_completion_ema": round(_ema(old.get("structural_completion_ema"), runtime["structural_completion_ratio"], samples, lo=0.0, hi=1.0), 6),
+            "safety_delivery_ema": round(_ema(old.get("safety_delivery_ema"), runtime["safety_delivery_ratio"], samples, lo=0.0, hi=1.0), 6),
+            "panic_rate_ema": round(_ema(old.get("panic_rate_ema"), panic_value, samples, lo=0.0, hi=1.0), 6),
+            "catchup_rate_ema": round(_ema(old.get("catchup_rate_ema"), catchup_value, samples, lo=0.0, hi=1.0), 6),
+            "last_predicted_seconds": round(predicted, 4),
+            "last_actual_seconds": round(actual, 4),
+            "last_time_ratio": round(ratio, 6),
+            "last_deadline_met": bool(deadline_pass),
+            "last_accepted": bool(accepted),
+            "last_result_source": result_source,
+            "last_selected_strategy": selected_strategy,
+            "last_result_visual_percent": None if result_visual is None else round(float(result_visual), 3),
+            "last_plan_visual_percent": None if planned_visual is None else round(float(planned_visual), 3),
+            "last_actual_snapshot_visual_percent": None if not snapshot.get("available") else round(float(snapshot.get("visual")), 3),
+            "last_actual_snapshot_trust": snapshot.get("trust", "none"),
+            "last_snapshot_scoring_state": snapshot.get("scoring_state"),
+            "last_snapshot_confidence_percent": snapshot.get("confidence_percent"),
+            "last_actual_snapshot_coverage_percent": snapshot.get("actual_coverage_percent"),
+            "last_actual_vs_simulated_visual_percent": snapshot.get("actual_vs_simulated_visual_percent"),
+            "last_snapshot_unexpected_ink_percent": snapshot.get("unexpected_ink_percent"),
+            "last_completion_percent": round(runtime["completion_ratio"] * 100.0, 2),
+            "last_structural_completion_percent": round(runtime["structural_completion_ratio"] * 100.0, 2),
+            "last_safety_delivery_percent": round(runtime["safety_delivery_ratio"] * 100.0, 2),
+            "last_headroom_seconds": None if headroom is None else round(headroom, 3),
+            "updated_at": time.time(),
+        })
+        if result_visual is not None:
+            item["result_visual_ema"] = round(_ema(old.get("result_visual_ema"), float(result_visual), samples, lo=0.0, hi=100.0), 4)
+        if planned_visual is not None:
+            item["planned_visual_ema"] = round(_ema(old.get("planned_visual_ema"), float(planned_visual), samples, lo=0.0, hi=100.0), 4)
+        if snapshot.get("trusted"):
+            item["snapshot_visual_ema"] = round(_ema(old.get("snapshot_visual_ema"), float(snapshot["visual"]), samples, lo=0.0, hi=100.0), 4)
+            item["snapshot_samples"] = max(0, int(old.get("snapshot_samples") or 0)) + 1
+        else:
+            item["snapshot_samples"] = max(0, int(old.get("snapshot_samples") or 0))
 
-    history = list(old.get("history") or ())[-(MAX_HISTORY - 1):]
-    history.append({
-        "time_ratio": round(ratio, 4), "deadline_met": bool(deadline_pass),
-        "accepted": bool(accepted), "completion_percent": round(runtime["completion_ratio"] * 100.0, 1),
-        "structure_percent": round(runtime["structural_completion_ratio"] * 100.0, 1),
-        "result_visual_percent": None if result_visual is None else round(float(result_visual), 1),
-        "result_source": result_source, "snapshot_trust": snapshot.get("trust", "none"),
-        "snapshot_confidence_percent": snapshot.get("confidence_percent"),
-        "panic": bool(runtime["panic_activations"]),
-    })
-    item["history"] = history
-    db["contexts"][key] = item
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2))
+        history = list(old.get("history") or ())[-(MAX_HISTORY - 1):]
+        history.append({
+            "time_ratio": round(ratio, 4), "deadline_met": bool(deadline_pass),
+            "accepted": bool(accepted), "completion_percent": round(runtime["completion_ratio"] * 100.0, 1),
+            "structure_percent": round(runtime["structural_completion_ratio"] * 100.0, 1),
+            "result_visual_percent": None if result_visual is None else round(float(result_visual), 1),
+            "result_source": result_source, "snapshot_trust": snapshot.get("trust", "none"),
+            "snapshot_confidence_percent": snapshot.get("confidence_percent"),
+            "panic": bool(runtime["panic_activations"]),
+        })
+        item["history"] = history
+        db["contexts"][key] = item
+        while len(db['contexts']) > MAX_CONTEXTS:
+            oldest = min((name for name in db['contexts'] if name != key),
+                         key=lambda name: _finite(db['contexts'][name].get('updated_at')))
+            del db['contexts'][oldest]
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False))
 
-    return {
-        "recorded": True, "profile_key": dim["profile_key"], "context_key": key,
-        "samples": item["samples"], "strategy": strategy, "source_kind": source_kind,
-        "budget_class": dim["budget_class"], "predicted_seconds": round(predicted, 3),
-        "actual_seconds": round(actual, 3), "time_ratio": round(ratio, 4),
-        "deadline_met": bool(deadline_pass), "accepted": bool(accepted),
-        "completion_percent": item["last_completion_percent"],
-        "structural_completion_percent": item["last_structural_completion_percent"],
-        "result_visual_percent": item["last_result_visual_percent"],
-        "result_source": result_source, "snapshot_trust": snapshot.get("trust", "none"),
-        "snapshot_scoring_state": snapshot.get("scoring_state"),
-        "snapshot_confidence_percent": snapshot.get("confidence_percent"),
-        "actual_snapshot_coverage_percent": snapshot.get("actual_coverage_percent"),
-        "actual_vs_simulated_visual_percent": snapshot.get("actual_vs_simulated_visual_percent"),
-        "storage_path": str(resolved),
-    }
+        return {
+            "recorded": True, "profile_key": dim["profile_key"], "context_key": key,
+            "samples": item["samples"], "strategy": strategy, "selected_strategy": selected_strategy,
+            "source_kind": source_kind,
+            "budget_class": dim["budget_class"], "predicted_seconds": round(predicted, 3),
+            "actual_seconds": round(actual, 3), "time_ratio": round(ratio, 4),
+            "deadline_met": bool(deadline_pass), "accepted": bool(accepted),
+            "completion_percent": item["last_completion_percent"],
+            "structural_completion_percent": item["last_structural_completion_percent"],
+            "result_visual_percent": item["last_result_visual_percent"],
+            "result_source": result_source, "snapshot_trust": snapshot.get("trust", "none"),
+            "snapshot_scoring_state": snapshot.get("scoring_state"),
+            "snapshot_confidence_percent": snapshot.get("confidence_percent"),
+            "actual_snapshot_coverage_percent": snapshot.get("actual_coverage_percent"),
+            "actual_vs_simulated_visual_percent": snapshot.get("actual_vs_simulated_visual_percent"),
+            "storage_path": str(resolved),
+        }
 
 
 def _matching_contexts(db: dict[str, Any], dim: dict[str, Any]) -> list[dict[str, Any]]:
@@ -497,9 +543,10 @@ def recommend_adjustment(options: dict[str, Any], *, source_kind: str, strategy:
 def reset_profile(options: dict[str, Any], *, path: Path | None = None) -> dict[str, Any]:
     """Reset only this profile's Step 12 strategy feedback database."""
     resolved = _resolved_path(options, path)
-    existed = resolved.exists()
-    try:
-        resolved.unlink()
-    except FileNotFoundError:
-        pass
-    return {"reset": bool(existed), "profile_key": _profile(options), "storage_path": str(resolved)}
+    with file_transaction(resolved):
+        existed = resolved.exists()
+        try:
+            resolved.unlink()
+        except FileNotFoundError:
+            pass
+        return {"reset": bool(existed), "profile_key": _profile(options), "storage_path": str(resolved)}

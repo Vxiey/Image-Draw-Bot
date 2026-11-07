@@ -5,8 +5,8 @@ from Version import APP_VERSION, FILE_VERSION
 
 class PerGameInputEngineV1075Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(FILE_VERSION,'1.0.148')
 
     def test_three_games_have_distinct_policies(self):
         g=resolve_stroke_delivery({'profile_name':'Gartic Phone','stroke_step_px':8})

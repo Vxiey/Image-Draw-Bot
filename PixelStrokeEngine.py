@@ -9,6 +9,7 @@ components on CPU, and emits four quality-first passes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from bisect import bisect_left, bisect_right
 import math
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -17,7 +18,7 @@ from typing import Sequence
 import numpy as np
 
 from ContinuousPaths import order_paths
-from PixelAccuratePlanner import PixelMap, groups_from_pixel_map
+from PixelAccuratePlanner import PixelMap, groups_from_pixel_map, validated_pixel_indices
 
 Point = tuple[int, int]
 Segment = tuple[int, int, int, int]
@@ -127,8 +128,7 @@ class _UnionFind:
 
 
 def _row_runs(pixel_map: PixelMap, cancelled=lambda: False) -> tuple[list[_Run], list[list[int]], _UnionFind]:
-    idx = pixel_map.palette_index
-    mask = pixel_map.drawable_mask
+    idx, mask = validated_pixel_indices(pixel_map, cancelled=cancelled)
     h, w = idx.shape
     uf = _UnionFind()
     runs: list[_Run] = []
@@ -140,7 +140,8 @@ def _row_runs(pixel_map: PixelMap, cancelled=lambda: False) -> tuple[list[_Run],
             raise InterruptedError()
         row_ids: list[int] = []
         current_by_color: dict[int, list[int]] = {}
-        values = np.where(mask[y], idx[y], -1)
+        values = np.full(w, -1, dtype=np.int16)
+        values[mask[y]] = idx[y][mask[y]]
         boundaries = np.r_[0, np.flatnonzero(values[1:] != values[:-1]) + 1, w]
         for start, end in zip(boundaries[:-1], boundaries[1:]):
             color = int(values[start]) if start < w else -1
@@ -186,62 +187,113 @@ def _vertical_run_chunk(component_map: np.ndarray, x0: int, x1: int, cancelled=l
     return out
 
 
-def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, cancelled=lambda: False) -> tuple[list[Component], np.ndarray, dict]:
+def _row_component_statistics(pixel_map: PixelMap, y: int, row_runs, *, cancelled):
+    """Reduce all runs in one row together, including gaps between runs.
+
+    Alternating start/end boundaries let reduceat cover exactly each drawable
+    interval. The unused inter-run reductions are discarded. One padded value
+    handles a run ending at the right edge without a special final interval.
+    """
+    planes = (pixel_map.importance_map, pixel_map.edge_map,
+              pixel_map.contour_map if pixel_map.contour_map is not None else pixel_map.edge_map,
+              pixel_map.shadow_map, pixel_map.shadow_detail_map)
+    if len(row_runs) < 8:
+        # Solid rows and sparse dots have too few runs to amortize full-row
+        # padding. Keep their original small slice reductions instead.
+        if cancelled():raise InterruptedError()
+        slices = [slice(run.x0, run.x1 + 1) for run in row_runs]
+        sums = [[0.0] * len(slices) if plane is None else
+                [float(np.sum(plane[y, sl], dtype=np.float64)) for sl in slices]
+                for plane in planes]
+        maxima = [float(np.max(pixel_map.importance_map[y, sl])) for sl in slices]
+        counts = [int(np.count_nonzero(pixel_map.protected_mask[y, sl])) for sl in slices]
+        return sums, maxima, counts
+    def boundaries():
+        for index, run in enumerate(row_runs):
+            if index % 128 == 0 and cancelled():raise InterruptedError()
+            yield run.x0
+            yield run.x1 + 1
+    bounds = np.fromiter(boundaries(), dtype=np.intp, count=len(row_runs) * 2)
+    cache = {}
+    sums = []
+    for plane in planes:
+        if cancelled():raise InterruptedError()
+        key = id(plane)
+        if key not in cache:
+            if plane is None:
+                cache[key] = np.zeros(len(row_runs), dtype=np.float64)
+            else:
+                values = np.empty(pixel_map.width + 1, dtype=np.float64)
+                values[:-1] = plane[y]
+                values[-1] = 0
+                cache[key] = np.add.reduceat(values, bounds)[::2]
+        sums.append(cache[key])
+    values = np.empty(pixel_map.width + 1, dtype=np.float64)
+    values[:-1] = pixel_map.importance_map[y]
+    values[-1] = 0
+    maxima = np.maximum.reduceat(values, bounds)[::2]
+    protected = np.empty(pixel_map.width + 1, dtype=np.int64)
+    # Preserve count_nonzero semantics for supported numeric masks as well
+    # as the Boolean masks produced by the application.
+    protected[:-1] = np.asarray(pixel_map.protected_mask[y], dtype=np.bool_)
+    protected[-1] = 0
+    counts = np.add.reduceat(protected, bounds)[::2]
+    return sums, maxima, counts
+
+
+def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, include_vertical_runs: bool = True,
+                         cancelled=lambda: False) -> tuple[list[Component], np.ndarray, dict]:
     """Label lossless same-palette 4-connected regions using run union-find."""
     runs, rows, uf = _row_runs(pixel_map, cancelled)
     h, w = pixel_map.height, pixel_map.width
     component_map = np.full((h, w), -1, dtype=np.int32)
     root_to_component: dict[int, int] = {}
     components: list[Component] = []
-    stats: dict[int, dict] = {}
-
-    for run_index,run in enumerate(runs):
-        if run_index%128==0 and cancelled():raise InterruptedError()
-        root = uf.find(run.rid)
-        cid = root_to_component.get(root)
-        if cid is None:
-            cid = len(components)
-            root_to_component[root] = cid
-            components.append(Component(cid, run.color, bbox=(run.x0, run.y, run.x1, run.y)))
-            stats[cid] = {"importance_sum": 0.0, "edge_sum": 0.0, "contour_sum": 0.0,
-                          "shadow_sum": 0.0, "shadow_detail_sum": 0.0}
-        comp = components[cid]
-        length = run.x1 - run.x0 + 1
-        comp.area += length
-        x0, y0, x1, y1 = comp.bbox
-        comp.bbox = (min(x0, run.x0), min(y0, run.y), max(x1, run.x1), max(y1, run.y))
-        segment = (run.x0, run.y, run.x1, run.y)
-        comp.horizontal_runs.append(segment)
-        sl = slice(run.x0, run.x1 + 1)
-        importance_values = pixel_map.importance_map[run.y, sl]
-        edge_values = pixel_map.edge_map[run.y, sl]
-        contour_values = (pixel_map.contour_map[run.y, sl] if pixel_map.contour_map is not None else edge_values)
-        shadow_values = (pixel_map.shadow_map[run.y, sl] if pixel_map.shadow_map is not None else np.zeros_like(edge_values))
-        shadow_detail_values = (pixel_map.shadow_detail_map[run.y, sl] if pixel_map.shadow_detail_map is not None else np.zeros_like(edge_values))
-        stats[cid]["importance_sum"] += float(np.sum(importance_values, dtype=np.float64))
-        stats[cid]["edge_sum"] += float(np.sum(edge_values, dtype=np.float64))
-        stats[cid]["contour_sum"] += float(np.sum(contour_values, dtype=np.float64))
-        stats[cid]["shadow_sum"] += float(np.sum(shadow_values, dtype=np.float64))
-        stats[cid]["shadow_detail_sum"] += float(np.sum(shadow_detail_values, dtype=np.float64))
-        if importance_values.size:
-            comp.importance_max = max(comp.importance_max, float(np.max(importance_values)))
-        comp.protected_pixels += int(np.count_nonzero(pixel_map.protected_mask[run.y, sl]))
-        component_map[run.y, sl] = cid
+    for y, row_ids in enumerate(rows):
+        if cancelled():raise InterruptedError()
+        if not row_ids:continue
+        row_runs = [runs[index] for index in row_ids]
+        sums, maxima, protected = _row_component_statistics(pixel_map, y, row_runs, cancelled=cancelled)
+        for run_index,run in enumerate(row_runs):
+            if run_index%128==0 and cancelled():raise InterruptedError()
+            root = uf.find(run.rid)
+            cid = root_to_component.get(root)
+            if cid is None:
+                cid = len(components)
+                root_to_component[root] = cid
+                components.append(Component(cid, run.color, bbox=(run.x0, run.y, run.x1, run.y)))
+            comp = components[cid]
+            comp.area += run.x1 - run.x0 + 1
+            x0, y0, x1, y1 = comp.bbox
+            comp.bbox = (min(x0, run.x0), min(y0, run.y), max(x1, run.x1), max(y1, run.y))
+            comp.horizontal_runs.append((run.x0, run.y, run.x1, run.y))
+            # These fields hold sums until the component is complete; avoid a
+            # second Python dictionary and five boxed sums per component.
+            comp.importance_mean += float(sums[0][run_index])
+            comp.edge_mean += float(sums[1][run_index])
+            comp.contour_mean += float(sums[2][run_index])
+            comp.shadow_mean += float(sums[3][run_index])
+            comp.shadow_detail_mean += float(sums[4][run_index])
+            comp.importance_max = max(comp.importance_max, float(maxima[run_index]))
+            comp.protected_pixels += int(protected[run_index])
+            component_map[run.y, run.x0:run.x1+1] = cid
 
     for comp in components:
         if comp.area:
-            comp.importance_mean = stats[comp.component_id]["importance_sum"] / comp.area
-            comp.edge_mean = stats[comp.component_id]["edge_sum"] / comp.area
-            comp.contour_mean = stats[comp.component_id]["contour_sum"] / comp.area
-            comp.shadow_mean = stats[comp.component_id]["shadow_sum"] / comp.area
-            comp.shadow_detail_mean = stats[comp.component_id]["shadow_detail_sum"] / comp.area
+            comp.importance_mean /= comp.area
+            comp.edge_mean /= comp.area
+            comp.contour_mean /= comp.area
+            comp.shadow_mean /= comp.area
+            comp.shadow_detail_mean /= comp.area
 
     # Build exact vertical runs. Block D parallelizes independent column chunks
     # while preserving deterministic x-order when merging the results.
     vertical_lists: list[list[Segment]] = [[] for _ in components]
     workers=max(1,int(cpu_workers or 1))
     vertical_backend="cpu-serial-columns"
-    if workers>1 and w>=64:
+    if not include_vertical_runs:
+        vertical_backend="not-requested"
+    elif workers>1 and w>=64:
         chunk=max(16,math.ceil(w/min(workers,16)))
         ranges=[(x,min(w,x+chunk)) for x in range(0,w,chunk)]
         with ThreadPoolExecutor(max_workers=min(workers,len(ranges))) as pool:
@@ -301,7 +353,7 @@ def _append_point(points: list[Point], point: Point) -> None:
         points.append(point)
 
 
-def _attach_lossless(state: _ActiveRasterPath, run: Segment) -> None:
+def _lossless_attachment_points(state: _ActiveRasterPath, run: Segment) -> list[Point]:
     x0,y,x1,_=run
     if x1<x0:x0,x1=x1,x0
     lo,hi=max(state.x0,x0),min(state.x1,x1)
@@ -309,24 +361,34 @@ def _attach_lossless(state: _ActiveRasterPath, run: Segment) -> None:
         raise ValueError('Runs are not safely adjacent.')
     end_x=state.points[-1][0]
     connector=min(hi,max(lo,end_x))
-    _append_point(state.points,(connector,state.last_y))
-    _append_point(state.points,(connector,y))
+    points=[state.points[-1]]
+    _append_point(points,(connector,state.last_y))
+    _append_point(points,(connector,y))
     # Sweep the complete new run.  Crucially, do not collinear-compress a
     # backtrack such as 0->2->1: the turning point represents real source pixels.
     if x0!=x1:
         if connector==x0:
-            _append_point(state.points,(x1,y))
+            _append_point(points,(x1,y))
         elif connector==x1:
-            _append_point(state.points,(x0,y))
+            _append_point(points,(x0,y))
         elif abs(connector-x0)<=abs(x1-connector):
-            _append_point(state.points,(x0,y));_append_point(state.points,(x1,y))
+            _append_point(points,(x0,y));_append_point(points,(x1,y))
         else:
-            _append_point(state.points,(x1,y));_append_point(state.points,(x0,y))
+            _append_point(points,(x1,y));_append_point(points,(x0,y))
+    return points[1:]
+
+
+def _attach_lossless(state: _ActiveRasterPath, run: Segment) -> None:
+    state.points.extend(_lossless_attachment_points(state,run))
+    x0,y,x1,_=run
+    x0,x1=sorted((x0,x1))
     state.last_y=y;state.x0=x0;state.x1=x1;state.rows+=1
 
 
 def _merge_horizontal_runs_lossless(runs: Sequence[Segment], *, cancelled=lambda: False,
                                     max_rows_per_path: int = 96, max_points_per_path: int = 480) -> list[Path]:
+    if max_points_per_path < 2 or max_rows_per_path < 1:
+        raise ValueError("Path limits require at least two points and one row.")
     rows: dict[int,list[Segment]]={}
     passthrough: list[Path]=[]
     for stroke in runs:
@@ -346,14 +408,29 @@ def _merge_horizontal_runs_lossless(runs: Sequence[Segment], *, cancelled=lambda
             if st.last_y==y-1:fresh.append(st)
             else:completed.append(tuple(st.points))
         active=fresh
+        # Active paths are in the preceding row's sorted run order. Keep a
+        # snapshot of those intervals while attachments mutate the selected
+        # path in place. Prefix maxima also handle overlapping/nested input
+        # runs: no interval that can intersect a new run may be skipped.
+        starts=[];prefix_ends=[]
+        for i,st in enumerate(active):
+            if i%256==0 and cancelled():raise InterruptedError()
+            starts.append(st.x0)
+            prefix_ends.append(max(prefix_ends[-1],st.x1) if prefix_ends else st.x1)
         used=set();next_active=[]
-        for run in sorted(rows[y],key=lambda r:(r[0],r[2])):
+        for run_number,run in enumerate(sorted(rows[y],key=lambda r:(r[0],r[2]))):
+            if run_number%128==0 and cancelled():raise InterruptedError()
             x0,_,x1,_=run
             candidates=[]
-            for i,st in enumerate(active):
+            first=bisect_left(prefix_ends,x0)
+            last=bisect_right(starts,x1)
+            for i in range(first,last):
+                if (i-first)%256==0 and cancelled():raise InterruptedError()
+                st=active[i]
                 if i in used or st.rows>=max_rows_per_path or len(st.points)>=max_points_per_path:continue
                 lo,hi=max(st.x0,x0),min(st.x1,x1)
                 if lo<=hi:
+                    if len(st.points)+len(_lossless_attachment_points(st,run))>max_points_per_path:continue
                     connector=min(hi,max(lo,st.points[-1][0]))
                     candidates.append((-(hi-lo+1),abs(connector-st.points[-1][0]),i,st))
             if candidates:
@@ -496,9 +573,15 @@ def build_component_paths(comp: Component, component_map: np.ndarray, *, cost_mo
             if exact0:
                 paths0=_bounded_axis_paths(paths0,cost_model,max_path_seconds,cancelled=cancelled)
                 ordered=order_paths(paths0,"Balanced",allow_reverse=True)
-                if cost_model.paths_seconds(ordered) <= cost_model.paths_seconds(paths0):
+                ordered_cost = float(cost_model.paths_seconds(ordered))
+                original_cost = float(cost_model.paths_seconds(paths0))
+                if ordered_cost <= original_cost:
                     paths0=ordered
-            cost=float(cost_model.paths_seconds(paths0)) if exact0 else float("inf")
+                    cost = ordered_cost
+                else:
+                    cost = original_cost
+            else:
+                cost = float("inf")
             candidate_meta[orientation]={"safe":bool(exact0),"paths":len(paths0),"estimated_seconds":None if not math.isfinite(cost) else round(cost,6)}
             if exact0:choices.append((cost,orientation,paths0,runs0))
         if choices:
@@ -593,12 +676,22 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
     serial = 0
     # Geometry is immutable while scheduling. Only entry travel and colour cost
     # change; do not walk every point again for all 72 candidates at each step.
-    intrinsic = ({c.component_id: float(cost_model.paths_seconds(c.paths))
-                  for c in components if c.paths} if cost_model is not None else {})
+    intrinsic={};entry_costs={}
+    prepare=getattr(cost_model,'prepare_path_cost',None)
+    if cost_model is not None:
+        for c in components:
+            if cancelled():raise InterruptedError()
+            if not c.paths:continue
+            intrinsic[c.component_id]=float(cost_model.paths_seconds(c.paths))
+            if callable(prepare):
+                entry_costs[c.component_id]=prepare(c.paths[0],cancelled=cancelled)
     estimated_total = 0.0
 
     for phase in PHASES:
         remaining = sorted((c for c in components if c.phase == phase and c.paths), key=lambda c: (-_priority(c), c.component_id))
+        # execute_plan reselects the first colour at each retained phase.
+        if remaining and cost_model is not None:
+            current_color = None
         while remaining:
             if cancelled():
                 raise InterruptedError()
@@ -618,11 +711,16 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
                         first=comp.paths[0]
                         # paths_seconds() already includes the first path's base
                         # travel/settle term. Add only the real stateful entry delta.
-                        moved=float(cost_model.path_seconds(first,cursor=cursor))
-                        base=float(cost_model.path_seconds(first,cursor=None))
+                        prepared=entry_costs.get(comp.component_id)
+                        if prepared is None:
+                            moved=float(cost_model.path_seconds(first,cursor=cursor))
+                            base=float(cost_model.path_seconds(first,cursor=None))
+                        else:
+                            moved=prepared.seconds(cursor=cursor)
+                            base=prepared.seconds()
                         seconds+=max(0.0,moved-base)
-                    if current_color not in (None,comp.color_index):
-                        seconds+=float(cost_model.color_change_seconds)
+                    if current_color != comp.color_index:
+                        seconds+=sum(cost_model.color_selection_cost(comp.color_index))
                     # Keep the multi-pass contract, but within each phase choose
                     # the component with highest visual value per millisecond.
                     value=max(.001,float(_priority(comp)))
@@ -663,7 +761,10 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
         try:
             _initial_brush=max(1,int(getattr(cost_model,'options',{}).get('brush_px',1) or 1))
             estimated_total=float(cost_model.sequence_cost(
-                sequence,initial_brush=_initial_brush).total_seconds)
+                sequence,initial_brush=_initial_brush,include_color_verification=True,
+                cancelled=cancelled).total_seconds)
+        except InterruptedError:
+            raise
         except Exception:
             # The geometry/order remains valid even if diagnostics cannot be costed.
             estimated_total=sum(float(cost_model.paths_seconds(c.paths)) for c in components if c.paths)
@@ -677,7 +778,7 @@ def schedule_components(components: Sequence[Component], palette_count: int, *, 
         "phase_component_counts": component_counts,
         "scheduled_paths": len(sequence),
         "cost_aware": bool(cost_model is not None),
-        "cost_policy": "ExecutionCostModel stateful v3" if cost_model is not None else "legacy geometry scheduler",
+        "cost_policy": f"ExecutionCostModel stateful v{cost_model.model_version}" if cost_model is not None else "legacy geometry scheduler",
         "cost_model": cost_model.as_dict() if cost_model is not None else None,
         "estimated_execution_seconds": round(estimated_total,4) if cost_model is not None else None,
         "scheduled_color_switches": sum(1 for a,b in zip(sequence,sequence[1:]) if a["color_index"]!=b["color_index"]),

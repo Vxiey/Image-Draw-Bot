@@ -5,8 +5,11 @@ No certificate creation, private-key export or trust-store changes are performed
 import os
 import re
 import shutil
+import stat
 import subprocess
 from pathlib import Path
+
+from WindowsSystem import system_directory
 
 
 class SigningError(RuntimeError):pass
@@ -29,13 +32,16 @@ def sign_arguments(tool,thumb,path):
 
 def validate_certificate(config):
     tool,thumb=config
+    if not isinstance(thumb, str) or not re.fullmatch(r'[0-9a-fA-F]{40}', thumb):
+        raise SigningError('A valid provisioned certificate thumbprint is required.')
     # Require RSA and a code-signing EKU. Public trust is checked separately by
     # SignTool /pa against the file, not inferred from subject/display names.
     command=(f"$ErrorActionPreference='Stop';$c=Get-Item Cert:\\CurrentUser\\My\\{thumb};"
              "if(!$c.HasPrivateKey){throw 'Private signing key is unavailable'};"
              "if($c.PublicKey.Oid.Value -ne '1.2.840.113549.1.1.1'){throw 'An RSA certificate is required'};"
              "if(!($c.EnhancedKeyUsageList.ObjectId.Value -contains '1.3.6.1.5.5.7.3.3')){throw 'Code-signing EKU is missing'}")
-    subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',command],check=True,timeout=30)
+    powershell = system_directory() / 'WindowsPowerShell' / 'v1.0' / 'powershell.exe'
+    subprocess.run([str(powershell),'-NoProfile','-NonInteractive','-Command',command],check=True,timeout=30)
 
 
 def verify(path,config):
@@ -54,7 +60,29 @@ def _is_primary_application_binary(path):
 
 
 def sign_distribution(root,config):
-    files=sorted(p for p in Path(root).rglob('*') if p.is_file() and p.suffix.lower() in ('.exe','.dll','.pyd'))
+    def is_link(path):
+        metadata = path.lstat()
+        return stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)
+    root = Path(root)
+    if is_link(root):
+        raise SigningError('The signing root must not be a link or junction.')
+    files = []
+    # Inspect the complete tree before the first signing mutation. A planted
+    # native-file link must never cause SignTool to modify an external target.
+    def walk_error(error):
+        raise SigningError('The complete signing tree could not be inspected.') from error
+    for current, directories, filenames in os.walk(root, followlinks=False, onerror=walk_error):
+        current = Path(current)
+        if any(is_link(current / name) for name in directories):
+            raise SigningError('The signing tree contains a linked directory.')
+        for name in filenames:
+            path = current / name
+            if path.suffix.lower() not in ('.exe', '.dll', '.pyd'):
+                continue
+            if is_link(path) or not path.is_file():
+                raise SigningError(f'The signing tree contains a linked or non-regular native file: {name}')
+            files.append(path)
+    files.sort()
     if not files:raise SigningError('No native release binaries were found.')
     for path in files:
         # Always stamp the application EXE with the configured Image Draw Bot

@@ -71,33 +71,41 @@ _TARGETS = {
         "Collaborative browser painting app; use explicit per-profile calibration."),
 }
 
+_ALL = tuple(_TARGETS.values())
+_BUILTIN_KEYS = frozenset(_TARGETS)
+_AUTO_BROWSER_KEYS = frozenset(k for k, v in _TARGETS.items() if v.setup_mode == 'browser-auto')
+_MANUAL_BROWSER_KEYS = frozenset(k for k, v in _TARGETS.items() if v.kind.startswith('browser-') and v.setup_mode == 'manual')
+_BROWSER_KEYS = frozenset(k for k, v in _TARGETS.items() if v.kind.startswith('browser-'))
+
 
 def capability_for_key(profile_key: str) -> TargetCapability:
     key = str(profile_key or "").strip().lower()
-    return _TARGETS.get(key, TargetCapability(
+    known = _TARGETS.get(key)
+    if known is not None:
+        return known
+    return TargetCapability(
         key or "custom", "Custom target", "generic", "manual", "manual", False,
-        True, True, "Custom profile with explicit calibration."))
+        True, True, "Custom profile with explicit calibration.")
 
 
 def all_capabilities() -> tuple[TargetCapability, ...]:
-    return tuple(_TARGETS.values())
+    return _ALL
 
 
 def builtin_profile_keys() -> frozenset[str]:
-    return frozenset(_TARGETS)
+    return _BUILTIN_KEYS
 
 
 def auto_browser_profile_keys() -> frozenset[str]:
-    return frozenset(k for k, v in _TARGETS.items() if v.setup_mode == "browser-auto")
+    return _AUTO_BROWSER_KEYS
 
 
 def manual_browser_profile_keys() -> frozenset[str]:
-    return frozenset(k for k, v in _TARGETS.items()
-                     if v.kind.startswith("browser-") and v.setup_mode == "manual")
+    return _MANUAL_BROWSER_KEYS
 
 
 def browser_profile_keys() -> frozenset[str]:
-    return frozenset(k for k, v in _TARGETS.items() if v.kind.startswith("browser-"))
+    return _BROWSER_KEYS
 
 
 def is_browser_target(profile_key: str) -> bool:

@@ -7,13 +7,14 @@ import time
 import numpy as np
 
 
-def _components(mask):
+def _components(mask,cancelled=lambda:False):
     # Row-run union-find avoids visiting every canvas pixel in Python.
     parent=[];boxes=[];previous=[]
     def root(i):
         while parent[i]!=i:parent[i]=parent[parent[i]];i=parent[i]
         return i
     for y,row in enumerate(mask):
+        if y%32==0 and cancelled():raise InterruptedError()
         changes=np.flatnonzero(np.diff(np.r_[False,row,False].astype(np.int8)))
         current=[];j=0
         for left,right in zip(changes[::2],changes[1::2]):
@@ -35,8 +36,21 @@ def _components(mask):
 
 
 def read_ring(image,box):
-    a=np.asarray(image.convert('RGB'));h,w=a.shape[:2]
-    l,t,r,b=map(float,box);cx=(l+r-1)/2;cy=(t+b-1)/2;radius=(r-l+b-t)/4
+    try:
+        l,t,r,b=map(float,box)
+    except (TypeError,ValueError,OverflowError) as error:
+        raise ValueError('Invalid timer bounds.') from error
+    if not all(math.isfinite(v) for v in (l,t,r,b)) or r<=l or b<=t or l<0 or t<0 or r>image.width or b>image.height:
+        raise ValueError('Timer ring is clipped or has invalid bounds.')
+    left,top=math.floor(l),math.floor(t)
+    crop=image.crop((left,top,math.ceil(r),math.ceil(b)))
+    try:
+        rgb=crop.convert('RGB')
+        try:a=np.asarray(rgb).copy()
+        finally:rgb.close()
+    finally:crop.close()
+    h,w=a.shape[:2]
+    cx=(l+r-1)/2-left;cy=(t+b-1)/2-top;radius=(r-l+b-t)/4
     angles=np.arange(720)*2*np.pi/720
     def samples(scale):
         xs=np.rint(cx+radius*scale*np.sin(angles)).astype(int)
@@ -60,17 +74,23 @@ def read_ring(image,box):
 
 def find_timer(image,canvas_box=None,cancelled=lambda:False):
     if cancelled():raise InterruptedError()
-    rgb=image.convert('RGB');scale=min(1,960/rgb.width)
-    small=rgb.resize((max(1,round(rgb.width*scale)),max(1,round(rgb.height*scale))))
-    a=np.asarray(small);mask=(a[:,:,0]>150)&(a[:,:,1]>90)&(a[:,:,2]>110)
+    if image.width<1 or image.height<1:raise ValueError('The timer screenshot is empty.')
+    scale=min(1,960/image.width,960/image.height)
+    small=image.resize((max(1,round(image.width*scale)),max(1,round(image.height*scale))))
+    try:
+        rgb=small.convert('RGB')
+        try:
+            a=np.asarray(rgb);mask=(a[:,:,0]>150)&(a[:,:,1]>90)&(a[:,:,2]>110)
+        finally:rgb.close()
+    finally:small.close()
     found=[]
-    for l,t,r,b in _components(mask):
+    for l,t,r,b in _components(mask,cancelled):
         if cancelled():raise InterruptedError()
         w=r-l;h=b-t
         if not (18<=w<=160 and 18<=h<=160 and .88<=w/h<=1.12):continue
         box=tuple(round(v/scale) for v in (l,t,r,b));cx=(box[0]+box[2])/2;cy=(box[1]+box[3])/2
         if canvas_box and canvas_box[0]<=cx<=canvas_box[2] and canvas_box[1]<=cy<=canvas_box[3]:continue
-        try:found.append(read_ring(rgb,box))
+        try:found.append(read_ring(image,box))
         except ValueError:continue
     if len(found)!=1:raise ValueError('Gartic timer not uniquely visible. Show the whole round timer or turn off Read Gartic timer and set time manually.')
     return found[0]
@@ -78,7 +98,10 @@ def find_timer(image,canvas_box=None,cancelled=lambda:False):
 
 def estimate_remaining(observations):
     if len(observations)<4:raise ValueError('More timer observations are required.')
-    a=np.asarray(observations,dtype=float);t=a[:,0]-a[0,0];f=a[:,1]
+    try:a=np.asarray(observations,dtype=float)
+    except (TypeError,ValueError,OverflowError) as error:raise ValueError('Invalid timer observations.') from error
+    if a.ndim!=2 or a.shape[1]!=2:raise ValueError('Timer observations must contain time/fraction pairs.')
+    t=a[:,0]-a[0,0];f=a[:,1]
     if not np.isfinite(a).all() or np.any(np.diff(t)<=0) or np.any((f<0)|(f>1)):raise ValueError('Invalid timer observations.')
     duration=t[-1]
     if duration<4 or f[0]-f[-1]<.018:raise ValueError('Timer is static or changing too slowly to estimate seconds. Try again or set time manually.')
@@ -101,12 +124,17 @@ def observe_timer(capture,canvas_box,stop,report=lambda text:None,clock=time.mon
     observations=[];ring=None
     for index in range(7):
         if stop.is_set():raise InterruptedError()
+        observed_at=clock()
         shot=capture()
-        if ring is None:ring=find_timer(shot,canvas_box,stop.is_set)
-        reading=read_ring(shot,ring['box'])
-        observations.append((clock(),reading['fraction']))
+        try:
+            if stop.is_set():raise InterruptedError()
+            if ring is None:ring=find_timer(shot,canvas_box,stop.is_set)
+            reading=read_ring(shot,ring['box'])
+        finally:shot.close()
+        observations.append((observed_at,reading['fraction']))
         report(f'Reading Gartic timer {index+1}/7 · {reading["fraction"]*100:.0f}% visible')
         if index<6 and stop.wait(1):raise InterruptedError()
+    if stop.is_set():raise InterruptedError()
     result=estimate_remaining(observations);result['box']=ring['box']
     return result
 

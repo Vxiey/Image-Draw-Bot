@@ -9,6 +9,8 @@ No UI, mouse, filesystem, network or renderer behaviour lives here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+from numbers import Integral, Real
 from typing import Iterable, Sequence
 
 from ColorFidelity import oklab_metrics
@@ -41,12 +43,35 @@ def _circular_distance(a: float, b: float) -> float:
     return min(d,360.0-d)
 
 
+def _threshold(value):
+    try:
+        valid=not isinstance(value,bool) and isinstance(value,Real) and math.isfinite(value) and value>=0
+    except OverflowError:
+        valid=False
+    if not valid:
+        raise ValueError('Hue chroma threshold must be finite and nonnegative.')
+    return float(value)
+
+
+def _family(chroma, hue, threshold):
+    if chroma < threshold:
+        return None
+    return min(_FAMILY_CENTRES,key=lambda item:(_circular_distance(hue,item[1]),item[1]))[0]
+
+
+def _cap(value):
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+        raise ValueError('Hue family limit must be a nonnegative integer.')
+    return int(value)
+
+
 def dominant_hue_family(rgb: Sequence[int], *, chroma_threshold: float=4.5) -> str | None:
     """Return a broad OKLab hue family, or None for near-neutral colours."""
+    threshold=_threshold(chroma_threshold)
     _L,C,H=oklab_metrics(_rgb(rgb))
-    if C < float(chroma_threshold):
-        return None
-    return min(_FAMILY_CENTRES,key=lambda item:(_circular_distance(H,item[1]),item[1]))[0]
+    return _family(C,H,threshold)
 
 
 @dataclass(frozen=True)
@@ -81,17 +106,36 @@ def summarize_hue_families(colors: Sequence[Sequence[int]], weights: Sequence[fl
     coverage floor are treated as texture/accent colours rather than guaranteed
     palette anchors.
     """
-    total=sum(max(0.0,float(weights[i])) for i in range(min(len(colors),len(weights)))) or 1.0
+    cap=_cap(max_families)
+    chroma_threshold=_threshold(chroma_threshold)
+    if len(colors)!=len(weights):
+        raise ValueError('Every hue color needs one matching weight.')
+    total=0.0
+    for value in weights:
+        try:
+            if isinstance(value,bool) or not isinstance(value,Real) or not math.isfinite(value) or value<0:
+                raise ValueError('Hue weights must be finite and nonnegative.')
+            total+=float(value)
+        except OverflowError as error:
+            raise ValueError('Hue weight exceeds the supported numeric range.') from error
+    if not math.isfinite(total):
+        raise ValueError('Combined hue weight exceeds the supported numeric range.')
+    if cap==0 or total==0:
+        return []
     buckets: dict[str,dict] = {}
     for i,(rgb,w) in enumerate(zip(colors,weights)):
         weight=max(0.0,float(w))
         if weight<=0: continue
-        family=dominant_hue_family(rgb,chroma_threshold=chroma_threshold)
+        color=_rgb(rgb)
+        _L,C,H=oklab_metrics(color)
+        family=_family(C,H,chroma_threshold)
         if family is None: continue
-        _L,C,_H=oklab_metrics(_rgb(rgb))
-        row=buckets.setdefault(family,{'weight':0.0,'members':[]})
+        row=buckets.setdefault(family,{'weight':0.0,'best':None,'best_key':None})
         row['weight']+=weight
-        row['members'].append((i,weight,C,_rgb(rgb)))
+        key=(weight*(1.0+min(40.0,C)/160.0),weight,C,-i)
+        if row['best_key'] is None or key>row['best_key']:
+            row['best_key']=key
+            row['best']=(i,weight,C,color)
     threshold=_coverage_threshold(fidelity)
     summaries=[]
     for family,row in buckets.items():
@@ -100,18 +144,18 @@ def summarize_hue_families(colors: Sequence[Sequence[int]], weights: Sequence[fl
             continue
         # Area dominates. Chroma only breaks close calls so a vivid family
         # representative is preferred over a muddy shade with similar mass.
-        i,w,C,rgb=max(row['members'],key=lambda item:(item[1]*(1.0+min(40.0,item[2])/160.0),item[1],item[2],-item[0]))
+        i,w,C,rgb=row['best']
         summaries.append(HueFamilySummary(family,float(row['weight']),coverage,int(i),rgb,float(C)))
     summaries.sort(key=lambda s:(-s.weight,-s.representative_chroma,s.representative_index,s.family))
-    if max_families is not None:
-        summaries=summaries[:max(0,int(max_families))]
+    if cap is not None:
+        summaries=summaries[:cap]
     return summaries
 
 
 def dominant_hue_anchors(colors: Sequence[Sequence[int]], weights: Sequence[float], cap: int, *,
                          fidelity: str="Faithful") -> tuple[list[int],dict]:
     """Return palette indices that must be reserved before shade/detail slots."""
-    cap=max(0,int(cap))
+    cap=_cap(cap)
     summaries=summarize_hue_families(colors,weights,fidelity=fidelity,max_families=cap)
     anchors=[s.representative_index for s in summaries]
     return anchors,{
@@ -124,4 +168,4 @@ def dominant_hue_anchors(colors: Sequence[Sequence[int]], weights: Sequence[floa
 
 def protected_hue_families(colors: Sequence[Sequence[int]], weights: Sequence[float], cap: int, *,
                            fidelity: str="Faithful") -> tuple[str,...]:
-    return tuple(s.family for s in summarize_hue_families(colors,weights,fidelity=fidelity,max_families=max(0,int(cap))))
+    return tuple(s.family for s in summarize_hue_families(colors,weights,fidelity=fidelity,max_families=_cap(cap)))

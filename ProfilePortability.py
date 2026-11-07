@@ -18,7 +18,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-from GameProfiles import PROFILES, clean_profile_name, prepare_custom_profile, _register_custom_profile
+from GameProfiles import (PROFILES, PROFILE_UI, clean_profile_name, prepare_custom_profile,
+                          current_custom_profile_registry, register_custom_profiles,
+                          CUSTOM_PROFILE_LOCK)
 from ProfileIsolation import SETTING_NAMES
 from ProfileStorage import (
     profile_auto_tuner_feedback_file,
@@ -30,7 +32,7 @@ from ProfileStorage import (
     profile_verified_color_file,
     safe_profile_key,
 )
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import atomic_write_text, data_dir, file_transaction, replace_text_files
 from StabilityRC import migrate_settings
 from Version import APP_VERSION
 
@@ -116,6 +118,27 @@ def _profile_identity(name: str):
     return name, key
 
 
+def _matching_profile_identity(name: str):
+    """Resolve the same name equivalence used by custom-profile registration."""
+    folded = name.casefold()
+    with CUSTOM_PROFILE_LOCK:
+        matches = [(label, str(value[0])) for label, value in PROFILES.items()
+                   if label.casefold() == folded]
+    if len(matches) > 1:
+        raise ProfilePortabilityError('Conflicting profile names must be resolved before import.')
+    return matches[0] if matches else None
+
+
+def _checked_import_identity(name, expected_name=None, expected_key=None, *, expected_absent=False):
+    identity = _matching_profile_identity(name)
+    if expected_absent and identity is not None:
+        raise ProfilePortabilityError('A profile with this name appeared. Open Import again to choose Replace or Copy.')
+    if ((expected_name is not None and (identity is None or identity[0] != expected_name)) or
+            (expected_key is not None and (identity is None or identity[1] != expected_key))):
+        raise ProfilePortabilityError('The existing profile changed. Open Import again before replacing or copying it.')
+    return identity
+
+
 def _unique_json_object(pairs):
     result = {}
     for key, value in pairs:
@@ -178,7 +201,11 @@ def portable_path_map(profile_key: str, root: Path | None = None):
 def sanitize_settings(data: dict, *, strict: bool = True) -> dict:
     if not isinstance(data, dict):
         raise ProfilePortabilityError("Profile settings must be a JSON object.")
-    migrated = migrate_settings(data)
+    from SettingsValidation import validated_settings
+    try:
+        migrated = validated_settings(data, strict=strict)
+    except ValueError as error:
+        raise ProfilePortabilityError(str(error)) from error
     for forbidden in FORBIDDEN_SETTING_NAMES:
         migrated.pop(forbidden, None)
     unknown = sorted(set(migrated) - PORTABLE_SETTING_NAMES)
@@ -214,11 +241,13 @@ def flatten_settings(package_settings: dict, canvas: dict | None = None) -> dict
         if overlap:
             raise ProfilePortabilityError("Profile contains duplicate setting names.")
         clean.update(values)
-    if canvas:
+    if canvas is not None:
         if not isinstance(canvas, dict):
             raise ProfilePortabilityError("Canvas metadata must be an object.")
         for key in CANVAS_SETTING_NAMES:
             if key in canvas:
+                if key in clean:
+                    raise ProfilePortabilityError('Profile repeats canvas metadata in its settings section.')
                 clean[key] = canvas[key]
     return sanitize_settings(clean)
 
@@ -306,8 +335,8 @@ def validate_package(data: dict) -> dict:
     if not isinstance(key, str):
         raise ProfilePortabilityError("Profile target key is missing.")
     _validate_source_key(key)
-    existing = PROFILES.get(name.strip())
-    if existing is not None and not str(existing[0]).startswith("custom-") and key != str(existing[0]):
+    existing = _matching_profile_identity(name)
+    if existing is not None and not existing[1].startswith("custom-") and key != existing[1]:
         raise ProfilePortabilityError("Built-in profile name does not match its Image Draw Bot target key.")
 
     for section in ("canvas", "settings", "calibration", "safety"):
@@ -439,13 +468,21 @@ def _capture_calibration(profile_key: str):
     return result
 
 
+def _require_idle_profile(app):
+    if (getattr(app,'activity',None) or getattr(app,'closing',False) or
+            getattr(app,'pending_clear_drawing',None) is not None or
+            getattr(app,'profile_change_in_progress',False) or
+            getattr(app,'profile_change_after',None) is not None):
+        raise ProfilePortabilityError('Wait for the current operation or profile change to finish before managing profiles.')
+
+
 def package_from_app(app) -> dict:
-    if getattr(app, "activity", None):
-        raise ProfilePortabilityError("Wait for the current Image Draw Bot task to finish before exporting a profile.")
+    _require_idle_profile(app)
     profile_name = str(app.game.get())
     name, key = _profile_identity(profile_name)
     try:
-        app.save_settings()
+        if app.save_settings() is False:
+            raise OSError('The current settings could not be saved.')
     except Exception as error:
         raise ProfilePortabilityError(f"Could not save current profile settings: {error}") from error
     settings_path = Path(getattr(app, "settings_path", profile_settings_file(key)))
@@ -477,67 +514,30 @@ def _package_file_changes(package, destination_key, root=None):
             changes[path] = None
             continue
         payload = _rewrite_calibration_owner(payload, destination_key)
+        if logical == 'tools' and package['profile']['key'] == 'microsoft-paint' and destination_key != 'microsoft-paint':
+            # A custom profile uses the generic tool protocol. Paint dropdown
+            # menus/presets are multi-click actions, never a generic Brush click.
+            from PaintTools import validate_tool_calibration
+            paint = validate_tool_calibration(payload)
+            if paint.get('version', 0) < 2:
+                changes[path] = None  # Unanchored legacy controls need recapture.
+                continue
+            from AppTools import validate_calibration
+            payload = validate_calibration({
+                'version': 1, 'profile': destination_key, 'anchor': paint['anchor'],
+                'tools': {name: value for name, value in paint['tools'].items()
+                          if name in ('Fill', 'Eraser')},
+            }, destination_key)
         changes[path] = json.dumps(payload, ensure_ascii=False, indent=2)
     return paths, changes
 
 
 def _replace_profile_files(changes):
-    """Stage all writes, then restore every original if any publish/delete fails.
-
-    Existing files are moved to unique backups in the same directory. Backups
-    are removed only after the entire operation succeeds; rollback failures
-    retain their backup paths for recovery rather than silently discarding data.
-    """
-    with _PROFILE_FILE_LOCK:
-        entries = []
-        rollback_failed = set()
-        try:
-            for path, text in changes.items():
-                path = Path(path)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                if path.exists() and not path.is_file():
-                    raise OSError(f'Profile path is not a file: {path.name}')
-                entry = dict(path=path, staged=None, backup=None, moved=False, published=False)
-                entries.append(entry)
-                if text is not None:
-                    fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.import', dir=path.parent)
-                    os.close(fd)
-                    entry['staged'] = Path(name)
-                    atomic_write_text(entry['staged'], text)
-                if path.exists() or path.is_symlink():
-                    fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.backup', dir=path.parent)
-                    os.close(fd)
-                    entry['backup'] = Path(name)
-            for entry in entries:
-                if entry['backup'] is not None:
-                    os.replace(entry['path'], entry['backup'])
-                    entry['moved'] = True
-                if entry['staged'] is not None:
-                    os.replace(entry['staged'], entry['path'])
-                    entry['published'] = True
-        except Exception as error:
-            for entry in reversed(entries):
-                try:
-                    if entry['moved']:
-                        os.replace(entry['backup'], entry['path'])
-                    elif entry['published']:
-                        entry['path'].unlink(missing_ok=True)
-                except OSError:
-                    rollback_failed.add(entry['backup'] or entry['path'])
-            if rollback_failed:
-                names = ', '.join(str(path) for path in sorted(rollback_failed))
-                raise ProfilePortabilityError(f'Profile update failed and could not be fully rolled back. Retained recovery paths: {names}') from error
-            if isinstance(error, ProfilePortabilityError):
-                raise
-            raise ProfilePortabilityError(f'Profile update failed; previous files were restored: {error}') from error
-        finally:
-            for entry in entries:
-                for temporary in (entry['staged'], entry['backup']):
-                    if temporary is not None and temporary not in rollback_failed:
-                        try:
-                            temporary.unlink(missing_ok=True)
-                        except OSError:
-                            pass
+    """Use the shared staged publisher, preserving the profile-facing error."""
+    try:
+        replace_text_files(changes)
+    except (OSError, ValueError) as error:
+        raise ProfilePortabilityError(str(error)) from error
 
 
 def apply_package_to_paths(package: dict, destination_key: str, *, root: Path | None = None):
@@ -598,35 +598,42 @@ def _reload_profile(app, name: str):
         app.change_profile()
 
 
-def import_package_into_app(app, package: dict, *, action: str = "replace", copy_name: str | None = None):
-    if getattr(app, "activity", None):
-        raise ProfilePortabilityError("Wait for the current Image Draw Bot task to finish before importing a profile.")
+def import_package_into_app(app, package: dict, *, action: str = "replace", copy_name: str | None = None,
+                            expected_name=None, expected_key=None, expected_absent=False):
+    _require_idle_profile(app)
     package = validate_package(package)
     source_name = package["profile"]["name"]
     if action not in ("replace", "copy"):
         raise ProfilePortabilityError("Import action must be Replace or Import as copy.")
+    _checked_import_identity(source_name, expected_name, expected_key, expected_absent=expected_absent)
 
     try:
         if hasattr(app, "save_settings"):
-            app.save_settings()
+            if app.save_settings() is False:
+                raise OSError('The current settings could not be saved.')
     except Exception as error:
         raise ProfilePortabilityError(f"Could not save the current profile before import: {error}") from error
 
-    destination_name = source_name if action == 'replace' else (copy_name or unique_copy_name(source_name))
-    registry = None
-    if action == 'copy' or destination_name not in PROFILES:
-        try:
-            destination_name, destination_key, registry = prepare_custom_profile(destination_name)
-        except ValueError as error:
-            raise ProfilePortabilityError(str(error)) from error
-    else:
-        destination_key = PROFILES[destination_name][0]
-    _paths, changes = _package_file_changes(package, destination_key)
-    if registry is not None:
-        changes[data_dir() / 'profiles.json'] = json.dumps(registry, ensure_ascii=False)
-    _replace_profile_files(changes)
-    if registry is not None:
-        _register_custom_profile(destination_name, destination_key)
+    with CUSTOM_PROFILE_LOCK:
+        _require_idle_profile(app)
+        existing = _checked_import_identity(source_name, expected_name, expected_key,
+                                           expected_absent=expected_absent)
+        destination_name = source_name if action == 'replace' else (copy_name or unique_copy_name(source_name))
+        registry = None
+        if action == 'copy' or existing is None:
+            try:
+                destination_name, destination_key, registry = prepare_custom_profile(
+                    destination_name, data_dir() / 'profiles.json')
+            except (OSError, ValueError) as error:
+                raise ProfilePortabilityError(str(error)) from error
+        else:
+            destination_name, destination_key = existing
+        _paths, changes = _package_file_changes(package, destination_key)
+        if registry is not None:
+            changes[data_dir() / 'profiles.json'] = json.dumps(registry, ensure_ascii=False)
+        _replace_profile_files(changes)
+        if registry is not None:
+            register_custom_profiles(registry)
 
     # Imported geometry/calibration can be useful metadata, but never counts as
     # a completed safety test. _apply_profile_change clears locks, target handles,
@@ -642,17 +649,153 @@ def import_package_into_app(app, package: dict, *, action: str = "replace", copy
     return destination_name
 
 
-def reset_profile(app):
-    if getattr(app, "activity", None):
-        raise ProfilePortabilityError("Wait for the current Image Draw Bot task to finish before resetting a profile.")
+def reset_profile(app, *, expected_name=None, expected_key=None):
+    _require_idle_profile(app)
     name, key = _profile_identity(str(app.game.get()))
+    if ((expected_name is not None and name != expected_name) or
+            (expected_key is not None and key != expected_key)):
+        raise ProfilePortabilityError('The selected profile changed. Open profile management again.')
     # Do not let the profile-change wrapper save the old values after deletion.
-    _replace_profile_files({path: None for path in profile_reset_paths(key)})
+    changes = {path: None for path in profile_reset_paths(key)}
+    # A missing per-profile ETA file triggers one-time migration from the old
+    # shared database. Keep an empty current-format record to make Reset final.
+    from DrawTimeCalibration import VERSION as TIMING_VERSION
+    changes[profile_timing_file(key)] = json.dumps({'version': TIMING_VERSION, 'profiles': {}})
+    from RealSpeedBudget import profile_reset_changes
+    try:
+        # Match the timing reset/writer order: timing, shared speed, publication.
+        # A writer that already read the old model must finish before Reset can
+        # publish its empty record, or its later write could revive old samples.
+        with file_transaction(profile_timing_file(key)):
+            with profile_reset_changes(key) as speed_changes:
+                changes.update(speed_changes)
+                _replace_profile_files(changes)
+    except ProfilePortabilityError:
+        raise
+    except (OSError, ValueError) as error:
+        raise ProfilePortabilityError(str(error)) from error
     _reload_profile(app, name)
     if hasattr(app, "status"):
         try: app.status.set(f"{name} restored to Image Draw Bot defaults. Calibration/setup must be verified again.")
         except Exception: pass
     return name
+
+
+def _managed_custom_identity(app, expected_name=None, expected_key=None):
+    _require_idle_profile(app)
+    name, key = _profile_identity(str(app.game.get()))
+    if ((expected_name is not None and name != expected_name) or
+            (expected_key is not None and key != expected_key)):
+        raise ProfilePortabilityError('The selected profile changed. Open profile management again.')
+    if _CUSTOM_KEY_RE.fullmatch(key) is None:
+        raise ProfilePortabilityError('Only your custom profiles can be renamed or removed. Built-in profiles can be reset instead.')
+    return name, key
+
+
+def _reload_managed_profile(app, name):
+    # Discard transient authorization/resume state without deleting the shared
+    # recovery snapshot. Only the selected profile's canonical files are removed.
+    for method_name in ('_disarm_manual_drop_in', '_disarm_full_draw'):
+        method = getattr(app, method_name, None)
+        if callable(method):
+            method('custom profile changed')
+    app.pending_render_resume = None
+    mouse = getattr(app, 'mouse', None)
+    disarm = getattr(mouse, 'disarm_input', None)
+    if callable(disarm):
+        try: disarm()
+        except OSError: pass
+    _reload_profile(app, name)
+
+
+def rename_custom_profile(app, new_name, *, expected_name=None, expected_key=None):
+    """Rename one label while preserving its storage UUID and every owned file."""
+    name, key = _managed_custom_identity(app, expected_name, expected_key)
+    try:
+        new_name = clean_profile_name(new_name)
+    except ValueError as error:
+        raise ProfilePortabilityError(str(error)) from error
+    if new_name == name:
+        return name
+    registry_path = data_dir() / 'profiles.json'
+    with CUSTOM_PROFILE_LOCK:
+        try:
+            registry = current_custom_profile_registry(registry_path)
+        except (OSError, ValueError) as error:
+            raise ProfilePortabilityError(str(error)) from error
+        if registry.get(name) != key:
+            raise ProfilePortabilityError('The custom profile registry changed. Reload profiles before renaming.')
+        other_names = {value.casefold() for value in (*PROFILES, *registry) if value != name}
+        if new_name.casefold() in other_names:
+            raise ProfilePortabilityError('Choose a unique name containing 1–50 characters.')
+        if hasattr(app, 'save_settings') and app.save_settings() is False:
+            raise ProfilePortabilityError('Could not save the current settings. The profile was not renamed.')
+        registry = {new_name if old_name == name else old_name: value
+                    for old_name, value in registry.items()}
+        _replace_profile_files({registry_path: json.dumps(registry, ensure_ascii=False)})
+        PROFILES.pop(name); PROFILE_UI.pop(name, None)
+        register_custom_profiles(registry)
+    _reload_managed_profile(app, new_name)
+    return new_name
+
+
+def remove_custom_profile(app, *, expected_name, expected_key):
+    """Delete one explicitly selected custom namespace with publication rollback."""
+    name, key = _managed_custom_identity(app, expected_name, expected_key)
+    registry_path = data_dir() / 'profiles.json'
+    with CUSTOM_PROFILE_LOCK:
+        try:
+            registry = current_custom_profile_registry(registry_path)
+        except (OSError, ValueError) as error:
+            raise ProfilePortabilityError(str(error)) from error
+        if registry.get(name) != key:
+            raise ProfilePortabilityError('The custom profile registry changed. Reload profiles before removing it.')
+        registry.pop(name)
+        changes = {path: None for path in profile_reset_paths(key)}
+        changes[registry_path] = json.dumps(registry, ensure_ascii=False)
+        _replace_profile_files(changes)
+        PROFILES.pop(name); PROFILE_UI.pop(name, None)
+        register_custom_profiles(registry)
+    _reload_managed_profile(app, 'Other drawing app')
+    return name
+
+
+def rename_custom_profile_dialog(app):
+    from tkinter import messagebox, simpledialog
+    try:
+        name, key = _managed_custom_identity(app)
+        selected = simpledialog.askstring('Rename custom profile', 'New profile name:',
+            initialvalue=name, parent=getattr(app, 'root', None))
+        if selected is None:
+            return None
+        result = rename_custom_profile(app, selected, expected_name=name, expected_key=key)
+        if hasattr(app, 'status'):
+            app.status.set(f'Custom profile renamed to {result}. Saved settings and calibration were kept.')
+        return result
+    except (ProfilePortabilityError, OSError) as error:
+        if not getattr(app, 'closing', False):
+            messagebox.showerror('Could not rename profile', str(error), parent=getattr(app, 'root', None))
+        return None
+
+
+def remove_custom_profile_dialog(app):
+    from tkinter import messagebox
+    try:
+        name, key = _managed_custom_identity(app)
+        if not messagebox.askyesno('Remove custom profile',
+            f"Remove '{name}' and its saved settings, calibration and profile caches?\n\n"
+            'Other profiles, source images and exported .drawprofile files are kept. '
+            'Export this profile first if you want a backup.',
+            parent=getattr(app, 'root', None), default='no'):
+            return None
+        result = remove_custom_profile(app, expected_name=name, expected_key=key)
+        if hasattr(app, 'status'):
+            app.status.set(f'Removed custom profile {result}. Other drawing app is now selected; verify its setup before drawing.')
+        return result
+    except (ProfilePortabilityError, OSError) as error:
+        if not getattr(app, 'closing', False):
+            messagebox.showerror('Could not remove profile', str(error), parent=getattr(app, 'root', None))
+        return None
 
 
 def export_profile_dialog(app):
@@ -677,18 +820,22 @@ def export_profile_dialog(app):
 
 def import_profile_dialog(app):
     from tkinter import filedialog, messagebox, simpledialog
-    selected = filedialog.askopenfilename(
-        parent=getattr(app, "root", None), title="Import Image Draw Bot profile",
-        filetypes=(("Image Draw Bot profile", "*.drawprofile *.json"), ("All files", "*.*")),
-    )
-    if not selected:
-        return None
     try:
+        _require_idle_profile(app)
+        selected = filedialog.askopenfilename(
+            parent=getattr(app, "root", None), title="Import Image Draw Bot profile",
+            filetypes=(("Image Draw Bot profile", "*.drawprofile *.json"), ("All files", "*.*")),
+        )
+        if not selected:
+            return None
+        _require_idle_profile(app)
         package = read_profile_file(Path(selected))
         name = package["profile"]["name"]
+        existing = _matching_profile_identity(name)
         action = "replace"
         copy_name = None
-        if name in PROFILES:
+        if existing is not None:
+            name = existing[0]
             answer = messagebox.askyesnocancel(
                 "Profile already exists",
                 f"A profile named '{name}' already exists.\n\nYes = Replace this profile\nNo = Import as copy\nCancel = Do nothing",
@@ -696,6 +843,8 @@ def import_profile_dialog(app):
             )
             if answer is None:
                 return None
+            _require_idle_profile(app)
+            _checked_import_identity(package['profile']['name'], *existing)
             if answer is False:
                 action = "copy"
                 suggestion = unique_copy_name(name)
@@ -705,38 +854,43 @@ def import_profile_dialog(app):
                 )
                 if not copy_name:
                     return None
-        destination = import_package_into_app(app, package, action=action, copy_name=copy_name)
-        messagebox.showinfo(
-            "Profile imported",
-            f"Imported '{destination}'.\n\nFor safety, imported canvas/palette calibration is not trusted as a completed setup. Verify the target and run the normal tests before drawing.",
-            parent=getattr(app, "root", None),
-        )
+        destination = import_package_into_app(app, package, action=action, copy_name=copy_name,
+            expected_name=existing[0] if existing is not None else None,
+            expected_key=existing[1] if existing is not None else None,
+            expected_absent=existing is None)
+        if not getattr(app, 'closing', False):
+            messagebox.showinfo(
+                "Profile imported",
+                f"Imported '{destination}'.\n\nFor safety, imported canvas/palette calibration is not trusted as a completed setup. Verify the target and run the normal tests before drawing.",
+                parent=getattr(app, "root", None),
+            )
         return destination
     except (ProfilePortabilityError, OSError) as error:
-        messagebox.showerror("Could not import profile", str(error), parent=getattr(app, "root", None))
+        if not getattr(app, 'closing', False):
+            messagebox.showerror("Could not import profile", str(error), parent=getattr(app, "root", None))
         return None
 
 
 def reset_profile_dialog(app):
     from tkinter import messagebox
     try:
-        name, _key = _profile_identity(str(app.game.get()))
-    except ProfilePortabilityError as error:
-        messagebox.showerror("Could not reset profile", str(error), parent=getattr(app, "root", None)); return None
-    if not messagebox.askyesno(
-        "Reset profile to defaults",
-        f"Reset '{name}' to Image Draw Bot defaults?\n\nThis removes this profile's saved settings and calibration/cache files only. Other profiles are not changed.",
-        parent=getattr(app, "root", None),
-    ):
-        return None
-    try:
-        result = reset_profile(app)
-        messagebox.showinfo(
-            "Profile reset",
-            f"'{result}' was restored to defaults. Re-run calibration/setup before drawing.",
-            parent=getattr(app, "root", None),
-        )
+        _require_idle_profile(app)
+        name, key = _profile_identity(str(app.game.get()))
+        if not messagebox.askyesno(
+            "Reset profile to defaults",
+            f"Reset '{name}' to Image Draw Bot defaults?\n\nThis removes this profile's saved settings and calibration/cache files only. Other profiles are not changed.",
+            parent=getattr(app, "root", None), default='no',
+        ):
+            return None
+        result = reset_profile(app, expected_name=name, expected_key=key)
+        if not getattr(app, 'closing', False):
+            messagebox.showinfo(
+                "Profile reset",
+                f"'{result}' was restored to defaults. Re-run calibration/setup before drawing.",
+                parent=getattr(app, "root", None),
+            )
         return result
     except ProfilePortabilityError as error:
-        messagebox.showerror("Could not reset profile", str(error), parent=getattr(app, "root", None))
+        if not getattr(app, 'closing', False):
+            messagebox.showerror("Could not reset profile", str(error), parent=getattr(app, "root", None))
         return None

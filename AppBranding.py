@@ -48,7 +48,8 @@ def _install_destroy_guard(root):
         return
 
     def destroy():
-        if getattr(root, '_image_draw_bot_destroying', False):
+        if (getattr(root, '_image_draw_bot_destroying', False)
+                or getattr(root, '_image_draw_bot_destroyed', False)):
             return
         root._image_draw_bot_destroying = True
         try:
@@ -65,8 +66,9 @@ def _install_destroy_guard(root):
                 # successful no-op; unrelated Tcl errors must still surface.
                 if not _already_destroyed_tcl_error(error):
                     raise
-        finally:
             root._image_draw_bot_destroyed = True
+        finally:
+            root._image_draw_bot_destroying = False
 
     root.destroy = destroy
     root._image_draw_bot_destroy_wrapped = True
@@ -114,16 +116,46 @@ def configure_root(root):
                 return
             window._image_draw_bot_icon_set = True
             apply(window)
-            # CustomTkinter also schedules its default Windows icon at startup.
-            pending = getattr(window, '_image_draw_bot_icon_after', None)
-            if pending:
-                window.after_cancel(pending)
-            window._image_draw_bot_icon_after = window.after(300, lambda: apply(window))
+            schedule_icon(window)
         except Exception:
             pass
 
+    def cancel_icon(window):
+        pending = getattr(window, '_image_draw_bot_icon_after', None)
+        window._image_draw_bot_icon_after = None
+        window._image_draw_bot_icon_ticket = None
+        if pending is not None:
+            try:
+                window.after_cancel(pending)
+            except (tk.TclError, RuntimeError):
+                pass
+
+    def schedule_icon(window):
+        cancel_icon(window)
+        if not getattr(window, '_image_draw_bot_icon_destroy_binding', None):
+            def destroyed(event):
+                if event.widget is window:
+                    cancel_icon(window)
+            window._image_draw_bot_icon_destroy_binding = window.bind('<Destroy>', destroyed, add='+')
+        # CTk also schedules its Windows icon. This follow-up belongs to the
+        # specific window, including ordinary Tk tooltip/overlay windows.
+        ticket = object()
+        window._image_draw_bot_icon_ticket = ticket
+
+        def delayed():
+            if getattr(window, '_image_draw_bot_icon_ticket', None) is not ticket:
+                return
+            window._image_draw_bot_icon_after = None
+            window._image_draw_bot_icon_ticket = None
+            apply(window)
+
+        try:
+            window._image_draw_bot_icon_after = window.after(300, delayed)
+        except (tk.TclError, RuntimeError):
+            cancel_icon(window)
+
     apply(root)
-    root.after(300, lambda: apply(root))
+    schedule_icon(root)
     root.bind_all('<Map>', mapped, add='+')
     root._image_draw_bot_branding = True
     return root

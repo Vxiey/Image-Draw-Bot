@@ -112,14 +112,16 @@ def _trace_component(runs, cancelled, max_points):
     return _split_paths(compressed, max_points), len(raw_paths), len(nodes)
 
 
-def _axis_paths(horizontal_runs, axis, cancelled, max_points):
+def _axis_paths(horizontal_runs, axis, cancelled, max_points, *, vertical_runs=None):
     from ContinuousPaths import _horizontal_paths
     if axis == "horizontal":
         paths = _horizontal_paths(horizontal_runs, cancelled,
                                   max_rows_per_path=110,
                                   max_points_per_path=max(24, max_points))
     else:
-        vertical = verticalize_horizontal_runs(horizontal_runs, cancelled=cancelled)
+        vertical = vertical_runs
+        if vertical is None:
+            vertical = verticalize_horizontal_runs(horizontal_runs, cancelled=cancelled)
         if vertical is None:
             return []
         transposed = [(y0, x, y1, x) for x, y0, _, y1 in vertical]
@@ -201,7 +203,7 @@ def trace_contours(image, cancelled=lambda:False, max_points=160, options=None):
                 from ExecutionCostModel import build_cost_model
                 model = build_cost_model(dict(options or {}), image.size, image.size)
             h_paths = _axis_paths(comp_runs, 'horizontal', cancelled, max_points)
-            v_paths = _axis_paths(comp_runs, 'vertical', cancelled, max_points)
+            v_paths = _axis_paths(comp_runs, 'vertical', cancelled, max_points, vertical_runs=vertical_runs)
             axis_candidates += int(bool(h_paths)) + int(bool(v_paths))
 
         very_dense = dense_candidate and node_count >= 64 and min(avg_h, avg_v) >= 3.0

@@ -20,8 +20,8 @@ class Button:
 
 class StartFailsafeV1018Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(FILE_VERSION,'1.0.148')
 
     def make_app(self, *, image=True, area=True, palette=True, unlocked=False):
         return SimpleNamespace(

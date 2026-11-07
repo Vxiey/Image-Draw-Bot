@@ -17,8 +17,8 @@ import sys
 import time
 
 from GpuHardware import detect_gpus
-from GpuSetupRuntime import (SetupEnvironmentError, process_failure, require_virtual_environment,
-                             running_in_virtual_environment)
+from GpuSetupRuntime import (SetupEnvironmentError, checked_requirements, pip_command,
+                             pip_environment, process_failure, running_in_virtual_environment)
 
 BASE = Path(__file__).resolve().parent
 REQUIREMENTS = BASE / "requirements-gpu-universal.txt"
@@ -45,11 +45,12 @@ def _creationflags() -> int:
     return int(getattr(subprocess, "CREATE_NO_WINDOW", 0)) if os.name == "nt" else 0
 
 
-def _run(command: list[str], timeout: float = 300.0, *, capture_stderr: bool = False) -> subprocess.CompletedProcess[str]:
+def _run(command: list[str], timeout: float = 300.0, *, capture_stderr: bool = False,
+         env=None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=BASE, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE if capture_stderr else subprocess.STDOUT,
                           text=True, encoding="utf-8", errors="replace", timeout=timeout,
-                          creationflags=_creationflags(), check=False)
+                          creationflags=_creationflags(), check=False, env=env)
 
 
 def _state_path() -> Path:
@@ -138,10 +139,11 @@ def _smoke_test(python: str) -> tuple[bool, tuple[str, ...], str]:
 
 
 def _pip_install_backend(python: str) -> subprocess.CompletedProcess[str]:
-    require_virtual_environment(python, _run)
-    return _run([python, "-m", "pip", "install", "--upgrade", "--upgrade-strategy", "only-if-needed",
-                 "--disable-pip-version-check", "--timeout", "45", "--retries", "2", "-r", str(REQUIREMENTS)],
-                timeout=600.0)
+    with pip_environment(python, _run) as environment:
+        checked_requirements(REQUIREMENTS)
+        return _run(pip_command(python, "install", "--upgrade", "--upgrade-strategy", "only-if-needed",
+                    "--disable-pip-version-check", "--timeout", "45", "--retries", "2", "-r", str(REQUIREMENTS)),
+                    timeout=600.0, env=environment.for_command("install"))
 
 
 def ensure_universal_gpu_backend(*, python: str | None = None, force: bool = False) -> SetupResult:

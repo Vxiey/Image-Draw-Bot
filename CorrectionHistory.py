@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ProfileStorage import profile_correction_history_file, safe_profile_key
-from RuntimePaths import atomic_write_text
+from RuntimePaths import atomic_write_text, file_transaction, is_finite_number, read_json
 
 VERSION = 1
 MAX_ENTRIES = 30
@@ -38,7 +38,7 @@ def _as_dict(value: Any) -> dict[str, Any]:
 def _finite(value: Any, default: float | None = None) -> float | None:
     try:
         out = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     return out if math.isfinite(out) else default
 
@@ -58,7 +58,7 @@ def _num(value: Any, ndigits: int = 3) -> float | None:
 def _int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -74,23 +74,51 @@ def _empty(profile_key: str) -> dict[str, Any]:
     return {"version": VERSION, "profile_key": safe_profile_key(profile_key), "entries": []}
 
 
+def _valid_entry(entry) -> bool:
+    """Keep legacy rows only when their display fields have their real domains."""
+    if not isinstance(entry, dict) or contains_image_data(entry):
+        return False
+    if 'state' in entry and (not isinstance(entry['state'], str) or len(entry['state']) > 80):
+        return False
+    for section in ('before', 'after', 'delta', 'correction', 'context'):
+        if section in entry and not isinstance(entry[section], dict):
+            return False
+    for section in ('before', 'after', 'delta'):
+        for key, value in entry.get(section, {}).items():
+            if value is None or not key.endswith(('_percent', '_delta')):
+                continue
+            low = -100 if key.endswith('_delta') else 0
+            if not is_finite_number(value) or not low <= value <= 100:
+                return False
+    for key in ('executed_paths', 'planned_paths', 'executed_colors', 'corrected_colors',
+                'selected_correction_pixels', 'missing_pixels', 'wrong_color_pixels'):
+        value = entry.get('correction', {}).get(key)
+        if value is not None and (type(value) is not int or not 0 <= value <= 1_000_000_000):
+            return False
+    for key in ('created_at', 'actual_seconds'):
+        value = entry.get(key)
+        if value is not None and (not is_finite_number(value) or value < 0):
+            return False
+    return True
+
+
 def _load(options: dict[str, Any], path: Path | None = None) -> tuple[Path, dict[str, Any]]:
     resolved = _resolved_path(options, path)
     profile = _profile_from_options(options)
     try:
-        raw = json.loads(resolved.read_text(encoding="utf-8"))
+        raw = read_json(resolved)
     except (OSError, ValueError, TypeError):
         return resolved, _empty(profile)
     if not isinstance(raw, dict):
         return resolved, _empty(profile)
-    if int(raw.get("version", 0) or 0) != VERSION:
+    if type(raw.get("version")) is not int or raw["version"] != VERSION:
         return resolved, _empty(profile)
     if safe_profile_key(raw.get("profile_key")) != profile:
         return resolved, _empty(profile)
     entries = raw.get("entries")
     if not isinstance(entries, list):
         return resolved, _empty(profile)
-    return resolved, {"version": VERSION, "profile_key": profile, "entries": [e for e in entries if isinstance(e, dict)][-MAX_ENTRIES:]}
+    return resolved, {"version": VERSION, "profile_key": profile, "entries": [e for e in entries if _valid_entry(e)][-MAX_ENTRIES:]}
 
 
 def _budget_class(seconds: Any) -> str:
@@ -139,18 +167,21 @@ def compact_result_metrics(meta: dict[str, Any] | None) -> dict[str, Any]:
     meta = _as_dict(meta)
     if not meta:
         return {}
+    def preferred(primary, secondary):
+        value = meta.get(primary)
+        return meta.get(secondary) if value is None else value
     out = {
         "available": bool(meta.get("available", True)),
         "trusted": bool(meta.get("trusted")) if "trusted" in meta else None,
         "trust": meta.get("feedback_trust") or meta.get("post_correction_trust"),
-        "confidence_percent": _metric(meta.get("confidence_percent") or meta.get("post_correction_confidence_percent")),
-        "visual_accuracy_percent": _metric(meta.get("visual_accuracy_percent") or meta.get("post_correction_visual_accuracy_percent")),
+        "confidence_percent": _metric(preferred("confidence_percent", "post_correction_confidence_percent")),
+        "visual_accuracy_percent": _metric(preferred("visual_accuracy_percent", "post_correction_visual_accuracy_percent")),
         "source_pixel_accuracy_percent": _metric(meta.get("source_pixel_accuracy_percent")),
         "perceptual_color_accuracy_percent": _metric(meta.get("perceptual_color_accuracy_percent")),
         "luminance_accuracy_percent": _metric(meta.get("luminance_accuracy_percent")),
         "hue_accuracy_percent": _metric(meta.get("hue_accuracy_percent")),
         "edge_accuracy_percent": _metric(meta.get("edge_accuracy_percent")),
-        "actual_coverage_percent": _metric(meta.get("actual_coverage_percent") or meta.get("post_correction_actual_coverage_percent")),
+        "actual_coverage_percent": _metric(preferred("actual_coverage_percent", "post_correction_actual_coverage_percent")),
         "actual_vs_simulated_visual_percent": _metric(meta.get("actual_vs_simulated_visual_percent")),
         "unexpected_ink_percent": _metric(meta.get("unexpected_ink_percent")),
         "visual_gate_passed": meta.get("visual_gate_passed") if isinstance(meta.get("visual_gate_passed"), bool) else None,
@@ -276,7 +307,10 @@ def build_history_entry(plan_or_options: dict[str, Any], *, actual_seconds: floa
     if not after and _state(correction) in {"skipped", "skipped-clean", "blocked", "planned-not-executed"}:
         after = dict(before)
 
-    created = float(created_at if created_at is not None else time.time())
+    created = time.time() if created_at is None else created_at
+    if not is_finite_number(created) or created < 0:
+        raise ValueError('Correction-history timestamp must be finite and nonnegative.')
+    created = float(created)
     material = json.dumps({"t": round(created, 3), "ctx": ctx, "corr": correction, "before": before, "after": after}, sort_keys=True, default=str)
     entry_id = hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
     entry = {
@@ -311,32 +345,84 @@ def record_correction_history(plan_or_options: dict[str, Any], *, actual_seconds
     entry = build_history_entry(plan if plan else options, actual_seconds=actual_seconds, created_at=created_at)
     if contains_image_data(entry):
         return {"recorded": False, "reason": "blocked unsafe image-data field", "profile_key": ctx["profile_key"]}
-    resolved, db = _load(options, path)
-    entries = list(db.get("entries") or [])
-    # Avoid duplicate double-click/UI-event records from the same correction run.
-    if not entries or entries[-1].get("id") != entry.get("id"):
-        entries.append(entry)
-    db["entries"] = entries[-MAX_ENTRIES:]
-    db["updated_at"] = round(time.time(), 3)
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2))
-    summary = summarize_correction_history(db, limit=DISPLAY_LIMIT)
-    return {
-        "recorded": True,
-        "profile_key": ctx["profile_key"],
-        "entry_id": entry.get("id"),
-        "state": entry.get("state"),
-        "entries": len(db["entries"]),
-        "latest": compact_history_entry(entry),
-        "summary": summary,
-        "storage_path": str(resolved),
-    }
+    with file_transaction(_resolved_path(options, path)):
+        resolved, db = _load(options, path)
+        entries = list(db.get("entries") or [])
+        # Avoid duplicate double-click/UI-event records from the same correction run.
+        if not entries or entries[-1].get("id") != entry.get("id"):
+            entries.append(entry)
+        db["entries"] = entries[-MAX_ENTRIES:]
+        db["updated_at"] = round(time.time(), 3)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False))
+        summary = summarize_correction_history(db, limit=DISPLAY_LIMIT)
+        return {
+            "recorded": True,
+            "profile_key": ctx["profile_key"],
+            "entry_id": entry.get("id"),
+            "state": entry.get("state"),
+            "entries": len(db["entries"]),
+            "latest": compact_history_entry(entry),
+            "summary": summary,
+            "storage_path": str(resolved),
+        }
+
+
+def record_result_verification(options: dict[str, Any], metrics: dict[str, Any], *,
+                               path: Path | None = None, created_at: float | None = None,
+                               cancelled=lambda: False) -> dict[str, Any]:
+    """Append a read-only observation without attributing correction or drawing.
+
+    Old correction fields in ``options`` supply no before/after pair, counters
+    or gain. Only the context and this fresh observation enter the history.
+    Cancellation is checked before the atomic publication; an already committed
+    observation is never deleted if Stop arrives afterward.
+    """
+    def check():
+        if cancelled():
+            raise InterruptedError('Result re-check history cancelled.')
+    check()
+    _, options, ctx = _context(options if isinstance(options, dict) else {})
+    observed = compact_result_metrics(metrics)
+    if not observed:
+        raise ValueError('Result re-check history requires fresh result metadata.')
+    created = time.time() if created_at is None else created_at
+    if not is_finite_number(created) or created < 0:
+        raise ValueError('Result re-check timestamp must be finite and nonnegative.')
+    material = json.dumps({'t': round(created, 3), 'ctx': ctx, 'observed': observed,
+                           'operation': 'read-only-verification'}, sort_keys=True, allow_nan=False)
+    entry = {'id': hashlib.sha256(material.encode('utf-8')).hexdigest()[:16],
+             'version': VERSION, 'created_at': round(created, 3),
+             'profile_key': ctx['profile_key'], 'operation': 'read-only-verification',
+             'state': 'rechecked' if metrics.get('available') is True else 'recheck-unavailable',
+             'context': ctx, 'before': {}, 'after': observed, 'delta': {}, 'correction': {},
+             'reason': str(metrics.get('reason') or metrics.get('summary') or '')[:220],
+             'privacy': 'Read-only result observation; no correction gain or persisted image artifacts.',
+             'stores_image_data': False, 'capture_pixels_persisted': False, 'image_pixels_persisted': False}
+    if not _valid_entry(entry):
+        raise ValueError('Result re-check history contains invalid result metadata.')
+    check()
+    with file_transaction(_resolved_path(options, path)):
+        resolved, db = _load(options, path)
+        entries = list(db.get('entries') or [])
+        if not entries or entries[-1].get('id') != entry['id']:
+            entries.append(entry)
+        db['entries'] = entries[-MAX_ENTRIES:]
+        db['updated_at'] = round(time.time(), 3)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        check()
+        atomic_write_text(resolved, json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False))
+        return {'recorded': True, 'profile_key': ctx['profile_key'], 'entry_id': entry['id'],
+                'state': entry['state'], 'entries': len(db['entries']),
+                'latest': compact_history_entry(entry),
+                'summary': summarize_correction_history(db, limit=DISPLAY_LIMIT),
+                'storage_path': str(resolved)}
 
 
 def compact_history_entry(entry: dict[str, Any]) -> dict[str, Any]:
     entry = _as_dict(entry)
     before = _as_dict(entry.get("before")); after = _as_dict(entry.get("after")); delta = _as_dict(entry.get("delta")); corr = _as_dict(entry.get("correction"))
-    return {
+    result = {
         "id": entry.get("id"),
         "created_at": entry.get("created_at"),
         "state": entry.get("state"),
@@ -351,6 +437,10 @@ def compact_history_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "selected_correction_pixels": corr.get("selected_correction_pixels"),
         "reason": corr.get("reason"),
     }
+    if entry.get('operation') == 'read-only-verification':
+        result['operation'] = 'read-only-verification'
+        result['reason'] = entry.get('reason')
+    return result
 
 
 def load_correction_history(options: dict[str, Any] | None, *, path: Path | None = None,
@@ -415,6 +505,13 @@ def format_correction_history(history: dict[str, Any] | None, *, max_entries: in
         parts = [state]
         if before is not None and after is not None:
             parts.append(f"Visual {float(before):.1f}% → {float(after):.1f}%")
+        elif item.get('operation') == 'read-only-verification':
+            parts.append('read-only observation')
+            if after is not None:
+                parts.append(f'Visual {float(after):.1f}%')
+            coverage = item.get('after_coverage_percent')
+            if coverage is not None:
+                parts.append(f'Coverage {float(coverage):.1f}%')
         if delta is not None:
             parts.append(f"Δ {float(delta):+.1f} pp")
         if coverage_delta is not None:
@@ -428,9 +525,10 @@ def format_correction_history(history: dict[str, Any] | None, *, max_entries: in
 
 def reset_profile_history(options: dict[str, Any], *, path: Path | None = None) -> dict[str, Any]:
     resolved = _resolved_path(options if isinstance(options, dict) else {}, path)
-    existed = resolved.exists()
-    try:
-        resolved.unlink()
-    except FileNotFoundError:
-        pass
-    return {"reset": bool(existed), "profile_key": _profile_from_options(options if isinstance(options, dict) else {}), "storage_path": str(resolved)}
+    with file_transaction(resolved):
+        existed = resolved.exists()
+        try:
+            resolved.unlink()
+        except FileNotFoundError:
+            pass
+        return {"reset": bool(existed), "profile_key": _profile_from_options(options if isinstance(options, dict) else {}), "storage_path": str(resolved)}

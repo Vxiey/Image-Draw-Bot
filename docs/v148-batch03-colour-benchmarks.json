@@ -1,0 +1,260 @@
+{
+  "baseline_commit": "2fb7abf470a4ef498df9c53f42cddda62d8b652b",
+  "python": "3.12.14",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "repetitions": 5,
+  "physical_gpu_used": false,
+  "memory_metric": "tracemalloc peak bytes; excludes untracked native/Pillow allocations and process RSS",
+  "comparisons": [
+    {
+      "name": "importance_cpu_working_set",
+      "before": {
+        "samples_ms": [
+          34.42940600143629,
+          34.58741999929771,
+          36.195097000017995,
+          35.67655000006198,
+          37.55692100094166
+        ],
+        "median_ms": 35.67655000006198,
+        "tracemalloc_peak_bytes": 28368696
+      },
+      "after": {
+        "samples_ms": [
+          22.00676899883547,
+          26.230703999317484,
+          25.977478999266168,
+          25.991300000896445,
+          26.114743002835894
+        ],
+        "median_ms": 25.991300000896445,
+        "tracemalloc_peak_bytes": 14126048
+      },
+      "time_ratio": 0.7285261607653007,
+      "traced_peak_ratio": 0.49794491787708534,
+      "shape": [
+        512,
+        768,
+        3
+      ],
+      "parity": "bit-identical map and all metadata"
+    },
+    {
+      "name": "edge_rgb_sampling",
+      "before": {
+        "samples_ms": [
+          90.87178000118001,
+          90.160438001476,
+          73.81656800134806,
+          72.1439900007681,
+          68.25082399882376
+        ],
+        "median_ms": 73.81656800134806,
+        "tracemalloc_peak_bytes": 27845028
+      },
+      "after": {
+        "samples_ms": [
+          24.924552999436855,
+          25.33240600314457,
+          26.943368000502232,
+          26.669081998988986,
+          25.83337699979893
+        ],
+        "median_ms": 25.83337699979893,
+        "tracemalloc_peak_bytes": 3179653
+      },
+      "time_ratio": 0.3499671916381584,
+      "traced_peak_ratio": 0.11419105055308258,
+      "size": [
+        640,
+        512
+      ],
+      "parity": "identical ranked edge colors"
+    },
+    {
+      "name": "spatial_palette_anchor_working_set",
+      "before": {
+        "samples_ms": [
+          56.702167999901576,
+          56.20041599831893,
+          32.24952299933648,
+          35.56261099947733,
+          34.769496000080835
+        ],
+        "median_ms": 35.56261099947733,
+        "tracemalloc_peak_bytes": 5570440
+      },
+      "after": {
+        "samples_ms": [
+          50.41730100128916,
+          75.69618499837816,
+          76.29041300242534,
+          73.52453999919817,
+          76.79443999950308
+        ],
+        "median_ms": 75.69618499837816,
+        "tracemalloc_peak_bytes": 22024
+      },
+      "time_ratio": 2.12853282902908,
+      "traced_peak_ratio": 0.0039537271741550035,
+      "strokes": 32768,
+      "parity": "identical anchor indexes"
+    },
+    {
+      "name": "smart_color_working_set",
+      "before": {
+        "samples_ms": [
+          55.749135000951355,
+          51.15024200131302,
+          51.40605499764206,
+          75.96977900175261,
+          68.7068379993434
+        ],
+        "median_ms": 55.749135000951355,
+        "tracemalloc_peak_bytes": 5663182
+      },
+      "after": {
+        "samples_ms": [
+          49.983015000179876,
+          47.24222699951497,
+          47.85266999897431,
+          49.45235400009551,
+          80.33806499952334
+        ],
+        "median_ms": 49.45235400009551,
+        "tracemalloc_peak_bytes": 114302
+      },
+      "time_ratio": 0.8870515031175212,
+      "traced_peak_ratio": 0.020183352751156507,
+      "strokes": 32768,
+      "parity": "identical adjusted weights and all metadata"
+    },
+    {
+      "name": "uncached_named_color_queries",
+      "before": {
+        "samples_ms": [
+          465.61833799933083,
+          475.26525300054345,
+          451.4283710013842,
+          496.72125700089964,
+          474.52967400022317
+        ],
+        "median_ms": 474.52967400022317,
+        "tracemalloc_peak_bytes": 153688
+      },
+      "after": {
+        "samples_ms": [
+          6.084009000915103,
+          6.184165999002289,
+          6.114342999353539,
+          5.993063998175785,
+          6.334409001283348
+        ],
+        "median_ms": 6.114342999353539,
+        "tracemalloc_peak_bytes": 64712
+      },
+      "time_ratio": 0.012885059321602433,
+      "traced_peak_ratio": 0.42106085055436987,
+      "queries": 256,
+      "vocabulary": "extended",
+      "parity": "identical names/RGB; distances within 1e-14 relative"
+    },
+    {
+      "name": "candidate_cost_without_unused_ciede2000",
+      "before": {
+        "samples_ms": [
+          8.942606000346132,
+          5.7491930019750725,
+          6.090939001296647,
+          6.497739999758778,
+          5.886345999897458
+        ],
+        "median_ms": 6.090939001296647,
+        "tracemalloc_peak_bytes": 150816
+      },
+      "after": {
+        "samples_ms": [
+          3.9490449998993427,
+          3.553204998752335,
+          4.06688499788288,
+          3.308422998088645,
+          4.215916000248399
+        ],
+        "median_ms": 3.9490449998993427,
+        "tracemalloc_peak_bytes": 150312
+      },
+      "time_ratio": 0.6483474878107734,
+      "traced_peak_ratio": 0.996658179503501,
+      "pairs": 512,
+      "parity": "identical candidate costs"
+    },
+    {
+      "name": "dynamic_horizontal_runs",
+      "before": {
+        "samples_ms": [
+          69.92909200198483,
+          38.92192700004671,
+          39.936717999808025,
+          68.73540199740091,
+          43.7981690010929
+        ],
+        "median_ms": 43.7981690010929,
+        "tracemalloc_peak_bytes": 4214248
+      },
+      "after": {
+        "samples_ms": [
+          30.639286000223365,
+          31.089792999409838,
+          30.606176998844603,
+          32.22101599749294,
+          25.98766699884436
+        ],
+        "median_ms": 30.639286000223365,
+        "tracemalloc_peak_bytes": 4219189
+      },
+      "time_ratio": 0.6995563216229158,
+      "traced_peak_ratio": 1.0011724511704105,
+      "shape": [
+        384,
+        512
+      ],
+      "parity": "identical complete stroke groups",
+      "baseline": "independent scalar row walk with the previous per-pixel state machine"
+    },
+    {
+      "name": "picture_analysis_without_unused_strokes",
+      "before": {
+        "samples_ms": [
+          91.12465600264841,
+          73.92124599937233,
+          88.79032900222228,
+          74.7563769982662,
+          57.692980000865646
+        ],
+        "median_ms": 74.7563769982662,
+        "tracemalloc_peak_bytes": 9088907
+      },
+      "after": {
+        "samples_ms": [
+          23.61154299796908,
+          21.902394000790082,
+          21.8163480021758,
+          21.79408500160207,
+          31.390697997267125
+        ],
+        "median_ms": 21.902394000790082,
+        "tracemalloc_peak_bytes": 8438605
+      },
+      "time_ratio": 0.2929836206655394,
+      "traced_peak_ratio": 0.9284510227687444,
+      "size": [
+        384,
+        256
+      ],
+      "parity": "identical colors, selectors and metadata",
+      "baseline": "same current color analysis with full stroke construction enabled"
+    }
+  ]
+}

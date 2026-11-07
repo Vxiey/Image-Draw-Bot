@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from ProfileStorage import safe_profile_key
-from RuntimePaths import atomic_write_text, data_dir
+from RuntimePaths import data_dir, file_transaction, read_json, replace_text_files, is_finite_number
+from SafeCanvasSnapshotScoring import trusted_snapshot_evidence
+from CompletedDrawLearning import paused_learning_reason
 
 REPORT_VERSION = 1
 MAX_HISTORY = 40
@@ -55,7 +57,7 @@ def _report_dir(options: dict[str, Any]) -> Path:
 
 def _accuracy(options: dict[str, Any]) -> dict[str, Any]:
     post = _dict(options.get("post_draw_accuracy_meta"))
-    if not post or not post.get("available"):
+    if not post or post.get("available") is not True:
         return {
             "available": False,
             "trusted": False,
@@ -67,12 +69,12 @@ def _accuracy(options: dict[str, Any]) -> dict[str, Any]:
     # by AccuracyEvaluator. Keep it as the headline score rather than inventing
     # another opaque weighted number. The component scores remain visible below.
     score = _float(post.get("visual_accuracy_percent"), None)
-    if score is not None:
-        score = max(0.0, min(100.0, score))
+    if score is not None and (isinstance(post.get('visual_accuracy_percent'), bool) or not 0 <= score <= 100):
+        score = None
     delta = _dict(post.get("delta_e_oklab"))
     return {
         "available": True,
-        "trusted": bool(post.get("trusted")),
+        "trusted": trusted_snapshot_evidence(post) and score is not None,
         "trust": str(post.get("feedback_trust") or "none"),
         "confidence_percent": _round(post.get("confidence_percent"), 2),
         "score_0_100": _round(score, 2),
@@ -112,11 +114,13 @@ def _operation_breakdown(options: dict[str, Any], actual_seconds: float) -> dict
             "average_seconds": round(average, 6),
             "share_of_actual_percent": round(100.0 * total / max(.001, actual_seconds), 2),
         }
-    unclassified = max(0.0, float(actual_seconds) - measured_total)
+    paused = min(float(actual_seconds), max(0.0, _float(options.get('execution_pause_seconds'), 0.0) or 0.0))
+    unclassified = max(0.0, float(actual_seconds) - measured_total - paused)
     return {
         "operations": rows,
         "measured_operation_seconds": round(measured_total, 5),
         "measured_share_percent": round(100.0 * measured_total / max(.001, actual_seconds), 2),
+        "paused_seconds": round(paused, 5),
         "unclassified_seconds": round(unclassified, 5),
         "unclassified_share_percent": round(100.0 * unclassified / max(.001, actual_seconds), 2),
     }
@@ -160,7 +164,7 @@ def _opacity(options: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _recommendations(*, options: dict[str, Any], actual: float, predicted: float,
+def _recommendations(*, options: dict[str, Any], actual: float, predicted: float | None,
                      accuracy: dict[str, Any], operations: dict[str, Any], brush: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     ops = _dict(operations.get("operations"))
@@ -173,7 +177,11 @@ def _recommendations(*, options: dict[str, Any], actual: float, predicted: float
 
     # Quality gates come first. Never tell a future optimizer to trade more quality
     # away when the real canvas already shows a quality or coverage problem.
-    quality_limited = False
+    quality_limited = not trusted or score is None or coverage is None
+    if quality_limited:
+        add(100, 'verify_result', 'Verify the real result before increasing speed',
+            'Trusted final-canvas quality and coverage evidence is incomplete.',
+            'Re-check the target canvas before accepting more aggressive brushes, simplification or fills.')
     if trusted and score is not None and score < 82.0:
         quality_limited = True
         add(100, "protect_accuracy", "Protect accuracy before more speed",
@@ -185,8 +193,13 @@ def _recommendations(*, options: dict[str, Any], actual: float, predicted: float
             f"Actual canvas coverage is {coverage:.1f}%.",
             "Inspect skipped/clipped regions and correction passes; do not raise simplification until coverage recovers.")
 
-    estimate_error = (actual - predicted) / max(1.0, actual)
-    if abs(estimate_error) >= .12:
+    pause_reason = paused_learning_reason(options)
+    if pause_reason:
+        add(86, 'paused_timing', 'Timing learning skipped for this paused run',
+            'The elapsed total includes a manual pause or an invalid pause measurement.',
+            'Use an uninterrupted drawing to compare execution speed. Canvas quality measurements remain available.')
+    estimate_error = (actual - predicted) / max(1.0, actual) if predicted is not None and not pause_reason else None
+    if estimate_error is not None and abs(estimate_error) >= .12:
         direction = "underestimated" if actual > predicted else "overestimated"
         add(86, "eta_model", "Refine the draw-time model",
             f"ETA {direction} this run by {abs(estimate_error)*100.0:.1f}% ({predicted:.1f}s predicted vs {actual:.1f}s actual).",
@@ -224,7 +237,7 @@ def _recommendations(*, options: dict[str, Any], actual: float, predicted: float
             f"{unclassified_share:.1f}% of the completed draw is still outside typed operation timings.",
             "Add timing around prelude/travel/fill verification/UI waits so planner costs are learned from the real bottleneck.")
 
-    if trusted and score is not None and score >= 92.0 and not quality_limited and actual > 10.0:
+    if trusted and score is not None and score >= 92.0 and not quality_limited and not pause_reason and actual > 10.0:
         add(45, "safe_speed_headroom", "Use quality headroom carefully",
             f"Measured accuracy is {score:.1f}/100 with trusted final-canvas evidence.",
             "Test broader brushes or cheaper ordering only where the simulator predicts no protected-detail loss; reject changes that lower the real score materially.")
@@ -233,7 +246,9 @@ def _recommendations(*, options: dict[str, Any], actual: float, predicted: float
     return out[:8]
 
 
-def _efficiency_score(actual: float, predicted: float, accuracy: dict[str, Any], operations: dict[str, Any]) -> float:
+def _efficiency_score(actual: float, predicted: float | None, accuracy: dict[str, Any], operations: dict[str, Any]) -> float | None:
+    if predicted is None or not accuracy.get('trusted') or accuracy.get('score_0_100') is None:
+        return None
     eta = 1.0 - min(1.0, abs(actual - predicted) / max(1.0, actual))
     classified = min(1.0, (_float(operations.get("measured_share_percent"), 0.0) or 0.0) / 90.0)
     acc = _float(accuracy.get("score_0_100"), None)
@@ -243,16 +258,21 @@ def _efficiency_score(actual: float, predicted: float, accuracy: dict[str, Any],
 
 def build_completed_drawing_report(plan: dict[str, Any], actual_seconds: float, *, completed_paths: int = 0) -> dict[str, Any]:
     options = _dict(plan.get("options"))
-    actual = max(.001, float(actual_seconds or 0.0))
+    if not is_finite_number(actual_seconds) or actual_seconds <= 0:
+        raise ValueError('Completed draw duration must be finite and positive.')
+    if type(completed_paths) is not int or completed_paths < 0:
+        raise ValueError('Completed path count must be a non-negative integer.')
+    actual = float(actual_seconds)
     estimate = _dict(plan.get("draw_time_estimate"))
-    predicted = max(.001, _float(estimate.get("projected_seconds"), None)
-                    or _float(estimate.get("preview_seconds"), None)
-                    or _float(plan.get("raw_execution_estimate_seconds"), None)
-                    or _float(plan.get("estimate"), 0.001) or .001)
+    predicted = next((float(value) for value in (
+        estimate.get('projected_seconds'), estimate.get('preview_seconds'),
+        plan.get('raw_execution_estimate_seconds'), plan.get('estimate'))
+        if is_finite_number(value) and value >= 0), None)
     accuracy = _accuracy(options)
     operations = _operation_breakdown(options, actual)
     brush = _brush(options)
     opacity = _opacity(options)
+    pause_reason = paused_learning_reason(options)
     recommendations = _recommendations(options=options, actual=actual, predicted=predicted,
                                        accuracy=accuracy, operations=operations, brush=brush)
     return {
@@ -266,16 +286,19 @@ def build_completed_drawing_report(plan: dict[str, Any], actual_seconds: float, 
         "speed": str(options.get("speed") or ""),
         "precision": str(options.get("precision") or ""),
         "completed_paths": max(0, int(completed_paths or 0)),
-        "predicted_seconds": round(predicted, 4),
+        "predicted_seconds": None if predicted is None else round(predicted, 4),
         "actual_seconds": round(actual, 4),
-        "eta_error_seconds": round(actual - predicted, 4),
-        "eta_error_percent_of_actual": round((actual - predicted) * 100.0 / max(1.0, actual), 2),
+        "execution_pause_count": max(0, _int(options.get('execution_pause_count'), 0)),
+        "execution_pause_seconds": operations['paused_seconds'],
+        "timing_sample_exclusion_reason": pause_reason,
+        "eta_error_seconds": None if predicted is None or pause_reason else round(actual - predicted, 4),
+        "eta_error_percent_of_actual": None if predicted is None or pause_reason else round((actual - predicted) * 100.0 / max(1.0, actual), 2),
         "accuracy": accuracy,
         "drawing_accuracy_score_0_100": accuracy.get("score_0_100"),
         "operations": operations,
         "brush": brush,
         "opacity": opacity,
-        "efficiency_score_0_100": _efficiency_score(actual, predicted, accuracy, operations),
+        "efficiency_score_0_100": None if pause_reason else _efficiency_score(actual, predicted, accuracy, operations),
         "recommendations": recommendations,
         "privacy": "Metrics only. No source image, final canvas screenshot, crop, thumbnail or pixel buffer is persisted.",
     }
@@ -283,9 +306,11 @@ def build_completed_drawing_report(plan: dict[str, Any], actual_seconds: float, 
 
 def _load_history(path: Path) -> list[dict[str, Any]]:
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = read_json(path, max_bytes=2*1024*1024)
         if isinstance(raw, list):
-            return [row for row in raw if isinstance(row, dict)]
+            return [row for row in raw if isinstance(row, dict)
+                    and type(row.get('version')) is int and row['version'] == REPORT_VERSION
+                    and is_finite_number(row.get('actual_seconds')) and row['actual_seconds'] > 0][-MAX_HISTORY:]
     except (OSError, ValueError, TypeError):
         pass
     return []
@@ -298,6 +323,7 @@ def _text_report(report: dict[str, Any]) -> str:
         f"Profile: {report.get('profile_name') or report.get('profile_key')}",
         f"Mode: {report.get('drawing_mode')} · preset {report.get('render_preset')} · quality {report.get('draw_quality')}",
         f"Time: predicted {report.get('predicted_seconds')}s · actual {report.get('actual_seconds')}s · error {report.get('eta_error_percent_of_actual')}% of actual",
+        f"Manual pause: {report.get('execution_pause_seconds', 0)}s · timing learning: {report.get('timing_sample_exclusion_reason') or 'normal eligibility checks'}",
         f"Paths: {report.get('completed_paths')}",
         f"Drawing Accuracy Score: {acc.get('score_0_100') if acc.get('score_0_100') is not None else 'unavailable'}/100 · trust {acc.get('trust','none')}",
         f"Coverage: {acc.get('actual_coverage_percent')}% · edge {acc.get('edge_accuracy_percent')}% · color {acc.get('perceptual_color_accuracy_percent')}%",
@@ -320,12 +346,15 @@ def record_completed_drawing(plan: dict[str, Any], actual_seconds: float, *, com
     latest_json = directory / "latest.json"
     latest_txt = directory / "latest.txt"
     history_path = directory / "history.json"
-    history = _load_history(history_path)
-    history.append(report)
-    history = history[-MAX_HISTORY:]
-    atomic_write_text(latest_json, json.dumps(report, ensure_ascii=False, indent=2))
-    atomic_write_text(latest_txt, _text_report(report))
-    atomic_write_text(history_path, json.dumps(history, ensure_ascii=False, indent=2))
+    with file_transaction(history_path):
+        history = _load_history(history_path)
+        history.append(report)
+        history = history[-MAX_HISTORY:]
+        replace_text_files({
+            latest_json: json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False),
+            latest_txt: _text_report(report),
+            history_path: json.dumps(history, ensure_ascii=False, indent=2, allow_nan=False),
+        })
     result = dict(report)
     result.update({
         "recorded": True,

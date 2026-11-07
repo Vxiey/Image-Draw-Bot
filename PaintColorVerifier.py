@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 from ColorFidelity import color_metrics, delta_e2000
+from CalibrationValidation import rgb_value
 
 @dataclass(frozen=True)
 class PaintColorVerificationResult:
@@ -28,7 +29,9 @@ class PaintColorVerificationResult:
 
 
 def verify_paint_color(requested: Sequence[int], detected: Sequence[int], *, context: str='modal') -> PaintColorVerificationResult:
-    req=tuple(max(0,min(255,int(v))) for v in requested[:3]);det=tuple(max(0,min(255,int(v))) for v in detected[:3])
+    req=rgb_value(requested);det=rgb_value(detected)
+    if context not in ('modal','rendered','selection'):
+        raise ValueError('Unknown Paint color verification context.')
     de=float(delta_e2000(req,det));rL,rS,_,_=color_metrics(req);dL,dS,_,_=color_metrics(det)
     light=abs(rL-dL);sat=abs(rS-dS)
     if context=='rendered':

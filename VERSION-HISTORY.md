@@ -1,12 +1,11 @@
-# Image Draw Bot v1.0.146-rc4 — 100 Reliability & Security Improvements
+# Image Draw Bot v1.0.148 — Development in progress
 
-- Publish 100 numbered behavior improvements across GPU execution, Windows loading, diagnostics, image/profile recovery, updates and UI.
-- Replace background PowerShell GPU enumeration with native DXGI and restrict Windows tool/DLL resolution to OS-reported locations.
-- Correct GPU device/thread selection, kernel argument widths, retry accounting and measured backend routing.
-- Harden diagnostic/release files, transactional profile changes and image-bound recovery while keeping drawing input disarmed after restore.
-- Bound and cancel update transfers; protect installer verification through launch; improve mobile-preview ordering, server limits and reconnect behavior.
-- Add native Windows and portable regressions, including DXGI in the built and installed executable self-tests.
-- See [all 100 improvements](docs/100-IMPROVEMENTS-v1.0.146-rc4.md) and [release notes](RELEASE-NOTES-v1.0.146-rc4.md). Builds remain unsigned; new artifact hashes require their own antivirus analysis.
+- The saved batch12 checkpoint records 779 behavior improvements: the 100-change merged baseline and 679 further changes on the development branch. The requested target remains 1,000; 1.0.148 has not been published.
+- Resumed maintenance adds faster 2-opt route search and bounded Windows verification: **781 total, 219 remaining**. Preview/brush completions, package exclusions, version updates and documentation add no duplicate IDs.
+- The work covers color/GPU processing, drawing geometry and budgets, target calibration, image import, previews, keyboard controls, persistence, recovery, native input and release packaging. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps the recorded changes to implementation and regression evidence.
+- Saved checkpoint `4704a94d` passed 3,626 local tests (45 platform/hardware skips), all four Windows/Linux and dependency CI jobs, and all seven commit checks. Windows self-test, bundle validation and packaged native drag-and-drop also passed; exact run links are in the [resume audit](docs/v148-improvement-progress.md#resume-audit--7-november-2026).
+- The resumed work completes final-preview color/brush ordering and preserves the real brush width in explicit Pixel Art and Line Art. Their new validation is separate from the saved checkpoint and does not add duplicate improvement IDs.
+- See [development release notes](RELEASE-NOTES-v1.0.148.md) and [available downloads](README.md#download-image-draw-bot-for-windows). The latest published build remains the 1.0.146-rc3 prerelease.
 
 # Image Draw Bot v1.0.146-rc3 — Security & Windows Packaging
 

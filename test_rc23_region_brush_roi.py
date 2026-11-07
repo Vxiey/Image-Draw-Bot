@@ -10,7 +10,7 @@ from Version import APP_VERSION
 
 def options():
     return {'profile_key':'gartic','brush_px':2,'speed':'Balanced','delay':0.0,
-            'browser_brush_plan':{'target_position':(10,10),'confidence':.99,
+            'browser_brush_plan':{'target_position':(1,1),'confidence':.99,
                 'nominal_sizes':[2,4,8,16,28],'verified_sizes':[2,4,8,16,28],
                 'control_positions':[(1,1),(2,1),(3,1),(4,1),(5,1)],'safe_guard_px':4}}
 
@@ -56,7 +56,7 @@ class Rc23RegionBrushRoiTests(unittest.TestCase):
         used=set(packed['used_brush_sizes'])
         self.assertIn(28,used);self.assertGreaterEqual(len(used),2);self.assertNotIn(1,used)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.146-rc4')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
 
 
 if __name__=='__main__':unittest.main()

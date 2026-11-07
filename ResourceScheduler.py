@@ -10,12 +10,11 @@ import json
 import math
 import os
 import platform
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
 
-from RuntimePaths import data_dir
+from RuntimePaths import atomic_write_text, data_dir, is_finite_number, read_json
 
 RESOURCE_SCHEDULER_MODES = ("Auto", "Off", "Benchmark recommendations")
 SCHEDULER_FILE = data_dir() / "resource-scheduler-v2.json"
@@ -68,15 +67,32 @@ def _requested_workers(requested: str, logical_cpus: int) -> int | None:
 def load_recommendation(path: Path | None = None, *, signature: str | None = None) -> dict[str, Any] | None:
     path = Path(path or SCHEDULER_FILE)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = read_json(path, max_bytes=256 * 1024)
+    except (OSError, ValueError, TypeError):
         return None
-    if not isinstance(data, dict) or int(data.get("version", 0)) != 2:
+    if not _valid_recommendation(data):
         return None
-    sig = signature or machine_signature(logical_cpus=data.get("logical_cpus"), ram_mb=data.get("ram_budget_mb"))
+    if signature is None:
+        from ResourceAllocation import logical_cpu_count
+        signature = machine_signature(logical_cpus=logical_cpu_count(), ram_mb=data['ram_budget_mb'])
+    sig = signature
     if data.get("machine_signature") != sig:
         return None
     return data
+
+
+def _valid_recommendation(data):
+    if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != 2:
+        return False
+    for key in ('logical_cpus', 'recommended_workers', 'ram_budget_mb'):
+        if type(data.get(key)) is not int or data[key] <= 0:
+            return False
+    if data['recommended_workers'] > data['logical_cpus'] or data.get('recommended_engine') not in ('Threads', 'Processes', 'Auto'):
+        return False
+    score = data.get('best_score')
+    if not is_finite_number(score) or score < 0:
+        return False
+    return isinstance(data.get('scores'), list) and isinstance(data.get('machine_signature'), str)
 
 
 def save_recommendation(result: dict[str, Any], path: Path | None = None) -> dict[str, Any]:
@@ -95,11 +111,9 @@ def save_recommendation(result: dict[str, Any], path: Path | None = None) -> dic
         "scores": result.get("scores", []),
         "ram_budget_mb": int(result.get("ram_budget_mb", 0) or 0),
     }
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=path.parent, suffix=".tmp") as handle:
-        tmp = Path(handle.name)
-        json.dump(clean, handle, ensure_ascii=False, indent=2)
-        handle.flush()
-    tmp.replace(path)
+    if not _valid_recommendation(clean):
+        raise ValueError('Invalid resource scheduler recommendation.')
+    atomic_write_text(path, json.dumps(clean, ensure_ascii=False, indent=2, allow_nan=False))
     return clean
 
 
@@ -117,6 +131,8 @@ def recommended_workers(allocation: dict[str, Any], *, mode: str = "Auto", previ
         return requested, "manual worker setting"
     cap = _safe_cap(logical, preview=preview)
     rec = recommendation or load_recommendation(signature=machine_signature(logical_cpus=logical, ram_mb=allocation.get("ram_budget_mb")))
+    if not isinstance(rec, dict) or type(rec.get('recommended_workers')) is not int or rec['recommended_workers'] <= 0:
+        rec = None
     if mode == "Benchmark recommendations" and rec and int(rec.get("recommended_workers", 0) or 0) > 0:
         return max(1, min(cap, int(rec["recommended_workers"]))), "saved per-machine benchmark"
     if rec and int(rec.get("recommended_workers", 0) or 0) > 0:
@@ -199,12 +215,9 @@ def choose_image_matrix_backend(*, gpu_mode: str, gpu_available: bool, pixels: i
 
 
 def _chunk_hint(height: int, width: int, workers: int, ram_mb: int) -> dict[str, int]:
+    from ResourceAllocation import rows_per_chunk
     height=max(1,int(height or 1)); width=max(1,int(width or 1)); workers=max(1,int(workers or 1)); ram_mb=max(128,int(ram_mb or 512))
-    bytes_per_row = max(1, width * 64)
-    rows = max(8, min(256, (ram_mb * 1024 * 1024) // max(1, workers * 4 * bytes_per_row)))
-    target_chunks = max(1, workers * 2)
-    if math.ceil(height / rows) < target_chunks:
-        rows = max(8, math.ceil(height / target_chunks))
+    rows = rows_per_chunk(height, width, workers=workers, ram_budget_mb=ram_mb)
     chunks = math.ceil(height / rows)
     return {"rows_per_chunk": int(rows), "chunks": int(chunks)}
 
@@ -249,11 +262,11 @@ def resolve_resource_schedule(allocation: dict[str, Any], *, mode: str = "Auto",
         phases[phase] = {"backend": backend, "workers": int(workers), "reason": phase_reason}
     chunks = _chunk_hint(height, width, phases["shape_extraction"]["workers"], ram_mb)
     if pressure_enabled and pressure.get('known') and pressure.get('level')!='normal':
-        rows=max(8,int(chunks['rows_per_chunk']*float(pressure.get('chunk_scale',1.0) or 1.0)))
+        rows=max(1,int(chunks['rows_per_chunk']*float(pressure.get('chunk_scale',1.0) or 1.0)))
         chunks={'rows_per_chunk':rows,'chunks':int(math.ceil(height/max(1,rows)))}
     phases["shape_extraction"].update(chunks)
     # Pixel-accuracy correction/error scoring can use the same verified GPU path on large final workloads.
-    if not preview and gpu_available and pixels>=160_000:
+    if not preview and gpu_mode != 'CPU' and gpu_available and pixels>=160_000:
         phases['correction_scoring']['backend']='GPU/CPU fallback'
         phases['correction_scoring']['reason']='tiled GPU scoring with VRAM recovery; CPU remains authoritative fallback'
     return {
@@ -272,7 +285,7 @@ def resolve_resource_schedule(allocation: dict[str, Any], *, mode: str = "Auto",
     }
 
 
-def _bench_once(workers: int, loops: int) -> float:
+def _bench_once(workers: int, loops: int, *, cancelled=lambda: False) -> float:
     state=0x12345678 ^ workers
     total=0
     loops=max(1000,int(loops))
@@ -282,6 +295,8 @@ def _bench_once(workers: int, loops: int) -> float:
     for w in range(max(1,int(workers))):
         local=(state + w*2654435761) & 0xffffffff
         for i in range(loops):
+            if i % 1024 == 0 and cancelled():
+                raise InterruptedError('Scheduler benchmark cancelled.')
             local=(1664525*local + 1013904223 + i) & 0xffffffff
             total ^= ((local >> 7) * 2246822519) & 0xffffffff
     elapsed=max(time.perf_counter()-started,1e-9)
@@ -289,7 +304,9 @@ def _bench_once(workers: int, loops: int) -> float:
 
 
 def benchmark_scheduler(allocation: dict[str, Any], *, loops_per_worker: int = 28_000, save: bool = True,
-                        path: Path | None = None) -> dict[str, Any]:
+                        path: Path | None = None, cancelled=lambda: False) -> dict[str, Any]:
+    if cancelled():
+        raise InterruptedError('Scheduler benchmark cancelled.')
     logical=max(1,int(allocation.get("logical_cpus",os.cpu_count() or 1) or 1))
     cap=_safe_cap(logical)
     candidates=[]
@@ -300,7 +317,10 @@ def benchmark_scheduler(allocation: dict[str, Any], *, loops_per_worker: int = 2
         candidates=[1]
     scores=[]
     for workers in candidates:
-        score=_bench_once(workers, max(1000, int(loops_per_worker)//max(1,workers)))
+        if cancelled():
+            raise InterruptedError('Scheduler benchmark cancelled.')
+        score=_bench_once(workers, max(1000, int(loops_per_worker)//max(1,workers)),
+                          cancelled=cancelled)
         # Penalize very high worker counts slightly to represent GUI/input headroom.
         headroom_penalty = 1.0 - min(0.18, max(0, workers - 8) * 0.012)
         adjusted = score * headroom_penalty
@@ -316,6 +336,8 @@ def benchmark_scheduler(allocation: dict[str, Any], *, loops_per_worker: int = 2
         "best_score": float(best["adjusted_score"]),
         "scores": scores,
     }
+    if cancelled():
+        raise InterruptedError('Scheduler benchmark cancelled.')
     if save:
         save_recommendation(result,path=path)
     return result

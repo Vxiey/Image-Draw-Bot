@@ -10,6 +10,7 @@ import math
 from PIL import ImageGrab, ImageOps, ImageFilter
 from CalibrationAnchors import make_anchor
 from PaintTools import save_tool_calibration, TOOL_FILE
+from CalibrationValidation import screen_rect,screenshot_matches,bounded_number,finite_confidence,calibration_screenshot
 
 @dataclass(frozen=True)
 class Candidate:
@@ -57,32 +58,37 @@ def _template_score(edge, dark, cx, cy, name, scale):
     elif name=='Eraser': score*=.94
     return score
 
-def detect_controls(image, client_rect):
+def detect_controls(image, client_rect, *, cancelled=lambda:False):
     """Only accept the verified modern Paint layout; no density/order guesses."""
     from PaintFullCalibration import detect_setup
-    try:result=detect_setup(image,screen_origin=tuple(client_rect[:2]))
+    client_rect=screen_rect(client_rect)
+    screenshot_matches(image,client_rect)
+    try:result=detect_setup(image,screen_origin=tuple(client_rect[:2]),cancelled=cancelled)
     except ValueError:return {}
-    return {name:Candidate(name,point,.90,.90) for name,point in result['tools'].items()}
+    confidence=finite_confidence(result.get('confidence'))
+    return {name:Candidate(name,point,confidence,confidence) for name,point in result['tools'].items()}
 
 def layout_signature(client_rect,dpi=None):
     l,t,r,b=map(int,client_rect)
     return f'{r-l}x{b-t}@{int(dpi or 96)}'
 
-def auto_calibrate(target_metadata, path=TOOL_FILE, screenshot=None, min_confidence=.62):
+def auto_calibrate(target_metadata, path=TOOL_FILE, screenshot=None, min_confidence=.62, *, cancelled=lambda:False):
     """Detect safe direct tools.  Never clicks and never overwrites on failure."""
-    rect=tuple(target_metadata['client_rect'])
-    if screenshot is None:
-        screenshot=ImageGrab.grab(bbox=rect,all_screens=True)
-    found=detect_controls(screenshot,rect)
-    accepted={k:v for k,v in found.items() if v.confidence>=float(min_confidence)}
-    if 'Pencil' not in accepted:
-        raise ValueError(
-            'Auto calibration could not identify Pencil with enough confidence. '
-            'Keep Paint maximized at 100% Windows scaling and use manual calibration for the missing control.')
-    tools={k:v.point for k,v in accepted.items() if k in ('Pencil','Eraser','Fill')}
-    confidence=min(v.confidence for v in accepted.values())
-    auto={'method':'visual-toolbar-v1','confidence':confidence,
-          'layout_signature':layout_signature(rect,target_metadata.get('dpi')),
-          'detected':sorted(tools)}
-    saved=save_tool_calibration(tools,path=path,anchor=make_anchor(rect),auto=auto)
-    return {'saved':saved,'confidence':confidence,'detected':sorted(tools)}
+    if cancelled():raise InterruptedError('Paint calibration cancelled.')
+    rect=screen_rect(target_metadata['client_rect'])
+    min_confidence=bounded_number(min_confidence,'Paint confidence threshold')
+    with calibration_screenshot(screenshot,rect) as screenshot:
+        found=detect_controls(screenshot,rect,cancelled=cancelled)
+        accepted={k:v for k,v in found.items() if v.confidence>=float(min_confidence)}
+        if 'Pencil' not in accepted:
+            raise ValueError(
+                'Auto calibration could not identify Pencil with enough confidence. '
+                'Keep Paint maximized at 100% Windows scaling and use manual calibration for the missing control.')
+        tools={k:v.point for k,v in accepted.items() if k in ('Pencil','Eraser','Fill')}
+        confidence=min(v.confidence for v in accepted.values())
+        auto={'method':'visual-toolbar-v1','confidence':confidence,
+              'layout_signature':layout_signature(rect,target_metadata.get('dpi')),
+              'detected':sorted(tools)}
+        if cancelled():raise InterruptedError('Paint calibration cancelled.')
+        saved=save_tool_calibration(tools,path=path,anchor=make_anchor(rect),auto=auto)
+        return {'saved':saved,'confidence':confidence,'detected':sorted(tools)}

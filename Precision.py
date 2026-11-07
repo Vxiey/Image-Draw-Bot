@@ -93,7 +93,12 @@ class CanvasTransform:
 
     def point(self, x: float, y: float):
         px, py = self.float_point(x, y)
-        return round_screen(px), round_screen(py)
+        # A canvas pixel grid must not acquire a gap when an integer desktop
+        # translation crosses zero. Give half ties one direction on both sides
+        # of zero; the generic round_screen policy remains separate. Comparing
+        # the fraction also avoids rounding a nearby value into a tie via +.5.
+        ix, iy = math.floor(px), math.floor(py)
+        return ix + int(px - ix >= .5), iy + int(py - iy >= .5)
 
 
 def effective_step(precision: str, requested_step_px: float | int = 8) -> float:
@@ -137,4 +142,19 @@ def precision_path(start, end, precision: str = 'High', requested_step_px: float
 
 
 def precision_path_count(start, end, precision: str = 'High', requested_step_px: float | int = 8) -> int:
+    sx, sy = map(int, start)
+    ex, ey = map(int, end)
+    if (sx, sy) == (ex, ey):
+        return 0
+    step = effective_step(precision, requested_step_px)
+    count = max(1, int(math.ceil(math.hypot(ex - sx, ey - sy) / step)))
+    if count > 100_000:
+        raise ValueError('A brush stroke is unexpectedly long. Select the drawing area again.')
+    # When each sample advances at least one pixel along the major axis,
+    # integer rounding cannot produce adjacent duplicates. Normal desktop
+    # coordinates also keep floating-point interpolation below rounding error.
+    if count <= max(abs(ex - sx), abs(ey - sy)) and max(abs(v) for v in (sx, sy, ex, ey)) <= 2**31:
+        return count
+    # Dense one-pixel diagonal sampling can repeat points. Preserve the exact
+    # execution-path contract for that case and unusually large coordinates.
     return len(precision_path(start, end, precision, requested_step_px))

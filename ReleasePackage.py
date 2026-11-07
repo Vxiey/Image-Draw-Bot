@@ -21,6 +21,7 @@ import zipfile
 from typing import Iterable, Sequence
 
 from Version import APP_NAME, APP_VERSION, BUILD_CHANNEL
+from RuntimePaths import atomic_write_text
 
 
 ROOT_PREFIX = "Image-Draw-Bot"
@@ -31,6 +32,7 @@ EXCLUDED_DIR_NAMES = {
     ".svn",
     "__pycache__",
     ".pytest_cache",
+    ".hypothesis",
     ".mypy_cache",
     ".ruff_cache",
     ".build-venv",
@@ -72,11 +74,12 @@ EXCLUDED_FILE_NAMES = {
 RUNTIME_FILE_PATTERNS = (
     "settings*.json", "calibration*.json", "release-state.json",
     "session-recovery*.json", "session-recovery*.png", "render-resume*.json",
-    "exact-colors-*.json", "app-tools-*.json", "paint-tools*.json",
+    "exact-colors-*.json", "verified-colors-*.json", "app-tools-*.json", "paint-tools*.json",
     "draw-time-calibration*.json", "auto-tuner-feedback-*.json",
     "correction-history-*.json", "layout-fingerprints-v2*.json",
     "hardware-performance-profile-v1.json", "real-speed-profiles.json",
     "performance-auto-tuner-v1.json", "profiles.json",
+    "verification.txt",
 )
 
 OUTPUT_DIR_NAMES = {"build", "dist", "release"}
@@ -88,6 +91,22 @@ EXCLUDED_PREFIXES = (
     "ImageDrawBot-session",
     "ImageDrawBot-target-probe",
     "ImageDrawBot-mouse-probe",
+)
+
+# Completed v1.0.145 integration jobs remain in git as history. Exclude only
+# their known repository-root paths, keeping current tooling and doc examples.
+_HISTORICAL_INTEGRATION_RCS = (4, 5, *range(13, 24))
+HISTORICAL_INTEGRATION_PATHS = frozenset(
+    {f".github/workflows/implement-rc{rc}.yml" for rc in _HISTORICAL_INTEGRATION_RCS}
+    | {f".github/implement-rc{rc}-trigger" for rc in _HISTORICAL_INTEGRATION_RCS}
+    | {f".github/scripts/implement_rc{rc}.py" for rc in _HISTORICAL_INTEGRATION_RCS if rc != 4}
+    | {
+        ".github/scripts/fix_rc19_class_indent.py",
+        ".github/scripts/fix_rc20_test.py",
+        ".github/scripts/migrate_rc16_tests.py",
+        ".github/scripts/migrate_rc17_tests.py",
+        ".github/scripts/run_rc21_retry.py",
+    }
 )
 
 REQUIRED_RELEASE_FILES = (
@@ -105,8 +124,20 @@ REQUIRED_RELEASE_FILES = (
     "Install-GPU-Universal.bat",
     "ROADMAP-STEP22-PLUS.md",
     "Build-Release.bat",
+    "BuildEnvironment.py",
+    "ReleasePublication.py",
     "build_release.py",
     "build_exe.py",
+    "Start.bat",
+    "SourceStartup.py",
+    "ClipboardImport.py",
+    "WordHelperResults.py",
+    "ProgressiveSummary.py",
+    "NumericEntryCommit.py",
+    "RecoveryImagePreparation.py",
+    "NativeBrushProjection.py",
+    "GpuSetupRuntime.py",
+    "ReleaseIdentity.py",
     "Version.py",
     "version_info.txt",
     "requirements.txt",
@@ -148,7 +179,19 @@ def _parts(rel: PurePosixPath) -> tuple[str, ...]:
 
 
 def _is_runtime_file(parts: tuple[str, ...]) -> bool:
-    return len(parts) == 1 and any(fnmatchcase(parts[0], pattern) for pattern in RUNTIME_FILE_PATTERNS)
+    if len(parts) != 1:
+        return False
+    name = parts[0].removesuffix('.lock')
+    return any(fnmatchcase(name, pattern) for pattern in RUNTIME_FILE_PATTERNS)
+
+
+def _is_integration_maintenance_file(parts: tuple[str, ...]) -> bool:
+    if "/".join(parts) in HISTORICAL_INTEGRATION_PATHS:
+        return True
+    name = parts[-1] if parts else ""
+    return name.endswith('_once.py') or (
+        len(parts) >= 3 and parts[0] == '.github' and parts[1] == 'workflows' and 'once' in name
+    )
 
 
 def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
@@ -171,9 +214,7 @@ def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
         return True
     # One-shot integration/packaging helpers are repository maintenance state,
     # never source-release contents.
-    if name.lower().endswith('_once.py'):
-        return True
-    if len(parts) >= 3 and parts[0] == '.github' and parts[1] == 'workflows' and 'once' in name.lower():
+    if _is_integration_maintenance_file(parts):
         return True
     return False
 
@@ -188,9 +229,7 @@ def is_nonfatal_excluded_path(relative_path: str | PurePosixPath) -> bool:
         return True
     if name.startswith(("image-draw-bot-", "imagedrawbot-")) and suffix in {'.zip','.exe'}:
         return True
-    if name.lower().endswith('_once.py'):
-        return True
-    if len(parts) >= 3 and parts[0] == '.github' and parts[1] == 'workflows' and 'once' in name.lower():
+    if _is_integration_maintenance_file(parts):
         return True
     return False
 
@@ -202,9 +241,16 @@ def _is_link(path: Path) -> bool:
     return stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)
 
 
+def _walk_error(error):
+    # os.walk otherwise skips unreadable subdirectories silently. A successful
+    # source release must account for every included subtree, including assets
+    # that are not individually listed in REQUIRED_RELEASE_FILES.
+    raise error
+
+
 def iter_release_files(root: Path) -> Iterable[Path]:
     root = root.resolve()
-    for current, dirs, files in os.walk(root):
+    for current, dirs, files in os.walk(root, onerror=_walk_error):
         current_path = Path(current)
         rel_dir = current_path.relative_to(root).as_posix() if current_path != root else ""
         dirs[:] = sorted(d for d in dirs if d.casefold() not in EXCLUDED_DIR_NAMES
@@ -228,7 +274,7 @@ def validate_release_tree(root: Path, *, allow_output_dirs: bool = False) -> Rel
     missing = tuple(item for item in REQUIRED_RELEASE_FILES if item not in release_set)
 
     forbidden: list[str] = []
-    for current, dirs, files in os.walk(root):
+    for current, dirs, files in os.walk(root, onerror=_walk_error):
         current_path = Path(current)
         rel_current = current_path.relative_to(root).as_posix() if current_path != root else ""
         original_dirs = list(dirs)
@@ -307,20 +353,26 @@ def create_source_archive(root: Path, destination: Path) -> dict[str, object]:
 def write_checksum_file(paths: Sequence[Path], destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     rows = [f"{sha256(path)}  {path.name}" for path in paths]
-    destination.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    atomic_write_text(destination, "\n".join(rows) + "\n")
     return destination
 
 
 def write_release_manifest(root: Path, destination: Path, artifacts: Sequence[Path] = ()) -> Path:
     report = validate_release_tree(root, allow_output_dirs=True)
     payload = report.to_dict()
-    payload["artifacts"] = [
-        {"name": path.name, "sha256": sha256(path), "bytes": path.stat().st_size}
-        for path in artifacts
-        if path.is_file()
-    ]
+    records = []
+    names = set()
+    for artifact in artifacts:
+        path = Path(artifact)
+        if not path.is_file() or _is_link(path):
+            raise ValueError(f'Release artifact is missing or linked: {path.name}')
+        if path.name.casefold() in names:
+            raise ValueError(f'Release artifacts have duplicate names: {path.name}')
+        names.add(path.name.casefold())
+        records.append({'name': path.name, 'sha256': sha256(path), 'bytes': path.stat().st_size})
+    payload['artifacts'] = records
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    atomic_write_text(destination, json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n")
     return destination
 
 

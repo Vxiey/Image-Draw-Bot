@@ -1,8 +1,12 @@
 """Read-only modern Paint setup, verified against ribbon geometry and icons."""
 import numpy as np
 from PIL import Image,ImageFilter
+from functools import lru_cache
+from types import MappingProxyType
 from PaletteMaps import detect_color_swatches
 from RuntimePaths import resource_path
+from CalibrationValidation import (screen_rect,screen_point,contained_rect,nonnegative_integer,
+                                   finite_confidence)
 
 ROW1=((0,0,0),(127,127,127),(136,0,21),(237,28,36),(255,127,39),(255,242,0),(34,177,76),(0,162,232),(63,72,204),(163,73,164))
 ROW2=((255,255,255),(195,195,195),(185,122,87),(255,174,201),(255,201,14),(239,228,176),(181,230,29),(153,217,234),(112,146,190),(200,191,231))
@@ -39,28 +43,31 @@ def resolve_manual_canvas_override(corners, selected_handle, selected_client_rec
     automatic detection instead of silently transforming the user's boundary.
     """
     try:
-        if len(corners)!=2 or int(selected_handle)!=int(current_handle):return None
-        old=tuple(map(int,selected_client_rect));cur=tuple(map(int,current_client_rect))
-        if len(old)!=4 or len(cur)!=4:return None
+        if len(corners)!=2:return None
+        selected_handle=nonnegative_integer(selected_handle,'Selected window',maximum=(1<<64)-1)
+        current_handle=nonnegative_integer(current_handle,'Current window',maximum=(1<<64)-1)
+        if not selected_handle or selected_handle!=current_handle:return None
+        old=screen_rect(selected_client_rect);cur=screen_rect(current_client_rect)
         ow,oh=old[2]-old[0],old[3]-old[1];cw,ch=cur[2]-cur[0],cur[3]-cur[1]
         if ow<=0 or oh<=0 or (ow,oh)!=(cw,ch):return None
         dx,dy=cur[0]-old[0],cur[1]-old[1]
-        p0=(int(corners[0][0])+dx,int(corners[0][1])+dy)
-        p1=(int(corners[1][0])+dx,int(corners[1][1])+dy)
+        a,b=screen_point(corners[0]),screen_point(corners[1])
+        p0=screen_point((a[0]+dx,a[1]+dy));p1=screen_point((b[0]+dx,b[1]+dy))
         left,right=sorted((p0[0],p1[0]));top,bottom=sorted((p0[1],p1[1]))
         if right-left<64 or bottom-top<64:return None
         if left<cur[0] or top<cur[1] or right>cur[2] or bottom>cur[3]:return None
         return (left,top,right,bottom)
-    except (TypeError,ValueError,OverflowError):
+    except (TypeError,ValueError,OverflowError,IndexError):
         return None
 
 
-def _validate_canvas_override(box, *, screen_origin, w, h, ratio, toolbar_end, scale):
-    try:left,top,right,bottom=map(int,box)
-    except (TypeError,ValueError):raise ValueError('The selected Paint drawing area is invalid. Select it again.')
+def _validate_canvas_override(box, *, screen_origin, w, h, ratio, toolbar_end, scale,original_size=None):
+    left,top,right,bottom=screen_rect(box,'selected Paint drawing area',min_side=64)
     if right-left<64 or bottom-top<64:
         raise ValueError('The selected Paint drawing area is too small. Select the canvas again.')
     ox,oy=map(int,screen_origin)
+    if original_size is not None:
+        contained_rect(box,(ox,oy,ox+original_size[0],oy+original_size[1]),'selected Paint drawing area',min_side=64)
     lx0=(left-ox)*ratio;ly0=(top-oy)*ratio;lx1=(right-ox)*ratio;ly1=(bottom-oy)*ratio
     tolerance=max(2,round(3*scale))
     if lx0 < -tolerance or ly0 < -tolerance or lx1 > w+tolerance or ly1 > h+tolerance:
@@ -167,12 +174,34 @@ def _detect_visible_canvas(white, *, toolbar_end, w, h, scale, screen_origin, ra
     return box,tuple(clipped),compact
 
 
+@lru_cache(maxsize=1)
+def _reference_templates():
+    templates={}
+    with Image.open(resource_path('assets/paint-tools-reference.png')) as raw:
+        reference=raw.convert('RGB')
+    try:
+        for name,rx,ry in (('Pencil',268,88),('Fill',308,88),('Eraser',268,128)):
+            with reference.crop((rx-262,ry-82,rx-238,ry-58)) as patch:
+                rgb=np.asarray(patch,dtype=np.int16)
+            mask=np.min(rgb,axis=2)<170
+            dilation=np.asarray(Image.fromarray(mask.astype('uint8')*255).filter(ImageFilter.MaxFilter(3)))>0
+            for value in (rgb,mask,dilation):value.setflags(write=False)
+            templates[name]=(rgb,mask,dilation)
+    finally:reference.close()
+    return MappingProxyType(templates)
+
+
 def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_override=None):
     if cancelled():raise InterruptedError()
+    if image.width<64 or image.height<64:raise ValueError('Paint screenshot is too small to verify its ribbon.')
+    screen_origin=screen_point(screen_origin,'Paint screen origin')
+    screen_rect((*screen_origin,screen_origin[0]+image.width,screen_origin[1]+image.height),'Paint screenshot')
     ratio=min(1.,1920/image.width,1200/image.height)
-    work=image.resize((round(image.width*ratio),round(image.height*ratio))).convert('RGB')
+    work=image if ratio==1 else image.resize((round(image.width*ratio),round(image.height*ratio)))
+    if work.mode!='RGB':work=work.convert('RGB')
     w,h=work.size;rh=min(h//2,360)
-    pos,colors,_=detect_color_swatches(work.crop((0,0,w,rh)))
+    with work.crop((0,0,w,rh)) as ribbon:
+        pos,colors,_=detect_color_swatches(ribbon,cancelled=cancelled)
     if cancelled():raise InterruptedError()
     matches=[]
     for expected in ROW1[1:]:
@@ -193,21 +222,21 @@ def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_ove
             if max(abs(a-b) for a,b in zip(rgb,expected))>10 or np.max(np.ptp(pixels.reshape(-1,3),axis=0))>10:
                 raise ValueError('Paint colour cells are covered or changed. Close menus and try again.')
             positions.append((round(x/ratio)+screen_origin[0],round(y/ratio)+screen_origin[1]));rgbs.append(rgb)
-    reference=Image.open(resource_path('assets/paint-tools-reference.png')).convert('RGB')
+    references=_reference_templates()
     tools={}
     for name,rx,ry in (('Pencil',268,88),('Fill',308,88),('Eraser',268,128)):
+        if cancelled():raise InterruptedError()
         cx=anchor_x+(rx-794)*scale;cy=anchor_y+(ry-83)*scale;radius=12*scale
         if cx-radius<0 or cy-radius<0:raise ValueError('Paint tools are clipped.')
-        expected=reference.crop((rx-250-12,ry-70-12,rx-250+12,ry-70+12));best=(float('inf'),cx,cy)
+        ee,em,ed=references[name];best=(float('inf'),cx,cy)
         for dx in (-2,0,2):
             for dy in (-2,0,2):
                 x,y=cx+dx*scale,cy+dy*scale
                 actual=work.crop((round(x-radius),round(y-radius),round(x+radius),round(y+radius))).resize((24,24))
-                aa=np.asarray(actual);ee=np.asarray(expected);am=np.min(aa,axis=2)<170;em=np.min(ee,axis=2)<170
+                aa=np.asarray(actual,dtype=np.int16);am=np.min(aa,axis=2)<170
                 ad=np.asarray(Image.fromarray(am.astype('uint8')*255).filter(ImageFilter.MaxFilter(3)))>0
-                ed=np.asarray(Image.fromarray(em.astype('uint8')*255).filter(ImageFilter.MaxFilter(3)))>0
                 overlap=min(float(np.sum(am&ed))/max(1,int(am.sum())),float(np.sum(em&ad))/max(1,int(em.sum())))
-                difference=float(np.mean(np.abs(aa.astype(float)-ee.astype(float)))) if overlap>=.75 else float('inf')
+                difference=float(np.mean(np.abs(aa-ee))) if overlap>=.75 else float('inf')
                 if difference<best[0]:best=(difference,x,y)
         difference,cx,cy=best
         if difference>32:raise ValueError(f'Paint {name} icon could not be verified. Close menus or use manual tool calibration.')
@@ -215,7 +244,7 @@ def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_ove
     if cancelled():raise InterruptedError()
     toolbar_end=min(h,round(anchor_y+100*scale))
     if canvas_box_override is not None:
-        box=_validate_canvas_override(canvas_box_override,screen_origin=screen_origin,w=w,h=h,ratio=ratio,toolbar_end=toolbar_end,scale=scale)
+        box=_validate_canvas_override(canvas_box_override,screen_origin=screen_origin,w=w,h=h,ratio=ratio,toolbar_end=toolbar_end,scale=scale,original_size=image.size)
         clipped_edges=();compact=False;visibility='manual-selected';confidence=.96
     else:
         a=np.asarray(work);white=np.min(a,axis=2)>=253;white[:toolbar_end]=False
@@ -223,6 +252,7 @@ def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_ove
                                                           screen_origin=screen_origin,ratio=ratio)
         clipped=bool(clipped_edges);visibility='viewport-compact' if compact else ('viewport-clipped' if clipped else 'full')
         confidence=.85 if compact else (.87 if clipped else .90)
+    if cancelled():raise InterruptedError()
     return {'tools':tools,'positions':positions,'rgbs':rgbs,'canvas_box':box,'palette_count':len(rgbs),
             'confidence':confidence,'method':'modern-paint-grid-and-icons-v7',
             'canvas_visibility':visibility,'canvas_clipped_edges':list(clipped_edges),
@@ -230,13 +260,31 @@ def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_ove
 
 
 def save_setup(result,meta,palette_path,tool_path=None):
-    from Colors import save_calibration
-    from PaintTools import save_tool_calibration,TOOL_FILE
+    import json
+    from pathlib import Path
+    from Colors import validate_calibration,normalize_rgb
+    from PaintTools import validate_tool_calibration,TOOL_FILE
     from CalibrationAnchors import make_anchor
+    from RuntimePaths import replace_text_files
     anchor=make_anchor(meta['client_rect'])
-    save_tool_calibration(result['tools'],path=tool_path or TOOL_FILE,anchor=anchor,
-                          auto={'method':result['method'],'confidence':result['confidence'],'detected':list(result['tools'])})
-    save_calibration(result['positions'],result['rgbs'],palette_path,anchor=anchor,profile_key='microsoft-paint',state='verified',verification={'method':str(result.get('method') or 'paint-auto-calibration'),'confidence':float(result.get('confidence',0) or 0),'source':'paint-screen-verification'})
+    confidence=finite_confidence(result.get('confidence'))
+    if confidence<.85:raise ValueError('Paint setup confidence is too low to save as verified.')
+    positions=result['positions'];rgbs=result['rgbs']
+    if len(positions)!=len(rgbs) or len(positions)!=20:raise ValueError('Verified Paint setup needs all 20 palette colors.')
+    tools=validate_tool_calibration({'version':3,'tools':result['tools'],'anchor':anchor,
+                                    'auto':{'method':result['method'],'confidence':confidence,'detected':list(result['tools'])}})
+    if not all(name in tools['tools'] for name in ('Pencil','Fill')):raise ValueError('Verified Paint setup needs Pencil and Fill.')
+    for point in list(positions)+list(tools['tools'].values()):
+        from CalibrationValidation import point_in_rect
+        if not point_in_rect(point,meta['client_rect']):raise ValueError('Paint setup contains a position outside its target.')
+    palette={'version':4,'profile':'microsoft-paint','state':'verified','anchor':anchor,
+             'colors':[{'name':f'Color {i+1}','position':list(screen_point(point)),'rgb':list(normalize_rgb(rgb))} for i,(point,rgb) in enumerate(zip(positions,rgbs))],
+             'verification':{'method':str(result.get('method') or 'paint-auto-calibration'),'confidence':confidence,'source':'paint-screen-verification'}}
+    validate_calibration(palette,profile_key='microsoft-paint')
+    destination=Path(palette_path);tool_destination=Path(tool_path or TOOL_FILE)
+    if destination.resolve()==tool_destination.resolve():raise ValueError('Paint palette and tools need different files.')
+    replace_text_files({tool_destination:json.dumps(tools,ensure_ascii=False,indent=2,allow_nan=False),
+                        destination:json.dumps(palette,ensure_ascii=False,indent=2,allow_nan=False)})
     return dict(result,target_meta=meta)
 
 

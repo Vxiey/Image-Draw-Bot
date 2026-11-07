@@ -6,8 +6,9 @@ The goal is quick fault detection, not pixel-perfect reconstruction.
 """
 from __future__ import annotations
 
-from math import hypot
+from math import hypot, isfinite, ceil
 from typing import Iterable, Sequence
+from PIL import Image
 
 VISUAL_VERIFICATION_MODES = ("Auto", "Off", "Fast", "Balanced", "Strict")
 
@@ -50,99 +51,128 @@ def _line_points(a, b, steps=None):
     return [(round(x0 + (x1 - x0) * i / (n - 1)), round(y0 + (y1 - y0) * i / (n - 1))) for i in range(n)]
 
 
-def _item_source_points(item, smart_group: bool, per_item_limit: int = 8):
+def _iter_item_source_points(item, smart_group: bool, per_item_limit: int = 8, cancelled=lambda: False):
     try:
         if smart_group:
-            pts = [tuple(map(float, p[:2])) for p in item]
-            if not pts:
-                return []
-            if len(pts) == 1:
-                return [(round(pts[0][0]), round(pts[0][1]))]
-            out = []
-            for a, b in zip(pts, pts[1:]):
+            pts = (tuple(map(float, p[:2])) for p in item)
+            first = next(pts, None)
+            if first is None:
+                return
+            yield (round(first[0]), round(first[1]))
+            a = first
+            for number,b in enumerate(pts):
+                if number%512==511 and cancelled():raise InterruptedError()
                 if a == b:
                     continue
-                out.extend(_line_points(a, b, max(2, min(per_item_limit, 1 + round(hypot(b[0]-a[0], b[1]-a[1]))))))
-            return out or [(round(pts[0][0]), round(pts[0][1]))]
+                yield from _line_points(a, b, max(2, min(per_item_limit, 1 + round(hypot(b[0]-a[0], b[1]-a[1])))))[1:]
+                a = b
+            return
         x0, y0, x1, y1 = map(float, item[:4])
-        return _line_points((x0, y0), (x1, y1), max(2, min(per_item_limit, 1 + round(hypot(x1-x0, y1-y0)))))
-    except Exception:
-        return []
+        yield from _line_points((x0, y0), (x1, y1), max(2, min(per_item_limit, 1 + round(hypot(x1-x0, y1-y0)))))
+    except (TypeError, ValueError, OverflowError, IndexError):
+        return
 
 
-def planned_batch_points(items, *, smart_group: bool, transform, sample_limit: int = 130):
+def _item_source_points(item, smart_group: bool, per_item_limit: int = 8):
+    return list(_iter_item_source_points(item, smart_group, per_item_limit))
+
+
+def planned_batch_points(items, *, smart_group: bool, transform, sample_limit: int = 130,
+                         cancelled=lambda: False):
     """Return deterministic screen-space sample points for one planned batch."""
+    if type(sample_limit) is not int or sample_limit < 0:
+        raise ValueError('Visual sample limit must be a non-negative integer.')
+    if cancelled():
+        raise InterruptedError()
+    if sample_limit == 0:
+        return []
+    # Deterministic streaming decimation keeps both the beginning and the end
+    # represented without materializing every probe in a long color batch.
     raw = []
-    for item in items or ():
-        raw.extend(_item_source_points(item, smart_group, 9))
+    stride = 1
+    count = 0
+    last = None
+    for index,item in enumerate(items or ()):
+        if index%512==0 and cancelled():raise InterruptedError()
+        for point in _iter_item_source_points(item, smart_group, 9, cancelled):
+            if count % 512 == 0 and cancelled():
+                raise InterruptedError()
+            last = (count, point)
+            if count % stride == 0:
+                raw.append(last)
+                if len(raw) > sample_limit * 2:
+                    stride *= 2
+                    raw = [entry for entry in raw if entry[0] % stride == 0]
+            count += 1
     if not raw:
         return []
+    if last is not None and raw[-1][0] != last[0]:
+        raw.append(last)
     if len(raw) > sample_limit:
-        step = max(1, len(raw) // sample_limit)
-        raw = raw[::step][:sample_limit]
+        raw = ([raw[len(raw)//2]] if sample_limit == 1 else
+               [raw[i*(len(raw)-1)//(sample_limit-1)] for i in range(sample_limit)])
     result = []
     seen = set()
-    for x, y in raw:
+    for _, (x, y) in raw:
         px, py = transform(int(x), int(y))
         point = (int(round(px)), int(round(py)))
         if point not in seen:
             result.append(point); seen.add(point)
+    if cancelled():
+        raise InterruptedError()
     return result
 
 
-def planned_batch_boxes(items, *, smart_group: bool, transform, brush_px: int = 1, pad_extra: int = 8):
+def planned_batch_boxes(items, *, smart_group: bool, transform, brush_px: int = 1, pad_extra: int = 8,
+                        cancelled=lambda: False):
     """Return padded screen-space bounding boxes for expected changed regions."""
     boxes = []
     pad = max(4, int(round(max(1, int(brush_px)) / 2)) + int(pad_extra))
-    for item in items or ():
-        points = _item_source_points(item, smart_group, 16)
-        if not points:
-            continue
-        screen = [transform(int(x), int(y)) for x, y in points]
-        xs = [int(round(p[0])) for p in screen]; ys = [int(round(p[1])) for p in screen]
-        boxes.append((min(xs)-pad, min(ys)-pad, max(xs)+pad, max(ys)+pad))
+    for index,item in enumerate(items or ()):
+        if index%512==0 and cancelled():raise InterruptedError()
+        bounds = None
+        for number, (x, y) in enumerate(_iter_item_source_points(item, smart_group, 16, cancelled)):
+            if number % 512 == 0 and cancelled():
+                raise InterruptedError()
+            sx, sy = transform(int(x), int(y))
+            sx, sy = int(round(sx)), int(round(sy))
+            if bounds is None:
+                bounds = [sx, sy, sx, sy]
+            else:
+                bounds = [min(bounds[0], sx), min(bounds[1], sy), max(bounds[2], sx), max(bounds[3], sy)]
+        if bounds is not None:
+            boxes.append((bounds[0]-pad, bounds[1]-pad, bounds[2]+pad, bounds[3]+pad))
+    if cancelled():
+        raise InterruptedError()
     return merge_boxes(boxes)
 
 
 def merge_boxes(boxes, *, max_boxes: int = 80):
-    boxes = [tuple(map(int, b)) for b in boxes if b and len(b) == 4]
-    if not boxes:
-        return []
-    merged = []
-    for box in boxes:
-        x0, y0, x1, y1 = box
-        if x1 < x0 or y1 < y0:
+    """Merge only rectangular unions; never mark the gaps between strokes safe.
+
+    ``max_boxes`` is retained for caller compatibility. Exact row intervals in
+    the verifier make a lossy all-enclosing fallback unnecessary.
+    """
+    normalized = []
+    for raw in boxes or ():
+        try:
+            x0, y0, x1, y1 = map(int, raw)
+        except (TypeError, ValueError, OverflowError):
             continue
-        placed = False
-        for i, current in enumerate(merged):
-            a0, b0, a1, b1 = current
-            if not (x1 < a0 or x0 > a1 or y1 < b0 or y0 > b1):
-                merged[i] = (min(a0, x0), min(b0, y0), max(a1, x1), max(b1, y1))
-                placed = True
-                break
-        if not placed:
-            merged.append((x0, y0, x1, y1))
-    # second pass catches boxes that became adjacent after earlier merges
-    changed = True
-    while changed and len(merged) > 1:
-        changed = False
-        out = []
-        for box in merged:
-            placed = False
-            for i, current in enumerate(out):
-                x0, y0, x1, y1 = box; a0, b0, a1, b1 = current
-                if not (x1 < a0 or x0 > a1 or y1 < b0 or y0 > b1):
-                    out[i] = (min(a0, x0), min(b0, y0), max(a1, x1), max(b1, y1))
-                    changed = True; placed = True; break
-            if not placed:
-                out.append(box)
-        merged = out
-    if len(merged) <= max_boxes:
-        return merged
-    # Many tiny stroke boxes are expensive for outside-diff checks. Collapse to
-    # one broad box; this is conservative and reduces false fill-leak alarms.
-    xs0, ys0, xs1, ys1 = zip(*merged)
-    return [(min(xs0), min(ys0), max(xs1), max(ys1))]
+        if x0 <= x1 and y0 <= y1:
+            normalized.append((x0, y0, x1, y1))
+    def pass_axis(values, transpose=False):
+        if transpose:
+            values = [(y0, x0, y1, x1) for x0, y0, x1, y1 in values]
+        result = []
+        for x0, y0, x1, y1 in sorted(values, key=lambda b: (b[1], b[3], b[0], b[2])):
+            if result and result[-1][1] == y0 and result[-1][3] == y1 and x0 <= result[-1][2]:
+                a0, _, a1, _ = result[-1]
+                result[-1] = (a0, y0, max(a1, x1), y1)
+            else:
+                result.append((x0, y0, x1, y1))
+        return [(y0, x0, y1, x1) for x0, y0, x1, y1 in result] if transpose else result
+    return pass_axis(pass_axis(normalized), True)
 
 
 def _contains(point, boxes):
@@ -153,32 +183,68 @@ def _contains(point, boxes):
     return False
 
 
-def _snapshot_xy(point, area):
-    x, y = map(int, point); ax, ay, _w, _h = map(int, area)
-    return x - ax, y - ay
+def _snapshot_xy(point, area, size=None):
+    x, y = map(float, point); ax, ay, w, h = map(float, area)
+    if size is None:
+        return int(x-ax), int(y-ay)
+    return (round((x-ax+.5)*size[0]/w-.5), round((y-ay+.5)*size[1]/h-.5))
 
 
 def _near_colors(image, sx, sy, radius):
     w, h = image.size
+    rx, ry = radius if isinstance(radius, tuple) else (radius, radius)
     values = []
-    for y in range(max(0, sy-radius), min(h, sy+radius+1)):
-        for x in range(max(0, sx-radius), min(w, sx+radius+1)):
+    for y in range(max(0, sy-ry), min(h, sy+ry+1)):
+        for x in range(max(0, sx-rx), min(w, sx+rx+1)):
             values.append(tuple(map(int, image.getpixel((x, y))[:3])))
     return values
 
 
-def compare_batch_snapshot(after, before, area, expected_rgb, planned_points, expected_boxes, *, brush_px: int = 1, mode: str = "Balanced"):
+def compare_batch_snapshot(after, before, area, expected_rgb, planned_points, expected_boxes, *, brush_px: int = 1, mode: str = "Balanced",
+                           cancelled=lambda: False):
     """Compare one canvas snapshot against the expected effects of a color batch."""
+    if cancelled():
+        raise InterruptedError()
     if mode == "Off":
         return {'ok': True, 'mode': 'Off', 'issues': [], 'confidence': 100.0}
     cfg = _mode_config(mode)
-    after = after.convert('RGB')
-    before = before.convert('RGB') if before is not None else None
-    expected = tuple(map(int, expected_rgb[:3]))
-    radius = max(1, min(5, int(round(max(1, int(brush_px)) / 2)) + 1))
+    def unavailable(reason):
+        return {'ok': False, 'available': False, 'mode': mode, 'issues': [reason], 'confidence': 0.0,
+                'sampled_points': 0, 'matched_points': 0, 'match_rate': 0.0}
+    if not isinstance(after, Image.Image) or min(after.size) <= 0:
+        return unavailable('invalid-canvas-snapshot')
+    if before is not None and (not isinstance(before, Image.Image) or before.size != after.size):
+        return unavailable('baseline-snapshot-geometry-mismatch')
+    try:
+        area = tuple(map(float, area))
+        expected = tuple(map(int, expected_rgb))
+        brush = float(brush_px)
+        if (len(area) != 4 or not all(isfinite(v) for v in area) or area[2] <= 0 or area[3] <= 0
+                or len(expected) != 3 or any(not 0 <= v <= 255 for v in expected)
+                or not isfinite(brush) or brush <= 0):
+            return unavailable('invalid-verification-geometry-or-color')
+    except (TypeError, ValueError, OverflowError):
+        return unavailable('invalid-verification-geometry-or-color')
+    after_rgb = after.convert('RGB')
+    before_rgb = None
+    try:
+        before_rgb = before.convert('RGB') if before is not None else None
+        return _compare_rgb_snapshot(after_rgb, before_rgb, area, expected, planned_points, expected_boxes,
+                                     brush, mode, cfg, cancelled)
+    finally:
+        after_rgb.close()
+        if before_rgb is not None:
+            before_rgb.close()
+
+
+def _compare_rgb_snapshot(after, before, area, expected, planned_points, expected_boxes, brush, mode, cfg, cancelled):
+    base_radius = max(1, min(5, int(round(brush / 2)) + 1))
+    radius = (max(1, ceil(base_radius*after.width/area[2])), max(1, ceil(base_radius*after.height/area[3])))
     matched = 0; sampled = 0; best_error = 999; best_color = None
-    for point in planned_points or []:
-        sx, sy = _snapshot_xy(point, area)
+    for number, point in enumerate(planned_points or []):
+        if number % 32 == 0 and cancelled():
+            raise InterruptedError()
+        sx, sy = _snapshot_xy(point, area, after.size)
         if not (0 <= sx < after.width and 0 <= sy < after.height):
             continue
         sampled += 1
@@ -190,31 +256,49 @@ def compare_batch_snapshot(after, before, area, expected_rgb, planned_points, ex
             matched += 1
         if err < best_error:
             best_error, best_color = err, color
-    match_rate = matched / sampled if sampled else 1.0
+    match_rate = matched / sampled if sampled else 0.0
 
     changed_outside = 0; changed_total = 0; grid_samples = 0
-    if before is not None and before.size == after.size:
+    if before is not None:
         # bounded grid; this detects large fills/strokes outside the planned batch.
         target = max(1, int(cfg['max_outside_samples']) * 9)
-        step = max(1, int((after.width * after.height / target) ** 0.5))
-        for y in range(0, after.height, step):
-            for x in range(0, after.width, step):
+        columns = min(after.width, target, max(1, int((target*after.width/after.height)**.5)))
+        rows = min(after.height, max(1, target//columns))
+        xs = [i*(after.width-1)//max(1, columns-1) for i in range(columns)]
+        ys = [i*(after.height-1)//max(1, rows-1) for i in range(rows)]
+        boxes = merge_boxes(expected_boxes)
+        after_pixels, before_pixels = after.load(), before.load()
+        for y in ys:
+            if cancelled():
+                raise InterruptedError()
+            sy = area[1]+(y+.5)*area[3]/after.height-.5
+            intervals = sorted((x0, x1) for x0, y0, x1, y1 in boxes if y0 <= sy <= y1)
+            interval_index = 0
+            for x in xs:
                 grid_samples += 1
-                a = tuple(map(int, after.getpixel((x, y))[:3])); b = tuple(map(int, before.getpixel((x, y))[:3]))
+                a = after_pixels[x,y]; b = before_pixels[x,y]
                 if rgb_error(a, b) > 42:
                     changed_total += 1
-                    screen = (int(area[0]) + x, int(area[1]) + y)
-                    if not _contains(screen, expected_boxes):
+                    sx = area[0]+(x+.5)*area[2]/after.width-.5
+                    while interval_index < len(intervals) and intervals[interval_index][1] < sx:
+                        interval_index += 1
+                    contained = interval_index < len(intervals) and intervals[interval_index][0] <= sx <= intervals[interval_index][1]
+                    if not contained:
                         changed_outside += 1
     outside_rate = changed_outside / grid_samples if grid_samples else 0.0
     issues = []
-    if sampled >= 2 and match_rate < cfg['min_match']:
+    if not sampled:
+        issues.append('no-valid-planned-probes')
+    elif match_rate < cfg['min_match']:
         issues.append('missed-region-or-wrong-color')
     if changed_outside > cfg['max_outside_samples'] or outside_rate > cfg['max_outside']:
         issues.append('outside-change-possible-fill-leak-or-wrong-place')
     confidence = max(0.0, min(100.0, match_rate * 100.0 - outside_rate * 240.0))
+    if cancelled():
+        raise InterruptedError()
     return {
         'ok': not issues,
+        'available': bool(sampled),
         'mode': mode,
         'issues': issues,
         'expected': expected,
@@ -225,6 +309,7 @@ def compare_batch_snapshot(after, before, area, expected_rgb, planned_points, ex
         'best_color': best_color or expected,
         'changed_total_samples': changed_total,
         'changed_outside_samples': changed_outside,
+        'outside_grid_samples': grid_samples,
         'outside_change_rate': outside_rate,
         'confidence': confidence,
     }

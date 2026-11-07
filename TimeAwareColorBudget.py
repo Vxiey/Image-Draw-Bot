@@ -22,7 +22,7 @@ from TimeBudgetEngine import resolve_budget
 def _finite(value: Any, default: float = 0.0) -> float:
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return float(default)
     return result if math.isfinite(result) else float(default)
 
@@ -30,6 +30,9 @@ def _finite(value: Any, default: float = 0.0) -> float:
 def _runtime_average(item: Any) -> float | None:
     if not isinstance(item, dict):
         return None
+    average = _finite(item.get('average_seconds'), 0.0)
+    if average > 0.0:
+        return average
     count = max(0, int(_finite(item.get('count'), 0)))
     total = _finite(item.get('total_seconds'), 0.0)
     if count <= 0 or total <= 0.0:

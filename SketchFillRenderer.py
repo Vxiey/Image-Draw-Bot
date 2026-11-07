@@ -54,7 +54,17 @@ def _black_selector(colors, selectors):
     except ValueError:pass
     from Colors import allColors
     native=min(range(len(allColors)),key=lambda i:sum(int(v)*int(v) for v in allColors[i].RGB))
-    colors.append((0,0,0));selectors.append({'kind':'palette','palette_index':native,'rgb':(0,0,0)})
+    # Palette-only sub-plans use implicit, index-matched selectors. Preserve
+    # those existing actions before appending a contour selector at its own
+    # color index; otherwise it occupies index zero and execution falls back
+    # to the last native swatch for the new contour color.
+    for index in range(len(selectors),len(colors)):
+        selectors.append({'kind':'palette','palette_index':index,'rgb':colors[index]})
+    # A native fallback can only paint the measured swatch, even when its
+    # darkest RGB is near-black rather than exactly zero. Preview and Paint's
+    # color verifier must describe that same available ink.
+    rgb=tuple(allColors[native].RGB)
+    colors.append(rgb);selectors.append({'kind':'palette','palette_index':native,'rgb':rgb})
     return len(colors)-1,colors,selectors
 
 
@@ -128,6 +138,26 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
         sequence.append({'color_index':black_index,'path':path,'phase':'reoutline','phase_label':'final re-outline','serial':serial});serial+=1
 
     outer=dict(color_plan.get('options') or {})
+    # The colour sub-plan deliberately supplies its palette and paths, but it
+    # no longer owns execution after contours/re-outline have been added. In
+    # particular, stale Pixel groups otherwise win finish_plan's group/count
+    # dispatch while the Sketch sequence wins its separate sequence dispatch.
+    # Keep pixel_accurate: the executor also uses that policy hint for its
+    # existing small-brush interpolation. It is not a measurement or a compiled
+    # sequence. Drop references only; the inner plan may own these buffers.
+    for key in (
+        '_pixel_execution_groups','_pixel_execution_sequence',
+        'pixel_map_meta','pixel_stroke_meta','pixel_stroke_engine','pixel_accuracy_meta',
+        '_adaptive_hybrid_execution_groups','_adaptive_hybrid_execution_sequence',
+        'adaptive_hybrid_active','adaptive_hybrid_meta','adaptive_hybrid_version',
+        'sketch_execution_groups','gartic_sketch_meta',
+        '_pixel_coverage_preview','_pixel_error_preview',
+        '_preview_safety_groups','preview_safety_meta','adaptive_accuracy_meta',
+        'preview_delta_e_meta','preview_diagnostics_meta','accuracy_buffer_meta',
+        'adaptive_deadline_meta','detail_zoom_meta','operation_timing_meta',
+        'region_fill_meta','fill_timing_meta','auto_tuner_acceptance_meta',
+    ):
+        outer.pop(key,None)
     outer.update({
         'render_style':SKETCH_FILL_RENDER_STYLE,'sketch_fill_active':True,'sketch_fill_version':SKETCH_FILL_VERSION,
         'sketch2_meta':dict(sketch_meta),'fill_regions':[],'background_fill':'Off','use_region_fill_engine':False,
@@ -142,33 +172,36 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
         'phase_order':'Sketch -> Color Fill -> Re-outline','sketch_paths':len(sketch_paths),
         'color_fill_paths':color_paths,'reoutline_paths':len(reoutline),'total_paths':len(sequence),
         'native_bucket_prelude':False,'fill_method':'connected color runs','custom_colors_reused':bool(outer.get('exact_color_available')),
+        'pixel_metrics_status':'not_calculated',
+        'pixel_metrics_reason':'The composed Sketch Fill sequence has no final Pixel coverage or plan-execution measurement; color sub-plan metrics do not describe its added contours.',
         'browser_policy_changed':False,'ai_ml_ocr':False,
     }
     groups=_strokes_from_paths(combined)
     return finish_plan(color_plan['image'],color_plan['fitted'],groups,outer,cancelled)
 
 
-def render_sequence_preview(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, phases=None):
-    w,h=map(int,source_size);pw,ph=map(int,preview_size)
-    out=Image.new('RGB',(max(1,pw),max(1,ph)),'white');draw=ImageDraw.Draw(out)
-    sx=pw/max(1,w);sy=ph/max(1,h);width=max(1,int(round(float(brush_px))))
+def render_sequence_preview(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, phases=None,cancelled=lambda:False):
+    from AdaptiveRegionHybrid import render_adaptive_preview
     allowed=set(phases) if phases is not None else None
-    for entry in sequence or ():
-        if allowed is not None and str(entry.get('phase')) not in allowed:continue
-        try:color=tuple(palette_rgb[int(entry['color_index'])])
-        except (KeyError,IndexError,TypeError,ValueError):continue
-        pts=[(float(x)*sx,float(y)*sy) for x,y in entry.get('path') or ()]
-        if not pts:continue
-        if len(pts)==1:
-            x,y=pts[0];r=max(.5,width/2);draw.ellipse((x-r,y-r,x+r,y+r),fill=color)
-        else:
-            draw.line(pts,fill=color,width=width,joint='curve')
-    return out
+    def selected():
+        for raw in sequence or ():
+            if cancelled():raise InterruptedError()
+            if allowed is not None and str(raw.get('phase')) not in allowed:continue
+            entry=dict(raw);entry.setdefault('brush_px',max(1,int(round(float(brush_px)))))
+            yield entry
+    return render_adaptive_preview(source_size,preview_size,selected(),palette_rgb,cancelled=cancelled)
 
 
-def build_phase_previews(source_size, preview_size, sequence, palette_rgb, brush_px=1):
-    return {
-        'sketch2':render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px,phases=('sketch',)),
-        'sketch_fill':render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px,phases=('sketch','color_fill')),
-        'sketch_fill_final':render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px),
-    }
+def build_phase_previews(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, cancelled=lambda:False):
+    previews={}
+    try:
+        for key,phases in (('sketch2',('sketch',)),('sketch_fill',('sketch','color_fill')),
+                           ('sketch_fill_final',None)):
+            if cancelled():raise InterruptedError()
+            previews[key]=render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px,
+                                                   phases=phases,cancelled=cancelled)
+        if cancelled():raise InterruptedError()
+        return previews
+    except BaseException:
+        for preview in previews.values():preview.close()
+        raise

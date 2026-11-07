@@ -1,0 +1,157 @@
+{
+  "baseline_commit": "ec22fd8739573adc2df1b3e33dbe1a98a09b9c99",
+  "implemented": 823,
+  "target": 1000,
+  "remaining": 177,
+  "added_behavior_groups": [
+    "R2101",
+    "R2102"
+  ],
+  "release_published": false,
+  "uncounted_completions": [
+    "RT42/IW08/AZ01: cache-only clearing retains source Upscale Undo; full Clear and Stop retain existing ownership. Consumed private background-removal Undo transfers without another full-image copy, preserving its independent adoption snapshot.",
+    "Step19/UI10/UI11: actual options and Setup wizard consume nested palette calibration evidence without repeating profile-policy resolution or changing verification gates.",
+    "048/batch01 source privacy: exclude root verified-color runtime caches from source archives and move the byteidentical synthetic seed off the live cache path, preserving fixtures and documented examples.",
+    "Regression tests, historical comparison tooling, clock-only fixture controls, documentation and routing-test adaptation add no behavior IDs."
+  ],
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 4198,
+    "runner_seconds": 199.785,
+    "wall_seconds": 200.721,
+    "status": "OK (skipped=58)",
+    "skipped": 58,
+    "source_files": 876,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "a104cd73cf4058eb99fc9a6ae80dd88e68a51b79d75337830b5bd7339bc1bdaf"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1215,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch21-engine-benchmarks.json",
+    "fixtures": 8,
+    "mismatched_plan_pixels": {
+      "icon": 0,
+      "line-art": 0,
+      "text-small-detail": 0,
+      "cartoon-large-colour": 0,
+      "photo-gradient": 0,
+      "fill-risk": 0,
+      "thin-diagonals": 0,
+      "many-islands": 0
+    },
+    "all_exact_palette_geometry": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "comparisons": {
+    "calibration": {
+      "artifact": "v148-batch21-calibration-benchmarks.json",
+      "sha256": "6e591e870a65d41f67da2847ddc9b0f27e2d9f8bf1691539387a3cde43f17835",
+      "workloads": 8,
+      "balanced_pairs_per_workload": 6,
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 826,
+      "source_hash_manifest_sha256": "cd45e8b46b1733330ba4a19e43a1d7cb644da522ed3980237f7f57a0459bfdcd",
+      "historical_parity": {
+        "complete_public_pairs": 84,
+        "coverage": "Six actual public callers plus manual Auto Sketch; small RGB and RGBA with partial/zero alpha; missing, malformed, distinct learned v4, v2, v1 and one-time legacy migration. All image bytes, paths, colors, selectors, estimates, calibration keys and nonclock metadata; post-operation file bytes also match. Only the additional untimed manual Auto oracle supplies equal monotonic clock input, retaining all remaining-budget arithmetic; measured Auto uses the real Unlimited recursive route without clock patches.",
+        "manual_auto_controlled_clock_pairs": 12,
+        "outputs_sha256": "aa0fc2da2e1f849d0c4f3908ff67058d7a70f59cdd9a81b6216229fe9ab234a5"
+      },
+      "scope": "The actual public make_plan call (or one unscoped correction_for control), including local database read/schema validation and planner output construction. Source/palette/file fixture preparation, module linking, output fingerprinting and owned image cleanup are outside elapsed intervals. No native input, UI rendering, network, GPU or whole-application speed claim.",
+      "memory_scope": "Separate tracemalloc peak and retained-with-result for the same public call. Python/NumPy tracked allocations, not total RSS or most native Pillow cores. At most one existing reader-bounded database remains live inside a nested planning operation; it is released before the public plan returns.",
+      "manual_auto_scope": "The original work-count audit used Manual Auto Sketch. Its remaining drawing budget includes actual elapsed planning time. Final timed Sketch uses explicitly Unlimited Auto; Manual Auto is retained separately as an untimed equal-clock complete-output/work-count oracle. No Manual-Auto elapsed speed claim is made."
+    },
+    "clipping": {
+      "artifact": "v148-batch21-clipping-benchmarks.json",
+      "sha256": "0394f303031c0d99b118e1f380d019b25f14f8ce275231a74b94bf3cbcdd1164",
+      "workloads": 8,
+      "balanced_pairs_per_workload": 6,
+      "exact_output_parity": true,
+      "source_unchanged": true,
+      "source_files": 826,
+      "source_hash_manifest_sha256": "cd45e8b46b1733330ba4a19e43a1d7cb644da522ed3980237f7f57a0459bfdcd",
+      "historical_parity": {
+        "counts": {
+          "clip_segment_to_polygon": 840,
+          "clip_path_to_polygon": 840,
+          "_safe_projection": 840,
+          "_nearest_boundary_point": 840,
+          "invalid_or_extreme": 20,
+          "cancellation": 6
+        },
+        "total": 3386,
+        "output_sha256": "b9f89abc2fc960357812b9cf53ae4ce3a1116537a731761cd4e28eca194a902a"
+      },
+      "scope": "Compare complete historical clipping with current real caller pipelines.\n\nOnly CanvasGuard is substituted. Its imported aliases in DrawBot, EdgeBehavior\nand PreviewSafety are linked to the same revision. All other caller bodies and\ndependencies are identical. No native input, screen capture or persistence is\nperformed; the executor uses the existing recorded-action device fixture.\n",
+      "memory_scope": "Separate tracemalloc observations; tracked Python allocations, not process RSS or native application painting.",
+      "manual_auto_scope": null
+    }
+  },
+  "independent_reviews": {
+    "calibration": "Closed; full-key reader/writer/migration/ownership and actual public routing, 19 focused cases.",
+    "clipping": "Closed; finite geometry, projection/ties/Stop, real callers and historical module linkage; 61 independently run cases.",
+    "ui_and_profile_guidance": "Closed; 12 independently run actual-controller cases.",
+    "source_archive": "Closed; 51 independently run archive/privacy/storage cases and byteidentical fixture relocation."
+  },
+  "synthetic_fixture": {
+    "previous_path": "verified-colors-microsoft-paint.json",
+    "new_path": "tests/fixtures/verified-color-cache-v2.json",
+    "bytes": 474,
+    "sha256": "5f62e83ab4a0bef941bb34ee4e91b5b3db23c93daf3dcd96c20f67a87dc61930",
+    "byteidentical_to_baseline": true,
+    "product_runtime_path_unchanged": true,
+    "local_suite_recreated_runtime_seed": true,
+    "recreated_seed_matched_baseline_bytes": true,
+    "only_identical_task_runtime_copy_removed_after_gates": true
+  },
+  "measurement_preflight_notes": [
+    "The initial clipping public-plan comparator rejected four existing PixelStroke stage timers. Final comparison uses the established exact VOLATILE_PATHS list; numeric costs, geometry, rasters and other fields remain compared.",
+    "The initial calibration comparison rejected existing hybrid stage clocks, then naturally varying Manual Auto remaining-budget metadata. Final comparison names each elapsed field explicitly; all budget and estimate fields remain compared. Timed Auto is explicitly Unlimited; twelve separate untimed Manual Auto pairs supply identical local AutoSketchBudget monotonic input. Measured product clocks and watchdogs remain real."
+  ],
+  "prior_checkpoint_validation": {
+    "commit": "ec22fd8739573adc2df1b3e33dbe1a98a09b9c99",
+    "all_seven_checks_passed": true,
+    "windows_tests": 4162,
+    "windows_runner_seconds": 376.741,
+    "windows_skipped": 3,
+    "windows_passed": 4159,
+    "windows_selftest_passed": true,
+    "bundle_validation_passed": true,
+    "packaged_gui_and_native_drop_passed": true,
+    "nonfatal_log_observation": "Several older raw CTk native fixtures emitted delayed titlebar/scaling callback bgerrors. Exact token-to-owner attribution is not established; no claim of error-free logs or new product cause is made.",
+    "run_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42396698234",
+    "windows_job_id": 128475495241
+  },
+  "remote_validation": "The preceding ec22fd8 checkpoint is green. The new published commit receives separate Windows/Linux, dependency and CodeQL checks, recorded in PR46.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46"
+}

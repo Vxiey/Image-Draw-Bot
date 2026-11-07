@@ -95,7 +95,8 @@ class Step27ProfilePortabilityTests(unittest.TestCase):
     def test_apply_as_copy_rewrites_calibration_owner_and_isolates_files(self):
         package = build_package('Microsoft Paint', self.basic_settings(), {
             'palette': self.palette(),
-            'tools': {'version': 1, 'profile': 'microsoft-paint', 'tools': {}},
+            'tools': {'version': 2, 'profile': 'microsoft-paint', 'tools': {},
+                      'anchor': {'version': 1, 'client_rect': [0, 0, 200, 100]}},
         })
         destination = 'custom-' + ('a' * 32)
         with tempfile.TemporaryDirectory() as td:

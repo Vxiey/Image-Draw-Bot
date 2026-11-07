@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import unicodedata
 import uuid
 
 MAX_CUSTOM_PROFILE_BYTES = 1024 * 1024
 MAX_CUSTOM_PROFILES = 1000
+CUSTOM_PROFILE_LOCK = threading.RLock()
 
 PROFILES={
  'Microsoft Paint':('microsoft-paint','#087e8b','Desktop Paint profile. Keep the toolbar visible, use the final window size, calibrate tools/colors and select only the canvas.'),
@@ -160,13 +162,54 @@ def _register_custom_profile(name, key):
     PROFILE_UI[name] = profile_ui('__custom__')
 
 
-def prepare_custom_profile(name):
-    """Build a registration without publishing files or in-memory UI state."""
+def current_custom_profile_registry(registry_path):
+    """Read and merge the current registry without publishing either state.
+
+    Callers hold CUSTOM_PROFILE_LOCK until file publication and registration
+    finish. A failed startup read must never turn the next Add/Import into a
+    replacement of profiles that are still safely stored on disk.
+    """
+    try:
+        stored = _read_custom_profile_registry(registry_path)
+    except FileNotFoundError:
+        stored = {}
+    data = {}
+    names = {n.casefold(): (n, v[0]) for n, v in PROFILES.items()
+             if not v[0].startswith('custom-')}
+    owners = {v[0]: n for n, v in PROFILES.items() if not v[0].startswith('custom-')}
+    current = {n: v[0] for n, v in PROFILES.items() if v[0].startswith('custom-')}
+    for entries in (stored, current):
+        for raw_name, key in entries.items():
+            entry_name = clean_profile_name(raw_name)
+            if not isinstance(key, str) or not re.fullmatch(r'custom-[a-f0-9]{32}', key):
+                raise ValueError('The saved profile registry contains an invalid storage key. It was not changed.')
+            folded = entry_name.casefold()
+            previous = names.get(folded)
+            if previous is not None:
+                if entries is current and previous == (entry_name, key) and data.get(entry_name) == key:
+                    continue
+                raise ValueError('The saved profile registry has conflicting names or storage keys. It was not changed.')
+            if key in owners:
+                raise ValueError('The saved profile registry has conflicting names or storage keys. It was not changed.')
+            names[folded] = (entry_name, key)
+            owners[key] = entry_name
+            data[entry_name] = key
+    if len(data) > MAX_CUSTOM_PROFILES:
+        raise ValueError('Too many custom profiles. The saved registry was not changed.')
+    return data
+
+
+def prepare_custom_profile(name, registry_path):
+    """Prepare one new registration while the caller holds the registry lock."""
     name = validate_custom_profile_name(name)
-    data = {n: v[0] for n, v in PROFILES.items() if v[0].startswith('custom-')}
+    data = current_custom_profile_registry(registry_path)
+    if name.casefold() in {entry.casefold() for entry in data}:
+        raise ValueError('Choose a unique name containing 1–50 characters.')
     if len(data) >= MAX_CUSTOM_PROFILES:
         raise ValueError('Too many custom profiles.')
     key = 'custom-' + uuid.uuid4().hex
+    if key in data.values():
+        raise ValueError('Could not create a unique profile storage key. Try again.')
     data[name] = key
     return name, key, data
 
@@ -180,31 +223,51 @@ def _unique_profile_object(pairs):
     return result
 
 
+def _read_custom_profile_registry(path):
+    with path.open('rb') as stream:
+        raw = stream.read(MAX_CUSTOM_PROFILE_BYTES + 1)
+    if len(raw) > MAX_CUSTOM_PROFILE_BYTES:
+        raise ValueError('The saved profile registry is too large. It was not changed.')
+    try:
+        data = json.loads(raw.decode('utf-8'), object_pairs_hook=_unique_profile_object)
+    except RecursionError as error:
+        raise ValueError('The saved profile registry is too deeply nested. It was not changed.') from error
+    if not isinstance(data, dict) or len(data) > MAX_CUSTOM_PROFILES:
+        raise ValueError('The saved profile registry is invalid or has too many profiles. It was not changed.')
+    return data
+
+
+def register_custom_profiles(data):
+    """Expose an already validated and successfully published registration."""
+    for name, key in data.items():
+        _register_custom_profile(name, key)
+
+
 def load_custom_profiles(path):
     try:
-        with path.open('rb') as stream:
-            raw = stream.read(MAX_CUSTOM_PROFILE_BYTES + 1)
-        if len(raw) > MAX_CUSTOM_PROFILE_BYTES:
-            return
-        data = json.loads(raw.decode('utf-8'), object_pairs_hook=_unique_profile_object)
-        if not isinstance(data, dict) or len(data) > MAX_CUSTOM_PROFILES:
-            return
+        data = _read_custom_profile_registry(path)
         owners = {v[0] for v in PROFILES.values()}
+        names = {name.casefold() for name in PROFILES}
         for name,key in data.items():
             if not isinstance(key, str) or not re.fullmatch(r'custom-[a-f0-9]{32}', key) or key in owners:
                 continue
             try:
-                name = validate_custom_profile_name(name)
+                name = clean_profile_name(name)
             except ValueError:
+                continue
+            folded = name.casefold()
+            if folded in names:
                 continue
             _register_custom_profile(name, key)
             owners.add(key)
+            names.add(folded)
     except (OSError, ValueError, RecursionError):
         return
 
 
 def add_custom_profile(name,path):
     from RuntimePaths import atomic_write_text
-    name, key, data = prepare_custom_profile(name)
-    atomic_write_text(path,json.dumps(data,ensure_ascii=False))
-    _register_custom_profile(name, key)
+    with CUSTOM_PROFILE_LOCK:
+        name, key, data = prepare_custom_profile(name, path)
+        atomic_write_text(path,json.dumps(data,ensure_ascii=False))
+        register_custom_profiles(data)

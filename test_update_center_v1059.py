@@ -20,8 +20,8 @@ class _Response:
 
 class UpdateCenterTests(unittest.TestCase):
     def test_version_metadata(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(FILE_VERSION,'1.0.148')
 
     def test_version_parser_orders_beta_and_stable(self):
         self.assertTrue(is_newer_version('1.0.59', '1.0.59-beta'))

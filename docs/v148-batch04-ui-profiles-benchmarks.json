@@ -1,0 +1,131 @@
+{
+  "baseline_commit": "1d48eabaf349a5fd8049a2c96ef5426745c3078c",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "workload": {
+    "widgets": 977,
+    "queries": 49,
+    "description": "Preorder label lookup with one missing target; deterministic supported Tk widget fakes."
+  },
+  "scope": "Algorithm/accessor calls only; no application startup, native Tk latency, Windows input or GPU measurements.",
+  "baseline_source_sha256": "176dbfb12257b0fd409ec418f830a9b2602c6cb9de065450dfde901a395eec04",
+  "current_source_sha256": "96864e6993f3870fe37aaa26f1084b1843777a69dfef16e58beaabf04a2ce0a3",
+  "before": [
+    {
+      "seconds": 0.008435840001766337,
+      "peak_python_bytes": null,
+      "text_reads": 24616,
+      "children_reads": 24617,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.007763225003145635,
+      "peak_python_bytes": null,
+      "text_reads": 24616,
+      "children_reads": 24617,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.007829182999557815,
+      "peak_python_bytes": null,
+      "text_reads": 24616,
+      "children_reads": 24617,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.007799639999575447,
+      "peak_python_bytes": null,
+      "text_reads": 24616,
+      "children_reads": 24617,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.008678679001604905,
+      "peak_python_bytes": null,
+      "text_reads": 24616,
+      "children_reads": 24617,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.007484234000003198,
+      "peak_python_bytes": null,
+      "text_reads": 24616,
+      "children_reads": 24617,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.007562519000202883,
+      "peak_python_bytes": null,
+      "text_reads": 24616,
+      "children_reads": 24617,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    }
+  ],
+  "after": [
+    {
+      "seconds": 0.0025176570015901234,
+      "peak_python_bytes": null,
+      "text_reads": 976,
+      "children_reads": 977,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.0022187200011103414,
+      "peak_python_bytes": null,
+      "text_reads": 976,
+      "children_reads": 977,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.0024173240017262287,
+      "peak_python_bytes": null,
+      "text_reads": 976,
+      "children_reads": 977,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.0018973149999510497,
+      "peak_python_bytes": null,
+      "text_reads": 976,
+      "children_reads": 977,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.002017572998738615,
+      "peak_python_bytes": null,
+      "text_reads": 976,
+      "children_reads": 977,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.0019334680000611115,
+      "peak_python_bytes": null,
+      "text_reads": 976,
+      "children_reads": 977,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    },
+    {
+      "seconds": 0.0019802569986495655,
+      "peak_python_bytes": null,
+      "text_reads": 976,
+      "children_reads": 977,
+      "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+    }
+  ],
+  "before_memory": {
+    "seconds": 0.025582987000234425,
+    "peak_python_bytes": 1880,
+    "text_reads": 24616,
+    "children_reads": 24617,
+    "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+  },
+  "after_memory": {
+    "seconds": 0.013111841999489116,
+    "peak_python_bytes": 118736,
+    "text_reads": 976,
+    "children_reads": 977,
+    "result_sha256": "1b0c17fe0ece245755b811283ee2c9dea813561ae0e3f3b4288245b1d0445b1b"
+  },
+  "before_median_seconds": 0.007799639999575447,
+  "after_median_seconds": 0.002017572998738615
+}

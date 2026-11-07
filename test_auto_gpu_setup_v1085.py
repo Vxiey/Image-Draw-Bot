@@ -63,8 +63,11 @@ class AutoGpuSetupV1085Tests(unittest.TestCase):
 
     def test_start_bat_uses_automatic_gpu_bootstrap(self):
         text = (ags.BASE / "Start.bat").read_text(encoding="utf-8", errors="replace")
-        self.assertIn("AutoGpuSetup.py --ensure", text)
-        self.assertIn("AutoGpuSetup.py --ensure --force", text)
+        self.assertIn("-E -s SourceStartup.py", text)
+        source = (ags.BASE / "SourceStartup.py").read_text(encoding="utf-8")
+        self.assertIn("'AutoGpuSetup.py'", source)
+        self.assertIn("'--ensure'", source)
+        self.assertIn("'--force'", source)
 
     def test_manual_gpu_installer_uses_same_bootstrap(self):
         text = (ags.BASE / "Install-GPU-NVIDIA.bat").read_text(encoding="utf-8", errors="replace")

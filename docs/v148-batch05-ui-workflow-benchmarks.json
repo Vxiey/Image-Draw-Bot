@@ -1,0 +1,118 @@
+{
+  "baseline_ref": "5f3fcfb5c4519e5ed1b9b770ba951918819d725d",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "method": "Seven alternating paired warm samples by default; exact output comparison. tracemalloc measures Python allocations, not process RSS or native GUI cost.",
+  "source_sha256": {
+    "CanvasDropPayload.py": "a1cd513aab5e9f4b2fe3924f19ff31b7b31d22dedeee1f542ab585556ada3864",
+    "GettingStarted.py": "341874a349951dd88101c4de5252f046027311880f231cdb0c4c1c1301b9a398",
+    "GameProfiles.py": "3506fd6fdad9f9b35d0112d5d82affc8facdd4fff764d7b4450ba94d7ed82926",
+    "UiCompatibility.py": "af59ab2b1dbd2f9872968808d4a2ddad67170617842139aa9774678da47999c1",
+    "SmartDropInCanvas.py": "b0548a3aed9de90b3941dab4c947ed7d44db3925d2c0252966712063072a6625",
+    "RegionPicker.py": "769d464b0259fae6cbf38fe2e06a0fde3453e742094d0b1ac43630a9d77d120a"
+  },
+  "results": {
+    "inline_png": {
+      "samples_ms": {
+        "before_ms": [
+          40.1877920012339,
+          46.56334800165496,
+          42.81790099776117,
+          50.782235000951914,
+          49.71340500196675,
+          43.05266799929086,
+          48.0916270025773
+        ],
+        "after_ms": [
+          3.2971740001812577,
+          2.2848489970783703,
+          2.4645029989187606,
+          2.345486998819979,
+          3.2155939989024773,
+          2.4056769980234094,
+          2.465124001901131
+        ]
+      },
+      "median_ms": {
+        "before_ms": 46.56334800165496,
+        "after_ms": 2.4645029989187606
+      },
+      "python_peak_bytes": {
+        "before_bytes": 8790891,
+        "after_bytes": 2413
+      },
+      "output_sha256": "79e24bc46be8ecd053b0a894fa41777b5ed5304b2218cd2982b50f66ac32a770",
+      "payload_characters": 2363706
+    },
+    "registry_1000_profiles": {
+      "samples_ms": {
+        "before_ms": [
+          44.021409998094896,
+          58.27541800317704,
+          51.363263999519404,
+          45.23717699703411,
+          47.212427998601925,
+          48.891529000684386,
+          51.214715000241995
+        ],
+        "after_ms": [
+          6.869985998491757,
+          5.330259999027476,
+          3.9076470020518173,
+          3.5234089991718065,
+          4.544669001916191,
+          4.270012999768369,
+          5.340284998965217
+        ]
+      },
+      "median_ms": {
+        "before_ms": 48.891529000684386,
+        "after_ms": 4.544669001916191
+      },
+      "python_peak_bytes": {
+        "before_bytes": 1054510,
+        "after_bytes": 1054510
+      },
+      "output_sha256": "77603b522f0ad832e8f1da1b4cc623b25d12b1dd6c1cc5a18267e35a672aab25"
+    },
+    "guide_height_events_1000": {
+      "samples_ms": {
+        "before_ms": [
+          3.7015919988334645,
+          3.114364000794012,
+          4.1033669986063614,
+          2.6609439992171247,
+          2.1733130015491042,
+          2.353149000555277,
+          2.7281330003461335
+        ],
+        "after_ms": [
+          0.2832080026564654,
+          0.3424259994062595,
+          0.25738999829627573,
+          0.19624999913503416,
+          0.21084199761389755,
+          0.28722499700961635,
+          0.20964000214007683
+        ]
+      },
+      "median_ms": {
+        "before_ms": 2.7281330003461335,
+        "after_ms": 0.25738999829627573
+      },
+      "python_peak_bytes": {
+        "before_bytes": 1335276,
+        "after_bytes": 10704
+      },
+      "output_sha256": "8569f95e1b2db3cbd584c2bc406c3449fe2c6f92a6dc050ceffb7847cc87cff8",
+      "before_counts": {
+        "label_configure_calls": 6000,
+        "body_width_queries": 6000
+      },
+      "after_counts": {
+        "label_configure_calls": 0,
+        "body_width_queries": 1
+      },
+      "scope": "Actual guide callbacks with fake widgets; excludes native Tk layout/rendering. Fake call recording contributes to the reported Python allocation peak."
+    }
+  }
+}

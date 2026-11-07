@@ -72,7 +72,7 @@ class SubjectFocusTests(unittest.TestCase):
 
     def test_integrated_plan_applies_mode_and_keeps_only_selection(self):
         plan=make_plan(self.image(),(40,30),opts(subject_focus='Subject only',subject_region=(.25,1/6,.75,5/6),draw_quality='Balanced',brush_px=3))
-        self.assertEqual(plan['options']['brush_px'],1)
+        self.assertEqual(plan['options']['brush_px'],3)
         self.assertTrue(plan['options']['pixel_accurate'])
         self.assertFalse(plan['options']['pixel_accuracy_meta']['automatic_corrections'])
         for entry in plan['execution_sequence']:

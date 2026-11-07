@@ -7,6 +7,10 @@ while target-specific safety/CanvasGuard remains authoritative.
 from __future__ import annotations
 
 from typing import Any
+from contextlib import ExitStack, closing
+from ImageGeometry import thumbnail_size
+
+import numpy as np
 from PIL import Image, ImageFilter, ImageStat
 
 DRAWING_STYLES=(
@@ -28,20 +32,28 @@ def validate_drawing_style(value: Any) -> str:
 
 
 def _metrics(image: Image.Image | None) -> dict[str,float]:
-    if not isinstance(image,Image.Image):
+    if not isinstance(image,Image.Image) or min(image.size)<1:
         return {'unique':1.0,'edge':.5,'white':0.0,'chroma':.5,'alpha_empty':0.0}
-    rgba=image.convert('RGBA')
-    sample=rgba.copy();sample.thumbnail((160,160),Image.Resampling.NEAREST)
-    rgb=sample.convert('RGB');gray=rgb.convert('L')
-    colors=rgb.quantize(colors=64,method=Image.Quantize.MEDIANCUT).histogram()
-    used=sum(1 for v in colors if v)
-    edge=float(ImageStat.Stat(gray.filter(ImageFilter.FIND_EDGES)).mean[0])/255.0
-    px=list(rgb.getdata());count=max(1,len(px))
-    white=sum(1 for p in px if min(p)>=235)/count
-    chroma=sum(1 for p in px if max(p)-min(p)>=30)/count
-    alpha=list(sample.getchannel('A').getdata())
-    alpha_empty=sum(1 for a in alpha if a<=8)/max(1,len(alpha))
-    return {'unique':min(1.0,used/64.0),'edge':edge,'white':white,'chroma':chroma,'alpha_empty':alpha_empty}
+    target=thumbnail_size(image.size,(160,160))
+    with ExitStack() as temporary:
+        own=lambda value:temporary.enter_context(closing(value))
+        # Resize directly from the caller source; only the bounded sample is copied.
+        sampled=own(image.resize(target,Image.Resampling.NEAREST))
+        sample=sampled if sampled.mode=='RGBA' else own(sampled.convert('RGBA'))
+        flat=own(Image.new('RGBA',sample.size,'white'));flat.alpha_composite(sample)
+        rgb=own(flat.convert('RGB'));gray=own(rgb.convert('L'))
+        quantized=own(rgb.quantize(colors=64,method=Image.Quantize.MEDIANCUT))
+        used=sum(1 for v in quantized.histogram() if v)
+        edges=own(gray.filter(ImageFilter.FIND_EDGES))
+        edge=float(ImageStat.Stat(edges).mean[0])/255.0
+        pixels=np.asarray(rgb);count=max(1,rgb.width*rgb.height)
+        low=pixels.min(axis=2);high=pixels.max(axis=2)
+        white=float(np.count_nonzero(low>=235))/count
+        chroma=float(np.count_nonzero(high-low>=30))/count
+        alpha=own(sample.getchannel('A'))
+        alpha_empty=sum(alpha.histogram()[:9])/count
+        return {'unique':min(1.0,used/64.0),'edge':edge,'white':white,
+                'chroma':chroma,'alpha_empty':alpha_empty}
 
 
 def classify_drawing_style(image: Image.Image | None) -> tuple[str,dict[str,float]]:
@@ -115,7 +127,22 @@ def apply_drawing_style(image: Image.Image | None, options: dict[str,Any]) -> di
     # Explicit style selection is authoritative. Auto detection is advisory to the
     # existing Auto/Extra Fast engines, avoiding a second independent planner.
     if requested!='Auto':
-        out.update(_explicit_profile(resolved))
+        policy = _explicit_profile(resolved)
+        # Style selection runs after native brush preflight. Its thin-line
+        # preference cannot replace the physical width without selecting a
+        # verified control. Keep the profile default only for callers that
+        # supplied no width; AdaptiveBrush owns any verified size changes.
+        if 'brush_px' in out:
+            policy.pop('brush_px', None)
+        if (resolved == 'Portrait' and out.get('paint_current_color')
+                and not out.get('erase_mode')):
+            # Single-color portraits use the existing shaded stroke renderer.
+            # Subject first belongs to full-color component planning and would
+            # make this otherwise valid mode fail make_plan's compatibility
+            # check. Do not inject it; explicit user subject settings retain
+            # their normal validation instead of being silently discarded.
+            policy.pop('subject_focus', None)
+        out.update(policy)
     out['drawing_style']=requested
     out['drawing_style_resolved']=resolved
     out['drawing_style_meta']={

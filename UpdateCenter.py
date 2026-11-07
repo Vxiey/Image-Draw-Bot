@@ -6,7 +6,7 @@ import json
 import re
 import time
 from typing import Iterable
-from urllib.parse import quote, unquote, urljoin, urlparse
+from urllib.parse import parse_qs, quote, unquote, urljoin, urlparse
 
 from Version import APP_VERSION, BUILD_CHANNEL
 
@@ -19,6 +19,7 @@ _INSTALLER_HOSTS = frozenset({
 _MAX_REDIRECTS = 5
 _MAX_RELEASE_RESPONSE_BYTES = 16 * 1024 * 1024
 _MAX_RELEASE_CHECK_SECONDS = 30
+_MAX_RELEASE_PAGES = 10
 _DOWNLOAD_SPACE_RESERVE = 8 * 1024 * 1024
 
 _STAGE_RANK = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "rc": 2, "stable": 3, "final": 3}
@@ -145,6 +146,19 @@ def _raise_rate_limit(response):
         raise UpdateCheckError("GitHub's request limit was reached." + detail + " You can still open the Releases page.")
 
 
+def _close_response(response):
+    """A transport cleanup error must not replace cancellation or verification."""
+    if response is None or not hasattr(response, 'close'):
+        return
+    try:
+        response.close()
+    except Exception as error:
+        # Keep the successful verified result (or primary exception) intact.
+        # Log only the exception class, never signed redirect URLs/headers.
+        from CrashDiagnostics import log_error
+        log_error(f'Update response cleanup failed: {type(error).__name__}', category='update-cleanup')
+
+
 def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, deadline=None, **options):
     """Follow only validated HTTPS redirects and close every discarded response."""
     for hop in range(_MAX_REDIRECTS + 1):
@@ -179,8 +193,64 @@ def _get_trusted_response(url, *, request_get, hosts, cancelled=lambda: False, d
             except ValueError as error:
                 raise UpdateCheckError("Update redirect has an invalid destination.") from error
         finally:
-            if not accepted and hasattr(response, "close"):
-                response.close()
+            if not accepted:
+                _close_response(response)
+
+
+def _response_chunks(response, chunk_size):
+    # Like image imports, inspect available body data without waiting to fill
+    # an entire chunk. A server that trickles bytes within the socket timeout
+    # must not prevent Stop/deadline checks for the whole response body.
+    from urllib3.response import HTTPResponse
+    raw = getattr(response, 'raw', None)
+    # File-like custom adapters may expose io.read1 without urllib3's decoding
+    # parameter. Leave those on Requests' existing iter_content contract.
+    reader = getattr(raw, 'read1', None) if isinstance(raw, HTTPResponse) else None
+    if callable(reader):
+        while True:
+            chunk = reader(chunk_size, decode_content=True)
+            if not chunk:
+                break
+            yield chunk
+    else:
+        # Retain compatibility with injected transports and older adapters.
+        yield from response.iter_content(chunk_size=chunk_size)
+
+
+def _next_release_page(response, current_page):
+    """Read pagination without allowing another repository/request endpoint."""
+    from requests.utils import parse_header_links
+    header = getattr(response, 'headers', {}).get('Link', '')
+    if not header:
+        return None
+    if not isinstance(header, str) or len(header) > 16384:
+        raise UpdateCheckError('GitHub returned invalid release pagination.')
+    links = parse_header_links(header)
+    if not links or any(not link.get('url') or not link.get('rel') for link in links):
+        raise UpdateCheckError('GitHub returned invalid release pagination.')
+    following = [link['url'] for link in links if 'next' in link['rel'].split()]
+    if not following:
+        return None
+    if len(following) != 1:
+        raise UpdateCheckError('GitHub returned ambiguous release pagination.')
+    url = urljoin(GITHUB_RELEASES_API, following[0])
+    _validate_https_url(url, {'api.github.com'})
+    parsed = urlparse(url)
+    # GitHub may canonicalize /repos/owner/name to its numeric repository ID.
+    # Only take the page number from that link; rebuild the request below using
+    # our fixed repository path, never the supplied numeric ID or endpoint.
+    expected = f'/repos/{GITHUB_REPOSITORY}/releases'
+    if (parsed.path.casefold() != expected.casefold()
+            and not re.fullmatch(r'/repositories/[0-9]+/releases', parsed.path)):
+        raise UpdateCheckError('GitHub release pagination has an unexpected endpoint.')
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    if (set(query) - {'page', 'per_page'} or len(query.get('page', ())) != 1
+            or query.get('per_page', ['100']) != ['100']):
+        raise UpdateCheckError('GitHub returned invalid release pagination.')
+    raw_page = query['page'][0]
+    if not re.fullmatch(r'[1-9][0-9]{0,5}', raw_page) or int(raw_page) != current_page + 1:
+        raise UpdateCheckError('GitHub release pagination skipped or repeated a page.')
+    return int(raw_page)
 
 
 def check_for_updates(*, request_get=None, timeout=(4, 8), cancelled=lambda: False) -> dict:
@@ -196,33 +266,48 @@ def check_for_updates(*, request_get=None, timeout=(4, 8), cancelled=lambda: Fal
         "User-Agent": f"ImageDrawBot/{APP_VERSION}",
         "X-GitHub-Api-Version": "2026-03-10",
     }
-    response = None
     deadline = time.monotonic() + _MAX_RELEASE_CHECK_SECONDS
+    total_bytes = 0
+    release = None
+    page = 1
     try:
-        response = _get_trusted_response(
-            GITHUB_RELEASES_API, request_get=request_get, hosts={"api.github.com"},
-            headers=headers, timeout=timeout, stream=True,
-            cancelled=cancelled, deadline=deadline,
-        )
-        body = bytearray()
-        for chunk in response.iter_content(chunk_size=64 * 1024):
-            _check_transfer_budget(cancelled, deadline)
-            if len(body) + len(chunk) > _MAX_RELEASE_RESPONSE_BYTES:
-                raise UpdateCheckError("GitHub release metadata exceeds the allowed size.")
-            body.extend(chunk)
+        for page_count in range(_MAX_RELEASE_PAGES):
+            response = None
+            url = GITHUB_RELEASES_API + (f'&page={page}' if page > 1 else '')
+            try:
+                response = _get_trusted_response(
+                    url, request_get=request_get, hosts={"api.github.com"},
+                    headers=headers, timeout=timeout, stream=True,
+                    cancelled=cancelled, deadline=deadline,
+                )
+                body = bytearray()
+                for chunk in _response_chunks(response, 64 * 1024):
+                    _check_transfer_budget(cancelled, deadline)
+                    total_bytes += len(chunk)
+                    if total_bytes > _MAX_RELEASE_RESPONSE_BYTES:
+                        raise UpdateCheckError("GitHub release metadata exceeds the allowed size.")
+                    body.extend(chunk)
+                _check_transfer_budget(cancelled, deadline)
+                releases = json.loads(body)
+                if not isinstance(releases, list):
+                    raise UpdateCheckError("GitHub returned an unexpected releases response.")
+                candidate = select_best_release(releases)
+                if candidate is not None and (release is None or is_newer_version(
+                        candidate.get('tag_name'), release.get('tag_name'))):
+                    release = candidate
+                following = _next_release_page(response, page)
+            finally:
+                _close_response(response)
+            if following is None:
+                break
+            if page_count + 1 >= _MAX_RELEASE_PAGES:
+                raise UpdateCheckError('GitHub release history exceeds the check limit. Open the Releases page to review it.')
+            page = following
         _check_transfer_budget(cancelled, deadline)
-        releases = json.loads(body)
     except InterruptedError:
         raise
     except Exception as error:
         raise UpdateCheckError(f"Could not check GitHub Releases: {error}") from error
-    finally:
-        if response is not None and hasattr(response, "close"):
-            response.close()
-    if not isinstance(releases, list):
-        raise UpdateCheckError("GitHub returned an unexpected releases response.")
-
-    release = select_best_release(releases)
     if release is None:
         return {
             "current_version": APP_VERSION,
@@ -308,14 +393,31 @@ def download_installer(asset, *, directory=None, request_get=None, cancelled=lam
         directory=data_dir()/'updates'
     root=Path(directory);root.mkdir(parents=True,exist_ok=True)
     if cancelled():raise InterruptedError('Update cancelled.')
+    from InstallerCache import find_verified_installer, publish_verified_installer
+    deadline=time.monotonic()+1800
+    def check():
+        _check_transfer_budget(cancelled, deadline)
+    cached=find_verified_installer(root, asset, check=check)
+    if cached is not None:
+        progress(asset['size'], asset['size'])
+        check()
+        return str(cached)
     required=asset['size']+_DOWNLOAD_SPACE_RESERVE
     if shutil.disk_usage(root).free < required:
         raise UpdateCheckError(f'Not enough free space to download the update. Free at least {(required+1024**2-1)//1024**2} MiB and try again.')
     fd,temp=tempfile.mkstemp(prefix='download-',suffix='.part',dir=root)
     path=Path(temp);response=None
     try:
-        total=0;digest=hashlib.sha256();deadline=time.monotonic()+1800
-        with os.fdopen(fd,'wb') as output:
+        total=0;digest=hashlib.sha256()
+        try:
+            output = os.fdopen(fd, 'wb')
+        except BaseException:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
+        with output:
             response=_get_trusted_response(
                 asset['url'],request_get=request_get,hosts=_INSTALLER_HOSTS,
                 cancelled=cancelled,deadline=deadline,stream=True,timeout=(5,15),
@@ -327,25 +429,32 @@ def download_installer(asset, *, directory=None, request_get=None, cancelled=lam
             declared=response_headers.get('Content-Length')
             if declared is not None and (not re.fullmatch(r'[0-9]{1,20}',str(declared)) or int(declared)!=asset['size']):
                 raise UpdateCheckError('Installer response size differs from its published size.')
-            for chunk in response.iter_content(chunk_size=256*1024):
+            for chunk in _response_chunks(response, 256*1024):
                 _check_transfer_budget(cancelled,deadline)
                 if not chunk:continue
                 total+=len(chunk)
                 if total>asset['size']:raise UpdateCheckError('Installer exceeds its published size.')
                 digest.update(chunk);output.write(chunk);progress(total,asset['size'])
             output.flush();os.fsync(output.fileno())
-        if cancelled():raise InterruptedError('Update cancelled.')
+        _check_transfer_budget(cancelled, deadline)
         if total!=asset['size'] or digest.hexdigest()!=asset['sha256']:
             raise UpdateCheckError('Installer checksum or size mismatch. Nothing was installed; try again.')
-        with path.open('rb') as check:
-            if check.read(2)!=b'MZ':raise UpdateCheckError('Downloaded file is not a Windows installer.')
-        destination=path.with_suffix('.exe');path.replace(destination)
+        with path.open('rb') as header_stream:
+            if header_stream.read(2)!=b'MZ':raise UpdateCheckError('Downloaded file is not a Windows installer.')
+        destination=publish_verified_installer(root, path, asset, check=check)
         return str(destination)
     finally:
+        import sys
+        failure = sys.exc_info()[1]
         try:
-            if response is not None and hasattr(response,'close'):response.close()
+            _close_response(response)
         finally:
-            path.unlink(missing_ok=True)
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as error:
+                if failure is None:
+                    raise
+                failure.add_note(f'Update staging cleanup also failed: {type(error).__name__}.')
 
 
 def installer_launch_args(path, *, executable=None):

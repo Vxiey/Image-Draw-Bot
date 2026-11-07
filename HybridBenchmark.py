@@ -6,8 +6,11 @@ verified Windows executor measurement.
 """
 from __future__ import annotations
 import time,tracemalloc
+from copy import deepcopy
+from contextlib import closing
 from typing import Any,Callable
 from PIL import Image,ImageDraw
+from RuntimePaths import is_finite_number
 
 
 def _icon():
@@ -37,27 +40,35 @@ CASES=(('icon',_icon),('line-art',_line),('text-small-detail',_text_detail),('ca
 
 
 def _row(make_plan,image,area,base_options,enabled,cancelled):
-    options=dict(base_options);options['adaptive_hybrid_cost']='Auto' if enabled else 'Off';options['_preview_plan']=True
+    if cancelled():raise InterruptedError()
+    options=deepcopy(base_options);options['adaptive_hybrid_cost']='Auto' if enabled else 'Off';options['_preview_plan']=True
     owns_trace=not tracemalloc.is_tracing()
     if owns_trace:tracemalloc.start()
     start=time.perf_counter()
     try:
-        plan=make_plan(image,area,options,cancelled)
+        with closing(image.copy()) as planner_image:
+            plan=make_plan(planner_image,area,options,cancelled)
         elapsed=time.perf_counter()-start
-        _cur,peak=tracemalloc.get_traced_memory()
+        peak=tracemalloc.get_traced_memory()[1] if owns_trace else None
+        if cancelled():raise InterruptedError()
     finally:
         if owns_trace:tracemalloc.stop()
     po=plan.get('options') or {};acc=po.get('adaptive_accuracy_meta') or {};de=po.get('preview_delta_e_meta') or {};timing=plan.get('draw_time_estimate') or {}
     seq=plan.get('execution_sequence') or []
     switches=sum(1 for a,b in zip(seq,seq[1:]) if a.get('color_index')!=b.get('color_index'))
     fills=len(po.get('fill_regions') or ())+(1 if (po.get('background_fill_plan') or {}).get('enabled') else 0)
-    return {'engine':'calibrated-hybrid' if enabled else 'legacy-fallback','planning_seconds':round(elapsed,5),'estimated_draw_seconds':round(float(timing.get('projected_seconds',plan.get('estimate',0)) or 0),4),'actual_draw_seconds':None,'operations':int(plan.get('count') or 0),'color_switches':switches,'fill_actions':fills,'peak_python_memory_bytes':int(peak),'visual_accuracy_percent':acc.get('visual_accuracy_percent'),'coverage_percent':acc.get('coverage_percent'),'spill_percent':acc.get('spill_percent'),'perceptual_color_accuracy_percent':acc.get('perceptual_color_accuracy_percent'),'mean_delta_e_oklab':de.get('mean_delta_e_oklab'),'performance_profile':plan.get('performance_profile') or {},'gpu_backend':(po.get('universal_gpu_meta') or po.get('gpu_meta') or {}).get('backend')}
+    estimate=next((float(v) for v in (timing.get('projected_seconds'),plan.get('estimate')) if is_finite_number(v) and v>=0),None)
+    return {'engine':'calibrated-hybrid' if enabled else 'legacy-fallback','planning_seconds':round(elapsed,5),'estimated_draw_seconds':None if estimate is None else round(estimate,4),'actual_draw_seconds':None,'operations':int(plan.get('count') or 0),'color_switches':switches,'fill_actions':fills,'peak_python_memory_bytes':peak,'memory_measurement':'isolated Python trace' if owns_trace else 'unavailable: caller tracing is active','visual_accuracy_percent':acc.get('visual_accuracy_percent'),'coverage_percent':acc.get('coverage_percent'),'spill_percent':acc.get('spill_percent'),'perceptual_color_accuracy_percent':acc.get('perceptual_color_accuracy_percent'),'mean_delta_e_oklab':de.get('mean_delta_e_oklab'),'performance_profile':plan.get('performance_profile') or {},'gpu_backend':(po.get('universal_gpu_meta') or po.get('gpu_meta') or {}).get('backend')}
 
 
 def run(make_plan:Callable[...,dict],base_options:dict[str,Any],*,area=(480,360),cancelled=lambda:False):
     rows=[]
     for name,factory in CASES:
         if cancelled():raise InterruptedError()
-        image=factory();legacy=_row(make_plan,image,area,base_options,False,cancelled);hybrid=_row(make_plan,image,area,base_options,True,cancelled)
-        rows.append({'case':name,'legacy':legacy,'hybrid':hybrid,'estimated_draw_delta_seconds':round(hybrid['estimated_draw_seconds']-legacy['estimated_draw_seconds'],4),'operation_delta':hybrid['operations']-legacy['operations']})
+        with closing(factory()) as image:
+            legacy=_row(make_plan,image,area,base_options,False,cancelled)
+            hybrid=_row(make_plan,image,area,base_options,True,cancelled)
+        delta=None if hybrid['estimated_draw_seconds'] is None or legacy['estimated_draw_seconds'] is None else round(hybrid['estimated_draw_seconds']-legacy['estimated_draw_seconds'],4)
+        rows.append({'case':name,'legacy':legacy,'hybrid':hybrid,'estimated_draw_delta_seconds':delta,'operation_delta':hybrid['operations']-legacy['operations']})
+    if cancelled():raise InterruptedError()
     return {'version':1,'local_only':True,'real_windows_input_verified':False,'actual_draw_times_measured':False,'cases':rows,'case_count':len(rows),'note':'Planning/simulation comparison only. Actual Windows input time and physical GPU execution must be measured on a real configured target.'}

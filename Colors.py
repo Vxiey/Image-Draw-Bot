@@ -1,4 +1,9 @@
+import re
+
 allColors = []
+
+_HEX_DIGITS = frozenset('0123456789abcdefABCDEF')
+_FUNCTION_COLOR = re.compile(r'(?i)(?:rgb|rgba|argb)\s*\(')
 
 
 def _channel(value):
@@ -20,7 +25,7 @@ def argb_to_rgb(value, background=(255, 255, 255)):
         text=value.strip().replace('_','')
         if text.startswith('#'):text=text[1:]
         elif text.lower().startswith('0x'):text=text[2:]
-        if len(text)!=8:
+        if len(text)!=8 or any(ch not in _HEX_DIGITS for ch in text):
             raise ValueError('ARGB hex colors must use AARRGGBB.')
         try:channels=tuple(int(text[i:i+2],16) for i in range(0,8,2))
         except ValueError:raise ValueError('Invalid ARGB hex color.') from None
@@ -51,8 +56,7 @@ def normalize_rgb(value, background=(255,255,255)):
         # Named Color Intelligence adds tolerant CSS4/Tk/X11 names plus explicit
         # rgb()/rgba()/argb() forms. Keep legacy comma lists and AARRGGBB semantics
         # unchanged so existing calibration/settings files remain compatible.
-        lower=raw.casefold().lstrip()
-        if lower.startswith(('rgb(', 'rgba(', 'argb(')):
+        if _FUNCTION_COLOR.match(raw):
             from NamedColorIntelligence import parse_named_color_text
             return parse_named_color_text(raw,background=background)
         # Also accept UI-friendly channel notation such as "255, 20, 30" or
@@ -63,6 +67,7 @@ def normalize_rgb(value, background=(255,255,255)):
             except ValueError:raise ValueError('RGB/ARGB channel lists must contain integers.') from None
             return normalize_rgb(parts,background)
         prefixed_hash=text.startswith('#')
+        prefixed_hex=prefixed_hash or text.lower().startswith('0x')
         if prefixed_hash:text=text[1:]
         elif text.lower().startswith('0x'):text=text[2:]
         # CSS short hex is unambiguous with a # prefix. #RGBA uses standard
@@ -70,12 +75,13 @@ def normalize_rgb(value, background=(255,255,255)):
         if prefixed_hash and len(text) in (3,4):
             from NamedColorIntelligence import parse_named_color_text
             return parse_named_color_text('#'+text,background=background)
-        if len(text)==8:
-            try:return argb_to_rgb(text,background)
-            except ValueError:pass
-        if len(text)==6:
-            try:return tuple(int(text[i:i+2],16) for i in range(0,6,2))
-            except ValueError:pass
+        hexadecimal=bool(text) and all(ch in _HEX_DIGITS for ch in text)
+        if len(text)==8 and hexadecimal:
+            return argb_to_rgb(text,background)
+        if len(text)==6 and hexadecimal:
+            return tuple(int(text[i:i+2],16) for i in range(0,6,2))
+        if prefixed_hex:
+            raise ValueError('Hex colors must contain only hexadecimal RGB/ARGB digits.')
         # Any non-hex string now gets a deterministic static named-colour lookup.
         # This does not add the named colour to allColors or the render palette.
         try:
@@ -212,6 +218,8 @@ def load_palette():
     for color, rgb in zip(allColors, values):
         color.R, color.G, color.B = rgb
         color.RGB = tuple(rgb)
+    from PixelData import closest_color
+    closest_color.cache_clear()
 
 
 CALIBRATION_FILE = DATA_DIR / 'calibration.json'

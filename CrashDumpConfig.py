@@ -5,13 +5,20 @@ import json
 import os
 import sys
 from pathlib import Path
-from RuntimePaths import atomic_write_text
+from RuntimePaths import atomic_write_text, data_dir, file_transaction
 from WindowsSystem import load_system_library
 
 REG_BASE = r'SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
 VALUE_NAMES = ('DumpFolder', 'DumpCount', 'DumpType')
 EXECUTABLE_NAMES = ('ImageDrawBot.exe', 'python.exe', 'pythonw.exe')
 MAX_BACKUP_BYTES = 1024 * 1024
+DUMP_FOLDER_TEMPLATE = r'%LOCALAPPDATA%\ImageDrawBot\dumps'
+
+
+def user_dump_folder():
+    """Resolve the same per-process account location that WER expands."""
+    local = os.environ.get('LOCALAPPDATA')
+    return Path(local) / 'ImageDrawBot' / 'dumps' if local else data_dir() / 'dumps'
 
 
 def _validate_backup(state, reg):
@@ -19,13 +26,14 @@ def _validate_backup(state, reg):
     if not isinstance(state, dict) or any(name not in EXECUTABLE_NAMES for name in state):
         raise ValueError('Invalid LocalDumps backup executable; no changes made.')
     for saved in state.values():
-        if not isinstance(saved, dict) or set(saved) != {'original', 'written'}:
+        if (not isinstance(saved, dict) or set(saved) not in (
+                {'original', 'written'}, {'original', 'written', 'previous_written'})):
             raise ValueError('Invalid LocalDumps backup record; no changes made.')
-        for label in ('original', 'written'):
+        for label in saved:
             values = saved[label]
             if not isinstance(values, dict) or set(values) - set(VALUE_NAMES):
                 raise ValueError('Invalid LocalDumps backup values; no changes made.')
-            if label == 'written' and set(values) != set(VALUE_NAMES):
+            if label != 'original' and set(values) != set(VALUE_NAMES):
                 raise ValueError('Incomplete LocalDumps backup; no changes made.')
             for name, pair in values.items():
                 if not isinstance(pair, list) or len(pair) != 2 or type(pair[1]) is not int:
@@ -38,18 +46,20 @@ def _validate_backup(state, reg):
                     valid = kind == reg.REG_DWORD and type(value) is int and 0 <= value <= 0xffffffff
                 if not valid:
                     raise ValueError('Invalid LocalDumps registry type; no changes made.')
-        if (saved['written']['DumpCount'] != [5, reg.REG_DWORD]
-                or saved['written']['DumpType'] != [1, reg.REG_DWORD]
-                or saved['written']['DumpFolder'][1] != reg.REG_EXPAND_SZ):
-            raise ValueError('Unrecognized LocalDumps saved configuration; no changes made.')
+        for label in ('written', 'previous_written'):
+            if label in saved and (saved[label]['DumpCount'] != [5, reg.REG_DWORD]
+                    or saved[label]['DumpType'] != [1, reg.REG_DWORD]
+                    or saved[label]['DumpFolder'][1] != reg.REG_EXPAND_SZ):
+                raise ValueError('Unrecognized LocalDumps saved configuration; no changes made.')
     return state
 
 
-def restore_values(current, written, original):
+def restore_values(current, written, original, previous_written=None):
     """Restore only values still matching ours; retain later external changes."""
     result=dict(current)
     for name, value in written.items():
-        if result.get(name) == value:
+        if result.get(name) == value or (previous_written is not None
+                and result.get(name) == previous_written.get(name)):
             if name in original:result[name]=original[name]
             else:result.pop(name,None)
     return result
@@ -66,8 +76,16 @@ def configure(action, include_python=False):
     is_admin.restype = ctypes.c_int
     if not is_admin():
         raise PermissionError('Right-click this BAT file and choose Run as administrator once. Start Image Draw Bot normally afterwards.')
-    folder=Path(os.environ['LOCALAPPDATA'])/'ImageDrawBot'/'dumps'
+    folder=user_dump_folder()
     folder.mkdir(parents=True,exist_ok=True)
+    # The undo document and corresponding registry changes form one logical
+    # operation. Otherwise Disable can consume the just-written undo record
+    # before Enable applies its values, leaving active settings with no backup.
+    with file_transaction(folder/'localdumps-backup.json'):
+        return _configure_locked(action, include_python, folder, reg)
+
+
+def _configure_locked(action, include_python, folder, reg):
     backup=folder/'localdumps-backup.json'
     access=reg.KEY_READ|reg.KEY_WRITE|reg.KEY_WOW64_64KEY
     state = {}
@@ -99,27 +117,43 @@ def configure(action, include_python=False):
         names=['ImageDrawBot.exe'] + (['python.exe','pythonw.exe'] if include_python else [])
         existing = {name: read_values(name) for name in names}
         for name in names:
-            if name in state and existing[name] != state[name]['written']:
-                raise RuntimeError(f'{name}: settings changed since last setup. Disable/inspect the saved configuration first.')
-        written={'DumpFolder':[str(folder),reg.REG_EXPAND_SZ],
+            if name in state:
+                saved = state[name]
+                previous = saved.get('previous_written', {})
+                if (set(existing[name]) != set(VALUE_NAMES) or any(
+                        existing[name][key] != saved['written'][key]
+                        and existing[name][key] != previous.get(key) for key in VALUE_NAMES)):
+                    raise RuntimeError(f'{name}: settings changed since last setup. Disable/inspect the saved configuration first.')
+        written={'DumpFolder':[DUMP_FOLDER_TEMPLATE,reg.REG_EXPAND_SZ],
                  'DumpCount':[5,reg.REG_DWORD],'DumpType':[1,reg.REG_DWORD]}
         planned = dict(state)
         for name in names:
             if name not in planned:
                 planned[name] = {'original': existing[name], 'written': written}
+            elif planned[name]['written'] != written:
+                # Preserve both known versions until the migration finishes.
+                # Disable must recognize either value after a partial write.
+                planned[name] = {'original': planned[name]['original'], 'written': written,
+                                 'previous_written': planned[name]['written']}
         _validate_backup(planned, reg)
         for name in names:
-            if name in state:
+            if (name in state and state[name] == planned[name]
+                    and 'previous_written' not in state[name] and existing[name] == written):
                 continue
             state[name] = planned[name]
             # Persist undo information BEFORE touching the registry.
             atomic_write_text(backup,json.dumps(state,indent=2))
             write_values(name,written)
-        return f'LocalDumps configured: {", ".join(names)}\nDump folder: {folder}\nMini dumps remain local; share them only when needed.'
+            if 'previous_written' in state[name]:
+                state[name] = {'original': state[name]['original'], 'written': written}
+                atomic_write_text(backup,json.dumps(state,indent=2))
+        return (f'LocalDumps configured: {", ".join(names)}\nDump folder: {DUMP_FOLDER_TEMPLATE}\n'
+                'Each Windows account writes to its own local folder.\n'
+                'Mini dumps remain local; share them only when needed.')
     if action=='disable':
         for name, saved in list(state.items()):
             current=read_values(name)
-            restored=restore_values(current,saved['written'],saved['original'])
+            restored=restore_values(current,saved['written'],saved['original'],saved.get('previous_written'))
             write_values(name,restored)
             # Keep the key itself: other tools may store additional values there.
             del state[name]

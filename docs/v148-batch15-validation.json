@@ -1,0 +1,90 @@
+{
+  "baseline_commit": "43a1c968eb56a63224827f1567e4ccc354acdadb",
+  "implemented": 803,
+  "target": 1000,
+  "remaining": 197,
+  "added_behavior_groups": [
+    "A1501",
+    "A1502",
+    "R1501",
+    "R1502",
+    "U1501",
+    "U1502",
+    "P1501"
+  ],
+  "uncounted_completions": [
+    "RT12 capture ownership at screen, brush-patch, preflight and independent setup-verification callers",
+    "IW08/RT12 accepted-before-task Stop cleanup for background removal and three image export paths",
+    "CG09/IW08 cancellation and owned-result cleanup in image preparation",
+    "A1402 locked-Start help distinguishes Paint Auto and manual tools",
+    "Review corrections within new groups, including direct HTTP-query preservation and checkpoint base-metadata cancellation",
+    "RT40/RT44 final draw-plan generation and shared executor/UI image ownership, including Stop, clear, shutdown, malformed result and failed publication"
+  ],
+  "release_published": false,
+  "local_regressions": {
+    "command": ".venv/bin/python -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 3851,
+    "runner_seconds": 103.373,
+    "wall_seconds": 104.245,
+    "status": "OK (skipped=48)",
+    "skipped": 48,
+    "source_files": 820,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "7a65bc9007cd2dab0a35c90a0eeaa5eec636a87538ac2281990b6aae9e5912da"
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1106,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch15-engine-benchmarks.json",
+    "fixtures": 8,
+    "mismatched_plan_pixels": {
+      "icon": 0,
+      "line-art": 0,
+      "text-small-detail": 0,
+      "cartoon-large-colour": 0,
+      "photo-gradient": 0,
+      "fill-risk": 0,
+      "thin-diagonals": 0,
+      "many-islands": 0
+    },
+    "all_exact_palette_geometry": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "independent_source_reviews": "All seven new groups and existing-contract completions reviewed without remaining blockers. Final plan ownership review covers real draw/make_plan/worker/UI interleavings, real executor final scoring, Stop/clear/close without queue drain, malformed results, aliases, publication failure and shallow dry-run ownership. The final 12 adoption regressions are included in the frozen full-suite total.",
+  "benchmarks": {
+    "v148-batch15-rendering-benchmarks.json": "901b71484a56bbd3d9218d0ae8bd3fa10501abd44b69fe1b0056f10e3a77ea14",
+    "v148-batch15-prepare-benchmarks.json": "13c4ac5aad161f9f05450fac32bd4e97c31d8e6a31948586192b544a88f45422",
+    "v148-batch15-platform-benchmarks.json": "b9b6b24ae82645100748434825afc2951bcf33181dca9643a3f551c09bcabcf2"
+  },
+  "remote_validation": "The exact published commit must pass its own GitHub checks. PR46 will link Windows/Linux, dependency audits, CodeQL and bundled GUI/native drag-and-drop results. Local Linux checks do not establish native Windows interaction or physical GPU performance.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46",
+  "benchmark_source_manifest_sha256": "17a88908be9bb8e3f425a2dae8732f3ef93a4cf81577ea0cbcf22732e7e93fec"
+}

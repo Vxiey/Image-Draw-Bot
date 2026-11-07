@@ -11,22 +11,23 @@ otherwise conservative deterministic defaults remain authoritative.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 import math
 from typing import Any, Iterable, Sequence
 
 from DrawTimeCalibration import correction_for
 from SpeedOptimizer import normalize_speed, phase_delay
-from StrokeDelivery import resolve_stroke_delivery
+from StrokeDelivery import resolve_stroke_delivery, interpolation_step, brush_switch_delays
+from Precision import effective_step, precision_path_count, round_screen
 
 Point = tuple[int, int]
-EXECUTION_MODEL_VERSION = 4
+EXECUTION_MODEL_VERSION = 7
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         out = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return float(default)
     return out if math.isfinite(out) else float(default)
 
@@ -57,6 +58,7 @@ class CostBreakdown:
     travel_seconds: float = 0.0
     press_release_seconds: float = 0.0
     palette_seconds: float = 0.0
+    custom_color_seconds: float = 0.0
     tool_seconds: float = 0.0
     brush_seconds: float = 0.0
     fill_seconds: float = 0.0
@@ -65,6 +67,9 @@ class CostBreakdown:
     operations: int = 0
     moves: int = 0
     palette_switches: int = 0
+    custom_color_switches: int = 0
+    custom_selection_seconds: float = 0.0
+    color_verifications: int = 0
     tool_switches: int = 0
     brush_switches: int = 0
     source: str = "deterministic profile model"
@@ -75,6 +80,40 @@ class CostBreakdown:
             if isinstance(value, float):
                 out[key] = round(value, 6)
         return out
+
+
+@dataclass(frozen=True)
+class PreparedPathCost:
+    """One immutable path/model snapshot for repeated cursor comparisons.
+
+    Keep the original ``(travel_base + distance + body) * multiplier``
+    evaluation order. Adding a travel delta to an already rounded total can
+    change a close candidate tie, even when the formulas are algebraically
+    equivalent. No path, options or persistent model cache is retained here.
+    """
+    baseline: CostBreakdown
+    start: Point | None
+    scale_x: float
+    scale_y: float
+    travel_base: float
+    body: float
+    multiplier: float
+
+    def _travel(self, cursor: Point | None) -> float:
+        pixels=0.0 if cursor is None else math.hypot(
+            (self.start[0]-cursor[0])*self.scale_x,
+            (self.start[1]-cursor[1])*self.scale_y)
+        return self.travel_base+min(.10,pixels*.000045)
+
+    def seconds(self, *, cursor: Point | None = None) -> float:
+        if self.start is None:return 0.0
+        return (self._travel(cursor)+self.body)*self.multiplier
+
+    def cost(self, *, cursor: Point | None = None) -> CostBreakdown:
+        if self.start is None:return self.baseline
+        travel=self._travel(cursor)
+        return replace(self.baseline,total_seconds=(travel+self.body)*self.multiplier,
+                       travel_seconds=travel*self.multiplier)
 
 
 class ExecutionCostModel:
@@ -90,6 +129,10 @@ class ExecutionCostModel:
         self.sx = max(.001, _safe_float(self.options.get("_execution_scale_x", self.options.get("_hybrid_scale_x", _sx_default)), _sx_default))
         self.sy = max(.001, _safe_float(self.options.get("_execution_scale_y", self.options.get("_hybrid_scale_y", _sy_default)), _sy_default))
         self.delivery = resolve_stroke_delivery(self.options, dry_run=False)
+        self.precision = self.options.get("precision", "High")
+        self.step_px = effective_step(self.precision, interpolation_step(
+            self.delivery.step_px, max(1, int(self.options.get('brush_px') or 1)),
+            pixel_accurate=bool(self.options.get('pixel_accurate'))))
         self.speed = normalize_speed(self.options.get("speed", "Balanced"))
         self.delay = max(0.0, _safe_float(self.options.get("delay"), 0.0))
         self.path_wait = max(float(self.delivery.min_path_delay),
@@ -108,6 +151,10 @@ class ExecutionCostModel:
         self.source = ("measured local calibration" if self.samples >= 3 else
                        f"learning local calibration ({self.samples}/3)" if self.samples else
                        "deterministic profile model")
+        from AdaptiveBrushEngine import verified_brush_sizes
+        sizes,dynamic=verified_brush_sizes(str(self.options.get('profile_key') or ''),
+            self.options.get('browser_brush_plan'),max(1,int(self.options.get('brush_px') or 1)))
+        self._color_reset_brushes=frozenset(sizes) if dynamic else frozenset()
 
     def _learned_average(self, kind: str, fallback: float) -> float:
         aliases = {
@@ -160,7 +207,7 @@ class ExecutionCostModel:
 
     @property
     def draw_seconds_per_px(self) -> float:
-        return max(1e-12,(self.path_wait/max(.5,float(self.delivery.step_px)))*self.multiplier)
+        return max(1e-12,(self.path_wait/self.step_px)*self.multiplier)
 
     @property
     def color_change_seconds(self) -> float:
@@ -182,6 +229,28 @@ class ExecutionCostModel:
 
     def path_seconds(self,path: Sequence[Point],*,cursor: Point|None=None,brush_px: int|None=None) -> float:
         return float(self.path_cost(path,cursor=cursor,brush_px=brush_px).total_seconds)
+
+    def prepare_path_cost(self, path: Sequence[Point], *, brush_px: int | None = None,
+                          cancelled=lambda: False) -> PreparedPathCost:
+        """Resolve invariant geometry once for an operation-local comparison."""
+        if cancelled():raise InterruptedError()
+        path=tuple((int(point[0]),int(point[1])) for point in (path or ()))
+        baseline=self.path_cost(path,brush_px=brush_px)
+        if cancelled():raise InterruptedError()
+        if not path:
+            return PreparedPathCost(baseline,None,self.sx,self.sy,self.travel_wait,0.0,1.0)
+        kind=_operation_type(path,_path_length(path,self.sx,self.sy))
+        target=max(.012,self.boundary_wait) if len(path)<=1 else self.boundary_wait+.0015
+        press_release=float(self.delivery.press_settle+self.delivery.release_settle)
+        body=(press_release+target if len(path)<=1
+              else press_release+baseline.moves*self.path_wait+target)
+        learned=self._learned_average(kind,0.0)
+        if learned>0.0:
+            body=max(.001,learned-self.travel_wait);multiplier=1.0
+        else:
+            multiplier=self.multiplier
+        if cancelled():raise InterruptedError()
+        return PreparedPathCost(baseline,path[0],self.sx,self.sy,self.travel_wait,body,multiplier)
 
     def paths_seconds(self,paths: Iterable[Sequence[Point]],*,cursor: Point|None=None,brush_px: int|None=None) -> float:
         total=0.0;current=cursor
@@ -211,7 +280,9 @@ class ExecutionCostModel:
         path = tuple((int(p[0]), int(p[1])) for p in (path or ()))
         if not path:
             return CostBreakdown(0.0, source=self.source)
-        _brush = max(1, int(brush_px or self.options.get("brush_px") or 1))
+        brush = max(1, int(brush_px or self.options.get("brush_px") or 1))
+        step_px = interpolation_step(self.delivery.step_px, brush,
+                                     pixel_accurate=bool(self.options.get('pixel_accurate')))
         length = _path_length(path, self.sx, self.sy)
         start = path[0]
         travel_px = 0.0
@@ -243,10 +314,13 @@ class ExecutionCostModel:
                                  operations=1, moves=1, source=self.source)
 
         moves = 0
-        for a, b in zip(path, path[1:]):
-            seg = math.hypot((b[0]-a[0])*self.sx, (b[1]-a[1])*self.sy)
-            if seg > 0:
-                moves += max(1, int(math.ceil(seg / max(.5, float(self.delivery.step_px)))))
+        # Native delivery first maps source pixel centres to integer desktop
+        # pixels, then applies the selected precision cap and de-duplicates
+        # repeated positions. Count that same path without allocating it.
+        screen_path = [(round_screen((x + .5) * self.sx - .5),
+                        round_screen((y + .5) * self.sy - .5)) for x, y in path]
+        for a, b in zip(screen_path, screen_path[1:]):
+            moves += precision_path_count(a, b, self.precision, step_px)
         drag = moves * self.path_wait
         target = self.boundary_wait + .0015
         body = press_release + drag + target
@@ -272,28 +346,65 @@ class ExecutionCostModel:
         defaults = {
             "palette_change": float(self.delivery.palette_click_delay),
             "tool_change": float(self.delivery.ui_control_delay),
-            "brush_change": max(.06, float(self.delivery.ui_control_delay) * .75),
+            "brush_change": sum(brush_switch_delays(self.delivery)),
             "fill": max(.12, float(self.delivery.ui_control_delay) + .04),
             "verification": max(.08, float(self.delivery.palette_click_delay) * .45),
         }
         base = defaults.get(kind, .0)
-        learned = self._learned_average(kind, base)
-        return learned if learned != base else base * self.multiplier
+        learned = self._learned_average(kind, 0.0)
+        return learned if learned > 0.0 else base * self.multiplier
+
+    def is_custom_color(self, color_index: int | None) -> bool:
+        selectors = self.options.get('color_selectors') or ()
+        selector = (selectors[color_index] if color_index is not None
+                    and 0 <= color_index < len(selectors) else None)
+        return bool(not self.options.get('paint_current_color')
+                    and self.options.get('exact_color_available')
+                    and isinstance(selector, dict) and selector.get('kind') == 'custom')
+
+    def color_selection_cost(self, color_index: int | None) -> tuple[float,float]:
+        """Palette/custom portions of one actual selection, including learned UI time.
+
+        Runtime records a complete non-palette select() call as color_change,
+        before verification or drawing. Such a measurement must replace the
+        complete default selection, not receive another custom-dialog surcharge.
+        """
+        if self.options.get('paint_current_color'):
+            return 0.0,0.0
+        palette=self.switch_cost('palette_change')
+        if not self.is_custom_color(color_index):return palette,0.0
+        learned=self._learned_average('color_change',0.0)
+        if learned>0:
+            # Keep the diagnostic split nonnegative even when a learned custom
+            # selector is faster than the palette default or historical average.
+            palette=min(palette,learned)
+            return palette,learned-palette
+        return palette,.78*self.multiplier
+
+    def brush_resets_color(self, previous: int | None, requested: int) -> bool:
+        return previous is not None and previous!=requested and requested in self._color_reset_brushes
 
     def sequence_cost(self, sequence: Iterable[dict[str, Any]], *,
                       initial_cursor: Point | None = None,
                       initial_color: int | None = None,
-                      initial_brush: int | None = None) -> CostBreakdown:
+                      initial_brush: int | None = None,
+                      include_color_verification: bool = False,
+                      include_geometry: bool = True,
+                      cancelled=None) -> CostBreakdown:
         cursor = initial_cursor
         color = initial_color
         brush = initial_brush
+        phase = None
+        verified_colors = set()
         totals = {
-            "drag": 0.0, "travel": 0.0, "press": 0.0, "palette": 0.0,
+            "drag": 0.0, "travel": 0.0, "press": 0.0, "palette": 0.0, "custom": 0.0,
             "tool": 0.0, "brush": 0.0, "fill": 0.0, "verification": 0.0,
             "target": 0.0, "ops": 0, "moves": 0, "palette_n": 0,
-            "tool_n": 0, "brush_n": 0,
+            "tool_n": 0, "brush_n": 0, "custom_n": 0, "custom_selection": 0.0,
         }
         for raw in sequence or ():
+            if cancelled is not None and cancelled():
+                raise InterruptedError()
             entry = dict(raw)
             operation = str(entry.get("operation_type") or "stroke")
             if operation in ("fill", "fill_action"):
@@ -306,44 +417,70 @@ class ExecutionCostModel:
                 totals["tool"] += self.switch_cost("tool_change"); totals["tool_n"] += 1; totals["ops"] += 1
                 continue
             if operation == "palette_change":
-                totals["palette"] += self.switch_cost("palette_change"); totals["palette_n"] += 1; totals["ops"] += 1
+                selected_color=int(entry['color_index']) if entry.get('color_index') is not None else color
+                palette,custom=self.color_selection_cost(selected_color)
+                totals["palette"] += palette; totals["custom"] += custom
+                totals["palette_n"] += 1; totals["ops"] += 1
+                if self.is_custom_color(selected_color):
+                    totals['custom_n'] += 1
+                    totals['custom_selection'] += palette + custom
                 if entry.get("color_index") is not None:
                     color = int(entry.get("color_index"))
                 continue
             if operation == "brush_change":
                 totals["brush"] += self.switch_cost("brush_change"); totals["brush_n"] += 1; totals["ops"] += 1
                 if entry.get("brush_px") is not None:
-                    brush = max(1, int(entry.get("brush_px")))
+                    requested=max(1,int(entry.get('brush_px')))
+                    if self.brush_resets_color(brush,requested):color=None
+                    brush=requested
+                continue
+            path = entry.get("path") or ()
+            if not path:
                 continue
             new_color = int(entry.get("color_index", color if color is not None else 0))
-            new_brush = max(1, int(entry.get("brush_px") or self.options.get("brush_px") or 1))
-            if color is not None and new_color != color and not self.options.get("paint_current_color"):
-                totals["palette"] += self.switch_cost("palette_change"); totals["palette_n"] += 1
-            elif color is None and not self.options.get("paint_current_color"):
-                totals["palette"] += self.switch_cost("palette_change"); totals["palette_n"] += 1
+            new_brush = max(1, int(entry.get("brush_px") or brush or self.options.get("brush_px") or 1))
+            new_phase=str(entry.get('phase','details'))
+            if (phase is not None and new_phase!=phase) or self.brush_resets_color(brush,new_brush):
+                color=None
+            if new_color!=color and not self.options.get('paint_current_color'):
+                palette,custom=self.color_selection_cost(new_color)
+                totals['palette']+=palette;totals['custom']+=custom;totals['palette_n']+=1
+                if self.is_custom_color(new_color):
+                    totals['custom_n'] += 1
+                    totals['custom_selection'] += palette + custom
+            if (include_color_verification and self.options.get('adaptive_color_verification')
+                    and not self.options.get('paint_current_color') and new_color not in verified_colors):
+                totals['verification']+=self.switch_cost('verification')
+                verified_colors.add(new_color)
             if brush is not None and new_brush != brush:
                 totals["brush"] += self.switch_cost("brush_change"); totals["brush_n"] += 1
-            piece = self.path_cost(entry.get("path") or (), cursor=cursor, brush_px=new_brush)
-            totals["drag"] += piece.drag_seconds
-            totals["travel"] += piece.travel_seconds
-            totals["press"] += piece.press_release_seconds
-            totals["target"] += piece.target_processing_seconds
-            totals["ops"] += piece.operations
-            totals["moves"] += piece.moves
+            if include_geometry:
+                piece = self.path_cost(path, cursor=cursor, brush_px=new_brush)
+                totals["drag"] += piece.drag_seconds
+                totals["travel"] += piece.travel_seconds
+                totals["press"] += piece.press_release_seconds
+                totals["target"] += piece.target_processing_seconds
+                totals["ops"] += piece.operations
+                totals["moves"] += piece.moves
             path = entry.get("path") or ()
             if path:
                 cursor = tuple(map(int, path[-1]))
             color = new_color
             brush = new_brush
-        total = sum(totals[k] for k in ("drag","travel","press","palette","tool","brush","fill","verification","target"))
+            phase = new_phase
+        total = sum(totals[k] for k in ("drag","travel","press","palette","custom","tool","brush","fill","verification","target"))
         return CostBreakdown(
             total_seconds=total, drag_seconds=totals["drag"],
             travel_seconds=totals["travel"], press_release_seconds=totals["press"],
             palette_seconds=totals["palette"], tool_seconds=totals["tool"],
+            custom_color_seconds=totals['custom'],
             brush_seconds=totals["brush"], fill_seconds=totals["fill"],
             verification_seconds=totals["verification"],
             target_processing_seconds=totals["target"], operations=totals["ops"],
             moves=totals["moves"], palette_switches=totals["palette_n"],
+            custom_color_switches=totals['custom_n'],
+            custom_selection_seconds=totals['custom_selection'],
+            color_verifications=len(verified_colors),
             tool_switches=totals["tool_n"], brush_switches=totals["brush_n"],
             source=self.source)
 

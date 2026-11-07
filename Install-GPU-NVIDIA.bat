@@ -13,7 +13,7 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 1
 )
 echo Detecting NVIDIA hardware and installing/repairing CUDA acceleration...
-".venv\Scripts\python.exe" AutoGpuSetup.py --ensure --force --require-nvidia
+".venv\Scripts\python.exe" -E -s AutoGpuSetup.py --ensure --force --require-nvidia
 if errorlevel 1 goto :fail
 if exist ".venv\gpu-install-failed.marker" del /q ".venv\gpu-install-failed.marker" >nul 2>&1
 echo.

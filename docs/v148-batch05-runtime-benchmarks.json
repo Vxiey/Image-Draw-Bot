@@ -1,0 +1,220 @@
+{
+  "baseline_commit": "5f3fcfb5c4519e5ed1b9b770ba951918819d725d",
+  "baseline_DeadlineScheduler_sha256": "bd41909a8b6b24c52bfdd9c73965f4ced66c4ab3b874e2e62549e68ba7f3201f",
+  "current_sources_sha256": {
+    "DeadlineScheduler.py": "3923772427cf644b5a14987de66b763a5a236cc84a66a83b8459653a3e981b60",
+    "DrawBot.py": "15286a9b2058b5f3bc7b8e3a4d4444f21d59a0e7edfd59c35600fbdf25c7d6f0"
+  },
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "scope": "Repeated eligibility checks on a prepared runtime sequence. Scheduler construction, mouse/native input, drawing and active sorting are excluded. Baseline follows the original DrawBot tail-copy call pattern. Current shared dependencies are used.",
+  "results": [
+    {
+      "policy": "normal",
+      "paths": 20000,
+      "replan_checks": 200,
+      "exact_output_parity": true,
+      "before_ms": [
+        1203.656500998477,
+        1216.8807750022097,
+        1033.0334840000432,
+        1152.6795470017532,
+        1094.8140209984558
+      ],
+      "after_ms": [
+        0.046318000386236235,
+        0.036943998566130176,
+        0.04508699930738658,
+        0.03734599886229262,
+        0.04771099702338688
+      ],
+      "before_median_ms": 1152.6795470017532,
+      "after_median_ms": 0.04508699930738658,
+      "before_peak_python_bytes": 11390112,
+      "after_peak_python_bytes": 100,
+      "output": {
+        "ordered_entries_sha256": "24ab5b1cc02fd48253c74d4109897ce0d361343766914dbd14f1785db7472c8f",
+        "scheduler_metadata": {
+          "elapsed_seconds": 0.0,
+          "remaining_budget_seconds": 1000.0,
+          "predicted_remaining_seconds": 200.0,
+          "predicted_finish_seconds": 200.0,
+          "schedule_delta_seconds": 800.0,
+          "operations_per_second": 0.0,
+          "estimated_work_seconds_per_real_second": 0.0,
+          "runtime_cost_multiplier": 1.0,
+          "runtime_samples": 10,
+          "prediction_interval": {
+            "lower_seconds": 99.99999999998154,
+            "upper_seconds": 399.99999999992616,
+            "source": "cold-start heuristic",
+            "samples": 0
+          },
+          "progress_evidence": "sent operations; visual verification is separate",
+          "last_operation_actual_seconds": 0.0,
+          "skipped_low_value": 0,
+          "current_phase": "",
+          "mode": "NORMAL",
+          "strategy": "planned-quality",
+          "structural_coverage_percent": 0.0,
+          "phase_executed": {},
+          "phase_skipped": {},
+          "skip_reasons": {},
+          "recovered_from_catchup": 0,
+          "dynamic_replans": 0,
+          "reordered_remaining_paths": 0,
+          "replans_rejected_switch_cost": 0,
+          "last_replan_mode": "NORMAL",
+          "remaining_time_seconds": 1000.0,
+          "remaining_predicted_seconds": 200.0,
+          "executed_paths": 0,
+          "skipped_paths": 0,
+          "panic_mode": false,
+          "panic_activations": 0,
+          "catch_up_activations": 0,
+          "runtime_prediction_source": "live measured execution EMA + typed planning cost",
+          "panic_policy": "coverage -> structure -> exceptionally important detail; accuracy/correction dropped",
+          "hard_budget_guard_seconds": 0.2
+        }
+      }
+    },
+    {
+      "policy": "unlimited",
+      "paths": 20000,
+      "replan_checks": 200,
+      "exact_output_parity": true,
+      "before_ms": [
+        894.1534049990878,
+        1225.706197998079,
+        982.0361040001444,
+        1164.122239999415,
+        1038.7484350030718
+      ],
+      "after_ms": [
+        0.04230299964547157,
+        0.034530999982962385,
+        0.0597079997533001,
+        0.03457099955994636,
+        0.041822000639513135
+      ],
+      "before_median_ms": 1038.7484350030718,
+      "after_median_ms": 0.041822000639513135,
+      "before_peak_python_bytes": 11390112,
+      "after_peak_python_bytes": 100,
+      "output": {
+        "ordered_entries_sha256": "24ab5b1cc02fd48253c74d4109897ce0d361343766914dbd14f1785db7472c8f",
+        "scheduler_metadata": {
+          "elapsed_seconds": 0.0,
+          "remaining_budget_seconds": null,
+          "predicted_remaining_seconds": 200.0,
+          "predicted_finish_seconds": 200.0,
+          "schedule_delta_seconds": null,
+          "operations_per_second": 0.0,
+          "estimated_work_seconds_per_real_second": 0.0,
+          "runtime_cost_multiplier": 1.0,
+          "runtime_samples": 10,
+          "prediction_interval": {
+            "lower_seconds": 99.99999999998154,
+            "upper_seconds": 399.99999999992616,
+            "source": "cold-start heuristic",
+            "samples": 0
+          },
+          "progress_evidence": "sent operations; visual verification is separate",
+          "last_operation_actual_seconds": 0.0,
+          "skipped_low_value": 0,
+          "current_phase": "",
+          "mode": "NORMAL",
+          "strategy": "planned-quality",
+          "structural_coverage_percent": 0.0,
+          "phase_executed": {},
+          "phase_skipped": {},
+          "skip_reasons": {},
+          "recovered_from_catchup": 0,
+          "dynamic_replans": 0,
+          "reordered_remaining_paths": 0,
+          "replans_rejected_switch_cost": 0,
+          "last_replan_mode": "NORMAL",
+          "remaining_time_seconds": null,
+          "remaining_predicted_seconds": 200.0,
+          "executed_paths": 0,
+          "skipped_paths": 0,
+          "panic_mode": false,
+          "panic_activations": 0,
+          "catch_up_activations": 0,
+          "runtime_prediction_source": "live measured execution EMA + typed planning cost",
+          "panic_policy": "coverage -> structure -> exceptionally important detail; accuracy/correction dropped",
+          "hard_budget_guard_seconds": 0.2
+        }
+      }
+    },
+    {
+      "policy": "throttled",
+      "paths": 20000,
+      "replan_checks": 200,
+      "exact_output_parity": true,
+      "before_ms": [
+        1078.8001540022378,
+        1131.6712240004563,
+        1182.394490999286,
+        990.0619390027714,
+        1052.7910429991607
+      ],
+      "after_ms": [
+        0.10277199908159673,
+        0.08970300041255541,
+        0.10864000068977475,
+        0.1250649984285701,
+        0.2436600007058587
+      ],
+      "before_median_ms": 1078.8001540022378,
+      "after_median_ms": 0.10864000068977475,
+      "before_peak_python_bytes": 11390216,
+      "after_peak_python_bytes": 224,
+      "output": {
+        "ordered_entries_sha256": "24ab5b1cc02fd48253c74d4109897ce0d361343766914dbd14f1785db7472c8f",
+        "scheduler_metadata": {
+          "elapsed_seconds": 0.0,
+          "remaining_budget_seconds": 1000.0,
+          "predicted_remaining_seconds": 200.0,
+          "predicted_finish_seconds": 200.0,
+          "schedule_delta_seconds": 800.0,
+          "operations_per_second": 0.0,
+          "estimated_work_seconds_per_real_second": 0.0,
+          "runtime_cost_multiplier": 1.0,
+          "runtime_samples": 10,
+          "prediction_interval": {
+            "lower_seconds": 99.99999999998154,
+            "upper_seconds": 399.99999999992616,
+            "source": "cold-start heuristic",
+            "samples": 0
+          },
+          "progress_evidence": "sent operations; visual verification is separate",
+          "last_operation_actual_seconds": 0.0,
+          "skipped_low_value": 0,
+          "current_phase": "",
+          "mode": "CATCH_UP",
+          "strategy": "planned-quality",
+          "structural_coverage_percent": 0.0,
+          "phase_executed": {},
+          "phase_skipped": {},
+          "skip_reasons": {},
+          "recovered_from_catchup": 0,
+          "dynamic_replans": 0,
+          "reordered_remaining_paths": 0,
+          "replans_rejected_switch_cost": 0,
+          "last_replan_mode": "CATCH_UP",
+          "remaining_time_seconds": 1000.0,
+          "remaining_predicted_seconds": 200.0,
+          "executed_paths": 0,
+          "skipped_paths": 0,
+          "panic_mode": false,
+          "panic_activations": 0,
+          "catch_up_activations": 0,
+          "runtime_prediction_source": "live measured execution EMA + typed planning cost",
+          "panic_policy": "coverage -> structure -> exceptionally important detail; accuracy/correction dropped",
+          "hard_budget_guard_seconds": 0.2
+        }
+      }
+    }
+  ]
+}

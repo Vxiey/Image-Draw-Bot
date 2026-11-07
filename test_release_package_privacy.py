@@ -23,6 +23,7 @@ class SourceArchivePrivacyTests(unittest.TestCase):
                 "settings-microsoft-paint.json",
                 "calibration.json",
                 "exact-colors-generic.json",
+                "verified-colors-microsoft-paint.json",
                 "app-tools-generic.json",
                 "paint-tools.json",
                 "draw-time-calibration.json",
@@ -32,11 +33,15 @@ class SourceArchivePrivacyTests(unittest.TestCase):
                 "profiles.json",
                 "release-state.json",
                 "session-recovery.png",
+                ".hypothesis/examples/generated-case",
+                ".HYPOTHESIS/constants/generated-constant",
+                "tools/.hypothesis/examples/nested-generated-case",
             )
             public_files = (
-                "palette-index-maps.json", "verified-colors-microsoft-paint.json",
+                "palette-index-maps.json", "tests/fixtures/verified-color-cache-v2.json",
                 "resource-scheduler-v2.json", "golden-regression/manifest.json",
                 "docs/settings-example.json",
+                "tests/fixtures/hypothesis/example.json",
             )
             for relative in (*private_files, *public_files):
                 path = root / relative

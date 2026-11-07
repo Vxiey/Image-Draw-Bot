@@ -97,6 +97,7 @@ def _edge_follow_subpath(
     raw_points: Sequence[Sequence[float | int]],
     *,
     mode: str,
+    cancelled=lambda: False,
 ) -> tuple[tuple[Point, ...], ...]:
     """Project a near-edge path onto the safe boundary/inset.
 
@@ -119,7 +120,12 @@ def _edge_follow_subpath(
         min_ratio = 0.35
     if _max_distance_to_safe_boundary(raw_points, safe_polygon) > max_project_distance:
         return ()
-    projected = _dedupe_points(_safe_projection(p, safe_polygon) for p in raw_points)
+    projected_points = []
+    for index, point in enumerate(raw_points):
+        if index % 512 == 0 and cancelled():
+            raise InterruptedError()
+        projected_points.append(_safe_projection(point, safe_polygon))
+    projected = _dedupe_points(projected_points)
     if len(projected) < 2:
         return ()
     projected_len = _path_length(projected)
@@ -140,6 +146,7 @@ def apply_edge_behavior(
     drawing_mode: str | None = None,
     outline: bool = False,
     context: str = "normal stroke",
+    cancelled=lambda: False,
 ) -> EdgeBehaviorResult:
     """Clip or edge-adapt one canvas path.
 
@@ -148,15 +155,22 @@ def apply_edge_behavior(
     reintroduce a path by projecting it onto the safe inset boundary and only
     when the path is close enough to that boundary.
     """
-    raw = tuple(_round_point(p) for p in raw_points)
+    if cancelled():
+        raise InterruptedError()
+    raw = []
+    for index, point in enumerate(raw_points):
+        if index % 512 == 0 and cancelled():
+            raise InterruptedError()
+        raw.append(_round_point(point))
+    raw = tuple(raw)
     mode = resolve_edge_behavior(behavior, profile_name=profile_name, drawing_mode=drawing_mode, outline=outline)
-    hard = guard.clip_path_to_safe_subpaths(raw, context)
+    hard = guard.clip_path_to_safe_subpaths(raw, context, cancelled=cancelled)
     if hard:
         output_points = sum(len(path) for path in hard)
         return EdgeBehaviorResult(hard, mode, "hard_clip", len(raw), output_points)
     if mode == "Hard Clip":
         return EdgeBehaviorResult((), mode, "hard_skip", len(raw), 0)
-    followed = _edge_follow_subpath(guard, raw, mode=mode)
+    followed = _edge_follow_subpath(guard, raw, mode=mode, cancelled=cancelled)
     if followed:
         strategy = "preserve_outline_boundary" if mode == "Preserve Outline" else "adaptive_boundary"
         return EdgeBehaviorResult(followed, mode, strategy, len(raw), sum(len(path) for path in followed))

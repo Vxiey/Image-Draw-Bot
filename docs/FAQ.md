@@ -2,7 +2,7 @@
 
 ## What does Image Draw Bot do?
 
-It turns an existing picture into mouse strokes, contours and fills, then executes that plan in a calibrated drawing canvas. The Windows app includes profiles for Microsoft Paint, Gartic Phone and Skribbl.io. See [supported workflows and quick start](../README.md#quick-start-microsoft-paint).
+It turns an existing picture into mouse strokes, contours and fills, then executes that plan in a calibrated drawing canvas. The Windows app includes profiles for Microsoft Paint, Gartic Phone and Skribbl.io. See [supported workflows and quick start](../README.md#microsoft-paint-autodraw-quick-start).
 
 ## Does it generate AI images or upload my pictures?
 
@@ -18,11 +18,11 @@ Open a blank Paint canvas, select the Paint profile, load a picture and press **
 
 ## Which drawing mode should I use?
 
-Extra Fast reduces input overhead with connected paths and suitable fill regions. Pixel Accurate prioritizes coverage and detail. Results and timing also depend on the target canvas, palette, brush settings and available drawing time. See [rendering features](../README.md#core-features) and [Extra Fast benchmarks](EXTRA-FAST-REVIEW.md).
+Extra Fast reduces input overhead with connected paths and suitable fill regions. Pixel Accurate prioritizes coverage and detail. Results and timing also depend on the target canvas, palette, brush settings and available drawing time. See [rendering features](../README.md#autodraw-and-drawing-bot-features) and [Extra Fast benchmarks](EXTRA-FAST-REVIEW.md).
 
 ## Why does a downloaded build still show the previous name?
 
-The repository and current source use Image Draw Bot. Older published packages retain the identity and filenames they were built with. Check the [download section](../README.md#download-for-windows) for the available release and the [update guide](IN-APP-UPDATES.md) for how published updates are selected.
+The repository and current source use Image Draw Bot. Older published packages retain the identity and filenames they were built with. Check the [download section](../README.md#download-image-draw-bot-for-windows) for the available release and the [update guide](IN-APP-UPDATES.md) for how published updates are selected.
 
 ## Is the Windows download signed?
 

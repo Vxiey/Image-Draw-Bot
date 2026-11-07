@@ -10,7 +10,8 @@ verification remain authoritative during execution.
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-from math import ceil, hypot
+from math import ceil, hypot, isfinite
+from numbers import Integral, Real
 from typing import Any, Iterable
 
 from FillOptimizer import detect_fill_regions
@@ -19,6 +20,40 @@ from StrokeDelivery import resolve_stroke_delivery
 
 AGGRESSIVENESS = ("Safe", "Balanced", "Aggressive")
 QUALITY_PRESETS = ("Fast", "Balanced", "High Quality", "Pixel Accurate")
+_UNSET_MODEL = object()
+
+
+def _region_evidence(region):
+    values=[]
+    for key in ('safety_score','bbox_density'):
+        value=region.get(key)
+        try:valid=not isinstance(value,bool) and isinstance(value,Real) and isfinite(value) and 0<=value<=1
+        except (TypeError,ValueError,OverflowError):valid=False
+        if not valid:return None
+        values.append(float(value))
+    for key in ('area_pixels','perimeter_pixels'):
+        value=region.get(key)
+        if isinstance(value,bool) or not isinstance(value,Integral) or not 0<value<2**63:return None
+        values.append(int(value))
+    return tuple(values)
+
+
+def _cost_model(options,image_size,fitted):
+    try:
+        from ExecutionCostModel import build_cost_model
+        return build_cost_model(options,image_size,fitted)
+    except InterruptedError:
+        raise
+    except Exception:
+        return None
+
+
+def _finite_cost(value, *, positive=False):
+    try:
+        if isinstance(value,bool) or not isinstance(value,Real) or not isfinite(value):return None
+        return float(value) if (value>0 if positive else value>=0) else None
+    except (TypeError,ValueError,OverflowError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -156,8 +191,9 @@ def _diagonal_seal_paths(region: dict[str, Any], *, max_paths: int = 96) -> tupl
 
 def _fill_escape_prediction(region: dict[str, Any], *, brush_px: int, aggressiveness: str, quality: str) -> tuple[float, list, str]:
     """Predict contour leakage without weakening existing hard safety gates."""
-    safety = max(0.0, min(1.0, float(region.get("safety_score", 0.0) or 0.0)))
-    density = max(0.0, min(1.0, float(region.get("bbox_density", 0.0) or 0.0)))
+    evidence=_region_evidence(region)
+    if evidence is None:return 1.0,[],"invalid region safety evidence"
+    safety,density,_area,_perimeter=evidence
     thin = _thin_neck_score(region, brush_px)
     seals, total_diag, unresolved = _diagonal_seal_paths(region)
     unresolved_ratio = (unresolved / max(1, total_diag)) if total_diag else 0.0
@@ -179,12 +215,11 @@ def _fill_escape_prediction(region: dict[str, Any], *, brush_px: int, aggressive
 
 
 
-def _seal_cost_seconds(paths, options: dict[str, Any], image_size: tuple[int, int], fitted: tuple[int, int]) -> float:
+def _seal_cost_seconds(paths, options: dict[str, Any], image_size: tuple[int, int], fitted: tuple[int, int], *, cost_model=_UNSET_MODEL) -> float:
     if not paths:
         return 0.0
     try:
-        from ExecutionCostModel import build_cost_model
-        model=build_cost_model(options,image_size,fitted)
+        model=_cost_model(options,image_size,fitted) if cost_model is _UNSET_MODEL else cost_model
         normalized=[]
         for raw_path in paths:
             pts=[]
@@ -194,6 +229,8 @@ def _seal_cost_seconds(paths, options: dict[str, Any], image_size: tuple[int, in
             if pts:normalized.append(tuple(pts))
         if normalized:
             return max(0.0,float(model.paths_seconds(normalized)))
+    except InterruptedError:
+        raise
     except Exception:
         pass
     delivery = resolve_stroke_delivery(options, dry_run=False)
@@ -220,10 +257,9 @@ def _seal_cost_seconds(paths, options: dict[str, Any], image_size: tuple[int, in
 
 
 def _risk(region: dict[str, Any], *, aggressiveness: str, quality: str, brush_px: int) -> tuple[float, float, str]:
-    safety = max(0.0, min(1.0, float(region.get("safety_score", 0.0) or 0.0)))
-    density = max(0.0, min(1.0, float(region.get("bbox_density", 0.0) or 0.0)))
-    area = max(1, int(region.get("area_pixels", 1) or 1))
-    perimeter = max(1, int(region.get("perimeter_pixels", 1) or 1))
+    evidence=_region_evidence(region)
+    if evidence is None:return 1.0,0.0,"invalid region safety evidence"
+    safety,density,area,perimeter=evidence
     contour = region.get("contour") or ()
     vertices = max(1, len(contour) - 1)
     thin = _thin_neck_score(region, brush_px)
@@ -292,7 +328,7 @@ def _legacy_region_cost(region: dict[str, Any], options: dict[str, Any], image_s
     return max(.001, stroke_cost), max(.001, fill_cost)
 
 
-def _region_cost(region: dict[str, Any], options: dict[str, Any], image_size: tuple[int, int], fitted: tuple[int, int]) -> tuple[float, float]:
+def _region_cost(region: dict[str, Any], options: dict[str, Any], image_size: tuple[int, int], fitted: tuple[int, int], *, cost_model=_UNSET_MODEL) -> tuple[float, float]:
     """Compare connected scanlines with Outline + Fill using shared execution cost.
 
     Safety is decided elsewhere.  This function only answers the performance
@@ -301,8 +337,7 @@ def _region_cost(region: dict[str, Any], options: dict[str, Any], image_size: tu
     fallback if the shared model cannot cost an unusual region.
     """
     try:
-        from ExecutionCostModel import build_cost_model
-        model=build_cost_model(options,image_size,fitted)
+        model=_cost_model(options,image_size,fitted) if cost_model is _UNSET_MODEL else cost_model
         color=max(0,int(region.get("color_index",0) or 0))
         brush=max(1,int(options.get("brush_px",1) or 1))
         stroke_sequence=[]
@@ -333,27 +368,31 @@ def _region_cost(region: dict[str, Any], options: dict[str, Any], image_size: tu
                    model.switch_cost("fill")+model.switch_cost("verification"))
         if stroke_cost>0 and fill_cost>0:
             return max(.001,float(stroke_cost)),max(.001,float(fill_cost))
+    except InterruptedError:
+        raise
     except Exception:
         pass
     return _legacy_region_cost(region,options,image_size,fitted)
 
 
-def _batchable_tool_cost(options: dict[str, Any]) -> float:
+def _batchable_tool_cost(options: dict[str, Any], *, cost_model=_UNSET_MODEL) -> float:
     """Per-region tool-switch share already embedded in the Fill candidate cost."""
     try:
-        from ExecutionCostModel import build_cost_model
         # Switch cost is independent of geometry; 1x1 keeps this helper cheap.
-        model=build_cost_model(options,(1,1),(1,1))
+        model=_cost_model(options,(1,1),(1,1)) if cost_model is _UNSET_MODEL else cost_model
         return max(0.0,float(model.switch_cost("tool_change")))
+    except InterruptedError:
+        raise
     except Exception:
         delivery=resolve_stroke_delivery(options,dry_run=False)
         return max(.08,float(delivery.ui_control_delay)*.45)
 
-def _region_cost_components(region: dict[str, Any], options: dict[str, Any], image_size: tuple[int, int], fitted: tuple[int, int]) -> tuple[float, float, float, float]:
-    stroke_cost, fill_cost = _region_cost(region, options, image_size, fitted)
-    seal_cost = _seal_cost_seconds(region.get("fill_seal_paths") or (), options, image_size, fitted)
+def _region_cost_components(region: dict[str, Any], options: dict[str, Any], image_size: tuple[int, int], fitted: tuple[int, int], *, cost_model=_UNSET_MODEL, seal_cost=None) -> tuple[float, float, float, float]:
+    model=_cost_model(options,image_size,fitted) if cost_model is _UNSET_MODEL else cost_model
+    stroke_cost, fill_cost = _region_cost(region, options, image_size, fitted, cost_model=model)
+    if seal_cost is None:seal_cost = _seal_cost_seconds(region.get("fill_seal_paths") or (), options, image_size, fitted, cost_model=model)
     fill_cost += seal_cost
-    batchable = max(0.0, min(_batchable_tool_cost(options), fill_cost * .50))
+    batchable = max(0.0, min(_batchable_tool_cost(options,cost_model=model), fill_cost * .50))
     fill_core = max(.001, fill_cost - batchable)
     return stroke_cost, fill_cost, fill_core, batchable
 
@@ -416,6 +455,7 @@ def build_region_fill_plan(image, fitted: tuple[int, int], options: dict[str, An
     deadline_seconds=float(options.get("max_seconds",180) or 180)
     value_threshold={"Safe":2.0,"Balanced":1.0,"Aggressive":.35}[aggressiveness] if deadline_active and deadline_seconds<=90 else {"Safe":3.0,"Balanced":1.5,"Aggressive":.55}[aggressiveness]
     absolute_saving_floor=.08 if deadline_active and deadline_seconds<=90 else .12
+    model=_cost_model(options,image.size,fitted)
 
     for idx, item in enumerate(regions):
         if cancelled():
@@ -428,8 +468,11 @@ def build_region_fill_plan(image, fitted: tuple[int, int], options: dict[str, An
             region, brush_px=brush_px, aggressiveness=aggressiveness, quality=quality)
         if seal_paths:
             region["fill_seal_paths"] = [tuple(path) for path in seal_paths]
-        stroke_cost, fill_cost, fill_core, batchable = _region_cost_components(region, options, image.size, fitted)
-        seal_cost = _seal_cost_seconds(seal_paths, options, image.size, fitted)
+        seal_cost = _seal_cost_seconds(seal_paths, options, image.size, fitted,cost_model=model)
+        if safety_reason=="invalid region safety evidence":
+            stroke_cost=fill_cost=fill_core=batchable=0.0
+        else:
+            stroke_cost, fill_cost, fill_core, batchable = _region_cost_components(region, options, image.size, fitted,cost_model=model,seal_cost=seal_cost)
         decision_fill_cost = _decision_fill_cost(fill_cost, fill_core, options)
         saving = max(0.0, stroke_cost - decision_fill_cost)
         thin_score=_thin_neck_score(region, brush_px)
@@ -517,7 +560,7 @@ def build_region_fill_plan(image, fitted: tuple[int, int], options: dict[str, An
         "fill_value_threshold": value_threshold,
         "fill_absolute_saving_floor_seconds": absolute_saving_floor,
         "average_seconds_saved_per_visual_error": round(sum(float(r.get("seconds_saved_per_visual_error",0) or 0) for r in accepted)/max(1,len(accepted)),3),
-        "hybrid_cost_model": __import__('HybridCostModel').build_cost_model(options).as_dict(),
+        "hybrid_cost_model": model.as_dict() if model is not None else {"source":"legacy RegionFill formula on model error"},
         "fill_color_batches": fill_colors,
         "fill_sealed_regions": sum(1 for r in accepted if r.get("fill_seal_count")),
         "fill_seal_paths": sum(int(r.get("fill_seal_count", 0) or 0) for r in accepted),
@@ -557,14 +600,18 @@ def evaluate_region_candidates(regions, image_size: tuple[int, int], fitted: tup
     deadline_seconds=float(options.get('max_seconds',180) or 180)
     value_threshold=({'Safe':2.0,'Balanced':1.0,'Aggressive':.35} if deadline_active and deadline_seconds<=90 else {'Safe':3.0,'Balanced':1.5,'Aggressive':.55})[aggressiveness]
     absolute_saving_floor=.08 if deadline_active and deadline_seconds<=90 else .12
+    model=_cost_model(options,image_size,fitted)
     for idx,item in enumerate(regions or ()):
         if cancelled():raise InterruptedError()
         region=item.as_dict() if hasattr(item,'as_dict') else dict(item)
         risk,confidence,safety_reason=_risk(region,aggressiveness=aggressiveness,quality=quality,brush_px=brush_px)
         escape_risk,seal_paths,escape_reason=_fill_escape_prediction(region,brush_px=brush_px,aggressiveness=aggressiveness,quality=quality)
         if seal_paths:region['fill_seal_paths']=[tuple(path) for path in seal_paths]
-        stroke_cost,fill_cost,fill_core,batchable=_region_cost_components(region,options,image_size,fitted)
-        seal_cost=_seal_cost_seconds(seal_paths,options,image_size,fitted)
+        seal_cost=_seal_cost_seconds(seal_paths,options,image_size,fitted,cost_model=model)
+        if safety_reason=='invalid region safety evidence':
+            stroke_cost=fill_cost=fill_core=batchable=0.0
+        else:
+            stroke_cost,fill_cost,fill_core,batchable=_region_cost_components(region,options,image_size,fitted,cost_model=model,seal_cost=seal_cost)
         decision_fill_cost=_decision_fill_cost(fill_cost,fill_core,options)
         saving=max(0.0,stroke_cost-decision_fill_cost);thin_score=_thin_neck_score(region,brush_px)
         visual_error=max(.005,min(1.0,risk*.62+thin_score*.20+(1.0-confidence)*.18))
@@ -620,33 +667,30 @@ def enrich_region_stats(meta: dict[str, Any] | None, *, source_strokes: int, fin
     return out
 
 
-def estimate_fill_execution_seconds(regions: Iterable[dict[str, Any]], image_size: tuple[int, int], fitted: tuple[int, int], options: dict[str, Any]) -> dict[str, Any]:
+def estimate_fill_execution_seconds(regions: Iterable[dict[str, Any]], image_size: tuple[int, int], fitted: tuple[int, int], options: dict[str, Any], *, use_cached_cost: bool = True) -> dict[str, Any]:
     """Batch-aware Fill estimate using the same configured delays as execution."""
     rows = [dict(r) for r in (regions or ())]
     delivery = resolve_stroke_delivery(options, dry_run=False)
     fill_seconds = 0.0
     removed_per_region_switch = 0.0
-    inferred_batchable = _batchable_tool_cost(options)
+    model=_cost_model(options,image_size,fitted)
+    inferred_batchable = _batchable_tool_cost(options,cost_model=model)
     for region in rows:
-        stored_core = region.get("fill_core_cost_seconds")
-        if stored_core is not None:
-            try:
-                fill_seconds += max(0.0, float(stored_core))
-                removed_per_region_switch += max(0.0, float(region.get("fill_batchable_overhead_seconds", 0.0) or 0.0))
-                continue
-            except Exception:
-                pass
-        stored = region.get("fill_cost_seconds")
+        # Candidate caches may contain learned timings. A raw, cold ETA must
+        # reprice the retained contour and seal geometry before calibration.
+        stored_core = _finite_cost(region.get("fill_core_cost_seconds"),positive=True) if use_cached_cost else None
+        stored_batchable = _finite_cost(region.get("fill_batchable_overhead_seconds",0.0))
+        if stored_core is not None and stored_batchable is not None:
+            fill_seconds += stored_core
+            removed_per_region_switch += stored_batchable
+            continue
+        stored = _finite_cost(region.get("fill_cost_seconds"),positive=True) if use_cached_cost else None
         if stored is not None:
-            try:
-                total = max(0.0, float(stored))
-                batchable = max(0.0, min(inferred_batchable, total * .50))
-                fill_seconds += max(0.0, total - batchable)
-                removed_per_region_switch += batchable
-                continue
-            except Exception:
-                pass
-        _stroke, _total, core, batchable = _region_cost_components(region, options, image_size, fitted)
+            batchable = max(0.0, min(inferred_batchable, stored * .50))
+            fill_seconds += max(0.0, stored - batchable)
+            removed_per_region_switch += batchable
+            continue
+        _stroke, _total, core, batchable = _region_cost_components(region, options, image_size, fitted,cost_model=model)
         fill_seconds += core
         removed_per_region_switch += batchable
     colors = {int(r.get("color_index", -1)) for r in rows if int(r.get("color_index", -1)) >= 0}

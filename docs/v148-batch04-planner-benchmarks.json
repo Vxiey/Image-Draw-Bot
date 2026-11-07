@@ -1,0 +1,175 @@
+{
+  "baseline": "1d48eabaf349a5fd8049a2c96ef5426745c3078c",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One warm/parity pair, five alternating before/after elapsed pairs by default, separate Python-traced peaks after garbage collection.",
+  "scope": "Synthetic CPU helpers and one complete contour extraction. Baseline modules import current shared dependencies. Python tracing excludes most native Pillow buffers; these are not whole-drawing or Windows-input timings.",
+  "after_source_sha256": {
+    "SketchPlanner": "0930e6df61125f9b447afd47a1ffa45340205fc743cdc44bcdbee90a79256714",
+    "Sketch2Planner": "f4271b40277912919eb3a2dd609f7f3d893cdcbd33b8253bf673690b83da1e08",
+    "AxisRegionPlanner": "3ab06db16eeadf51d11629f7fd17fa7a58c88b271391a0bb4953b72906f09181",
+    "TimeBudget": "c68ba2186c387fcd67d5c04820dba05fa10af12d3d9e35a34a1e72a1bae4d96c",
+    "QuickSketchFillContour": "d25f13672f38bc81bae17dd7c74899cdbe966bbfe5af531ad8fc8c3c1d5305be"
+  },
+  "measurements": {
+    "legacy_contour512x384_connected_grid": {
+      "before_samples_ms": [
+        124.50508199981414,
+        165.8729829978256,
+        123.02750399976503,
+        133.50965100107715,
+        152.1827599972312
+      ],
+      "after_samples_ms": [
+        109.17807599980733,
+        105.80806199868675,
+        98.3342729996366,
+        102.42794500300079,
+        97.26353999940329
+      ],
+      "before_median_ms": 133.50965100107715,
+      "after_median_ms": 102.42794500300079,
+      "exact_output_parity": true,
+      "output_sha256": "0745234e081bfcc5263fee8c1449ab82ddda20c167a1f7ecf069efb1ab18cacd",
+      "before_peak_python_bytes": 8705672,
+      "after_peak_python_bytes": 8438575,
+      "parameters": {
+        "size": [
+          512,
+          384
+        ],
+        "background": "white",
+        "line_width": 2,
+        "vertical_step": 9,
+        "horizontal_step": 13,
+        "detail": "Detailed"
+      },
+      "comparison": "Complete output raster, dimensions and mode; source remains open."
+    },
+    "sketch2_component300x220_full": {
+      "before_samples_ms": [
+        113.81171800167067,
+        122.82097800198244,
+        149.93868300007307,
+        127.89637199966819,
+        125.21359599850257
+      ],
+      "after_samples_ms": [
+        103.80525199798285,
+        128.86709699887433,
+        136.2161790020764,
+        111.22109599818941,
+        117.31969399988884
+      ],
+      "before_median_ms": 125.21359599850257,
+      "after_median_ms": 117.31969399988884,
+      "exact_output_parity": true,
+      "output_sha256": "6050e9f9da605bf747913def0aeac8a30a1650a9b7e1fefbababfc0a47f5e1f0",
+      "before_peak_python_bytes": 4698552,
+      "after_peak_python_bytes": 169088,
+      "parameters": {
+        "size": [
+          300,
+          220
+        ],
+        "mask": "all true",
+        "strength": 20,
+        "threshold": 10,
+        "min_component": 6,
+        "protect_factor": 1.6
+      },
+      "comparison": "Complete output mask and removed/protected component counts."
+    },
+    "vertical_runs1024x768_solid": {
+      "before_samples_ms": [
+        13.165296000806848,
+        11.124356999062002,
+        10.620192999340361,
+        12.01399300043704,
+        10.00740600284189
+      ],
+      "after_samples_ms": [
+        6.201808999321656,
+        6.868395001220051,
+        6.270712001423817,
+        5.613860001176363,
+        5.32197899883613
+      ],
+      "before_median_ms": 11.124356999062002,
+      "after_median_ms": 6.201808999321656,
+      "exact_output_parity": true,
+      "output_sha256": "00c35eba901fe3171c55c2c28a75d9178693ee487a1228cef971ec591a831bfb",
+      "before_peak_python_bytes": 1812252,
+      "after_peak_python_bytes": 1124556,
+      "parameters": {
+        "size": [
+          1024,
+          768
+        ],
+        "horizontal_runs": 768
+      },
+      "comparison": "Exact ordered vertical runs."
+    },
+    "target_cap60000_paths_to500": {
+      "before_samples_ms": [
+        80.70159099952434,
+        100.9647720020439,
+        80.5660039986833,
+        88.85540200208197,
+        78.44156899955124
+      ],
+      "after_samples_ms": [
+        78.34770100089372,
+        70.93104500017944,
+        82.40011200177833,
+        71.20409900016966,
+        76.37765300023602
+      ],
+      "before_median_ms": 80.70159099952434,
+      "after_median_ms": 76.37765300023602,
+      "exact_output_parity": true,
+      "output_sha256": "fb61d29971d66dbc264f45313376169f327be5c19bd15e6c85545eaa851c7e59",
+      "before_peak_python_bytes": 12148500,
+      "after_peak_python_bytes": 1798608,
+      "parameters": {
+        "groups": 3,
+        "paths_per_group": 20000,
+        "cap": 500,
+        "path": "((i%200,i//200),(i%200+i%13,i//200))"
+      },
+      "comparison": "Exact kept paths, source order and complete returned metadata."
+    },
+    "quick_micro100000_to500": {
+      "before_samples_ms": [
+        98.99446800045553,
+        95.66454499872634,
+        91.11570800087065,
+        96.50901299755787,
+        96.41838400057168
+      ],
+      "after_samples_ms": [
+        72.52934200005257,
+        75.20656599808717,
+        74.43943200269132,
+        71.20574100190424,
+        75.60756900056731
+      ],
+      "before_median_ms": 96.41838400057168,
+      "after_median_ms": 74.43943200269132,
+      "exact_output_parity": true,
+      "output_sha256": "b5853ee223d5174c32057c434a463097094ca44ba5733c74282ca18ec9fe68d6",
+      "before_peak_python_bytes": 19944320,
+      "after_peak_python_bytes": 931188,
+      "parameters": {
+        "groups": 8,
+        "strokes_per_group": 12500,
+        "cap": 500,
+        "stroke": "(i,color,i+i%2,color)"
+      },
+      "comparison": "Exact retained strokes/order and removed, micro and long counts."
+    }
+  }
+}

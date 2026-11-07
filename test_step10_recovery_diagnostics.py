@@ -9,8 +9,8 @@ from Version import APP_VERSION, FILE_VERSION
 
 class Step10Tests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(FILE_VERSION,'1.0.148')
 
     def test_recovery_snapshot_never_restores_armed_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -41,6 +41,6 @@ class Step10Tests(unittest.TestCase):
                 with zipfile.ZipFile(path) as z:
                     names=set(z.namelist());self.assertNotIn('recovery/last-image.png',names)
                     log=z.read('logs/ImageDrawBot-session.log').decode();self.assertNotIn('Felix',log);self.assertNotIn('abc123',log)
-                    settings=json.loads(z.read('settings-summary.json'));self.assertNotIn('corners',settings['settings.json'])
+                    settings=json.loads(z.read('settings-summary.json'));self.assertNotIn('corners',settings['settings-001.json'])
 
 if __name__=='__main__':unittest.main()

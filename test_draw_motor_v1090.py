@@ -90,6 +90,10 @@ class DrawMotorV1090Tests(unittest.TestCase):
         src=(Path(__file__).parent/'DrawBot.py').read_text(encoding='utf-8')
         self.assertIn('def switch_execution_brush',src)
         self.assertIn("entry.get('brush_px'",src)
-        self.assertIn('current_execution_brush)*1.5',src)
+        self.assertIn('interpolation_step(step_px,current_execution_brush,',src)
+        from StrokeDelivery import interpolation_step
+        self.assertEqual([interpolation_step(5,brush,pixel_accurate=True)
+                          for brush in (1,3,8)], [1.5,4.5,5])
+        self.assertEqual(interpolation_step(5,1,pixel_accurate=False),5)
 
 if __name__=='__main__':unittest.main()

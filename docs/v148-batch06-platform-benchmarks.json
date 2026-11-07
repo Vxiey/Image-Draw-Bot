@@ -1,0 +1,110 @@
+{
+  "baseline_commit": "f59a57c6fc1eef1ace07e872ba50ed834e1bb924",
+  "python": "3.12.14",
+  "platform": "Linux",
+  "fixture": {
+    "bytes": 8388610,
+    "requests_per_round": 3,
+    "rounds": 5,
+    "alternating_paired_order": true,
+    "warmup_rounds": 1
+  },
+  "output_parity": "Every returned installer is byte-for-byte equal to the same synthetic input.",
+  "measurement_limits": "In-process transport, local temporary filesystem and warm imports. No network latency, Windows execution or antivirus performance is measured. Cache hits still read and hash the entire file. Timing excludes independent parity checks.",
+  "runs": {
+    "before": [
+      {
+        "transport_calls": 3,
+        "transport_body_bytes": 25165830,
+        "elapsed_seconds": 0.02429625699733151,
+        "unique_installer_files": 3,
+        "retained_installer_bytes": 25165830,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      },
+      {
+        "transport_calls": 3,
+        "transport_body_bytes": 25165830,
+        "elapsed_seconds": 0.024365639001189265,
+        "unique_installer_files": 3,
+        "retained_installer_bytes": 25165830,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      },
+      {
+        "transport_calls": 3,
+        "transport_body_bytes": 25165830,
+        "elapsed_seconds": 0.02326691700000083,
+        "unique_installer_files": 3,
+        "retained_installer_bytes": 25165830,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      },
+      {
+        "transport_calls": 3,
+        "transport_body_bytes": 25165830,
+        "elapsed_seconds": 0.023852571001043543,
+        "unique_installer_files": 3,
+        "retained_installer_bytes": 25165830,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      },
+      {
+        "transport_calls": 3,
+        "transport_body_bytes": 25165830,
+        "elapsed_seconds": 0.025652309996075928,
+        "unique_installer_files": 3,
+        "retained_installer_bytes": 25165830,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      }
+    ],
+    "after": [
+      {
+        "transport_calls": 1,
+        "transport_body_bytes": 8388610,
+        "elapsed_seconds": 0.02421567299461458,
+        "unique_installer_files": 1,
+        "retained_installer_bytes": 8388610,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      },
+      {
+        "transport_calls": 1,
+        "transport_body_bytes": 8388610,
+        "elapsed_seconds": 0.02324897999642417,
+        "unique_installer_files": 1,
+        "retained_installer_bytes": 8388610,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      },
+      {
+        "transport_calls": 1,
+        "transport_body_bytes": 8388610,
+        "elapsed_seconds": 0.023903405999590177,
+        "unique_installer_files": 1,
+        "retained_installer_bytes": 8388610,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      },
+      {
+        "transport_calls": 1,
+        "transport_body_bytes": 8388610,
+        "elapsed_seconds": 0.02314305299660191,
+        "unique_installer_files": 1,
+        "retained_installer_bytes": 8388610,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      },
+      {
+        "transport_calls": 1,
+        "transport_body_bytes": 8388610,
+        "elapsed_seconds": 0.022643124997557607,
+        "unique_installer_files": 1,
+        "retained_installer_bytes": 8388610,
+        "output_sha256": "8c5be431f8ffdaeb82009a251d62634cc144609735426340b93d69241a7b1166"
+      }
+    ]
+  },
+  "median_seconds": {
+    "before": 0.02429625699733151,
+    "after": 0.02324897999642417
+  },
+  "checkpoint_candidate_sources_sha256": {
+    "UpdateCenter.py": "85a542541d446138ebcc67fbebd588e5b44ac393a31a056728dd5e4bd99a0509",
+    "InstallerCache.py": "2227a2ccce72b32dc838668804cbea4211927b350866cce00c251e059d8625d9",
+    "RuntimePaths.py": "ab1bba9cb165e134f2f3197ca99ddaea4dbbd9fbf3414737ab8383f70c06d1e7"
+  },
+  "checkpoint_hash_note": "Candidate source hashes recorded at finalization after the unchanged-source whole-program gate; these product files were not edited after the measured run."
+}

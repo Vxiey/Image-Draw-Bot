@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,11 +22,12 @@ from typing import Iterable, Sequence
 
 from RuntimePaths import atomic_write_text, data_dir
 
-SCHEMA = 3
+SCHEMA = 4
 PROFILE_KEY = "microsoft-paint"
 DEFAULT_MAX_COLORS = 16
 MAX_ANALYSIS_DIMENSION = 640
 MAX_EDGE_SAMPLES = 24000
+MAX_CACHE_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -67,35 +69,41 @@ def _rgb(value: Sequence[int]) -> tuple[int, int, int]:
 
 def _visible_rgb(image):
     from ColorMatchingEngine import visible_rgb_image
-    return visible_rgb_image(image).convert("RGB")
+    return visible_rgb_image(image)
 
 
 def _analysis_image(image):
     from PIL import Image
     source = _visible_rgb(image)
-    if max(source.size) <= MAX_ANALYSIS_DIMENSION:
+    try:
+        if max(source.size) > MAX_ANALYSIS_DIMENSION:
+            source.thumbnail((MAX_ANALYSIS_DIMENSION, MAX_ANALYSIS_DIMENSION), Image.Resampling.LANCZOS)
         return source
-    out = source.copy()
-    out.thumbnail((MAX_ANALYSIS_DIMENSION, MAX_ANALYSIS_DIMENSION), Image.Resampling.LANCZOS)
-    return out
+    except BaseException:
+        source.close()
+        raise
 
 
-def image_fingerprint(image) -> str:
-    """Stable bounded fingerprint of visible source pixels plus original size."""
-    from PIL import Image
-    source = _visible_rgb(image)
-    thumb = source.copy()
-    thumb.thumbnail((512, 512), Image.Resampling.LANCZOS)
+def image_fingerprint(image, *, cancelled=lambda: False) -> str:
+    """Hash all visible pixels in bounded row strips, including small edits."""
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     digest = hashlib.sha256()
-    digest.update(f"{source.width}x{source.height}|RGB|".encode("ascii"))
-    digest.update(thumb.tobytes())
+    digest.update(f"{image.width}x{image.height}|RGB|".encode("ascii"))
+    rows = max(1, min(128, 1024 * 1024 // max(1, image.width * 4)))
+    for top in range(0, image.height, rows):
+        if cancelled():
+            raise InterruptedError('Picture custom palette cancelled.')
+        with closing(image.crop((0, top, image.width, min(image.height, top + rows)))) as strip:
+            with closing(_visible_rgb(strip)) as visible:
+                digest.update(visible.tobytes())
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     return digest.hexdigest()
 
 
 def _cache_root() -> Path:
-    root = data_dir() / "picture-palettes"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+    return data_dir() / "picture-palettes"
 
 
 def cache_path(image_fp: str, calibration_fp: str = "") -> Path:
@@ -108,8 +116,9 @@ def cache_path(image_fp: str, calibration_fp: str = "") -> Path:
 
 def _validate_payload(payload: dict, *, image_fp: str | None = None,
                       calibration_fp: str | None = None) -> dict:
-    if not isinstance(payload, dict) or int(payload.get("version", 0)) != SCHEMA:
+    if not isinstance(payload, dict) or type(payload.get("version")) is not int or payload["version"] != SCHEMA:
         raise ValueError("Invalid picture custom palette cache.")
+    payload = dict(payload)
     if payload.get("profile_key") != PROFILE_KEY:
         raise ValueError("Picture custom palette belongs to another profile.")
     if image_fp is not None and payload.get("image_fingerprint") != image_fp:
@@ -117,29 +126,50 @@ def _validate_payload(payload: dict, *, image_fp: str | None = None,
     if calibration_fp is not None and payload.get("calibration_fingerprint", "") != calibration_fp:
         raise ValueError("Picture custom palette was built for another Paint calibration.")
     size = payload.get("source_size")
-    if not isinstance(size, (list, tuple)) or len(size) != 2 or any(int(v) <= 0 for v in size):
+    if not isinstance(size, (list, tuple)) or len(size) != 2 or any(type(v) is not int or v <= 0 for v in size):
         raise ValueError("Invalid picture palette source size.")
+    limit = payload.get('max_colors')
+    if type(limit) is not int or not 1 <= limit <= 32:
+        raise ValueError('Invalid picture palette color limit.')
+    from ColorFidelity import validate_color_fidelity
+    validate_color_fidelity(payload.get('fidelity'))
     for name in ("colors", "custom_colors", "palette_colors"):
         values = payload.get(name, [])
-        if not isinstance(values, list):
+        if not isinstance(values, list) or len(values) > limit or (name == 'colors' and not values):
             raise ValueError(f"Invalid {name} in picture palette.")
-        payload[name] = [list(_rgb(v)) for v in values]
+        for value in values:
+            if (not isinstance(value, (list, tuple)) or len(value) != 3 or
+                    any(type(v) is not int or not 0 <= v <= 255 for v in value)):
+                raise ValueError('Invalid RGB channels in picture palette cache.')
+        clean = [tuple(value) for value in values]
+        if len(set(clean)) != len(clean):
+            raise ValueError(f'Duplicate colors in {name}.')
+        payload[name] = [list(value) for value in clean]
+    colors, custom, calibrated = (set(map(tuple, payload[name])) for name in
+                                  ('colors', 'custom_colors', 'palette_colors'))
+    if custom & calibrated or custom | calibrated != colors:
+        raise ValueError('Picture palette color groups do not match the prepared colors.')
     coverages = payload.get("custom_coverages", [])
-    if not isinstance(coverages, list):
+    if not isinstance(coverages, list) or len(coverages) != len(payload['custom_colors']):
         raise ValueError("Invalid picture palette coverage data.")
-    payload["custom_coverages"] = [max(0.0, min(1.0, float(v))) for v in coverages]
-    payload["max_colors"] = max(1, min(32, int(payload.get("max_colors", DEFAULT_MAX_COLORS))))
-    payload["fidelity"] = str(payload.get("fidelity") or "Faithful")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or
+           not 0 <= v <= 1 or not math.isfinite(v) for v in coverages):
+        raise ValueError('Picture palette coverage must be finite and between 0 and 1.')
+    payload['custom_coverages'] = [float(v) for v in coverages]
     return payload
 
 
 def load_cached_palette(image_fp: str, calibration_fp: str, *, max_colors: int,
                         fidelity: str) -> PicturePalette | None:
-    path = cache_path(image_fp, calibration_fp)
     try:
-        payload = _validate_payload(json.loads(path.read_text(encoding="utf-8")),
+        path = cache_path(image_fp, calibration_fp)
+        with path.open('rb') as stream:
+            raw = stream.read(MAX_CACHE_BYTES + 1)
+        if len(raw) > MAX_CACHE_BYTES:
+            return None
+        payload = _validate_payload(json.loads(raw.decode('utf-8-sig')),
                                     image_fp=image_fp, calibration_fp=calibration_fp)
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+    except (OSError, ValueError, TypeError, OverflowError, RecursionError):
         return None
     if int(payload["max_colors"]) != int(max_colors) or payload["fidelity"] != str(fidelity):
         return None
@@ -152,11 +182,11 @@ def load_cached_palette(image_fp: str, calibration_fp: str, *, max_colors: int,
 
 
 def save_palette(palette: PicturePalette) -> Path:
-    payload = palette.as_dict()
+    payload = _validate_payload(palette.as_dict())
     payload["cache_hit"] = False
     payload["saved_at_utc"] = datetime.now(timezone.utc).isoformat()
     path = cache_path(palette.image_fingerprint, palette.calibration_fingerprint)
-    atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2))
+    atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False))
     return path
 
 
@@ -182,27 +212,41 @@ def _edge_detail_colors(image, count: int, *, cancelled=lambda: False) -> list[t
     high-contrast details a chance to enter the prepared palette when coverage
     alone would put them below large flat regions.
     """
-    if count <= 0 or cancelled():
-        return []
-    from PIL import Image, ImageFilter
-    source = _analysis_image(image)
-    gray = source.convert("L")
-    edge = gray.filter(ImageFilter.FIND_EDGES)
-    pixels = list(source.getdata())
-    weights = list(edge.getdata())
-    candidates = [rgb for rgb, strength in zip(pixels, weights) if int(strength) >= 52]
-    if not candidates:
-        return []
-    step = max(1, math.ceil(len(candidates) / MAX_EDGE_SAMPLES))
-    candidates = candidates[::step][:MAX_EDGE_SAMPLES]
     if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
+    if count <= 0:
         return []
-    sample = Image.new("RGB", (max(1, len(candidates)), 1))
-    sample.putdata(candidates)
-    q = sample.quantize(colors=max(1, min(int(count), 16)), method=Image.Quantize.MEDIANCUT,
-                        dither=Image.Dither.NONE)
-    pal = q.getpalette() or []
-    ranked = sorted((q.getcolors() or []), reverse=True)
+    from contextlib import closing
+    import numpy as np
+    from PIL import Image
+    with closing(_analysis_image(image)) as source:
+        rgb = np.asarray(source, dtype=np.uint8)
+        edge = np.zeros(rgb.shape[:2], dtype=np.uint8)
+        # Both sides of a real color transition are evidence. A signed
+        # Laplacian clipped dark accents away and treated the unchanged Pillow
+        # filter border as an edge even for a completely uniform source.
+        for axis in (0, 1):
+            left = (slice(None, -1), slice(None)) if axis == 0 else (slice(None), slice(None, -1))
+            right = (slice(1, None), slice(None)) if axis == 0 else (slice(None), slice(1, None))
+            contrast = np.max(np.abs(rgb[right].astype(np.int16) - rgb[left].astype(np.int16)), axis=2).astype(np.uint8)
+            np.maximum(edge[left], contrast, out=edge[left])
+            np.maximum(edge[right], contrast, out=edge[right])
+        indices = np.flatnonzero(edge.ravel() >= 32)
+        if not len(indices):
+            return []
+        step = max(1, math.ceil(len(indices) / MAX_EDGE_SAMPLES))
+        indices = indices[::step][:MAX_EDGE_SAMPLES]
+        # Materialize RGB triples only for the bounded sample, in exactly the
+        # same row-major order as the scalar pixel/edge zip used previously.
+        pixels = rgb.reshape(-1, 3)[indices]
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
+    with closing(Image.fromarray(pixels.reshape(1, -1, 3))) as sample:
+        with closing(sample.quantize(colors=max(1, min(int(count), 16)),
+                                     method=Image.Quantize.MEDIANCUT,
+                                     dither=Image.Dither.NONE)) as quantized:
+            pal = quantized.getpalette() or []
+            ranked = sorted((quantized.getcolors() or []), reverse=True)
     result = []
     for _n, index in ranked:
         base = int(index) * 3
@@ -216,69 +260,73 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
                           cancelled=lambda: False) -> PicturePalette:
     """Build a bounded picture-specific palette using the production color planner."""
     from ColorFidelity import delta_e2000
-    from DynamicColors import build_dynamic_color_strokes
+    from DynamicColors import build_dynamic_color_palette
 
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     max_colors = max(1, min(32, int(max_colors)))
     fidelity = str(fidelity or "Faithful")
-    image_fp = image_fingerprint(image)
+    image_fp = image_fingerprint(image, cancelled=cancelled)
     cached = load_cached_palette(image_fp, calibration_fingerprint, max_colors=max_colors, fidelity=fidelity)
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     if cached is not None:
         return cached
     if cancelled():
         raise InterruptedError("Picture custom palette cancelled.")
 
-    analysis = _analysis_image(image)
-    fallback = tuple(_rgb(c) for c in palette_rgb)
-    if not fallback:
-        raise ValueError("No Paint palette colors are available. Read/calibrate the Paint palette first.")
-    groups, planned, selectors, meta = build_dynamic_color_strokes(
-        analysis, fallback, max_colors=max_colors, skip_white=False, lines=True,
-        exact_available=True, color_fidelity=fidelity, profile_name="Microsoft Paint", source_palette=True,
-        cancelled=cancelled,
-    )
-    if groups is None:
-        raise InterruptedError("Picture custom palette cancelled.")
-    planned = tuple(_rgb(c) for c in (planned or ()))
-    selectors = tuple(selectors or ())
-    coverages = tuple((meta or {}).get("coverage_priority") or ())
-
-    custom: list[tuple[int, int, int]] = []
-    custom_cov: list[float] = []
-    palette_colors: list[tuple[int, int, int]] = []
-    for index, selector in enumerate(selectors):
-        if cancelled():
+    with closing(_analysis_image(image)) as analysis:
+        fallback = tuple(_rgb(c) for c in palette_rgb)
+        if not fallback:
+            raise ValueError("No Paint palette colors are available. Read/calibrate the Paint palette first.")
+        planned, selectors, meta = build_dynamic_color_palette(
+            analysis, fallback, max_colors=max_colors, skip_white=False, lines=True,
+            exact_available=True, color_fidelity=fidelity, profile_name="Microsoft Paint", source_palette=True,
+            cancelled=cancelled,
+        )
+        if planned is None:
             raise InterruptedError("Picture custom palette cancelled.")
-        if index >= len(groups) or not groups[index]:
-            continue
-        coverage = float(coverages[index]) if index < len(coverages) else 0.0
-        if selector.get("kind") == "custom":
-            rgb = _rgb(selector.get("rgb", planned[index] if index < len(planned) else (0, 0, 0)))
-            if rgb not in custom:
-                custom.append(rgb); custom_cov.append(coverage)
-        else:
-            rgb = _rgb(planned[index] if index < len(planned) else selector.get("rgb", (0, 0, 0)))
-            if rgb not in palette_colors:
-                palette_colors.append(rgb)
+        planned = tuple(_rgb(c) for c in (planned or ()))
+        selectors = tuple(selectors or ())
+        coverages = tuple((meta or {}).get("coverage_priority") or ())
 
-    # Reserve up to a quarter of the custom budget for high-edge colors that are
-    # materially different from the normal Paint palette.  This protects eyes,
-    # thin contours and small isolated color fields without exploding color count.
-    detail_budget = min(6, max(2, max_colors // 4))
-    for rgb in _edge_detail_colors(analysis, detail_budget, cancelled=cancelled):
-        if len(custom) >= max_colors:
-            break
-        nearest = min(float(delta_e2000(rgb, p)) for p in fallback)
-        if nearest < 2.0:
-            continue
-        if any(float(delta_e2000(rgb, old)) < 2.0 for old in custom):
-            continue
-        custom.append(rgb); custom_cov.append(0.0)
+        custom: list[tuple[int, int, int]] = []
+        custom_cov: list[float] = []
+        palette_colors: list[tuple[int, int, int]] = []
+        for index, selector in enumerate(selectors):
+            if cancelled():
+                raise InterruptedError("Picture custom palette cancelled.")
+            coverage = float(coverages[index]) if index < len(coverages) else 0.0
+            if selector.get("kind") == "custom":
+                rgb = _rgb(selector.get("rgb", planned[index] if index < len(planned) else (0, 0, 0)))
+                if rgb not in custom:
+                    custom.append(rgb); custom_cov.append(coverage)
+            else:
+                rgb = _rgb(planned[index] if index < len(planned) else selector.get("rgb", (0, 0, 0)))
+                if rgb not in palette_colors:
+                    palette_colors.append(rgb)
 
-    custom = custom[:max_colors]
-    custom_cov = custom_cov[:len(custom)]
-    all_colors = _dedupe([*custom, *palette_colors], threshold=3)[:max_colors]
-    from PicturePaletteRefinement import refine_picture_palette
-    all_colors = refine_picture_palette(analysis, all_colors, max_colors, cancelled=cancelled)
+        # Reserve up to a quarter of the custom budget for high-edge colors that are
+        # materially different from the normal Paint palette.  This protects eyes,
+        # thin contours and small isolated color fields without exploding color count.
+        detail_budget = min(6, max(2, max_colors // 4))
+        details=(_edge_detail_colors(analysis,detail_budget,cancelled=cancelled)
+                 if len(custom)<max_colors else ())
+        for rgb in details:
+            if len(custom) >= max_colors:
+                break
+            nearest = min(float(delta_e2000(rgb, p)) for p in fallback)
+            if nearest < 2.0:
+                continue
+            if any(float(delta_e2000(rgb, old)) < 2.0 for old in custom):
+                continue
+            custom.append(rgb); custom_cov.append(0.0)
+
+        custom = custom[:max_colors]
+        custom_cov = custom_cov[:len(custom)]
+        all_colors = _dedupe([*custom, *palette_colors], threshold=3)[:max_colors]
+        from PicturePaletteRefinement import refine_picture_palette
+        all_colors = refine_picture_palette(analysis, all_colors, max_colors, cancelled=cancelled)
     custom = list(all_colors)
     custom_cov = [0.0] * len(custom)
     palette_colors = []
@@ -286,78 +334,28 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
         image_fp, str(calibration_fingerprint or ""), tuple(map(int, image.size)), max_colors, fidelity,
         tuple(all_colors), tuple(custom), tuple(palette_colors), tuple(custom_cov), False,
     )
-    save_palette(result)
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
+    try:
+        save_palette(result)
+    except OSError:
+        # Persistence is an optional reuse optimization; the complete in-memory
+        # palette remains usable if this machine's cache directory is read-only.
+        pass
+    if cancelled():
+        raise InterruptedError('Picture custom palette cancelled.')
     return result
 
 
 def apply_custom_rgb_sequence(mouse, keyboard_backend, controls: dict,
                               colors: Iterable[Sequence[int]], *, cancelled=lambda: False,
-                              wait=time.sleep, progress=None, dialog_ready=None, dialog_closed=None, color_ready=None) -> int:
-    """Type a bounded RGB sequence into Paint's calibrated Edit colors dialog."""
-    required = ("OpenCustomColor", "RedField", "GreenField", "BlueField", "ConfirmColor")
-    missing = [name for name in required if name not in controls]
-    if missing:
-        raise ValueError("Numeric Paint RGB controls are not calibrated: " + ", ".join(missing))
-    controls = dict(controls)
-    values = tuple(_rgb(c) for c in colors)
-    dialog_open = False
-    completed = 0
-
-    def click(name: str, delay: float = 0.04) -> None:
-        point = tuple(map(int, controls[name]))
-        mouse.move(*point)
-        wait(0.015)
-        mouse.click()
-        wait(delay)
-
-    if not values:
-        return 0
-    mouse.arm_input()
-    try:
-        if cancelled():
-            raise InterruptedError("Picture custom palette cancelled.")
-        click("OpenCustomColor", 0.16)
-        dialog_open = True
-        if dialog_ready is not None:
-            controls.update(dialog_ready())
-        if "AddCustomColor" not in controls:
-            raise ValueError("Paint + / Add to custom colors is not calibrated; no RGB input was sent.")
-        for index, rgb in enumerate(values, 1):
-            if cancelled():
-                raise InterruptedError("Picture custom palette cancelled.")
-            for name, value in zip(("RedField", "GreenField", "BlueField"), rgb):
-                if cancelled():
-                    raise InterruptedError("Picture custom palette cancelled.")
-                click(name, 0.025)
-                keyboard_backend.press_and_release("ctrl+a")
-                keyboard_backend.write(str(int(value)), delay=0.01)
-                wait(0.025)
-            # OK only selects the current color. The + button is what adds it
-            # to Paint's Custom colors slots. Keep the dialog open for the batch.
-            if color_ready is not None:
-                controls.update(color_ready(rgb))
-            if cancelled():
-                raise InterruptedError("Picture custom palette cancelled.")
-            click("AddCustomColor", 0.25)
-            wait(0.50)
-            if cancelled():
-                raise InterruptedError("Picture custom palette cancelled.")
-            completed += 1
-            if progress is not None:
-                progress(index, len(values), rgb)
-        click("ConfirmColor", 0.12)
-        if dialog_closed is not None:
-            dialog_closed()
-        dialog_open = False
-    finally:
-        if dialog_open:
-            try:
-                keyboard_backend.press_and_release("esc")
-                wait(0.04)
-            except Exception:
-                pass
-        mouse.disarm_input()
-    return completed
+                              wait=time.sleep, progress=None, dialog_ready=None, dialog_closed=None,
+                              color_ready=None, input_guard=None) -> int:
+    """Keep direct legacy callers on the same bounded, guarded transaction."""
+    from PictureCustomPalette import apply_custom_rgb_sequence as transaction
+    return transaction(mouse,keyboard_backend,controls,colors,cancelled=cancelled,
+                       wait=wait,progress=progress,dialog_ready=dialog_ready,
+                       dialog_closed=dialog_closed,color_ready=color_ready,input_guard=input_guard)
 
 
 def _resolve_max_colors(app) -> int:
@@ -427,7 +425,7 @@ def start_picture_custom_palette(app) -> bool:
         if app.stop.wait(0.20):
             raise InterruptedError("Picture custom palette cancelled.")
         from TargetCapture import probe_handle_isolated
-        meta = probe_handle_isolated(handle)
+        meta = probe_handle_isolated(handle, cancelled=app.stop.is_set)
         from ExactColorTools import numeric_rgb_available, resolved_controls, save as save_exact_colors
         if not numeric_rgb_available(PROFILE_KEY):
             # This is deliberately independent from full Paint canvas detection.
@@ -436,17 +434,14 @@ def start_picture_custom_palette(app) -> bool:
             from CalibrationAnchors import make_anchor
             app.events.put(("status", "Custom color palette for picture: calibrating Paint Edit colors R/G/B controls…"))
             exact_controls = calibrate_rgb_controls(handle, cancelled=app.stop.is_set)
-            meta = probe_handle_isolated(handle)
+            meta = probe_handle_isolated(handle, cancelled=app.stop.is_set)
             save_exact_colors(PROFILE_KEY, exact_controls, anchor=make_anchor(tuple(meta["client_rect"])))
         controls = resolved_controls(PROFILE_KEY, tuple(meta["client_rect"]))
-        try:
-            from ProfileStorage import calibration_context_fingerprint
-            calibration_fp = calibration_context_fingerprint(
-                PROFILE_KEY, workflow="picture-custom-palette", palette_path=palette_path,
-                extras=(f"colors:{max_colors}", f"fidelity:{fidelity}"),
-            )
-        except Exception:
-            calibration_fp = ""
+        from ProfileStorage import calibration_context_fingerprint
+        calibration_fp = calibration_context_fingerprint(
+            PROFILE_KEY, workflow="picture-custom-palette", palette_path=palette_path,
+            extras=(f"colors:{max_colors}", f"fidelity:{fidelity}"),
+        )
         from Colors import allColors
         fallback = tuple(tuple(c.RGB) for c in allColors)
         palette = build_picture_palette(
@@ -508,10 +503,16 @@ def start_picture_custom_palette(app) -> bool:
         def progress(index, total, rgb):
             app.events.put(("status", f"Custom color palette for picture: RGB {rgb} · {index}/{total}"))
 
+        def input_guard(point, *, modal=False):
+            if app.stop.is_set():raise InterruptedError('Picture custom palette cancelled.')
+            if modal:monitor.verify_modal(target,point)
+            else:monitor.verify(target,point)
+
         completed = apply_custom_rgb_sequence(
             mouse, keyboard_backend, controls, custom,
             cancelled=app.stop.is_set, wait=app.stop.wait, progress=progress,
             dialog_ready=dialog_ready, dialog_closed=dialog_closed, color_ready=color_ready,
+            input_guard=input_guard,
         )
         # Hard postcondition for the preparation action: never leave Edit colors
         # over the document when control returns to Image Draw Bot.

@@ -371,29 +371,52 @@ def universal_hardware_summary(*, refresh: bool = False) -> str:
 
 
 def cupy_smoke_test() -> tuple[bool, str]:
-    """Run a tiny real CUDA kernel so missing runtime/header issues are caught."""
+    """Validate complete kernel output on an actual CUDA-visible device.
+
+    nvidia-smi/DXGI ordinals are not CUDA ordinals: CUDA_VISIBLE_DEVICES and
+    CUDA_DEVICE_ORDER can reorder/hide devices. Read each tested device's name
+    from that same CUDA runtime instead of borrowing another API's identity.
+    """
     gpu = best_nvidia_gpu(refresh=True)
-    if gpu is None:
-        return False, "No NVIDIA GPU detected"
+    from GpuResourceCache import used_cuda_device
     try:
         import cupy as cp
+        import numpy as np
         count = int(cp.cuda.runtime.getDeviceCount())
         if count < 1:
-            return False, f"{gpu.name} detected, but CuPy reports no CUDA devices"
-        target = gpu.index if gpu.index is not None and 0 <= gpu.index < count else 0
-        with cp.cuda.Device(int(target)):
-            kernel = cp.RawKernel(
-                'extern "C" __global__ void imagedrawbot_probe(float* x){int i=blockDim.x*blockIdx.x+threadIdx.x;if(i<32)x[i]=x[i]*2.0f+1.0f;}',
-                "imagedrawbot_probe",
-            )
-            arr = cp.arange(32, dtype=cp.float32)
-            kernel((1,), (32,), (arr,))
-            cp.cuda.Stream.null.synchronize()
-            if float(cp.asnumpy(arr)[3]) != 7.0:
-                return False, "CUDA probe returned an unexpected result"
-        return True, f"CUDA ready on {gpu.name}"
+            return False, "CuPy reports no CUDA-visible devices"
+        errors = []
+        for target in range(min(count, 64)):
+            arr = kernel = None
+            label = f"CUDA device {target}"
+            try:
+                with used_cuda_device(cp, target):
+                    properties = cp.cuda.runtime.getDeviceProperties(target)
+                    label = properties.get("name") or label
+                    if isinstance(label, bytes):
+                        label = label.decode("utf-8", errors="replace")
+                    kernel = cp.RawKernel(
+                        'extern "C" __global__ void imagedrawbot_probe(float* x){int i=blockDim.x*blockIdx.x+threadIdx.x;if(i<32)x[i]=x[i]*2.0f+1.0f;}',
+                        "imagedrawbot_probe",
+                    )
+                    arr = cp.arange(32, dtype=cp.float32)
+                    kernel((1,), (32,), (arr,))
+                    cp.cuda.Stream.null.synchronize()
+                    if not np.array_equal(cp.asnumpy(arr), np.arange(32, dtype=np.float32) * 2 + 1):
+                        raise RuntimeError("CUDA probe returned an unexpected result")
+                return True, f"CUDA ready on {label}"
+            except InterruptedError:
+                raise
+            except Exception as exc:
+                errors.append(f"{label}: {type(exc).__name__}: {exc}")
+            finally:
+                arr = kernel = None
+        return False, "No CUDA-visible GPU passed validation. " + "; ".join(errors[:3])
+    except InterruptedError:
+        raise
     except Exception as exc:
-        return False, f"{gpu.name} detected, but CUDA/CuPy smoke test failed: {type(exc).__name__}: {exc}"
+        prefix = f"{gpu.name} detected, but " if gpu is not None else ""
+        return False, f"{prefix}CUDA/CuPy smoke test failed: {type(exc).__name__}: {exc}"
 
 
 def _main(argv: list[str]) -> int:

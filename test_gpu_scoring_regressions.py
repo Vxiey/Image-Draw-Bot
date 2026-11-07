@@ -89,17 +89,17 @@ class ScoreRetryRegressionTests(unittest.TestCase):
 class StrokeCancellationRegressionTests(unittest.TestCase):
     def test_cancellation_is_checked_during_one_long_diagonal(self):
         generated = [0]
-        original = gpu._bresenham
+        original = gpu.clipped_bresenham
 
-        def tracked(a, b):
-            for point in original(a, b):
+        def tracked(*args, **kwargs):
+            for point in original(*args, **kwargs):
                 generated[0] += 1
                 yield point
 
-        with mock.patch.object(gpu, "_bresenham", side_effect=tracked):
+        with mock.patch.object(gpu, "clipped_bresenham", side_effect=tracked):
             with self.assertRaises(InterruptedError):
                 gpu.compile_swept_rectangles(
-                    [{"color_index": 1, "path": [(0, 0), (2000, 2000)]}], 1, 4, 4,
+                    [{"color_index": 1, "path": [(0, 0), (2000, 2000)]}], 1, 2001, 2001,
                     cancelled=lambda: generated[0] >= 130)
         self.assertLessEqual(generated[0], 258)
 

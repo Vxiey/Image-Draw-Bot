@@ -84,7 +84,8 @@ def _auto_count_from_time(seconds: int, speed: str, drawing_mode: str, *, previe
     length, precision, palette changes and Fill/tool actions.  The final estimate
     remains the hard safety gate in DrawBot.
     """
-    speed = str(speed or "Balanced")
+    from SpeedOptimizer import normalize_speed
+    speed = normalize_speed(str(speed or "Balanced"))
     if speed == "Fast":
         paths_per_second = 8.0
     elif speed == "Safe":
@@ -202,12 +203,19 @@ def apply_target_path_cap(groups: Sequence[Sequence[Path]], cap: int | None, *,
     Phase hints are filtered with the exact same kept path indices and returned
     in metadata so DrawBot's existing ``path_meta.update`` keeps them aligned.
     """
-    normalized=[[tuple(path) for path in paths if path] for paths in groups]
+    original = [paths if isinstance(paths, Sequence) else list(paths) for paths in groups]
     inherited_hints=getattr(groups,'phase_hints',None)
     inherited_prefixes=getattr(groups,'protected_prefix_counts',None)
     inherited_semantic=getattr(groups,'semantic_meta',None)
-    hints=_aligned_phase_hints(normalized, phase_hints if phase_hints is not None else inherited_hints)
-    prefixes=_prefix_counts(normalized, protected_prefix_counts if protected_prefix_counts is not None else inherited_prefixes)
+    hints=_aligned_phase_hints(original, phase_hints if phase_hints is not None else inherited_hints)
+    prefixes=_prefix_counts(original, protected_prefix_counts if protected_prefix_counts is not None else inherited_prefixes)
+    normalized = []
+    for index, paths in enumerate(original):
+        kept = [position for position, path in enumerate(paths) if path]
+        normalized.append([tuple(paths[position]) for position in kept])
+        if hints is not None:
+            hints[index] = [hints[index][position] for position in kept]
+        prefixes[index] = sum(position < prefixes[index] for position in kept)
     semantic=dict(inherited_semantic or {}) if isinstance(inherited_semantic,dict) else {}
     before=sum(len(paths) for paths in normalized)
     protected_before=sum(prefixes)
@@ -247,15 +255,18 @@ def apply_target_path_cap(groups: Sequence[Sequence[Path]], cap: int | None, *,
         result=wrap(normalized,result_hints,list(prefixes))
         return result,metadata(before,list(prefixes),0,result_hints)
 
-    cap=max(0,int(cap));entries=[];serial=0
-    for color_index,paths in enumerate(normalized):
-        prefix=prefixes[color_index]
-        for local_index,path in enumerate(paths):
-            score=_importance_score(path,serial,prioritize_structure=prioritize_structure)
-            protected=local_index<prefix
-            entries.append((color_index,local_index,serial,score,path,protected))
-            serial+=1
-    keep=heapq.nsmallest(cap,entries,key=lambda item:(0 if item[5] else 1,-item[3],item[2]))
+    cap=max(0,int(cap))
+    def ranked_entries():
+        serial=0
+        for color_index,paths in enumerate(normalized):
+            prefix=prefixes[color_index]
+            for local_index,path in enumerate(paths):
+                score=_importance_score(path,serial,prioritize_structure=prioritize_structure)
+                yield (color_index,local_index,serial,score,path,local_index<prefix)
+                serial+=1
+    # nsmallest already holds only cap candidates. Feeding it a full scored list
+    # duplicates every path reference and tuple for potentially huge dot plans.
+    keep=heapq.nsmallest(cap,ranked_entries(),key=lambda item:(0 if item[5] else 1,-item[3],item[2]))
     kept_serials={item[2] for item in keep}
     regrouped=[[] for _ in normalized]
     regrouped_hints=[[] for _ in normalized] if hints is not None else None

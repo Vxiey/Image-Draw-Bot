@@ -71,7 +71,7 @@ def build_prepared_color_strokes(image, palette, selectors, options, *, skip_whi
         image, palette, color_rendering=options.get('color_rendering', 'Perceptual match'),
         color_fidelity='Exact', skip_white=skip_white,
         gpu_mode=options.get('gpu_mode', 'Auto'), gpu_vram=options.get('gpu_vram', 'Auto'),
-        gpu_performance=options.get('gpu_performance', 'High throughput'))
+        gpu_performance=options.get('gpu_performance', 'High throughput'), cancelled=cancelled)
     pixel_map = SimpleNamespace(height=image.height, palette_index=indices, drawable_mask=drawable)
     groups = groups_from_pixel_map(pixel_map, len(palette), lines=options.get('lines', True), cancelled=cancelled)
     return groups, palette, selectors, {

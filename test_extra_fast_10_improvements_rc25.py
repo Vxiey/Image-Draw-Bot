@@ -15,7 +15,7 @@ def opts(limit=60.0):
             'time_budget_active':True,'time_budget_mode':'Custom','max_seconds':limit,
             'manual_max_seconds':limit,'deadline_safety_reserve':'Auto','paint_current_color':False,
             'adaptive_color_verification':False,'fill_tool_available':False,
-            'browser_brush_plan':{'target_position':(10,10),'confidence':.99,
+            'browser_brush_plan':{'target_position':(1,1),'confidence':.99,
                 'nominal_sizes':[2,4,8,16,28],'verified_sizes':[2,4,8,16,28],
                 'control_positions':[(1,1),(2,1),(3,1),(4,1),(5,1)],'safe_guard_px':4}}
 
@@ -41,6 +41,8 @@ class FakeBreakdown:
 class FakeModel:
     scale_x=1.0;scale_y=1.0;multiplier=1.0;uncertainty_multiplier=1.0
     def switch_cost(self,kind):return {'palette_change':.1,'brush_change':.2,'verification':.1,'fill':.1}.get(kind,.1)
+    def color_selection_cost(self,color_index):return self.switch_cost('palette_change'),0.0
+    def brush_resets_color(self,previous,requested):return False
     def fixed_overhead(self,**kwargs):return FakeBreakdown(0.0)
     def risk_adjusted_seconds(self,value):return float(value)
     def sequence_cost(self,sequence,**kwargs):
@@ -138,6 +140,6 @@ class ExtraFastTenImprovementTests(unittest.TestCase):
         self.assertIn(1,ids);self.assertIn(3,ids);self.assertNotIn(2,ids)
         self.assertGreaterEqual(meta['budget_swapped_components'],1)
 
-    def test_version_stays_rc25(self):self.assertEqual(APP_VERSION,'1.0.146-rc4')
+    def test_version_stays_rc25(self):self.assertEqual(APP_VERSION,'1.0.148')
 
 if __name__=='__main__':unittest.main()

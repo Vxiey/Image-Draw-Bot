@@ -1,0 +1,243 @@
+{
+  "baseline": "73788a51c1a3502f03f007e4d2ffe0152f56b7e6",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "numpy": "2.5.4",
+  "pillow": "13.0.0",
+  "repeats": 5,
+  "method": "One exact-parity/warm pair, alternating before/after elapsed pairs, separate traced peaks after garbage collection.",
+  "scope": "Only the two square-footprint operators are substituted from the baseline. Both sides of the actual public make_plan call share current color/contrast/GPU policy, candidate generation, sequence cost, scheduling, previews and all other dependencies. Generated CPU images only; no native input or hardware GPU test.",
+  "memory_scope": "Python/NumPy traced peak; not process RSS or most native Pillow pixel-core storage. Returned maps/images and full plan structures remain included as described per fixture.",
+  "baseline_adaptation": "The old helpers predate the optional cancelled keyword. The public caller adapters accept it and invoke the unchanged baseline helper; all benchmark callbacks remain false.",
+  "baseline_source_sha256": "15a0029878131f9163b8d8f33cbe4ed83cd6a18eceb92a50dad9a2f0b86a30b1",
+  "source_sha256": {
+    "AdaptiveRegionHybrid": "bb416e790c581d5376a27ebad88e162c9884aaee60c87ce4f8c924f3d7fec6b0",
+    "DrawBot": "3b53538e31c2be9c8d4f80ef03abc82593b9edba693a9185aca7b5bbbb89e977",
+    "PixelAccuratePlanner": "aa46e595d16b6d913e6f5781ac4cb9d0405961fb02f954c7a699c74da3eb52e7",
+    "PixelStrokeEngine": "41014942aa3b409ef1511ef1503cf3d6c2d24276c0b60258dc592c1a72cabe50",
+    "RasterGeometry": "956b69a5b97928d20dcec9e11860a5892bb0236e5588f4b25844dd29bae4da49",
+    "ExecutionCostModel": "075886156d70d1fea4d213a6bcc3cc8b7a5c51e70d361d9dd03b23a77e916b70",
+    "AdaptiveBrushEngine": "ffd7979bd94740ceae57010c4ba5671120aa8ca5822264adf91dc1c8b875a955",
+    "VisibleContrast": "9b178cd5ea52d714c07b29cbe5a31e55eb64331c7fbb63531e90d11f9fd21518",
+    "AdaptiveDetail": "28f5d6ff2b40452815990f3c12a62474c765d408ba035693af0b7e7370c5eb23",
+    "SafeFillMask": "2596307e8d2dd6795be62dc9ef68474cffaec0e02d9b44b082ae4b5eb08179dc",
+    "FillOptimizer": "1d4fef29930e14df7a16e5b6f10483e62dd99bf3bdc5437af6f6796b497aac5b",
+    "PreviewSafety": "7b53509e71cb3fc3d36c557d84823459122cbd502f325871f4887beb948b357a",
+    "UniversalGpuAcceleration": "1e9fd7799608522729fd63440eb01840b27fcd77c832de68efbbedc0e1ba96fb",
+    "ColorMatchingEngine": "a947fbe2faf71148178a9f0de8125cae73129731622dcb7429d87a08b872f7ae",
+    "ColorFidelity": "8a85606577672a7758dc58e208c4d60d084e5fab0bbec09d29d0bb44b8599513",
+    "benchmark_v148_image_workflow": "ccba17da2b50a22c3c967e51994121bc23a95a7c4b2a496dc3eb1b2918346da5",
+    "benchmark_v148_rendering_batch08": "7203f22009ea1621be9c1ea0accb0f71a1bc347f683d968f02185fae4b964af6",
+    "test_v148_rendering_batch08_footprint": "693ae1747166aedae9d64140f7e78ceed658760a63742bcaa8f110c95e1c18fa",
+    "test_v148_rendering_batch07_transparency": "88c86adb39b18c10816b5744fa2cea26c4c86dbcf9df68966bd6f1c9c811cc9b",
+    "test_pixel_accurate_v1086": "b83cea6c09c5d89105e67aa94ea82334ec8a1331adb276c1defdeaaf60c28842",
+    "test_v148_rendering_batch06_canvas": "8f65654e85fdfe50050eb11744625b67f82a735cfb1f9f3aee9bd558215fd60d"
+  },
+  "measurements": {
+    "both_footprints_128x128_28px": {
+      "before_samples_ms": [
+        6.752000001142733,
+        7.125792995793745,
+        6.679153004370164,
+        6.76761399518,
+        6.531674996949732
+      ],
+      "after_samples_ms": [
+        0.6977709999773651,
+        0.592194999626372,
+        0.5772930016973987,
+        0.6224500029929914,
+        0.5970519996481016
+      ],
+      "before_median_ms": 6.752000001142733,
+      "after_median_ms": 0.5970519996481016,
+      "exact_output_parity": true,
+      "output_sha256": "35b4413fa88374fdb70e8a8cf4eafb7ea80eb5a39b3ae27c90f8b14ba53dcdf4",
+      "before_peak_python_bytes": 66657,
+      "after_peak_python_bytes": 117677,
+      "parameters": {
+        "size": [
+          128,
+          128
+        ],
+        "brush_px": 28,
+        "target": "Solid region with central rectangular hole",
+        "residual": "Target excluding every third row"
+      },
+      "comparison": "Every Boolean pixel of both footprint maps.",
+      "baseline_full_roi_shift_buffers": 1568,
+      "current_full_roi_shift_buffers": 0,
+      "largest_explicit_numeric_work_array_bytes": 131072
+    },
+    "both_footprints_768x512_28px": {
+      "before_samples_ms": [
+        45.67860200040741,
+        45.76559099950828,
+        47.22293999657268,
+        46.84799999813549,
+        47.43610000150511
+      ],
+      "after_samples_ms": [
+        7.039404998067766,
+        7.228304995805956,
+        7.234283999423496,
+        7.000728001003154,
+        7.563140003185254
+      ],
+      "before_median_ms": 46.84799999813549,
+      "after_median_ms": 7.228304995805956,
+      "exact_output_parity": true,
+      "output_sha256": "732b8a4895612f603ed924a53bfc14ad783ed10687f4ef4557d4495de0a05cb2",
+      "before_peak_python_bytes": 1574113,
+      "after_peak_python_bytes": 1471974,
+      "parameters": {
+        "size": [
+          768,
+          512
+        ],
+        "brush_px": 28,
+        "target": "Solid region with central rectangular hole",
+        "residual": "Target excluding every third row"
+      },
+      "comparison": "Every Boolean pixel of both footprint maps.",
+      "baseline_full_roi_shift_buffers": 1568,
+      "current_full_roi_shift_buffers": 0,
+      "largest_explicit_numeric_work_array_bytes": 131072
+    },
+    "actual_verified_multibrush_make_plan": {
+      "before_samples_ms": [
+        105.82840600545751,
+        114.4495199987432,
+        111.97890699986601,
+        118.71659700409509,
+        110.39076000452042
+      ],
+      "after_samples_ms": [
+        86.76159100286895,
+        94.70563400100218,
+        89.66577400133247,
+        98.53394200035837,
+        84.83211899874732
+      ],
+      "before_median_ms": 111.97890699986601,
+      "after_median_ms": 89.66577400133247,
+      "exact_output_parity": true,
+      "output_sha256": "3fab8db10ea4b606017de3e1075d955ab6f88c6e3eddbb277de5db15db3d7ca9",
+      "before_peak_python_bytes": 1847092,
+      "after_peak_python_bytes": 1849302,
+      "parameters": {
+        "size": [
+          128,
+          96
+        ],
+        "region_bbox": [
+          20,
+          16,
+          107,
+          79
+        ],
+        "options": {
+          "detail": 10,
+          "delay": 0.001,
+          "speed": "Balanced",
+          "precision": "Ultra",
+          "lines": true,
+          "drawing_mode": "Smart paths (recommended)",
+          "smart_paths": true,
+          "render_style": "Standard / pixel",
+          "draw_quality": "High likeness",
+          "human_mode": "Off",
+          "gpu_mode": "CPU",
+          "gpu_vram": "Auto",
+          "gpu_performance": "High throughput",
+          "cpu_workers": "4",
+          "cpu_engine": "Threads",
+          "ram_budget": "2 GB",
+          "ram_custom_mb": "2048",
+          "planning_resolution": "Standard",
+          "resource_scheduler": "Off",
+          "background_fill": "Off",
+          "background_simplification": "Off",
+          "color_grouping": "Accurate",
+          "color_workflow": "Finish color first",
+          "stroke_optimizer": "Travel only",
+          "adaptive_detail": "Off",
+          "visual_verification": "Off",
+          "color_rendering": "RGB nearest",
+          "color_layers": "Off",
+          "custom_color_workflow": "Calibrated palette",
+          "exact_color_limit": "Auto",
+          "tool_strategy": "Auto",
+          "portrait_focus": true,
+          "skip_white": true,
+          "contrast": 1.0,
+          "outline": false,
+          "brush_px": 1,
+          "max_seconds": 600,
+          "manual_max_seconds": 600,
+          "time_budget_mode": "Unlimited",
+          "target_stroke_count": "Auto",
+          "target_stroke_custom": "2500",
+          "paint_current_color": false,
+          "erase_mode": false,
+          "paint_tool": "Use current tool",
+          "effective_paint_tool": "Use current tool",
+          "tool_actions": [],
+          "fill_tool_available": false,
+          "fill_tool_actions": [],
+          "fill_restore_actions": [],
+          "render_preset": "Manual",
+          "use_region_fill_engine": false,
+          "detail_zoom": "Off",
+          "color_fidelity": "Fast",
+          "unlimited_time": true,
+          "extra_fast": true,
+          "extra_fast_v2": true,
+          "profile_name": "Gartic Phone",
+          "profile_key": "gartic-phone",
+          "browser_brush_plan": {
+            "target_position": [
+              1,
+              1
+            ],
+            "confidence": 0.99,
+            "nominal_sizes": [
+              1,
+              4,
+              16,
+              28
+            ],
+            "verified_sizes": [
+              1,
+              4,
+              16,
+              28
+            ],
+            "control_positions": [
+              [
+                1,
+                1
+              ],
+              [
+                2,
+                1
+              ],
+              [
+                3,
+                1
+              ],
+              [
+                4,
+                1
+              ]
+            ],
+            "safe_guard_px": 4
+          },
+          "_execution_cost_calibration_override": {}
+        }
+      },
+      "comparison": "Complete source/preview pixels, source/execution groups and ordered sequence, counts/estimate/path statistics, regional choices, all candidate diagnostics, complete schedule and quality. Only unrelated volatile timing/profiling fields are outside this explicitly listed comparison.",
+      "timing_scope": "Whole actual make_plan call plus identical result fingerprinting/owned-image cleanup on both sides."
+    }
+  }
+}

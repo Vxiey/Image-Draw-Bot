@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from functools import lru_cache
 from Colors import allColors
+from PlanningRowTasks import read_only_rgba, RgbaRowTasks
 
 
 @dataclass
@@ -23,27 +24,62 @@ def closest_color(rgb):
 def prepare_image(image, area, detail=9, *, sample_limit=None, max_pixels=None,
                   preview_detail_mode=None, preview_detail_meta=None, cancelled=lambda: False):
     from PIL import Image, ImageOps
+    if cancelled():
+        raise InterruptedError()
     if not 1 <= detail <= 10:
         raise ValueError("Detail must be between 1 and 10.")
     width, height = area
     if width < 2 or height < 2:
         raise ValueError("Select a larger drawing area.")
-    image = ImageOps.exif_transpose(image).convert("RGBA")
-    scale = min(width / image.width, height / image.height)
-    fitted = (image.width * scale, image.height * scale)
-    samples = 200 / (11 - detail) if sample_limit is None else max(1.0, float(sample_limit))
-    sample_scale = min(samples / max(fitted), 1.0)
-    if max_pixels is not None:
-        try:
-            pixel_scale = (max(1, int(max_pixels)) / max(1.0, fitted[0] * fitted[1])) ** 0.5
-            sample_scale = min(sample_scale, pixel_scale, 1.0)
-        except (TypeError, ValueError, OverflowError):
-            pass
-    size = tuple(max(1, round(v * sample_scale)) for v in fitted)
-    if preview_detail_mode:
-        from PreviewDetailEngine import detail_aware_resize
-        return detail_aware_resize(image, size, preview_detail_mode, cancelled=cancelled, metadata=preview_detail_meta), fitted
-    return image.resize(size, Image.Resampling.LANCZOS), fitted
+    source=image;owned=[];published=None
+    try:
+        # Imported images are normally already oriented RGBA. Pillow's no-op
+        # exif_transpose and same-mode convert each copy the full raster; neither
+        # copy is needed by these read-only resize consumers.
+        image.load()
+        if image.getexif().get(274,1) not in (None,1):
+            image=ImageOps.exif_transpose(image)
+            if image is not source:owned.append(image)
+        if cancelled():raise InterruptedError()
+        if image.mode!='RGBA':
+            oriented=image
+            image=oriented.convert('RGBA')
+            if image is not source:owned.append(image)
+            if oriented is not source:
+                oriented.close();owned.remove(oriented)
+        if cancelled():raise InterruptedError()
+        scale = min(width / image.width, height / image.height)
+        fitted = (image.width * scale, image.height * scale)
+        samples = 200 / (11 - detail) if sample_limit is None else max(1.0, float(sample_limit))
+        sample_scale = min(samples / max(fitted), 1.0)
+        pixel_limit = None
+        if max_pixels is not None:
+            try:
+                pixel_limit = max(1, int(max_pixels))
+                pixel_scale = (pixel_limit / max(1.0, fitted[0] * fitted[1])) ** 0.5
+                sample_scale = min(sample_scale, pixel_scale, 1.0)
+            except (TypeError, ValueError, OverflowError):
+                pass
+        size = tuple(max(1, round(v * sample_scale)) for v in fitted)
+        if pixel_limit is not None and size[0] * size[1] > pixel_limit:
+            # Rounding both fitted dimensions upward can exceed the hard pixel
+            # budget, including extremely thin panoramas with a minimum side of 1.
+            if size[0] >= size[1]:
+                size = (max(1, min(size[0], pixel_limit // size[1])), size[1])
+            else:
+                size = (size[0], max(1, min(size[1], pixel_limit // size[0])))
+        if preview_detail_mode:
+            from PreviewDetailEngine import detail_aware_resize
+            result = detail_aware_resize(image, size, preview_detail_mode, cancelled=cancelled, metadata=preview_detail_meta)
+        else:
+            result = image.resize(size, Image.Resampling.LANCZOS)
+        if result is not source:owned.append(result)
+        if cancelled():raise InterruptedError()
+        published=result
+        return result, fitted
+    finally:
+        for private in reversed(owned):
+            if private is not published:private.close()
 
 
 def _nearest_palette_index(rgb, palette, cache):
@@ -106,23 +142,19 @@ def _parallel_basic_strokes(image, lines, skip_white, cancelled, cpu_workers, cp
                                           workers=workers, ram_budget_mb=ram_mb, preview=bool(preview_plan))
         if backend == "serial":
             return None
-        rgba = image.convert("RGBA")
-        raw = rgba.tobytes()
         palette = tuple(tuple(c.RGB) for c in allColors)
-        ranges = row_chunk_ranges(rgba.height, rgba.width, workers=workers, ram_budget_mb=ram_mb,
+        ranges = row_chunk_ranges(image.height, image.width, workers=workers, ram_budget_mb=ram_mb,
                                   bytes_per_pixel=16, min_rows=12, max_rows=256)
         if len(ranges) <= 1:
             return None
-        tasks = []
-        stride = rgba.width * 4
-        for y0, y1 in ranges:
-            if cancelled():
-                return None
-            tasks.append((y0, rgba.width, raw[y0 * stride:y1 * stride], bool(lines), bool(skip_white), palette))
-        chunks = parallel_map(_basic_rows_worker, tasks, backend=backend, workers=workers)
+        with read_only_rgba(image) as rgba:
+            tasks = RgbaRowTasks(rgba, ranges, (bool(lines), bool(skip_white), palette), cancelled=cancelled)
+            chunks = parallel_map(_basic_rows_worker, tasks, backend=backend, workers=workers, cancelled=cancelled)
         if cancelled():
             return None
         return _merge_groups(chunks, len(palette))
+    except InterruptedError:
+        raise
     except Exception:
         # A failed optimization must never break the safe legacy planner.
         return None
@@ -137,35 +169,38 @@ def build_strokes(image, lines=True, skip_white=True, cancelled=lambda: False,
     path remains the compatibility/safety fallback and is used by old tests and
     small images.
     """
-    if cpu_workers and int(cpu_workers) > 1:
-        parallel = _parallel_basic_strokes(image, lines, skip_white, cancelled, cpu_workers,
-                                          cpu_engine, ram_budget_mb, preview_plan)
-        if parallel is not None:
-            return parallel
-    groups = [[] for _ in allColors]
-    pixels = image.load()
-    for y in range(image.height):
-        if cancelled():
-            return None
-        previous, start = None, 0
-        for x in range(image.width + 1):
-            color = None
-            if x < image.width:
-                r, g, b, alpha = pixels[x, y]
-                if alpha:
-                    rgb = tuple(round((v * alpha + 255 * (255 - alpha)) / 255)
-                                for v in (r, g, b))
-                    color = closest_color(rgb)
-                    if skip_white and min(allColors[color].RGB) >= 245:
-                        color = None
-            if not lines:
-                if color is not None:
-                    groups[color].append((x, y, x, y))
-            elif color != previous:
-                if previous is not None:
-                    groups[previous].append((start, y, x - 1, y))
-                start, previous = x, color
-    return groups
+    if cancelled():
+        return None
+    with read_only_rgba(image) as image:
+        if cpu_workers and int(cpu_workers) > 1:
+            parallel = _parallel_basic_strokes(image, lines, skip_white, cancelled, cpu_workers,
+                                              cpu_engine, ram_budget_mb, preview_plan)
+            if parallel is not None:
+                return parallel
+        groups = [[] for _ in allColors]
+        pixels = image.load()
+        for y in range(image.height):
+            if cancelled():
+                return None
+            previous, start = None, 0
+            for x in range(image.width + 1):
+                color = None
+                if x < image.width:
+                    r, g, b, alpha = pixels[x, y]
+                    if alpha:
+                        rgb = tuple(round((v * alpha + 255 * (255 - alpha)) / 255)
+                                    for v in (r, g, b))
+                        color = closest_color(rgb)
+                        if skip_white and min(allColors[color].RGB) >= 245:
+                            color = None
+                if not lines:
+                    if color is not None:
+                        groups[color].append((x, y, x, y))
+                elif color != previous:
+                    if previous is not None:
+                        groups[previous].append((start, y, x - 1, y))
+                    start, previous = x, color
+        return groups
 
 
 def monochrome_strokes(image, lines=True, cancelled=lambda:False,

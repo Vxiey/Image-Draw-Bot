@@ -13,6 +13,8 @@ import math
 
 import numpy as np
 from AdaptiveBrushEngine import brush_for_entry
+from PixelMapValidation import validate_color_index
+from RasterGeometry import clipped_bresenham
 
 Point = tuple[int, int]
 
@@ -66,6 +68,7 @@ def compile_swept_rectangles(sequence: Sequence[dict], brush_px: int, width: int
     """
     rects=[]
     w=max(1,int(width));h=max(1,int(height))
+    current_brush=max(1,int(brush_px))
     def add(x0,y0,x1,y1,color):
         from PixelAccuracyEngine import _clip_rect
         clipped=_clip_rect(x0,y0,x1,y1,w,h)
@@ -78,10 +81,13 @@ def compile_swept_rectangles(sequence: Sequence[dict], brush_px: int, width: int
             yield tuple(map(int,point))
     for n,entry in enumerate(sequence):
         if n%128==0 and cancelled():raise InterruptedError()
-        try:color=int(entry['color_index']);path=tuple(checked_path(entry['path']))
+        try:raw_color=entry['color_index'];points=entry['path']
+        except (KeyError,TypeError):continue
+        color=validate_color_index(raw_color)
+        try:path=tuple(checked_path(points))
         except (KeyError,TypeError,ValueError):continue
-        if color<0 or not path:continue
-        entry_brush=brush_for_entry(entry,brush_px);before,after=_brush_extents(entry_brush)
+        if not path:continue
+        current_brush=brush_for_entry(entry,current_brush);before,after=_brush_extents(current_brush)
         if len(path)==1:
             x,y=path[0];add(x-before,y-before,x+after,y+after,color);continue
         for segment_index,(a,b) in enumerate(zip(path,path[1:])):
@@ -92,7 +98,7 @@ def compile_swept_rectangles(sequence: Sequence[dict], brush_px: int, width: int
             elif x0==x1:
                 lo,hi=sorted((y0,y1));add(x0-before,lo-before,x0+after,hi+after,color)
             else:
-                for point_index,(x,y) in enumerate(_bresenham(a,b)):
+                for point_index,(x,y) in enumerate(clipped_bresenham(a,b,w,h,before=before,after=after)):
                     if point_index%128==0 and cancelled():raise InterruptedError()
                     add(x-before,y-before,x+after,y+after,color)
     if not rects:return np.empty((0,5),dtype=np.int32)
@@ -130,12 +136,14 @@ def _cuda_context(mode: str, vram_budget: str, performance: str):
 
 
 def _plan(info, width: int, height: int, rectangle_count: int) -> SimulationPlan:
-    from GpuAcceleration import plan_vram_allocation
+    from GpuAcceleration import available_vram_mb, plan_vram_allocation
     p=plan_vram_allocation(info,width,height,arrays=4,overlap=0)
-    budget=max(128,int(info.vram_budget_mb or info.free_vram_mb or 256))
+    budget=available_vram_mb(info)
     # A rectangle is 20 bytes.  Keep rectangle staging under ~8% of the user
     # budget and under 250k entries to keep individual kernel launches bounded.
-    batch=max(1024,min(250_000,int((budget*1024*1024*.08)//20)))
+    batch=min(250_000,int((budget*1024*1024*.08)//20))
+    if batch < 1:
+        raise MemoryError("CUDA budget cannot fit rectangle staging")
     tile_rows=max(1,min(128,int(height),int(p.get('tile_rows') or height)))
     # Bound work as well as allocation: every pixel scans every rectangle.
     # VRAM alone allowed billions of tests in a single desktop CUDA launch.
@@ -173,7 +181,18 @@ def _simulation_attempt(cp, kernel, rects: np.ndarray, plan: SimulationPlan, wid
         sim_host[y0:y1]=cp.asnumpy(sim_gpu);counts_host[y0:y1]=cp.asnumpy(counts_gpu)
         del sim_gpu,counts_gpu
     cp.cuda.Stream.null.synchronize()
+    if cancelled():raise InterruptedError()
     return launches,filtered_rectangles
+
+
+def _release_failed_frames(error: BaseException) -> None:
+    """A retained traceback must not keep a failed tile's device arrays live."""
+    import traceback
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        traceback.clear_frames(error.__traceback__)
+        error = error.__cause__ or error.__context__
 
 
 def _recovery_plan(base: SimulationPlan, height: int, rectangle_count: int, tile_rows: int, batch_size: int) -> SimulationPlan:
@@ -227,6 +246,7 @@ def simulate_cuda(sequence: Sequence[dict], width: int, height: int, background_
                 if n+1>=len(steps):
                     log_event(f'CUDA stroke simulation exhausted {len(steps)} VRAM recovery attempt(s); using CPU: {type(exc).__name__}: {exc}')
                     return None
+                _release_failed_frames(exc)
                 pool_releases.append(release_gpu_memory_cache(cp))
                 nxt=steps[n+1]
                 log_event(f'CUDA stroke simulation VRAM pressure: retry {n+1}/{len(steps)-1} with tile_rows={nxt["tile_rows"]}, batch={nxt["batch_size"]}.')
@@ -238,7 +258,30 @@ def simulate_cuda(sequence: Sequence[dict], width: int, height: int, background_
         log_event(f'CUDA stroke simulation setup failed; using CPU: {type(exc).__name__}: {exc}')
         return None
 
-\
+def _score_tile(cp, drawable_h, desired_h, simulated, coverage_count, edge_h,
+                protected_h, background_index, edge_threshold):
+    """Return a completed tile; failed arrays belong to this disposable frame."""
+    drawable=cp.asarray(drawable_h);desired=cp.asarray(desired_h,dtype=cp.int16)
+    sim=cp.asarray(simulated,dtype=cp.int16);counts=cp.asarray(coverage_count,dtype=cp.uint16)
+    coverage=counts>0;missing=drawable&~coverage;wrong=drawable&coverage&(sim!=desired)
+    spill=(~drawable)&coverage&(sim!=int(background_index))
+    error=cp.zeros(drawable.shape,dtype=cp.uint8);error[missing]=1;error[wrong]=2;error[spill]=3
+    evaluation=drawable|coverage;correct=evaluation&(sim==desired)
+    edge=cp.asarray(edge_h);edge_mask=drawable&(edge>=edge_threshold)
+    protected=cp.asarray(protected_h)
+    def nz(value):return int(cp.count_nonzero(value).get())
+    totals={
+        'evaluation':nz(evaluation),'drawable':nz(drawable),'correct':nz(correct),
+        'covered':nz(drawable&coverage),'target_correct':nz(drawable&(sim==desired)),
+        'edge':nz(edge_mask),'edge_correct':nz(edge_mask&(sim==desired)),
+        'protected':nz(protected),'protected_correct':nz(protected&(sim==desired)),
+        'overdraw':nz(counts>1),'touched':nz(coverage),
+        'hits':int(cp.sum(counts,dtype=cp.uint64).get()),
+        'missing':nz(missing),'wrong':nz(wrong),'spill':nz(spill),'errors':nz(error),
+    }
+    return totals, cp.asnumpy(error)
+
+
 def score_cuda_host(pixel_map, simulated: np.ndarray, coverage_count: np.ndarray, background_index: int, *,
                     gpu_mode: str = 'Auto', gpu_vram: str = 'Auto', gpu_performance: str = 'High throughput',
                     cancelled=lambda: False):
@@ -257,7 +300,7 @@ def score_cuda_host(pixel_map, simulated: np.ndarray, coverage_count: np.ndarray
         edge_threshold=max(.32,float(np.percentile(vals,70.0))) if vals.size else .32
         height,width=drawable_h.shape
         initial_rows=gpu_score_tile_rows(info,width,height,bytes_per_pixel=64,share=.42)
-        tile_rows=initial_rows;min_rows=max(1,min(8,height));retries=0;tiles=0
+        tile_rows=initial_rows;min_rows=1;retries=0;tiles=0
         error_host=np.zeros((height,width),dtype=np.uint8)
         totals={k:0 for k in ('evaluation','drawable','correct','covered','target_correct','edge','edge_correct',
                                'protected','protected_correct','overdraw','touched','hits','missing','wrong','spill','errors')}
@@ -266,32 +309,16 @@ def score_cuda_host(pixel_map, simulated: np.ndarray, coverage_count: np.ndarray
             if cancelled():raise InterruptedError()
             y1=min(height,y0+tile_rows)
             try:
-                drawable=cp.asarray(drawable_h[y0:y1]);desired=cp.asarray(desired_h[y0:y1],dtype=cp.int16)
-                sim=cp.asarray(simulated[y0:y1],dtype=cp.int16);counts=cp.asarray(coverage_count[y0:y1],dtype=cp.uint16)
-                coverage=counts>0;missing=drawable&~coverage;wrong=drawable&coverage&(sim!=desired)
-                spill=(~drawable)&coverage&(sim!=int(background_index))
-                error=cp.zeros(drawable.shape,dtype=cp.uint8);error[missing]=1;error[wrong]=2;error[spill]=3
-                evaluation=drawable|coverage;correct=evaluation&(sim==desired)
-                edge=cp.asarray(edge_h[y0:y1]);edge_mask=drawable&(edge>=edge_threshold)
-                protected=cp.asarray(protected_h[y0:y1])
-                def nz(value):return int(cp.count_nonzero(value).get())
                 # Reductions and the host copy may fail after earlier reductions
                 # have completed. Commit a tile only after every operation has
                 # succeeded, so retrying y0 cannot count its pixels twice.
-                tile_totals={
-                    'evaluation':nz(evaluation),'drawable':nz(drawable),'correct':nz(correct),
-                    'covered':nz(drawable&coverage),'target_correct':nz(drawable&(sim==desired)),
-                    'edge':nz(edge_mask),'edge_correct':nz(edge_mask&(sim==desired)),
-                    'protected':nz(protected),'protected_correct':nz(protected&(sim==desired)),
-                    'overdraw':nz(counts>1),'touched':nz(coverage),
-                    'hits':int(cp.sum(counts,dtype=cp.uint64).get()),
-                    'missing':nz(missing),'wrong':nz(wrong),'spill':nz(spill),'errors':nz(error),
-                }
-                tile_error=cp.asnumpy(error)
+                tile_totals,tile_error=_score_tile(
+                    cp,drawable_h[y0:y1],desired_h[y0:y1],simulated[y0:y1],coverage_count[y0:y1],
+                    edge_h[y0:y1],protected_h[y0:y1],background_index,edge_threshold)
+                if cancelled():raise InterruptedError()
                 next_totals={key:totals[key]+tile_totals[key] for key in totals}
                 error_host[y0:y1]=tile_error
                 totals=next_totals
-                del drawable,desired,sim,counts,coverage,missing,wrong,spill,error,evaluation,correct,edge,edge_mask,protected
                 y0=y1;tiles+=1
             except InterruptedError:
                 raise
@@ -300,6 +327,7 @@ def score_cuda_host(pixel_map, simulated: np.ndarray, coverage_count: np.ndarray
                     from CrashDiagnostics import log_event
                     log_event(f'CUDA accuracy scoring failed; using CPU score: {type(exc).__name__}: {exc}')
                     return None
+                _release_failed_frames(exc)
                 release_gpu_memory_cache(cp);retries+=1
                 if tile_rows<=min_rows or retries>4:
                     from CrashDiagnostics import log_event
@@ -308,22 +336,25 @@ def score_cuda_host(pixel_map, simulated: np.ndarray, coverage_count: np.ndarray
                 tile_rows=max(min_rows,tile_rows//2)
                 from CrashDiagnostics import log_event
                 log_event(f'CUDA accuracy scoring VRAM pressure: retrying current tile with {tile_rows} row(s).')
-        try:cp.cuda.Stream.null.synchronize()
-        except Exception:pass
+        cp.cuda.Stream.null.synchronize()
+        if cancelled():raise InterruptedError()
         eval_count=totals['evaluation'];drawable_count=totals['drawable'];correct_count=totals['correct']
+        target_accuracy=100.0*totals['target_correct']/max(1,drawable_count)
         metrics={
             'plan_execution_accuracy_percent':round(100.0*correct_count/max(1,eval_count),4),
             'pixel_accuracy_percent':round(100.0*correct_count/max(1,eval_count),4),
-            'target_color_accuracy_percent':round(100.0*totals['target_correct']/max(1,drawable_count),4),
+            'target_color_accuracy_percent':round(target_accuracy,4),
             'coverage_percent':round(100.0*totals['covered']/max(1,drawable_count),4),
-            'edge_accuracy_percent':round(100.0*totals['edge_correct']/max(1,totals['edge']),4),
-            'protected_accuracy_percent':round(100.0*totals['protected_correct']/max(1,totals['protected']),4),
+            'edge_accuracy_percent':round(100.0*totals['edge_correct']/totals['edge'] if totals['edge'] else target_accuracy,4),
+            'protected_accuracy_percent':round(100.0*totals['protected_correct']/totals['protected'] if totals['protected'] else target_accuracy,4),
             'evaluation_pixels':eval_count,'drawable_pixels':drawable_count,'correct_pixels':correct_count,
             'missing_pixels':totals['missing'],'wrong_color_pixels':totals['wrong'],'spill_pixels':totals['spill'],
             'error_pixels':totals['errors'],'covered_target_pixels':totals['covered'],'edge_pixels':totals['edge'],
             'protected_pixels':totals['protected'],'touched_pixels':totals['touched'],'overdraw_pixels':totals['overdraw'],
             'total_brush_hits':totals['hits'],'mean_hits_per_touched_pixel':round(float(totals['hits']/max(1,totals['touched'])),5),
             'edge_threshold':round(edge_threshold,5),'background_index':int(background_index),
+            'background_repaint_available':background_index != -1,
+            'unrepairable_background_pixels':totals['spill'] if background_index == -1 else 0,
             'score_backend':'cuda-cupy-tiled-reduction' if initial_rows<height or retries else 'cuda-cupy-reduction',
             'score_cuda_device':info.device,'score_tile_rows':int(tile_rows),'score_initial_tile_rows':int(initial_rows),
             'score_tile_count':int(tiles),'score_vram_retries':int(retries),'score_vram_recovered':bool(retries>0),

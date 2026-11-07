@@ -86,6 +86,7 @@ class V109AdvancedColorTests(unittest.TestCase):
     def test_modal_preview_uses_patch_median_not_one_bad_pixel(self):
         class Monitor:
             def rectangle(self,handle): return (0,0,500,500)
+            def verify_modal(self,target,point): pass  # Ownership is covered by native-monitor fixtures.
         class RawMouse:
             def get_position(self): return (0,0)
         guard=GuardedMouse(RawMouse(),Monitor(),(1,(0,0,500,500)))
@@ -95,7 +96,7 @@ class V109AdvancedColorTests(unittest.TestCase):
 
     def test_version(self):
         from Version import APP_VERSION,FILE_VERSION
-        self.assertEqual(APP_VERSION,'1.0.146-rc4');self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.148');self.assertEqual(FILE_VERSION,'1.0.148')
 
 
 if __name__=='__main__': unittest.main()

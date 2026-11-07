@@ -38,17 +38,17 @@ def _stamp():
     return time.strftime('%Y-%m-%d %H:%M:%S')
 
 
-def _rotate_if_large(path: Path, limit: int = _MAX_LOG_BYTES, *, incoming_bytes: int = 0) -> None:
+def _rotate_if_large(path: Path, limit: int = _MAX_LOG_BYTES, *, incoming_bytes: int = 0) -> bool:
     """Keep logs bounded so a long-running beta cannot fill the user profile."""
     try:
         if not path.exists() or path.stat().st_size + incoming_bytes <= limit:
-            return
+            return incoming_bytes <= limit
         backup = path.with_suffix(path.suffix + '.1')
-        backup.unlink(missing_ok=True)
         os.replace(path, backup)
+        return incoming_bytes <= limit
     except OSError:
         # Diagnostics must never become a reason the app cannot start.
-        return
+        return False
 
 
 def _looks_like_error(message: str) -> bool:
@@ -74,9 +74,9 @@ def _append_error(message, *, category='runtime'):
         record = f'[{_stamp()}] [{label}] {text}\n'
         with _LOG_LOCK:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
-            _rotate_if_large(DEBUG_ERROR_LOG, incoming_bytes=len(record.encode('utf-8')))
-            with DEBUG_ERROR_LOG.open('a', encoding='utf-8') as stream:
-                stream.write(record)
+            if _rotate_if_large(DEBUG_ERROR_LOG, incoming_bytes=len(record.encode('utf-8'))):
+                with DEBUG_ERROR_LOG.open('a', encoding='utf-8') as stream:
+                    stream.write(record)
     except Exception:
         # Debug logging is never allowed to break drawing.
         pass
@@ -104,13 +104,25 @@ def log_event(message, *, force_error=False, error_category='runtime'):
         record=f'[{_stamp()}] {text}\n'
         with _LOG_LOCK:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
-            _rotate_if_large(SESSION_LOG, incoming_bytes=len(record.encode('utf-8')))
-            with SESSION_LOG.open('a', encoding='utf-8') as stream:
-                stream.write(record)
+            if _rotate_if_large(SESSION_LOG, incoming_bytes=len(record.encode('utf-8'))):
+                with SESSION_LOG.open('a', encoding='utf-8') as stream:
+                    stream.write(record)
             if force_error or _looks_like_error(text):
                 _append_error(text, category=error_category)
     except Exception:
         pass
+
+
+def _write_crash_record(record):
+    if _LOG_STREAM is None:
+        return
+    with _LOG_LOCK:
+        # Keep faulthandler's descriptor open and stable. Python exceptions are
+        # already copied to the rotating error log; they must not grow this
+        # native-crash stream indefinitely after its fixed budget is exhausted.
+        if os.fstat(_LOG_STREAM.fileno()).st_size + len(record.encode('utf-8')) <= _MAX_LOG_BYTES:
+            _LOG_STREAM.write(record)
+            _LOG_STREAM.flush()
 
 
 def install():
@@ -118,19 +130,26 @@ def install():
     if _INSTALLED:
         return
     _INSTALLED = True
+    if sys.platform == 'win32':
+        # WER's expandable path belongs to the crashing account, which can be
+        # different from the administrator who opted in to LocalDumps.
+        try:
+            from CrashDumpConfig import user_dump_folder
+            user_dump_folder().mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         _rotate_if_large(CRASH_LOG)
         _rotate_if_large(SESSION_LOG)
         _rotate_if_large(DEBUG_ERROR_LOG)
         _LOG_STREAM = CRASH_LOG.open('a', encoding='utf-8', buffering=1)
-        _LOG_STREAM.write('\n' + '=' * 72 + '\n')
-        _LOG_STREAM.write(f'[{_stamp()}] Image Draw Bot start\n')
-        _LOG_STREAM.write(f'Python: {sys.version.replace(chr(10), " ")}\n')
-        _LOG_STREAM.write(f'Executable: {_record_text(sys.executable)}\n')
-        _LOG_STREAM.write(f'Platform: {platform.platform()}\n')
-        _LOG_STREAM.write(f'PID: {os.getpid()}\n')
-        _LOG_STREAM.flush()
+        _write_crash_record('\n' + '=' * 72 + '\n'
+                            f'[{_stamp()}] Image Draw Bot start\n'
+                            f'Python: {sys.version.replace(chr(10), " ")}\n'
+                            f'Executable: {_record_text(sys.executable)}\n'
+                            f'Platform: {platform.platform()}\n'
+                            f'PID: {os.getpid()}\n')
         faulthandler.enable(file=_LOG_STREAM, all_threads=True)
     except Exception:
         _LOG_STREAM = None
@@ -141,10 +160,7 @@ def install():
         try:
             rendered=_record_text(''.join(traceback.format_exception(exc_type, exc, tb)))
             _append_error('Unhandled exception\n' + rendered, category='unhandled-main-thread')
-            if _LOG_STREAM:
-                with _LOG_LOCK:
-                    _LOG_STREAM.write(f'[{_stamp()}] Unhandled exception\n' + rendered)
-                    _LOG_STREAM.flush()
+            _write_crash_record(f'[{_stamp()}] Unhandled exception\n' + rendered)
         except Exception:
             pass
         finally:
@@ -163,10 +179,7 @@ def install():
                 name = _record_text(getattr(getattr(args, 'thread', None), 'name', '<unknown>'))[:200]
                 rendered=_record_text(''.join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback)))
                 _append_error(f'Unhandled thread exception: {name}\n{rendered}', category='unhandled-worker-thread')
-                if _LOG_STREAM:
-                    with _LOG_LOCK:
-                        _LOG_STREAM.write(f'[{_stamp()}] Unhandled thread exception: {name}\n' + rendered)
-                        _LOG_STREAM.flush()
+                _write_crash_record(f'[{_stamp()}] Unhandled thread exception: {name}\n' + rendered)
             except Exception:
                 pass
             finally:
@@ -206,8 +219,10 @@ def clean_exit():
         if RUN_MARKER_OWNED:
             # Do not delete another process's marker if ownership changed.
             try:
-                content = RUN_MARKER.read_text(encoding='utf-8')
-            except OSError:
+                with RUN_MARKER.open('rb') as marker:
+                    raw = marker.read(1025)
+                content = raw.decode('utf-8') if len(raw) <= 1024 else ''
+            except (OSError, UnicodeError):
                 content = ''
             if content.split() and content.split()[0] == f'pid={os.getpid()}':
                 RUN_MARKER.unlink(missing_ok=True)

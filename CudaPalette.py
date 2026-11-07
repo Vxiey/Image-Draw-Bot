@@ -46,7 +46,8 @@ for (int p=0; p<count; ++p) {
             float light=fabsf(srcL-palL), dark=fmaxf(srcL-palL,0.f);
             float chroma=fabsf(C-palC), bright=1.f+fmaxf(srcL-52.f,0.f)/80.f;
             float neutral=(C>=5.f && palC<fmaxf(2.5f,C*.28f))?C-palC:0.f;
-            float hex=fmaxf(hue-45.f,0.f), hext=fmaxf(hue-85.f,0.f);
+            float hex=(C>=5.f)?fmaxf(hue-45.f,0.f):0.f;
+            float hext=(C>=5.f)?fmaxf(hue-85.f,0.f):0.f;
             if (fidelity==1)
                 dist+=light*.10f+dark*.24f*bright+chroma*.055f+hue*.010f+neutral*.18f+hex*.035f+hext*.060f;
             else

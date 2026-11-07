@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any
 import math
+from SafeCanvasSnapshotScoring import trusted_snapshot_evidence
 
 REVIEW_VERSION = 1
 TRUSTED_LEVELS = {"high", "medium"}
@@ -60,6 +61,43 @@ def _actual_coverage(options: dict[str, Any]) -> float | None:
         return value
     post = _as_dict(options.get("post_draw_accuracy_meta"))
     return _float(post.get("actual_coverage_percent"), None)
+
+
+def build_correction_retry_plan(base_plan: dict[str, Any]) -> dict[str, Any]:
+    """Prepare one correction pass while retaining the original visual target.
+
+    Empty execution groups prevent a full redraw. The original source, previews
+    and fill descriptions remain comparison evidence; execution separately skips
+    every clear/fill prelude for this explicit correction-only operation.
+    """
+    options = dict(base_plan.get('options') or {})
+    estimate = _as_dict(base_plan.get('draw_time_estimate'))
+    projected = _float(estimate.get('projected_seconds'))
+    if projected is None or projected <= 0:
+        projected = _float(base_plan.get('estimate'))
+    count = base_plan.get('count')
+    per_path = (projected / count if projected is not None and projected > 0
+                and type(count) is int and count > 0 else None)
+    # A retry's before/after pair must describe this attempt, not the first
+    # full drawing. Missing fresh evidence cannot fall back to a previous pass.
+    for key in ('post_draw_before_correction_accuracy_meta', 'post_draw_accuracy_meta',
+                'post_draw_correction_meta', 'correction_review_meta',
+                'stroke_delivery_verification_meta', 'edge_behavior_meta',
+                'visual_verification_runtime_meta', 'adaptive_brush_runtime_meta',
+                'deadline_runtime_meta', 'real_speed_runtime_meta',
+                'auto_tuner_feedback_runtime_meta'):
+        options.pop(key, None)
+    options.update({
+        'post_draw_correction_retry': True, 'correction_only_retry': True,
+        '_post_draw_correction_ran': False, 'render_resume_state': None,
+        'auto_clear_canvas': False, 'canvas_clear_actions': [],
+        'canvas_clear_restore_actions': [], 'test_run': False, 'dry_run_sampled': False,
+        'post_draw_correction_reference_seconds_per_path': per_path,
+    })
+    groups = [[] for _ in (base_plan.get('colors') or ())]
+    retry_estimate = _float(options.get('post_draw_correction_estimated_seconds'), 6.0)
+    return dict(base_plan, options=options, groups=groups, execution_groups=groups,
+                execution_sequence=[], count=0, estimate=max(1.0, min(20.0, retry_estimate)))
 
 
 @dataclass(frozen=True)
@@ -131,15 +169,24 @@ def build_correction_review_state(options: dict[str, Any] | None, *, can_snapsho
     gate = _gate(options)
     visual = _actual_visual(options)
     coverage = _actual_coverage(options)
-    corr_enabled = bool(corr.get("enabled"))
-    corr_safe = bool(corr.get("safe", True))
+    corr_enabled = corr.get("enabled") is True
+    corr_safe = corr.get("safe", True) is True
+    if any(key in corr and type(corr[key]) is not bool for key in ('enabled', 'safe', 'stopped_early')):
+        corr_safe = False
     executed = _int(corr.get("executed_paths", 0), 0)
     planned = _int(corr.get("correction_paths", 0), 0)
     stopped = bool(corr.get("stopped_early"))
-    post_available = bool(post.get("available"))
-    trusted = _trust(post) in TRUSTED_LEVELS or bool(post.get("trusted"))
-    after_trust = _trust(corr) in TRUSTED_LEVELS
-    low_trust = post_available and not trusted
+    post_available = post.get("available") is True
+    trusted = trusted_snapshot_evidence(post)
+    after_trust = str(corr.get('post_correction_trust') or '').strip().lower()
+    after_untrusted = 'post_correction_trust' in corr and after_trust not in TRUSTED_LEVELS
+    for key in ('post_correction_visual_accuracy_percent', 'post_correction_actual_coverage_percent',
+                'post_correction_confidence_percent'):
+        if key in corr and corr[key] is not None:
+            value = _float(corr[key])
+            if isinstance(corr[key], bool) or value is None or not 0 <= value <= 100:
+                after_untrusted = True
+    low_trust = (post_available and not trusted) or after_untrusted
     blank = bool(post.get("blank_canvas"))
     unexpected = (_float(post.get("unexpected_ink_percent"), 0.0) or 0.0) > 18.0
     below_visual_gate = bool(gate is not None and visual is not None and visual < gate)
@@ -158,7 +205,8 @@ def build_correction_review_state(options: dict[str, Any] | None, *, can_snapsho
         next_step = "Inspect the canvas manually. Use full retry only after re-running the safety chain."
     elif low_trust or blank or unexpected or not corr_safe:
         state = "manual_review_required"; tone = "danger"; title = "Manual review required"
-        reason = str(corr.get("reason") or post.get("reason") or ("blank canvas" if blank else "snapshot trust was too low"))
+        reason = ("post-correction verification was not trusted" if after_untrusted else
+                  str(corr.get("reason") or post.get("reason") or ("blank canvas" if blank else "snapshot trust was too low")))
         summary = "Automatic correction is blocked because the captured result is not safe enough to patch."
         next_step = "Inspect the target canvas, then run normal Safety preflight / Dry run before retrying."
     elif corr_enabled and executed > 0:
@@ -174,7 +222,7 @@ def build_correction_review_state(options: dict[str, Any] | None, *, can_snapsho
             next_step = "No retry is needed unless the target canvas still looks wrong."
     elif corr and corr.get("reason"):
         reason = str(corr.get("reason"))
-        if "within" in reason.lower() or "already" in reason.lower():
+        if not needs_more and trusted and reason.strip().lower() == 'real result is already within correction gates':
             state = "within_gates"; tone = "success"; title = "Result is within correction gates"
             summary = "Correction was skipped because the verified result already met the configured gates."
             next_step = "No action needed."
@@ -197,31 +245,31 @@ def build_correction_review_state(options: dict[str, Any] | None, *, can_snapsho
         reason = str(corr.get("reason") or post.get("reason") or "")
 
     correction_retry_allowed = bool(
-        can_snapshot and trusted and not blank and not unexpected and not bool(options.get("paint_current_color"))
+        can_snapshot is True and trusted and not blank and not unexpected and not bool(options.get("paint_current_color"))
         and state in {"corrected_partial", "correction_skipped", "correction_available"}
     )
     correction_reason = "available after current safety gates" if correction_retry_allowed else "not available for the current review state"
-    if correction_retry_allowed and not strict_safety_ready:
+    if correction_retry_allowed and strict_safety_ready is not True:
         correction_reason = "run the normal setup safety chain first"
-    elif correction_retry_allowed and not full_start_unlocked:
+    elif correction_retry_allowed and full_start_unlocked is not True:
         correction_reason = "press Unlock full drawing first; correction-only still sends native input"
 
     full_retry_allowed = bool(options) and state != "no_result"
     full_retry_reason = "uses current image/settings but still requires the normal safety chain" if full_retry_allowed else "no completed plan to retry yet"
 
-    reverify_allowed = bool(can_snapshot and options and state != "no_result")
+    reverify_allowed = bool(can_snapshot is True and options and state != "no_result")
     reverify_reason = "available while the same target canvas is visible" if reverify_allowed else "requires snapshot support and a completed draw"
 
     actions = {
         "retry_correction_only": ReviewAction(
-            "Retry correction only", bool(correction_retry_allowed and strict_safety_ready and full_start_unlocked), correction_reason,
+            "Retry correction only", bool(correction_retry_allowed and strict_safety_ready is True and full_start_unlocked is True), correction_reason,
             requires_safety_chain=True, native_input=True).as_dict(),
         "retry_full_drawing": ReviewAction(
             "Retry full drawing", full_retry_allowed, full_retry_reason,
             requires_safety_chain=True, native_input=True).as_dict(),
         "rerun_result_verification": ReviewAction(
-            "Re-check result", bool(reverify_allowed and strict_safety_ready), reverify_reason,
-            requires_safety_chain=True, native_input=False).as_dict(),
+            "Re-check result", reverify_allowed, reverify_reason,
+            requires_safety_chain=False, native_input=False).as_dict(),
     }
     history_meta = _as_dict(options.get('correction_history_meta'))
     if not history_meta:

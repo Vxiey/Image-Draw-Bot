@@ -65,10 +65,10 @@ class Rc14SequenceResumeTests(unittest.TestCase):
 
     def test_drawbot_integrates_sequence_checkpointing(self):
         src=Path('DrawBot.py').read_text(encoding='utf-8')
-        self.assertIn('checkpoint_sequence_progress',src);self.assertIn('sequence_completed_counts',src)
+        self.assertIn('SequenceCheckpointSession',src);self.assertIn('sequence_completed_counts',src)
         self.assertIn('sequence_new_completed%25==0',src);self.assertIn('Dynamic Replanner may safely reorder only the remaining work',src)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.146-rc4')
+    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
 
 
 if __name__=='__main__':unittest.main()

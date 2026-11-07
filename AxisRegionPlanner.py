@@ -75,9 +75,14 @@ def horizontal_components(strokes: Sequence[Sequence[int]], *, adjacency: int = 
     for _y, items in rows.items():
         if cancelled():
             raise InterruptedError()
-        for left, right in zip(items, items[1:]):
+        left = items[0]
+        for right in items[1:]:
             if right[0] <= left[1] + 1:
                 union(left[2], right[2])
+                if right[1] > left[1]:
+                    left = right
+            else:
+                left = right
 
     for y in sorted(rows):
         if cancelled():
@@ -109,12 +114,23 @@ def horizontal_components(strokes: Sequence[Sequence[int]], *, adjacency: int = 
     for i in range(count):
         buckets.setdefault(find(i), []).append(i)
 
+    # Overlapping custom runs describe the same pixels, even when source run
+    # indices must remain distinct. Count their union in each already-sorted row.
+    pixel_counts: dict[int, int] = {}
+    for items in rows.values():
+        previous_end = None
+        for x0, x1, index in items:
+            root = find(index)
+            start = x0 if previous_end is None else max(x0, previous_end + 1)
+            pixel_counts[root] = pixel_counts.get(root, 0) + max(0, x1 - start + 1)
+            previous_end = x1 if previous_end is None else max(previous_end, x1)
+
     out = []
-    for indices in buckets.values():
+    for root, indices in buckets.items():
         indices.sort()
         component_runs = tuple(runs[i] for i in indices)
         x0, y0, x1, y1 = _bbox(component_runs)
-        pixels = sum(r[2] - r[0] + 1 for r in component_runs)
+        pixels = pixel_counts[root]
         out.append({
             "indices": tuple(indices),
             "runs": component_runs,
@@ -143,15 +159,19 @@ def verticalize_horizontal_runs(strokes: Sequence[Sequence[int]], *,
         if i % 256 == 0 and cancelled():
             raise InterruptedError()
         mask[y - y0 + 1, left - x0:right - x0 + 1] = 1
-    transitions = np.diff(mask, axis=0)
     result: list[Segment] = []
-    for x in range(width):
-        if x % 256 == 0 and cancelled():
+    # Process a few columns together. Transposition makes nonzero return the
+    # exact previous x-major/y-major order without two NumPy calls per column,
+    # and avoids retaining a second full-area transition raster.
+    for start_x in range(0, width, 64):
+        if cancelled():
             raise InterruptedError()
-        starts = np.flatnonzero(transitions[:, x] == 1)
-        ends = np.flatnonzero(transitions[:, x] == -1) - 1
-        result.extend((int(x + x0), int(a + y0), int(x + x0), int(b + y0))
-                      for a, b in zip(starts, ends))
+        transitions = np.diff(mask[:, start_x:start_x + 64], axis=0).T
+        columns, starts = np.nonzero(transitions == 1)
+        _, ends = np.nonzero(transitions == -1)
+        result.extend((int(x + start_x + x0), int(a + y0),
+                       int(x + start_x + x0), int(b - 1 + y0))
+                      for x, a, b in zip(columns, starts, ends))
     return tuple(result)
 
 

@@ -8,15 +8,18 @@ source/canvas pixels to disk.  Execution remains the responsibility of
 profile isolation rules still apply.
 """
 from __future__ import annotations
+from contextlib import closing
 
 from typing import Any, Callable, Sequence
+from numbers import Integral
 import math
+from time import monotonic
 import numpy as np
 from PIL import Image, ImageFilter
 
 from AccuracyEvaluator import _srgb_to_oklab, normalize_source
 from ContinuousPaths import build_execution_paths
-from SafeCanvasSnapshotScoring import crop_fitted_canvas
+from SafeCanvasSnapshotScoring import crop_fitted_canvas, trusted_snapshot_evidence, validated_comparison_size
 
 BACKGROUND_RGB = (255, 255, 255)
 MIN_TRUST = {"high", "medium"}
@@ -51,14 +54,21 @@ def _rgb_tuple(value: Any, default: tuple[int, int, int] = BACKGROUND_RGB) -> tu
 
 
 def _palette_tuple(palette_rgb: Sequence[Any] | None) -> tuple[tuple[int, int, int], ...]:
-    return tuple(_rgb_tuple(c) for c in (palette_rgb or ()))
+    if palette_rgb is None:
+        return ()
+    result = []
+    for color in palette_rgb:
+        if len(result) >= 65_536:
+            raise ValueError('Correction palette exceeds the bounded color count.')
+        values = tuple(float(c) for c in color)
+        if len(values) != 3 or not all(math.isfinite(c) and 0 <= c <= 255 for c in values):
+            raise ValueError('Correction palette must contain finite RGB colors in the byte range.')
+        result.append(tuple(int(round(c)) for c in values))
+    return tuple(result)
 
 
 def _as_rgb_image(image: Image.Image, size: tuple[int, int] | None = None) -> Image.Image:
-    out = image.convert("RGB")
-    if size is not None and out.size != tuple(size):
-        out = out.resize(tuple(size), Image.Resampling.LANCZOS)
-    return out
+    return normalize_source(image, tuple(size) if size is not None else image.size)
 
 
 def _foreground(arr: np.ndarray, *, background: tuple[int, int, int] = BACKGROUND_RGB,
@@ -77,15 +87,19 @@ def _plan_enabled(options: dict[str, Any], post_draw_meta: dict[str, Any] | None
     if bool(options.get("paint_current_color")):
         return False, "current-color mode cannot safely select source-matched correction colours"
     if post_draw_meta:
-        if str(post_draw_meta.get("feedback_trust") or "").lower() not in MIN_TRUST and not post_draw_meta.get("trusted"):
+        if not trusted_snapshot_evidence(post_draw_meta):
             return False, "real-result snapshot was not trusted enough"
         if bool(post_draw_meta.get("blank_canvas")):
             return False, "blank canvas snapshot is never corrected automatically"
         unexpected = _float(post_draw_meta.get("unexpected_ink_percent"), 0.0) or 0.0
         if unexpected > UNEXPECTED_INK_MAX:
             return False, "unexpected ink outside the plan is too high for safe correction"
-    if usable_deadline_seconds is not None and elapsed_seconds is not None:
-        remaining = float(usable_deadline_seconds) - float(elapsed_seconds)
+    if usable_deadline_seconds is not None or elapsed_seconds is not None:
+        usable = _float(usable_deadline_seconds)
+        elapsed = _float(elapsed_seconds)
+        if usable is None or elapsed is None or usable <= 0 or elapsed < 0:
+            return False, "invalid verified deadline headroom for a correction pass"
+        remaining = usable - elapsed
         if remaining < 1.25:
             return False, "not enough verified deadline headroom for a correction pass"
     return True, "enabled"
@@ -97,7 +111,7 @@ def correction_needed(post_draw_meta: dict[str, Any] | None, *, visual_gate_perc
     meta = post_draw_meta if isinstance(post_draw_meta, dict) else {}
     if not meta:
         return False, "no post-draw snapshot evidence"
-    if str(meta.get("feedback_trust") or "").lower() not in MIN_TRUST and not meta.get("trusted"):
+    if not trusted_snapshot_evidence(meta):
         return False, "snapshot trust below correction threshold"
     if bool(meta.get("blank_canvas")):
         return False, "blank canvas cannot be corrected safely"
@@ -129,7 +143,10 @@ def _extract_actual_canvas(*, snapshot: Image.Image | None, actual_canvas: Image
     if area is None or fitted is None:
         raise ValueError("snapshot correction needs area and fitted size")
     crop, geometry = crop_fitted_canvas(snapshot, area=tuple(area), fitted=tuple(fitted))
-    return _as_rgb_image(crop, size), {"source": "snapshot", **dict(geometry)}
+    try:
+        return _as_rgb_image(crop, size), {"source": "snapshot", **dict(geometry)}
+    finally:
+        crop.close()
 
 
 def _limit_mask(mask: np.ndarray, score: np.ndarray, *, max_pixels: int, max_fraction: float) -> tuple[np.ndarray, int, float]:
@@ -138,26 +155,23 @@ def _limit_mask(mask: np.ndarray, score: np.ndarray, *, max_pixels: int, max_fra
     selected = int(np.count_nonzero(mask))
     if selected <= 0:
         return mask, 0, 0.0
-    pixel_cap = min(max(1, int(max_pixels)), max(1, int(round(mask.size * float(max_fraction)))))
+    pixel_cap = min(max(0, int(max_pixels)), max(0, int(math.floor(mask.size * float(max_fraction)))))
+    if pixel_cap <= 0:
+        return np.zeros_like(mask), 0, 0.0
     if selected <= pixel_cap:
         return mask, selected, 100.0
     values = score[mask]
     # Deterministic top-K threshold; keep all pixels above the cutoff then trim
     # by row-major order if ties still exceed the cap.
     kth = np.partition(values, max(0, selected - pixel_cap))[selected - pixel_cap]
-    limited = mask & (score >= kth)
-    if int(np.count_nonzero(limited)) > pixel_cap:
-        ys, xs = np.nonzero(limited)
-        keep = np.zeros_like(mask, dtype=bool)
-        # Stable row-major ordering after thresholding.  The highest-error pixels
-        # are already isolated by the threshold, so this avoids randomness.
-        for y, x in zip(ys[:pixel_cap], xs[:pixel_cap]):
-            keep[int(y), int(x)] = True
-        limited = keep
+    limited = mask & (score > kth)
+    remaining = pixel_cap - int(np.count_nonzero(limited))
+    ties = np.flatnonzero(mask & (score == kth))
+    limited.reshape(-1)[ties[:remaining]] = True
     return limited, int(np.count_nonzero(limited)), round(pixel_cap * 100.0 / max(1, selected), 2)
 
 
-def _runs_from_mask(mask: np.ndarray) -> list[tuple[int, int, int, int]]:
+def _runs_from_mask(mask: np.ndarray, cancelled=lambda: False) -> list[tuple[int, int, int, int]]:
     rows, cols = np.nonzero(np.asarray(mask, dtype=bool))
     if len(rows) == 0:
         return []
@@ -166,9 +180,13 @@ def _runs_from_mask(mask: np.ndarray) -> list[tuple[int, int, int, int]]:
     # objects per pixel in the main analysis phase.
     start = 0
     while start < len(rows):
+        if cancelled():
+            raise InterruptedError()
         y = int(rows[start])
         end = start + 1
         while end < len(rows) and int(rows[end]) == y:
+            if end % 4096 == 0 and cancelled():
+                raise InterruptedError()
             end += 1
         xs = cols[start:end]
         if len(xs):
@@ -185,7 +203,7 @@ def _runs_from_mask(mask: np.ndarray) -> list[tuple[int, int, int, int]]:
     return out
 
 
-def build_post_draw_correction_plan(*, original_source: Image.Image,
+def _build_post_draw_correction_plan(*, original_source: Image.Image,
                                     palette_rgb: Sequence[Any],
                                     post_draw_meta: dict[str, Any] | None = None,
                                     snapshot: Image.Image | None = None,
@@ -204,7 +222,8 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
                                     max_pixels: int = DEFAULT_MAX_PIXELS,
                                     max_area_fraction: float = DEFAULT_MAX_FRACTION,
                                     background: tuple[int, int, int] = BACKGROUND_RGB,
-                                    cancelled: Callable[[], bool] = lambda: False) -> dict[str, Any]:
+                                    cancelled: Callable[[], bool] = lambda: False,
+                                    _owned: list) -> dict[str, Any]:
     """Plan one conservative source-relative correction pass.
 
     The returned ``groups`` and ``execution_groups`` are in source/planning pixel
@@ -213,8 +232,19 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
     """
     if cancelled():
         raise InterruptedError()
+    started = monotonic()
     options = options if isinstance(options, dict) else {}
-    palette = _palette_tuple(palette_rgb)
+    try:
+        if any(isinstance(v, bool) or not isinstance(v, Integral) or v < 0 for v in (max_paths, max_pixels)):
+            raise ValueError('Correction path and pixel limits must be non-negative integers.')
+        fraction = float(max_area_fraction)
+        if not math.isfinite(fraction) or not 0 <= fraction <= 1:
+            raise ValueError('Correction area fraction must be between zero and one.')
+        palette = _palette_tuple(palette_rgb)
+    except (TypeError, ValueError, OverflowError) as error:
+        return {"enabled": False, "safe": False, "reason": str(error), "stores_image_data": False}
+    if max_paths == 0 or max_pixels == 0 or fraction == 0:
+        return {"enabled": False, "safe": True, "reason": "correction cap disables all candidates", "stores_image_data": False}
     if not palette:
         return {"enabled": False, "safe": False, "reason": "palette is empty", "stores_image_data": False}
     ok, reason = _plan_enabled(options, post_draw_meta, usable_deadline_seconds, elapsed_seconds)
@@ -229,9 +259,15 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
             comparison_size = tuple(map(int, simulated_final.size))
         else:
             comparison_size = tuple(map(int, original_source.size))
-    size = (max(1, int(comparison_size[0])), max(1, int(comparison_size[1])))
+    size = validated_comparison_size(comparison_size)
     actual, geometry = _extract_actual_canvas(snapshot=snapshot, actual_canvas=actual_canvas, area=area, fitted=fitted, size=size)
+    _owned.append(actual)
+    if geometry.get('geometry_ok') is not True:
+        return {"enabled": False, "safe": False, "reason": "actual canvas geometry was not verified", "stores_image_data": False}
+    if cancelled():
+        raise InterruptedError()
     source = normalize_source(original_source, size, background=background)
+    _owned.append(source)
     src_u8 = np.asarray(source, dtype=np.uint8)
     act_u8 = np.asarray(actual, dtype=np.uint8)
     if src_u8.shape != act_u8.shape:
@@ -255,14 +291,18 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
     act_fg = _foreground(act_u8, background=background)
     expected_mask = src_fg
     if isinstance(quantized_target, Image.Image):
-        q = np.asarray(_as_rgb_image(quantized_target, size), dtype=np.uint8)
+        q_image = _as_rgb_image(quantized_target, size)
+        _owned.append(q_image)
+        q = np.asarray(q_image, dtype=np.uint8)
         q_fg = _foreground(q, background=background)
         # A correction may only target pixels the source and the plan both
         # consider drawable.  This blocks broad repainting outside the planned
         # object when the canvas capture is shifted or stale.
         expected_mask = src_fg & q_fg
     elif isinstance(simulated_final, Image.Image):
-        sim = np.asarray(_as_rgb_image(simulated_final, size), dtype=np.uint8)
+        sim_image = _as_rgb_image(simulated_final, size)
+        _owned.append(sim_image)
+        sim = np.asarray(sim_image, dtype=np.uint8)
         expected_mask = src_fg & _foreground(sim, background=background)
 
     missing = expected_mask & (~act_fg)
@@ -298,29 +338,41 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
         correction_oklab_route = {'backend_id':'cpu:numpy','backend':'CPU/NumPy'}
         correction_palette_lab_route = dict(correction_oklab_route)
     # Bound the palette-distance temporary independently of image size.
-    wanted_indices=np.empty(len(selected_lab),dtype=np.int16)
+    wanted_indices=np.empty(len(selected_lab),dtype=np.int32)
     best_error=np.empty(len(selected_lab),dtype=np.float32)
     for start in range(0,len(selected_lab),2048):
         if cancelled():raise InterruptedError()
         values=selected_lab[start:start+2048]
-        diff=values[:,None,:]-palette_lab[None,:,:]
-        dist=np.sum(diff*diff,axis=2)+diff[:,:,0]*diff[:,:,0]*.65
-        best=np.argmin(dist,axis=1)
-        wanted_indices[start:start+len(values)]=best
-        best_error[start:start+len(values)]=dist[np.arange(len(values)),best]
+        local_error = np.full(len(values), np.inf, dtype=np.float32)
+        local_index = np.zeros(len(values), dtype=np.int32)
+        color_step = max(1, 262_144//max(1, len(values)))
+        for color_start in range(0, len(palette_lab), color_step):
+            if cancelled():raise InterruptedError()
+            diff=values[:,None,:]-palette_lab[None,color_start:color_start+color_step,:]
+            dist=np.sum(diff*diff,axis=2)+diff[:,:,0]*diff[:,:,0]*.65
+            best=np.argmin(dist,axis=1)
+            errors=dist[np.arange(len(values)),best]
+            improves_tile=errors < local_error
+            local_error[improves_tile]=errors[improves_tile]
+            local_index[improves_tile]=color_start+best[improves_tile]
+        wanted_indices[start:start+len(values)]=local_index
+        best_error[start:start+len(values)]=local_error
     before_error=np.sum((src_lab-act_lab)**2,axis=2)+lum*lum*.65
     gains=before_error.reshape(-1)[selected_flat]-best_error
     improves=gains>1e-7
-    wanted = np.full(limited_mask.shape, -1, dtype=np.int16)
+    wanted = np.full(limited_mask.shape, -1, dtype=np.int32)
     wanted.reshape(-1)[selected_flat] = np.where(improves,wanted_indices,-1)
     rejected_non_improving=int(np.count_nonzero(~improves))
     # A brush has area. Every possible touched pixel must be non-worsening,
     # including neighbours that were already correct. A conservative square
     # envelope also covers circular brushes and endpoint rounding.
-    brush=max(1.0,float(options.get('brush_px',1) or 1))
-    scale=min(float(fitted[0])/size[0],float(fitted[1])/size[1]) if fitted else 1.0
-    if not math.isfinite(brush) or not math.isfinite(scale) or scale<=0:
+    brush=_float(options.get('brush_px',1))
+    scales=tuple(_float(v) for v in fitted) if fitted is not None else (float(size[0]),float(size[1]))
+    if (brush is None or brush<=0 or isinstance(options.get('brush_px'),bool)
+            or len(scales)!=2 or any(v is None or v<=0 for v in scales)):
         return {"enabled":False,"safe":False,"reason":"invalid correction brush geometry","stores_image_data":False}
+    brush=max(1.0,brush)
+    scale=min(scales[0]/size[0],scales[1]/size[1])
     radius=0 if brush==1 and scale==1 else int(math.ceil((brush/2+1)/scale))
     if radius>31:
         return {"enabled":False,"safe":True,"reason":"correction brush footprint exceeds bounded verifier","stores_image_data":False}
@@ -332,8 +384,9 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
             after=np.sum(diff*diff,axis=2)+diff[:,:,0]*diff[:,:,0]*.65
             allowed=(after<=before_error+1e-7) & expected_mask
             padded=np.pad(allowed, radius, constant_values=False)
-            eroded=np.asarray(Image.fromarray(padded.astype(np.uint8)*255).filter(
-                ImageFilter.MinFilter(radius*2+1)))[radius:-radius,radius:-radius]>0
+            with closing(Image.fromarray(padded.astype(np.uint8)*255)) as padded_image:
+                with closing(padded_image.filter(ImageFilter.MinFilter(radius*2+1))) as filtered:
+                    eroded=np.asarray(filtered)[radius:-radius,radius:-radius]>0
             reject=(wanted==index)&(~eroded)
             rejected_footprint+=int(np.count_nonzero(reject))
             wanted[reject]=-1
@@ -343,7 +396,8 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
 
     groups: list[list[tuple[int, int, int, int]]] = [[] for _ in palette]
     color_errors: list[tuple[float, int]] = []
-    for index in range(len(palette)):
+    for index in np.unique(wanted[wanted >= 0]):
+        index = int(index)
         if cancelled():
             raise InterruptedError()
         cmask = wanted == int(index)
@@ -351,7 +405,7 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
         if pixels <= 0:
             color_errors.append((0.0, index))
             continue
-        groups[index] = _runs_from_mask(cmask)
+        groups[index] = _runs_from_mask(cmask, cancelled)
         color_errors.append((float(np.mean(score[cmask], dtype=np.float64)), index))
 
     execution_groups = build_execution_paths(groups, enabled=True, max_rows_per_path=96,
@@ -385,21 +439,26 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
                 "rejected_non_improving_pixels":rejected_non_improving,"rejected_brush_footprint_pixels":rejected_footprint}
 
     seconds_per_path = _float(estimated_seconds_per_path, None)
+    if estimated_seconds_per_path is not None and seconds_per_path is None:
+        return {"enabled": False, "safe": False, "reason": "correction path timing must be finite and positive", "stores_image_data": False}
     if seconds_per_path is None:
         seconds_per_path = _float((options.get("draw_time_estimate") or {}).get("seconds_per_path"), None) if isinstance(options.get("draw_time_estimate"), dict) else None
     if seconds_per_path is None:
         seconds_per_path = 0.055 if str(options.get("speed", "Balanced")).lower() == "fast" else 0.085
+    if seconds_per_path <= 0:
+        return {"enabled": False, "safe": False, "reason": "correction path timing must be positive", "stores_image_data": False}
     estimated_seconds = total_paths * float(seconds_per_path)
     if usable_deadline_seconds is not None and elapsed_seconds is not None:
-        remaining = max(0.0, float(usable_deadline_seconds) - float(elapsed_seconds))
+        remaining = max(0.0, float(usable_deadline_seconds) - float(elapsed_seconds) - (monotonic()-started))
         # Leave at least half a second for release/final safety and never consume
         # more than 80% of the verified leftover budget.
         allowed = max(0.0, (remaining - 0.50) * 0.80)
         if allowed < 1.0:
             return {"enabled": False, "safe": True, "reason": "insufficient leftover budget after final safety reserve", "stores_image_data": False}
-        if estimated_seconds > allowed and total_paths > 1:
-            ratio = _clamp(allowed / max(1e-6, estimated_seconds), 0.05, 1.0)
-            path_cap = max(1, min(total_paths, int(math.floor(total_paths * ratio))))
+        if estimated_seconds > allowed:
+            path_cap = min(total_paths, int(math.floor(allowed / seconds_per_path)))
+            if path_cap <= 0:
+                return {"enabled": False, "safe": True, "reason": "no correction path fits the verified leftover budget", "stores_image_data": False}
             keep_left = path_cap
             capped = [[] for _ in palette]
             for idx in color_order:
@@ -414,6 +473,24 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
             estimated_seconds = total_paths * float(seconds_per_path)
             capped_flag = True
 
+    color_order = [i for i in color_order if execution_groups[i]]
+    if capped_flag:
+        from RasterIdentity import rasterize_segment
+        covered = np.zeros_like(limited_mask)
+        for index in color_order:
+            for path in execution_groups[index]:
+                if cancelled():raise InterruptedError()
+                if len(path) == 1:
+                    x, y = path[0]
+                    covered[y, x] = True
+                for a, b in zip(path, path[1:]):
+                    for x, y in rasterize_segment((*a, *b)):
+                        covered[y, x] = True
+        limited_mask &= covered
+        groups = [[] for _ in palette]
+    selected_pixels = int(np.count_nonzero(limited_mask))
+    selected_ratio = 100.0*selected_pixels/max(1, raw_pixels)
+    if cancelled():raise InterruptedError()
     corrected_colors = sum(1 for g in execution_groups if g)
     return {
         "enabled": True,
@@ -455,6 +532,36 @@ def build_post_draw_correction_plan(*, original_source: Image.Image,
             "palette_oklab": dict(correction_palette_lab_route),
         },
     }
+
+
+def build_post_draw_correction_plan(*, original_source: Image.Image,
+                                    palette_rgb: Sequence[Any],
+                                    post_draw_meta: dict[str, Any] | None = None,
+                                    snapshot: Image.Image | None = None,
+                                    actual_canvas: Image.Image | None = None,
+                                    area: tuple[int, int, int, int] | None = None,
+                                    fitted: tuple[float, float] | None = None,
+                                    comparison_size: tuple[int, int] | None = None,
+                                    simulated_final: Image.Image | None = None,
+                                    quantized_target: Image.Image | None = None,
+                                    options: dict[str, Any] | None = None,
+                                    usable_deadline_seconds: float | None = None,
+                                    elapsed_seconds: float | None = None,
+                                    visual_gate_percent: float | None = None,
+                                    estimated_seconds_per_path: float | None = None,
+                                    max_paths: int = DEFAULT_MAX_PATHS,
+                                    max_pixels: int = DEFAULT_MAX_PIXELS,
+                                    max_area_fraction: float = DEFAULT_MAX_FRACTION,
+                                    background: tuple[int, int, int] = BACKGROUND_RGB,
+                                    cancelled: Callable[[], bool] = lambda: False) -> dict[str, Any]:
+    """Plan bounded corrections and release every privately owned image on exit."""
+    arguments = locals().copy()
+    owned = []
+    try:
+        return _build_post_draw_correction_plan(**arguments, _owned=owned)
+    finally:
+        for image in reversed(owned):
+            image.close()
 
 
 def compact_correction_meta(correction: dict[str, Any]) -> dict[str, Any]:

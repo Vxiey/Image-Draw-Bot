@@ -22,8 +22,8 @@ class Root:
 
 class DrawStartDiagnosticsV1015Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.146-rc4')
-        self.assertEqual(FILE_VERSION,'1.0.146')
+        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(FILE_VERSION,'1.0.148')
 
     def test_start_without_image_is_not_silent(self):
         app = SimpleNamespace(
