@@ -1,6 +1,15 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 818 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18 and three in batch 19. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 821 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19 and three in batch 20. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 20: shared color analysis and complete UI handoffs
+
+- Share visible RGB/alpha source analysis across actual dynamic-color stages while preserving exact plans and ending private ownership promptly.
+- Make Clear GPU cache work after a switch to CPU without initializing unused backends or releasing live allocations.
+- Present the completed preview worker estimate without repeating its geometry scan on the UI thread; retain fresh legacy/failure fallbacks.
+- Complete automatic source-preview/Stop handoff, private-image cleanup, manually selected browser drawing boundaries and reset of learned Real-Speed history. These existing-contract completions add no IDs.
+
+Three new groups bring the registry to **821**, leaving **179** before the requested release. Frozen-source discovery completed **4,162 tests: 4,104 passed and 58 skipped**. The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures and full historical comparisons passed. Fourteen paired workloads separate observed CPU/UI-adoption work from native drawing/GPU claims. See [final local validation](docs/v148-batch20-validation.json). Exact-commit Windows/CI results remain a separate gate recorded in PR46.
 
 ## Batch 19: less repeated analysis and reliable window cleanup
 

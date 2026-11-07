@@ -4299,6 +4299,7 @@ class DrawBotApp:
         self.color_session_cache = {}
         self.pending_render_resume = None
         self.canvas_anchor_detection = None
+        self.browser_drawing_region = None
         self.small_test_passed = False
         self.capture_job = None
         self.mouse_probe_process = None
@@ -4798,6 +4799,7 @@ class DrawBotApp:
                 self.color_plan_text.set(f'Render resume: {completed}/{total} colors completed · next color {completed+1 if completed < total else "done"} · DISARMED')
         # Never restore a live target or any passed/armed gate.
         self.corners=[];self.target_window=None;self.target_client_rect=None;self.target_dpi=None
+        self.browser_drawing_region=None
         self.small_test_passed=False
         self.target_lock_passed=False;self.target_lock_fingerprint=None;self.target_lock_signature=None
         self.safety_preflight_passed=False;self.safety_preflight_signature=None;self.safety_preflight_valid_until=0.0
@@ -4915,6 +4917,7 @@ class DrawBotApp:
         if self.game.get()!='Gartic Phone':
             self.status.set('Choose Gartic Phone for full automatic setup.');return
         self.cancel() # disarm any pending automatic start; setup never draws
+        self.browser_drawing_region=None  # This explicit command chooses the full detected canvas.
         profile=self.game.get();path=Path(self.calibration_path)
         self.browser_auto_calibration_success=False
         _preferred_handle=(self.target_window[0] if getattr(self,'target_window',None) else None)
@@ -5385,6 +5388,20 @@ class DrawBotApp:
         selected=getattr(getattr(self,'paint_tool',None),'get',lambda:'Auto (recommended)')()
         return profile=='Microsoft Paint' and selected=='Auto (recommended)'
 
+    def _browser_drawing_region(self, *, require_verified=False):
+        region=getattr(self,'browser_drawing_region',None)
+        if region is None:return None
+        from BrowserDrawingRegion import BrowserDrawingRegion
+        if not isinstance(region,BrowserDrawingRegion):
+            raise ValueError('Select the drawing area again to bind its browser window.')
+        target=getattr(self,'target_window',None)
+        if not target:raise ValueError('Select the drawing area again to bind its browser window.')
+        meta={'handle':target[0],'client_rect':getattr(self,'target_client_rect',None),
+              'dpi':getattr(self,'target_dpi',None)}
+        region.require_current(PROFILES.get(self.game.get(),('',))[0],meta,self.corners,
+                               verified=require_verified)
+        return region
+
     def _start_guard_ready(self, *, require_image=True):
         """Return basic setup readiness without moving or clicking the mouse."""
         if require_image and self.original is None:
@@ -5393,6 +5410,8 @@ class DrawBotApp:
             return False, 'Start locked: select the drawing area first.'
         if getattr(self,'target_window',None) is None:
             return False, 'Start locked: the target window is not locked. Select the drawing area again.'
+        try:DrawBotApp._browser_drawing_region(self,require_verified=True)
+        except ValueError as error:return False, 'Start locked: '+str(error)
         if not self._palette_preflight_ready():
             return False, 'Start locked: read the color palette first, or enable a Paint mode that intentionally bypasses palette clicks.'
         if not self._paint_tool_preflight_ready():
@@ -6580,6 +6599,14 @@ class DrawBotApp:
         if self.activity:
             return DrawBotApp._schedule_browser_one_click(self,request,delay=80)
         profile_name=request['profile_name'];profile_key=request['profile_key']
+        try:drawing_region=DrawBotApp._browser_drawing_region(self)
+        except ValueError as error:
+            self.status.set(str(error))
+            DrawBotApp._cancel_browser_one_click(self,'drawing region needs selection',request=request)
+            return False
+        if drawing_region is not None:
+            drawing_region=drawing_region.without_verification()
+            self.browser_drawing_region=drawing_region
         current_handle=(self.target_window[0] if getattr(self,'target_window',None) else None)
         palette_path=Path(self.calibration_path)
         self.browser_one_click_pending=False
@@ -6594,8 +6621,10 @@ class DrawBotApp:
             from BrowserOneClick import one_click_setup
             cancelled=lambda:request['cancelled'].is_set() or self.stop.is_set()
             if cancelled():raise InterruptedError('One-Click request cancelled.')
-            payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,cancelled=cancelled)
+            payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,
+                                    cancelled=cancelled,verify_canvas=drawing_region is not None)
             if cancelled():raise InterruptedError('One-Click request cancelled.')
+            payload['_browser_drawing_region']=drawing_region
             payload['one_click_force']=force
             payload['_browser_request']=request
             self.events.put(('browser_one_click_setup_complete',payload))
@@ -6654,6 +6683,12 @@ class DrawBotApp:
         if not target:
             if not automatic:self.status.set('Select/confirm the target canvas once. Image Draw Bot will auto-detect the palette immediately afterwards.')
             return False
+        try:drawing_region=DrawBotApp._browser_drawing_region(self)
+        except ValueError as error:
+            self.status.set(str(error));return False
+        if drawing_region is not None:
+            drawing_region=drawing_region.without_verification()
+            self.browser_drawing_region=drawing_region
         # begin_worker owns the busy state. Setting it before begin_worker used to
         # make the worker reject itself as already busy.
         self.stop.clear();self.drop_in_sync_phase=DROP_SYNC_AUTO_SETUP
@@ -6689,7 +6724,12 @@ class DrawBotApp:
                         'note':'Verified local layout fingerprint restored without full palette detection.',
                         'target_meta':meta, 'profile_name':profile_name,
                         'layout_fingerprint_meta':cached.as_dict(),
+                        '_browser_drawing_region':drawing_region,
                     })
+                    if drawing_region is not None:
+                        from BrowserAutoCalibration import detect_browser_canvas
+                        live=detect_browser_canvas(profile_key,screenshot,screen_origin=tuple(meta['client_rect'])[:2],cancelled=self.stop.is_set)
+                        payload.update(canvas_box=live['canvas_box'],canvas_confidence=live['canvas_confidence'])
                     self.events.put(('browser_auto_calibration_complete',payload))
                     return
                 result=auto_calibrate_browser(profile_key,meta,palette_path,screenshot=screenshot,cancelled=self.stop.is_set)
@@ -6699,6 +6739,7 @@ class DrawBotApp:
                     fingerprint={'saved':False,'reason':str(error)}
                 payload=result.as_dict();payload['target_meta']=meta;payload['profile_name']=profile_name
                 payload['layout_fingerprint_meta']=fingerprint
+                payload['_browser_drawing_region']=drawing_region
                 self.events.put(('browser_auto_calibration_complete',payload))
         started=self.begin_worker('browser-auto-calibration',work)
         if not started and self.drop_in_sync_phase==DROP_SYNC_AUTO_SETUP:
@@ -6731,6 +6772,13 @@ class DrawBotApp:
             started=bool(self.auto_calibrate_paint_tools(one_click_verify=True))
             if not started:self.one_click_setup_verify_pending=None
             return started
+        try:drawing_region=DrawBotApp._browser_drawing_region(self)
+        except ValueError as error:
+            self.one_click_setup_verify_pending=None
+            self.status.set(str(error));return False
+        if drawing_region is not None:
+            drawing_region=drawing_region.without_verification()
+            self.browser_drawing_region=drawing_region
         current_handle=(self.target_window[0] if getattr(self,'target_window',None) else None)
         palette_path=Path(self.calibration_path)
         request=DrawBotApp._new_browser_one_click_request(self,auto_start=False)
@@ -6741,7 +6789,9 @@ class DrawBotApp:
                 from BrowserOneClick import one_click_setup
                 cancelled=lambda:request['cancelled'].is_set() or self.stop.is_set()
                 if cancelled():raise InterruptedError('One-click Setup cancelled.')
-                payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,cancelled=cancelled)
+                payload=one_click_setup(profile_name,profile_key,palette_path,current_handle=current_handle,
+                                        cancelled=cancelled,verify_canvas=drawing_region is not None)
+                payload['_browser_drawing_region']=drawing_region
                 if cancelled():raise InterruptedError('One-click Setup cancelled.')
                 payload['one_click_setup_verify_only']=True
                 payload['_browser_request']=request
@@ -6752,7 +6802,7 @@ class DrawBotApp:
                     'passed':False,'profile_key':profile_key,'mode':'browser','confidence':0.0,
                     'canvas_ok':False,'palette_ok':False,'palette_verified':0,'palette_tested':0,
                     'tool_ok':False,'reasons':[str(error)],'error':str(error),'profile_name':profile_name,
-                    '_browser_request':request,
+                    '_browser_request':request,'_browser_drawing_region':drawing_region,
                 }))
         try:started=bool(self.begin_worker('browser-one-click-setup',work))
         except Exception:
@@ -6800,13 +6850,17 @@ class DrawBotApp:
             except (tk.TclError,RuntimeError):self.one_click_setup_after=None
             return True
         profile_name=str(pending['profile_name']);profile_key=str(pending['profile_key']);mode=str(pending['mode'])
+        drawing_region=payload.get('_browser_drawing_region') if mode=='browser' else None
+        if mode=='browser' and drawing_region is not getattr(self,'browser_drawing_region',None):
+            DrawBotApp._cancel_browser_one_click(self,'verification drawing region changed',request=request)
+            return False
         meta=dict(payload.get('target_meta') or {});canvas=payload.get('canvas_box')
         if not meta.get('handle') or not meta.get('rect') or not meta.get('client_rect') or not isinstance(canvas,(list,tuple)) or len(canvas)!=4:
             self.events.put(('one_click_setup_verification_complete',{
                 'passed':False,'profile_key':profile_key,'mode':mode,'confidence':0.0,'canvas_ok':False,
                 'palette_ok':False,'palette_verified':0,'palette_tested':0,'tool_ok':False,
                 'reasons':['setup did not return complete target/canvas metadata'],'profile_name':profile_name,
-                '_browser_request':request,
+                '_browser_request':request,'_browser_drawing_region':drawing_region,
             }))
             return False
         palette_path=Path(self.calibration_path)
@@ -6824,11 +6878,11 @@ class DrawBotApp:
                 from OneClickSetupVerification import verify_browser_live,verify_paint_live
                 with closing(_grab_rgb(client)) as shot:
                     if cancelled():raise InterruptedError('One-click Setup verification cancelled.')
-                    result=(verify_browser_live(profile_key,live_meta,canvas,palette_path,screenshot=shot)
+                    result=(verify_browser_live(profile_key,live_meta,canvas,palette_path,screenshot=shot,drawing_region=drawing_region)
                             if mode=='browser' else verify_paint_live(live_meta,canvas,palette_path,screenshot=shot))
                 if cancelled():raise InterruptedError('One-click Setup verification cancelled.')
                 out=result.as_dict();out['profile_name']=profile_name;out['target_meta']=live_meta
-                out['_browser_request']=request
+                out['_browser_request']=request;out['_browser_drawing_region']=drawing_region
                 self.events.put(('one_click_setup_verification_complete',out))
             except InterruptedError:raise
             except Exception as error:
@@ -6836,7 +6890,7 @@ class DrawBotApp:
                     'passed':False,'profile_key':profile_key,'mode':mode,'confidence':0.0,'canvas_ok':False,
                     'palette_ok':False,'palette_verified':0,'palette_tested':0,'tool_ok':False,
                     'reasons':[str(error)],'error':str(error),'profile_name':profile_name,
-                    '_browser_request':request,
+                    '_browser_request':request,'_browser_drawing_region':drawing_region,
                 }))
         return bool(self.begin_worker('one-click-verify',work))
 
@@ -7178,6 +7232,7 @@ class DrawBotApp:
             # A profile change is configuration only.  It must never capture a
             # target, activate another window, move the pointer or click.
             self.corners=[];self.saved_area=None;self.canvas_anchor_detection=None;self.target_window=None;self.target_client_rect=None;self.target_dpi=None;self.plan=None;self.small_test_passed=False;self.color_session_cache.clear()
+            self.browser_drawing_region=None
             self.mode.set(SMART_PATH_MODE);self.shape_order.set('Fill first');self.shape_model.set('Auto');self.max_stroke_cap.set('Auto');self.progressive_rendering.set('Auto');self.planning_watchdog.set('Auto');self.time_budget_mode.set('Manual');self.adaptive_deadline_renderer.set(True);self.deadline_safety_reserve.set('Auto');self.target_stroke_count.set('Auto');self.target_stroke_custom.set('2500');self.render_style.set('Auto');self.draw_quality.set('High likeness');self.human_mode.set('Off');self.gpu_mode.set('Auto');self.gpu_vram.set('Auto');self.gpu_performance.set('High throughput');self.cpu_workers.set('Auto');self.cpu_engine.set('Auto');self.ram_budget.set('Auto');self.ram_custom_mb.set('4096');self.planning_resolution.set('High');self.profile_engine.set('Auto');self.edge_behavior.set('Auto');self.background_fill.set('Conservative');self.fill_engine.set('Auto');self.background_simplification.set('Balanced');self.color_grouping.set('Smart');self.color_workflow.set('Finish color first');self.stroke_optimizer.set('Auto');self.adaptive_detail.set('Auto');self.detail_zoom.set('Auto');self.quick_sketch_style.set('Balanced');self.quick_sketch_fill_preference.set('Safe Fill First');self.hybrid_mode.set('Auto Hybrid');self.color_rendering.set('Perceptual match');self.color_fidelity.set('Faithful');self.color_layers.set('Off');self.custom_color_workflow.set('Exact custom + palette fallback');self.exact_color_limit.set('Auto');self.preview_mode.set('Manual');self.auto_clear_canvas.set(False);self.tool_strategy.set('Auto');self.portrait_focus.set(True)
             self.quality.set('Balanced');self.speed.set('Balanced');self.precision.set('High')
             apply_profile_defaults(self,selected)
@@ -7851,6 +7906,7 @@ class DrawBotApp:
                     # re-verifies canvas/palette again before native input.
                     self._invalidate_target_lock('Game Canvas Drop changed the target canvas',disarm=True)
                     self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)];self.canvas_anchor_detection=None
+                    self.browser_drawing_region=None  # The user dropped on this newly highlighted full canvas.
                     self.target_window=(int(meta['handle']),tuple(map(int,meta['rect'])))
                     self.target_client_rect=tuple(map(int,meta['client_rect']));self.target_dpi=meta.get('dpi')
                     self.small_test_passed=False;self.color_session_cache.clear();self.browser_auto_calibration_success=False
@@ -8443,6 +8499,8 @@ class DrawBotApp:
     def _maybe_auto_preview(self, delay=900, reason='settings'):
         if self.activity or self.closing or self.original is None:
             return False
+        stop=getattr(self,'stop',None)
+        if stop is not None and stop.is_set():return False
         if reason == 'profile-change':
             log_event('Preview auto-start blocked after profile-change. Build preview is manual after profile switches.')
             return False
@@ -8459,8 +8517,8 @@ class DrawBotApp:
 
     def reset_draw_time_calibration(self):
         if self.closing:return False
-        if self.activity:
-            self.status.set('Finish or stop the current operation before resetting learned draw timing.')
+        if not DrawBotApp._profile_action_ready(self):
+            self.status.set('Finish the current operation or profile change before resetting learned draw timing.')
             return False
         try:
             from DrawTimeCalibration import reset_profile
@@ -8576,6 +8634,8 @@ class DrawBotApp:
         self.preview_after=None
         if self.activity or self.closing:
             return
+        stop=getattr(self,'stop',None)
+        if not user_initiated and stop is not None and stop.is_set():return
         self.preview_generation=int(getattr(self,'preview_generation',0))+1
         generation=self.preview_generation
         if self.original is None:
@@ -8696,21 +8756,32 @@ class DrawBotApp:
                 return
             plan['target_area']=tuple(map(int,target_area))
             plan['preview_area']=tuple(map(int,preview_area))
-            try:
-                from DrawTimeEstimate import attach_draw_time_estimate
-                attach_draw_time_estimate(plan)
-            except Exception as error:
-                log_event(f'Preview draw time projection skipped: {error!r}')
-            plan['preview_elapsed_seconds']=round(time.monotonic()-started,3)
             plan['preview_safe_pipeline']=not full_detail
             plan['full_detail_preview']=bool(full_detail)
             plan['preview_fallback_used']=bool(used_fallback)
             plan['preview_generation']=generation
+            try:
+                from DrawTimeEstimate import attach_draw_time_estimate
+                # This worker exclusively owns the completed plan until the
+                # queued result is adopted. Transfer this exact final estimate
+                # once; Tk need not rescan every path and reload calibration.
+                plan['_preview_time_estimate_ready']=attach_draw_time_estimate(plan)
+            except Exception as error:
+                log_event(f'Preview draw time projection skipped: {error!r}')
+            plan['preview_elapsed_seconds']=round(time.monotonic()-started,3)
             log_event(f'Preview planning finished in {plan["preview_elapsed_seconds"]:.3f} s fallback={used_fallback}: {_plan_log_text(plan)}.')
             self.events.put(('planned',plan))
         # Historic v1.0.10 status string kept for release-test visibility: Planning optimized preview.
         self.status.set('Building preview…' if user_initiated else 'Planning lightweight auto preview…')
-        self.begin_worker('preview',work)
+        started=False
+        try:
+            # Automatic work must not clear an Esc received during options or
+            # snapshot preparation. An explicit Build preview is a new request.
+            started=bool(self.begin_worker('preview',work,reset_stop=bool(user_initiated),cleanup=original.close))
+        finally:
+            if not started:
+                original.close()
+                if self.stop.is_set() and not self.closing:self.status.set('Stopped.')
 
     def schedule_previews(self,event=None,delay=45):
         """Coalesce resize events before redrawing preview canvases.
@@ -9154,6 +9225,9 @@ class DrawBotApp:
         try:
             return DrawBotApp._auto_recalibrate_browser_from_meta_impl(self,meta,reason=reason)
         except Exception as error:
+            from BrowserDrawingRegion import BrowserDrawingRegion
+            region=getattr(self,'browser_drawing_region',None)
+            if isinstance(region,BrowserDrawingRegion):self.browser_drawing_region=region.without_verification()
             if getattr(self,'pending_drop_in_import',None) is not None or normalize_drop_in_action(getattr(self,'drop_action_pending',None))==DROP_IN_ACTION:
                 DrawBotApp._disarm_manual_drop_in(self,'browser auto-recalibration failed while Drop-In was waiting')
                 try:self.status.set(f'Drop-In blocked: Auto-Recalibration failed: {error}')
@@ -9181,6 +9255,7 @@ class DrawBotApp:
             raise ValueError(f'Browser Auto-Recalibration is unavailable: {error}') from error
         if profile_key not in SUPPORTED_BROWSER_PROFILES:
             return False
+        drawing_region=DrawBotApp._browser_drawing_region(self)
         client=tuple(meta.get('client_rect') or ())
         if len(client)!=4:
             raise ValueError('Browser Auto-Recalibration could not read the browser client rectangle.')
@@ -9198,6 +9273,7 @@ class DrawBotApp:
             meta=dict(meta);meta.update({'handle':handle,'rect':rect,'client_rect':client,'dpi':dpi})
         except InterruptedError as error:
             raise ValueError(f'Browser Auto-Recalibration could not verify the target browser: {error}') from error
+        if drawing_region is not None:drawing_region.drawing_box(profile_key,meta)
         if uses_paint_color(self):
             from ScreenGuard import _grab_rgb
             from BrowserAutoCalibration import detect_browser_canvas
@@ -9209,10 +9285,14 @@ class DrawBotApp:
             l,t,r,b=map(int,canvas)
             if r-l<40 or b-t<40 or not (client[0]<=l<r<=client[2] and client[1]<=t<b<=client[3]):
                 raise ValueError('Detected sketch canvas is outside the browser or too small.')
+            if drawing_region is not None:
+                drawing_region=drawing_region.with_canvas(profile_key,meta,canvas)
+                l,t,r,b=drawing_region.drawing_box(profile_key,meta)
             self.corners=[(l,t),(r,b)];self.saved_area=list(self.corners)
             self.target_window=(handle,tuple(meta['rect']))
             self.target_client_rect=client;self.target_dpi=meta.get('dpi')
-            self.canvas_anchor_detection=None
+            self.browser_drawing_region=drawing_region
+            if drawing_region is None:self.canvas_anchor_detection=None
             self.color_session_cache.clear()
             log_event('Single-color browser canvas verified without palette calibration or input.')
             return True
@@ -9268,10 +9348,14 @@ class DrawBotApp:
         if not (client[0] <= l < r <= client[2] and client[1] <= t < b <= client[3]):
             raise ValueError('Browser Auto-Recalibration detected a canvas outside the browser client area. No mouse input was sent.')
 
+        if drawing_region is not None:
+            drawing_region=drawing_region.with_canvas(profile_key,meta,canvas)
+            l,t,r,b=drawing_region.drawing_box(profile_key,meta)
         self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)]
         self.target_window=(int(meta['handle']),tuple(meta['rect']))
         self.target_client_rect=client;self.target_dpi=meta.get('dpi')
-        self.canvas_anchor_detection=None
+        self.browser_drawing_region=drawing_region
+        if drawing_region is None:self.canvas_anchor_detection=None
         self.color_session_cache.clear()
         DrawBotApp.refresh_palette(self)
         if not bool(getattr(self,'palette_ready',False)):
@@ -9317,6 +9401,9 @@ class DrawBotApp:
         try:
             return DrawBotApp._run_browser_visual_preflight_impl(self,current_client,reason=reason)
         except Exception as error:
+            from BrowserDrawingRegion import BrowserDrawingRegion
+            region=getattr(self,'browser_drawing_region',None)
+            if isinstance(region,BrowserDrawingRegion):self.browser_drawing_region=region.without_verification()
             if getattr(self,'pending_drop_in_import',None) is not None or normalize_drop_in_action(getattr(self,'drop_action_pending',None))==DROP_IN_ACTION:
                 DrawBotApp._disarm_manual_drop_in(self,'browser visual preflight failed while Drop-In was waiting')
                 try:self.status.set(f'Drop-In blocked: Visual Preflight failed: {error}')
@@ -9355,9 +9442,17 @@ class DrawBotApp:
                 'client_rect':tuple(client),
                 'dpi':getattr(self,'target_dpi',None),
             }
+            drawing_region=DrawBotApp._browser_drawing_region(self,require_verified=True)
+            if drawing_region is not None:canvas=drawing_region.expected_canvas(profile_key,meta)
             if uses_paint_color(self):
-                return verify_browser_visual_preflight(profile_key,meta,canvas,(),require_palette=False)
-            return verify_browser_visual_preflight(profile_key,meta,canvas,palette_entries)
+                result=verify_browser_visual_preflight(profile_key,meta,canvas,(),require_palette=False)
+            else:
+                result=verify_browser_visual_preflight(profile_key,meta,canvas,palette_entries)
+            if result.passed and drawing_region is not None:
+                # Verify the full canvas independently, then retain the user's
+                # hard region only if it fits this fresh detection as well.
+                self.browser_drawing_region=drawing_region.with_canvas(profile_key,meta,result.detected_canvas)
+            return result
 
         result=verify(current_client)
         if not result.passed:
@@ -9400,6 +9495,14 @@ class DrawBotApp:
         import os
         from TargetCapture import capture_target_metadata_isolated
         meta=capture_target_metadata_isolated(self.area(),exclude_pid=os.getpid())
+        from BrowserAutoCalibration import SUPPORTED_BROWSER_PROFILES
+        from BrowserDrawingRegion import BrowserDrawingRegion
+        profile_key=PROFILES.get(self.game.get(),('',))[0]
+        region=None
+        if profile_key in SUPPORTED_BROWSER_PROFILES:
+            x,y,w,h=self.area()
+            region=BrowserDrawingRegion.capture(profile_key,meta,(x,y,x+w,y+h))
+        self.browser_drawing_region=region
         self.target_window=(meta['handle'],meta['rect'])
         self.target_client_rect=meta['client_rect']
         self.target_dpi=meta.get('dpi')
@@ -9558,6 +9661,14 @@ class DrawBotApp:
                 raise ValueError('The color palette overlaps the drawing area. Select only the canvas.')
             options=self.options()
             profile_key=PROFILES[self.game.get()][0]
+            detection_canvas=(area[0],area[1],area[0]+area[2],area[1]+area[3])
+            drawing_region=DrawBotApp._browser_drawing_region(self,require_verified=True)
+            if drawing_region is not None:
+                detection_canvas=drawing_region.expected_canvas(profile_key,{
+                    'handle':self.target_window[0],'client_rect':current_client,
+                    'dpi':getattr(self,'target_dpi',None)})
+            limited_browser_region=(drawing_region is not None and
+                detection_canvas!=(area[0],area[1],area[0]+area[2],area[1]+area[3]))
             if paint_prepared_options is not None:
                 if not isinstance(paint_prepared_options,dict):
                     raise ValueError('Prepared Paint brush settings are invalid. Prepare Paint again.')
@@ -9587,7 +9698,7 @@ class DrawBotApp:
                             pal_box=(min(xs),min(ys),max(xs)+1,max(ys)+1)
                         x,y,w,h=area
                         brush_plan=plan_browser_brush_size(profile_key,shot,tuple(current_client),
-                            canvas_box=(x,y,x+w,y+h),palette_box=pal_box,requested_px=options.get('brush_px',3))
+                            canvas_box=detection_canvas,palette_box=pal_box,requested_px=options.get('brush_px',3))
                         options['browser_brush_plan']=brush_plan.as_dict()
                         options['brush_px']=int(brush_plan.effective_px)
                         options['canvas_guard_brush_px']=int(brush_plan.safe_guard_px)
@@ -9597,7 +9708,7 @@ class DrawBotApp:
                         if profile_key in ('gartic-phone','gartic-io'):
                             from GarticOpacity import plan_gartic_opacity
                             opacity_plan=plan_gartic_opacity(profile_key,shot,tuple(current_client),
-                                canvas_box=(x,y,x+w,y+h),source_image=self.original,
+                                canvas_box=detection_canvas,source_image=self.original,
                                 requested=options.get('gartic_opacity','Auto'),draw_quality=options.get('draw_quality',''),
                                 render_style=options.get('render_style',''),drawing_mode=options.get('drawing_mode',''),
                                 outline=bool(options.get('outline')))
@@ -9625,7 +9736,7 @@ class DrawBotApp:
                             tool_pal_box=(min(xs),min(ys),max(xs)+1,max(ys)+1)
                         x,y,w,h=area
                         tool_plan=plan_browser_tools(profile_key,tool_shot,tuple(current_client),
-                            canvas_box=(x,y,x+w,y+h),palette_box=tool_pal_box)
+                            canvas_box=detection_canvas,palette_box=tool_pal_box)
                         options['browser_tool_plan']=tool_plan.as_dict()
                         log_event(f"Automatic browser tools preflight: profile={profile_key} tools={sorted((tool_plan.tools or {}).keys())} confidence={tool_plan.confidence:.3f} method={tool_plan.method!r}.")
                 except InterruptedError:raise
@@ -9708,11 +9819,21 @@ class DrawBotApp:
                     x,y=position
                     if area[0]<=x<=area[0]+area[2] and area[1]<=y<=area[1]+area[3]:
                         raise ValueError(f'The calibrated {kind} control overlaps the drawing area. Recalibrate application tools.')
+            if limited_browser_region:
+                # A bucket seed inside a region does not constrain host flood
+                # fill. Keep the existing stroke fallback for this hard bound.
+                options['fill_tool_available']=False
+                options['fill_tool_actions']=[];options['fill_restore_actions']=[]
+                options['fill_unavailable_reason']='A selected browser subregion uses brush strokes; native Fill can escape into the full canvas.'
             # v1.0.114 Automatic Canvas Clear.  Resolution happens only inside
             # explicit Start/Dry Run preflight, never during preview planning.
             options['canvas_clear_actions']=[];options['canvas_clear_restore_actions']=[]
             options['canvas_clear_strategy']='off';options['canvas_clear_reason']='';options['canvas_clear_estimate_seconds']=0.0
             if options.get('auto_clear_canvas') and not test:
+                if limited_browser_region:
+                    raise ValueError('Auto clear cannot safely preserve a selected browser subregion: '
+                                     'native Clear affects the full canvas and the Eraser width is not verified. '
+                                     'Disable Auto clear or select the full canvas.')
                 from CanvasClear import resolve_clear_strategy
                 tool_data={}
                 if not paint_profile:
@@ -10629,17 +10750,30 @@ class DrawBotApp:
         return bool(self.begin_worker('golden-regression',work,reset_stop=False))
 
     def clear_gpu_cache(self):
-        if self.activity:
-            self.status.set('Stop the current operation before clearing the GPU cache.')
-            return
-        try:
-            result=gpu_clear_cache(self.gpu_mode.get())
+        if not self._profile_action_ready():
+            return False
+        self.stop.clear()
+        mode = self.gpu_mode.get()
+        self.status.set('Clearing unused GPU caches…')
+        def work():
+            result = gpu_clear_cache(mode, cancelled=self.stop.is_set)
+            if self.stop.is_set():
+                raise InterruptedError()
             if result.get('cleared'):
-                self.status.set(f"GPU cache cleared. Cached VRAM: {result.get('before_cached_mb',0)} MB → {result.get('after_cached_mb',0)} MB.")
+                before = result.get('before_free_bytes', 0) / (1024 * 1024)
+                after = result.get('after_free_bytes', 0) / (1024 * 1024)
+                text = (f"GPU cache cleanup finished. Unused CUDA pool: {before:.2f} MB → {after:.2f} MB; "
+                        f"{len(result.get('cuda_devices', ()))} device(s), "
+                        f"{result.get('pinned_pools', 0)} pinned pool(s), "
+                        f"{result.get('opencl_entries', 0)} OpenCL cache entry/entries cleared.")
             else:
-                self.status.set(f"GPU cache was not active. {result.get('reason','')}")
-        except Exception as error:
-            self.status.set(f'Could not clear GPU cache: {error}')
+                text = result.get('reason') or 'No previously used GPU caches are available.'
+            if result.get('opencl_busy'):
+                text += ' Active OpenCL resources were kept.'
+            if result.get('errors'):
+                text += ' Some resources could not be cleared: ' + '; '.join(result['errors'][:3])
+            self.events.put(('status', text))
+        return bool(self.begin_worker('gpu-cache', work, reset_stop=False))
 
     def run_self_test(self):
         """Run Image Draw Bot's built-in self-test out of process.
@@ -11067,14 +11201,24 @@ class DrawBotApp:
                 DrawBotApp._cancel_browser_one_click(self,'setup returned a different profile',request=request)
                 return
             force=request['force']
+            if payload.get('_browser_drawing_region') is not getattr(self,'browser_drawing_region',None):
+                DrawBotApp._cancel_browser_one_click(self,'drawing region changed',request=request)
+                return
             self.browser_auto_calibration_success=False
             meta,canvas=_validated_setup_payload(payload,require_canvas=True)
+            drawing_region=DrawBotApp._browser_drawing_region(self)
+            if drawing_region is not None:
+                drawing_region=drawing_region.with_canvas(PROFILES[profile_name][0],meta,canvas)
+                canvas=drawing_region.drawing_box(PROFILES[profile_name][0],meta)
             # Preserve only this image's one-shot permission until its owned
             # finish callback consumes it. A global switch cannot replace it.
             self.browser_one_click_force=force
             if canvas is not None:
-                l,t,r,b=map(int,canvas);self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)];self.canvas_anchor_detection=None
-                self.area_text.set(f'✓ Canvas Drop verified {r-l} × {b-t} px' if force else f'✓ One-Click canvas {r-l} × {b-t} px')
+                l,t,r,b=map(int,canvas);self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)]
+                self.browser_drawing_region=drawing_region
+                if drawing_region is None:self.canvas_anchor_detection=None
+                self.area_text.set(f'✓ Selected region {r-l} × {b-t} px · inside verified canvas' if drawing_region is not None else
+                                   (f'✓ Canvas Drop verified {r-l} × {b-t} px' if force else f'✓ One-Click canvas {r-l} × {b-t} px'))
             if meta.get('handle') and meta.get('rect') and meta.get('client_rect'):
                 self.target_window=(int(meta['handle']),tuple(meta['rect']));self.target_client_rect=tuple(meta['client_rect']);self.target_dpi=meta.get('dpi')
             self.color_session_cache.clear();self.refresh_palette();self.small_test_passed=False
@@ -11088,11 +11232,14 @@ class DrawBotApp:
             log_event(f'Browser One-Click setup completed: profile={profile_name!r} colors={count} confidence={confidence:.3f} canvas={canvas!r} force={force}.')
             pending=getattr(self,'one_click_setup_verify_pending',None)
             if not request['auto_start'] and isinstance(pending,dict) and pending.get('_browser_request') is request:
-                DrawBotApp._queue_one_click_setup_verification(self,payload)
+                DrawBotApp._queue_one_click_setup_verification(self,dict(payload,_browser_drawing_region=drawing_region))
         elif kind=='one_click_setup_verification_complete':
             payload=value if isinstance(value,dict) else {}
             request=payload.get('_browser_request')
             if str(payload.get('mode'))=='browser':
+                if payload.get('_browser_drawing_region') is not getattr(self,'browser_drawing_region',None):
+                    DrawBotApp._cancel_browser_one_click(self,'verification drawing region changed',request=request)
+                    return
                 if (not DrawBotApp._browser_one_click_request_current(self,request) or request['auto_start']):
                     if request is not None:DrawBotApp._cancel_browser_one_click(self,'verification context changed',request=request)
                     log_event('Ignored Browser One-click verification result from an older request.')
@@ -11110,7 +11257,10 @@ class DrawBotApp:
                     self.status.set(f'✓ One-click Setup verified for {profile_name}: live canvas + palette checks passed at {confidence*100:.0f}% confidence. No drawing input was sent.')
                     log_event(f'Step 27.5 One-click Setup PASS: profile={profile_name!r} mode={payload.get("mode")!r} confidence={confidence:.3f} canvas={payload.get("canvas_ok")} palette={payload.get("palette_verified")}/{payload.get("palette_tested")} tools={payload.get("tool_ok")}.')
                 else:
-                    if str(payload.get('mode'))=='browser':self.browser_auto_calibration_success=False
+                    if str(payload.get('mode'))=='browser':
+                        self.browser_auto_calibration_success=False
+                        region=payload.get('_browser_drawing_region')
+                        if region is not None:self.browser_drawing_region=region.without_verification()
                     reason='; '.join(str(x) for x in (payload.get('reasons') or ())) or str(payload.get('error') or 'verification failed')
                     DrawBotApp._invalidate_target_lock(self,'Step 27.5 verification failed',disarm=True)
                     DrawBotApp._invalidate_safety_preflight(self,'Step 27.5 verification failed',disarm=True)
@@ -11120,20 +11270,38 @@ class DrawBotApp:
             if request is not None:DrawBotApp._cancel_browser_one_click(self,'read-only verification finished',request=request)
         elif kind=='browser_auto_calibration_complete':
             payload=value if isinstance(value,dict) else {}
+            if payload.get('_browser_drawing_region') is not getattr(self,'browser_drawing_region',None):
+                log_event('Ignored Browser Auto Setup result for a replaced drawing-region selection.')
+                return
             profile_name=str(payload.get('profile_name') or self.game.get())
             if profile_name!=self.game.get():
                 log_event('Ignored stale Browser Auto Setup result after profile change.')
             else:
                 self.browser_auto_calibration_success=False
                 meta,canvas=_validated_setup_payload(payload)
-                self.corners=[];self.saved_area=[];self.canvas_anchor_detection=None
-                if canvas is not None:
-                    l,t,r,b=map(int,canvas)
-                    if r-l>=10 and b-t>=10:
-                        self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)];self.canvas_anchor_detection=None
-                        self.area_text.set(f'✓ Auto canvas {r-l} × {b-t} px · confidence {float(payload.get("canvas_confidence",0))*100:.0f}%')
+                drawing_region=DrawBotApp._browser_drawing_region(self)
+                if drawing_region is not None:
+                    try:
+                        drawing_region=(drawing_region.with_canvas(PROFILES[profile_name][0],meta,canvas)
+                                        if canvas is not None else drawing_region.without_verification())
+                        l,t,r,b=drawing_region.drawing_box(PROFILES[profile_name][0],meta)
+                    except ValueError as error:
+                        self.browser_drawing_region=drawing_region.without_verification()
+                        self.browser_auto_text.set('Drawing region blocked · '+str(error))
+                        self.status.set(str(error));return
+                    self.browser_drawing_region=drawing_region
+                    self.corners=[(l,t),(r,b)];self.saved_area=list(self.corners)
+                    self.area_text.set(f'✓ Selected region {r-l} × {b-t} px · inside verified canvas' if canvas is not None else
+                                       f'Selected region {r-l} × {b-t} px · canvas not yet verified')
                 else:
-                    self.area_text.set('Select drawing area: automatic setup verified the palette only.')
+                    self.corners=[];self.saved_area=[];self.canvas_anchor_detection=None
+                    if canvas is not None:
+                        l,t,r,b=map(int,canvas)
+                        if r-l>=10 and b-t>=10:
+                            self.corners=[(l,t),(r,b)];self.saved_area=[(l,t),(r,b)]
+                            self.area_text.set(f'✓ Auto canvas {r-l} × {b-t} px · confidence {float(payload.get("canvas_confidence",0))*100:.0f}%')
+                    else:
+                        self.area_text.set('Select drawing area: automatic setup verified the palette only.')
                 if meta.get('handle') and meta.get('rect') and meta.get('client_rect'):
                     self.target_window=(int(meta['handle']),tuple(meta['rect']))
                     self.target_client_rect=tuple(meta['client_rect']);self.target_dpi=meta.get('dpi')
@@ -11144,8 +11312,13 @@ class DrawBotApp:
                 self.browser_auto_text.set(f'✓ Auto setup ready · {count} colors · confidence {confidence*100:.0f}% · manual calibration not required.')
                 self.status.set(f'✓ {profile_name} Auto Setup ready: {count} verified colors. Add/drop the image and draw.')
                 if canvas is None:
-                    self.browser_auto_text.set(f'Palette ready · {count} colors · select the drawing area manually.')
-                    self.status.set(f'{profile_name} palette calibrated. Select the drawing area before starting.')
+                    if drawing_region is not None:
+                        from BrowserDrawingRegion import UNVERIFIED_REGION_MESSAGE
+                        self.browser_auto_text.set(f'Palette ready · {count} colors · selected region is unverified.')
+                        self.status.set(UNVERIFIED_REGION_MESSAGE)
+                    else:
+                        self.browser_auto_text.set(f'Palette ready · {count} colors · select the drawing area manually.')
+                        self.status.set(f'{profile_name} palette calibrated. Select the drawing area before starting.')
                 try:self.save_settings()
                 except Exception:pass
                 try:self.root.deiconify();self.root.lift()
@@ -11281,6 +11454,7 @@ class DrawBotApp:
             self.status.set('Image updated. Build preview to check the result before Start.')
             self.show_previews()
             self._schedule_recovery_checkpoint(include_image=True,delay=40)
+            self.needs_plan=True
         elif kind=='background_removed':
             from ImageFormatInfo import image_label
             result=value
@@ -11309,7 +11483,7 @@ class DrawBotApp:
                 log_event(f"Background removal complete: removed={removed:.2f}% work_reduction={reduction:.2f}% ref={meta.get('reference_rgb')} threshold={meta.get('threshold')} bbox={meta.get('foreground_bbox')}.")
                 self._mark_plan_stale('Background changed. Build preview to recalculate strokes and ETA.')
                 self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40)
-                self._maybe_auto_preview(delay=500,reason='background-removed')
+                self.needs_plan=True
         elif kind=='png_saved':
             self.status.set(f'PNG saved: {value}')
             log_event(f'PNG export saved: {value!r}.')
@@ -11362,7 +11536,10 @@ class DrawBotApp:
                 self.status.set('Image loaded through Drop-In Start. Drawing will start after the loader finishes if the canvas setup is still valid.')
             else:
                 self.status.set('Image loaded. Press Build preview when you want a preview, or continue setup and Safety preflight / Dry run when ready.')
-            self.show_previews();self._sync_mobile_preview();self.needs_plan=False;self._schedule_recovery_checkpoint(include_image=True,delay=40);self._maybe_auto_preview(delay=900, reason='image-loaded')
+            self.show_previews();self._sync_mobile_preview();self._schedule_recovery_checkpoint(include_image=True,delay=40)
+            # Like pasted bitmaps and edits, release the loader before poll
+            # schedules automatic planning. Explicit drawing continuations win.
+            self.needs_plan=True
         elif kind=='preview_timeout':
             target,preview=value
             self.summary.set('Preview calculation exceeded its time limit. The previous preview is retained. Try the normal Build preview or a smaller drawing area.')
@@ -11390,7 +11567,12 @@ class DrawBotApp:
             estimate=max(0,float(value['estimate']));unit=f'{estimate/60:.1f} min' if estimate>=60 else f'{estimate:.0f} s'
             try:
                 from DrawTimeEstimate import attach_draw_time_estimate, status_line
-                time_meta=attach_draw_time_estimate(value)
+                prepared=value.pop('_preview_time_estimate_ready',None)
+                time_meta=value.get('draw_time_estimate')
+                if not isinstance(time_meta,dict) or prepared is not time_meta:
+                    # Legacy/manual producers, failed preparation and replaced
+                    # metadata retain the existing fresh-calculation path.
+                    time_meta=attach_draw_time_estimate(value)
                 time_status=status_line(value)
             except Exception:
                 time_meta={'projected_seconds':estimate,'projected_label':unit,'range_label':unit,'confidence':'unknown','is_projection':False}

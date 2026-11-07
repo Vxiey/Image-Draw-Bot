@@ -7,12 +7,14 @@ remaining very close to an RGB value that actually exists in the source image.
 """
 from __future__ import annotations
 
+from contextlib import closing, nullcontext
 from dataclasses import dataclass
 from typing import Dict, Iterable, Tuple
 
 import numpy as np
 from PIL import Image
 from ExactColorEngine import select_representative_color
+from PlanningRowTasks import read_only_rgba
 
 RGB = Tuple[int, int, int]
 
@@ -52,12 +54,59 @@ def visible_rgb_image(image: Image.Image, background: RGB=(255,255,255)) -> Imag
     """Return the RGB pixels the user actually sees, including alpha compositing."""
     if image.mode == 'RGB' and 'transparency' not in image.info:
         return image.copy()
-    with image.convert('RGBA') as rgba:
+    with read_only_rgba(image) as rgba:
         if rgba.getextrema()[3] == (255,255):
             return rgba.convert('RGB')
-        with Image.new('RGBA',rgba.size,tuple(background)+(255,)) as backdrop:
+        with closing(Image.new('RGBA',rgba.size,tuple(background)+(255,))) as backdrop:
             backdrop.alpha_composite(rgba)
             return backdrop.convert('RGB')
+
+
+class _ColorSourceAnalysis:
+    """One operation's visible RGB and alpha, never attached to a caller image.
+
+    The RGB image belongs to this owner. NumPy exports are read-only snapshots;
+    source pixels can be shared across quantization, measurement and region
+    analysis without converting/compositing the same source again.
+    """
+    def __init__(self, source, *, visible_factory=None):
+        self.source = source
+        self.visible = None
+        self.rgb = None
+        self.alpha = None
+        visible_factory = visible_factory or visible_rgb_image
+        try:
+            if source.mode == 'RGB' and 'transparency' not in source.info:
+                self.visible = visible_factory(source)
+            else:
+                with read_only_rgba(source) as rgba:
+                    self.visible = visible_factory(rgba)
+                    with closing(rgba.getchannel('A')) as alpha:
+                        self.alpha = np.asarray(alpha, dtype=np.uint8)
+            self.rgb = np.asarray(self.visible, dtype=np.uint8)
+        except BaseException:
+            self.close()
+            raise
+
+    def rgb_for(self, source):
+        if self.rgb is None or source is not self.source:
+            raise ValueError('Color source analysis belongs to a different or finished operation.')
+        return self.rgb
+
+    def release_visible(self):
+        visible, self.visible = self.visible, None
+        if visible is not None:
+            visible.close()
+
+    def close(self):
+        self.release_visible()
+        self.rgb = self.alpha = self.source = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        self.close()
 
 
 def _dominant_exact(pixels: np.ndarray) -> tuple[RGB,float]:
@@ -112,37 +161,45 @@ def measure_color_pixels(pixels: np.ndarray, *, alpha_values: np.ndarray | None=
     return ColorSample(tuple(map(int,robust)),mean,median,dominant,float(dominant_fraction),spread,len(px),alpha_mean,alpha_median)
 
 
-def measure_quantized_regions(source: Image.Image, labels: Image.Image, *, drawable_mask=None) -> Dict[int,ColorSample]:
+def measure_quantized_regions(source: Image.Image, labels: Image.Image, *, drawable_mask=None,
+                              _source_data=None) -> Dict[int,ColorSample]:
     """Measure the real RGB pixels assigned to every quantizer label."""
     if source.size!=labels.size:
         raise ValueError('Source image and color labels must have the same size.')
-    visible=np.asarray(visible_rgb_image(source),dtype=np.uint8)
-    lab=np.asarray(labels,dtype=np.int32)
-    if lab.ndim != 2:
-        raise ValueError('Color labels must be a single-channel image.')
-    alpha = None
-    if source.mode != 'RGB' or 'transparency' in source.info:
-        alpha = np.asarray(source.convert('RGBA').getchannel('A'),dtype=np.uint8).reshape(-1)
-    result: Dict[int,ColorSample]={}
-    # Stable grouping preserves each region's source order, including the
-    # bounded representative sampler, without rescanning the image per label.
-    flat = lab.reshape(-1)
-    if drawable_mask is None:
-        order = np.argsort(flat, kind='stable')
-    else:
-        mask = np.asarray(drawable_mask)
-        if mask.shape != lab.shape or mask.dtype != np.bool_:
-            raise ValueError('Drawable color mask must be Boolean and match the label image.')
-        active = np.flatnonzero(mask.ravel())
-        order = active[np.argsort(flat[active], kind='stable')]
-    sorted_labels = flat[order]
-    boundaries = np.flatnonzero(sorted_labels[1:] != sorted_labels[:-1]) + 1
-    visible = visible.reshape(-1,3)
-    for indices in np.split(order,boundaries):
-        if len(indices):
-            result[int(flat[indices[0]])] = measure_color_pixels(
-                visible[indices], alpha_values=None if alpha is None else alpha[indices])
-    return result
+    owner = _ColorSourceAnalysis(source) if _source_data is None else nullcontext(_source_data)
+    with owner as data:
+        visible = alpha = None
+        try:
+            visible = data.rgb_for(source)
+            if _source_data is None:
+                data.release_visible()
+            lab=np.asarray(labels,dtype=np.int32)
+            if lab.ndim != 2:
+                raise ValueError('Color labels must be a single-channel image.')
+            alpha = None if data.alpha is None else data.alpha.reshape(-1)
+            result: Dict[int,ColorSample]={}
+            # Stable grouping preserves each region's source order, including the
+            # bounded representative sampler, without rescanning the image per label.
+            flat = lab.reshape(-1)
+            if drawable_mask is None:
+                order = np.argsort(flat, kind='stable')
+            else:
+                mask = np.asarray(drawable_mask)
+                if mask.shape != lab.shape or mask.dtype != np.bool_:
+                    raise ValueError('Drawable color mask must be Boolean and match the label image.')
+                active = np.flatnonzero(mask.ravel())
+                order = active[np.argsort(flat[active], kind='stable')]
+            sorted_labels = flat[order]
+            boundaries = np.flatnonzero(sorted_labels[1:] != sorted_labels[:-1]) + 1
+            visible = visible.reshape(-1,3)
+            for indices in np.split(order,boundaries):
+                if len(indices):
+                    result[int(flat[indices[0]])] = measure_color_pixels(
+                        visible[indices], alpha_values=None if alpha is None else alpha[indices])
+            return result
+        finally:
+            # A retained caller traceback must not prolong the shared exports.
+            visible = alpha = None
 
 
 def rgb_error(actual: Iterable[int], expected: Iterable[int]) -> float:

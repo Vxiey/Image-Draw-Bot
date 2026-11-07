@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from RuntimePaths import atomic_write_text, data_dir, file_transaction, is_finite_number, read_json
+from RuntimePaths import atomic_write_text, data_dir, file_transaction, is_finite_number, read_json, replace_text_files
 from ProfileStorage import profile_timing_file, safe_profile_key
 
 # Legacy shared database. It is read only for one-time per-profile migration.
@@ -345,9 +345,21 @@ def record_sample(options: dict[str, Any], predicted_seconds: float, actual_seco
 
 
 def reset_profile(options: dict[str, Any], *, path: Path | None = None) -> dict[str, Any]:
-    """Delete learned timing for exactly one isolated profile/tool/brush/workflow key."""
-    with file_transaction(_resolved_path(options, path)):
-        resolved, db = _ensure_profile_db(options, path)
+    """Reset one timing context and its profile-wide browser throughput floor."""
+    from RealSpeedBudget import profile_reset_changes
+    resolved = _resolved_path(options, path)
+    with file_transaction(resolved):
+        if resolved.exists() or path is not None:
+            db = _load_raw(resolved, accept_legacy_version=True)
+        else:
+            # Read migration candidates without publishing them before the
+            # complete reset can commit. A failed reset leaves missing files
+            # missing, as well as preserving existing files byte for byte.
+            prefix = _profile(options) + '|'
+            db = _empty()
+            db['profiles'] = {key: value for key, value in
+                              _load_raw(FILE, accept_legacy_version=True)['profiles'].items()
+                              if key.startswith(prefix)}
         key = _key(options)
         v2 = _v2_key(options)
         legacy = _legacy_key(options)
@@ -355,6 +367,8 @@ def reset_profile(options: dict[str, Any], *, path: Path | None = None) -> dict[
         db["profiles"].pop(key, None)
         db["profiles"].pop(v2, None)
         db["profiles"].pop(legacy, None)
-        resolved.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(resolved, _database_text(db))
-        return {"reset": bool(existed), "key": key, "profile_key": _profile(options), "storage_path": str(resolved)}
+        with profile_reset_changes(_profile(options)) as speed_changes:
+            replace_text_files({resolved: _database_text(db), **speed_changes})
+            speed_reset = bool(speed_changes)
+        return {"reset": bool(existed), "key": key, "profile_key": _profile(options),
+                "storage_path": str(resolved), "speed_reset": speed_reset}

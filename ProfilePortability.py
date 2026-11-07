@@ -32,7 +32,7 @@ from ProfileStorage import (
     profile_verified_color_file,
     safe_profile_key,
 )
-from RuntimePaths import atomic_write_text, data_dir, replace_text_files
+from RuntimePaths import atomic_write_text, data_dir, file_transaction, replace_text_files
 from StabilityRC import migrate_settings
 from Version import APP_VERSION
 
@@ -661,7 +661,19 @@ def reset_profile(app, *, expected_name=None, expected_key=None):
     # shared database. Keep an empty current-format record to make Reset final.
     from DrawTimeCalibration import VERSION as TIMING_VERSION
     changes[profile_timing_file(key)] = json.dumps({'version': TIMING_VERSION, 'profiles': {}})
-    _replace_profile_files(changes)
+    from RealSpeedBudget import profile_reset_changes
+    try:
+        # Match the timing reset/writer order: timing, shared speed, publication.
+        # A writer that already read the old model must finish before Reset can
+        # publish its empty record, or its later write could revive old samples.
+        with file_transaction(profile_timing_file(key)):
+            with profile_reset_changes(key) as speed_changes:
+                changes.update(speed_changes)
+                _replace_profile_files(changes)
+    except ProfilePortabilityError:
+        raise
+    except (OSError, ValueError) as error:
+        raise ProfilePortabilityError(str(error)) from error
     _reload_profile(app, name)
     if hasattr(app, "status"):
         try: app.status.set(f"{name} restored to Image Draw Bot defaults. Calibration/setup must be verified again.")

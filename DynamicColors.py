@@ -5,10 +5,11 @@ them by coverage, and only spends exact custom-color selections when they make a
 visible improvement over the nearest calibrated palette swatch.
 """
 from __future__ import annotations
+from contextlib import ExitStack, closing
 from math import sqrt, ceil
 from itertools import chain
 import numpy as np
-from ColorMatchingEngine import visible_rgb_image, measure_quantized_regions
+from ColorMatchingEngine import visible_rgb_image, measure_quantized_regions, _ColorSourceAnalysis
 from ColorFidelity import delta_e2000, delta_e_oklab, mapping_pair_metrics, finalize_mapping_stats
 from ExactColorEngine import candidate_cost
 from DominantHuePreservation import dominant_hue_family, protected_hue_families, summarize_hue_families
@@ -266,35 +267,42 @@ def _add_run(groups,index,start,y,end_x):
     groups[index].append((int(start),int(y),int(end_x),int(y)))
 
 
-def _drawable_source(image, visible, skip_white):
+def _drawable_source(image, source_data, skip_white):
     """Keep source skip decisions independent of quantizer/merged colors."""
-    pixels=np.asarray(visible,dtype=np.uint8)
-    drawable=np.ones(pixels.shape[:2],dtype=bool)
-    if any(band in ('A','a') for band in image.getbands()) or 'transparency' in image.info:
-        from contextlib import closing
-        with closing(image.convert('RGBA')) as rgba:
-            with closing(rgba.getchannel('A')) as alpha:
-                drawable=np.asarray(alpha,dtype=np.uint8)>0
-    white=np.all(pixels>=245,axis=2)&drawable if skip_white else np.zeros_like(drawable)
-    drawable &= ~white
-    return pixels,drawable,int(np.count_nonzero(white))
+    pixels=None
+    try:
+        pixels=source_data.rgb_for(image)
+        drawable=np.ones(pixels.shape[:2],dtype=bool)
+        if any(band in ('A','a') for band in image.getbands()) or 'transparency' in image.info:
+            drawable=source_data.alpha>0
+        white=np.all(pixels>=245,axis=2)&drawable if skip_white else np.zeros_like(drawable)
+        drawable &= ~white
+        return pixels,drawable,int(np.count_nonzero(white))
+    finally:
+        pixels=None
 
 
 def _quantize_drawable(source,pixels,drawable,temp_colors):
     """Train only on drawable colors; ignored white cannot consume the budget."""
-    from PIL import Image
-    if np.all(drawable):
-        quantized=source.quantize(colors=temp_colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)
-        return quantized,{int(index):int(count) for count,index in (quantized.getcolors() or [])}
-    from contextlib import closing
-    # The compact one-row image contains no padded/background samples. Its
-    # labels are put back into the source geometry after quantization.
-    with closing(Image.fromarray(pixels[drawable].reshape(1,-1,3))) as samples:
-        with closing(samples.quantize(colors=temp_colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)) as quantized:
-            counts={int(index):int(count) for count,index in (quantized.getcolors() or [])}
-            labels=np.zeros(drawable.shape,dtype=np.uint8)
-            labels[drawable]=np.asarray(quantized,dtype=np.uint8).reshape(-1)
-    return Image.fromarray(labels),counts
+    try:
+        from PIL import Image
+        if np.all(drawable):
+            quantized=source.quantize(colors=temp_colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)
+            try:
+                return quantized,{int(index):int(count) for count,index in (quantized.getcolors() or [])}
+            except BaseException:
+                quantized.close()
+                raise
+        # The compact one-row image contains no padded/background samples. Its
+        # labels are put back into the source geometry after quantization.
+        with closing(Image.fromarray(pixels[drawable].reshape(1,-1,3))) as samples:
+            with closing(samples.quantize(colors=temp_colors,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)) as quantized:
+                counts={int(index):int(count) for count,index in (quantized.getcolors() or [])}
+                labels=np.zeros(drawable.shape,dtype=np.uint8)
+                labels[drawable]=np.asarray(quantized,dtype=np.uint8).reshape(-1)
+        return Image.fromarray(labels),counts
+    finally:
+        pixels=None
 
 
 def _groups_from_labels(labels,drawable,group_by_label,group_count,lines,cancelled):
@@ -381,195 +389,206 @@ def build_dynamic_color_strokes(image, palette_rgb, *, max_colors=16, skip_white
         raise ValueError('No calibrated palette colors are available for fallback.')
     if cancelled():
         return None,None,None,None
-    # v1.0.109: measure the pixels the user actually sees (including alpha)
-    # instead of trusting only the quantizer's generated palette RGB.
-    src=visible_rgb_image(image)
-    max_colors=max(1,int(max_colors))
-    source_pixels,drawable,skipped_white=_drawable_source(image,src,skip_white)
-    if cancelled():
-        return None,None,None,None
-    if not np.any(drawable):
-        return [],(),(),{'mode':'dynamic-exact-v4','requested_colors':max_colors,'active_colors':0,
-                         'custom_exact_colors':0,'palette_fallback_colors':0,'white_skipped':skipped_white,
-                         'exact_available':bool(exact_available),
-                         'color_fidelity_diagnostics':finalize_mapping_stats({'mapped_pixels':0})}
-    # Slightly higher temporary palette gives the reducer something to merge.
-    temp_colors=max(8,min(64,max_colors*3))
-    q,counts=_quantize_drawable(src,source_pixels,drawable,temp_colors)
-    del source_pixels
-    if cancelled():return None,None,None,None
-    # Measure all original pixels belonging to every quantized region.  This
-    # provides mean/median/dominant RGB plus a robust source-backed target RGB.
-    source_stats=measure_quantized_regions(image,q,drawable_mask=drawable)
-    entries=[]
-    for qindex,count in counts.items():
-        if cancelled():
+    with ExitStack() as stack:
+        # v1.0.109: measure the pixels the user actually sees (including alpha)
+        # instead of trusting only the quantizer's generated palette RGB.
+        source_data=stack.enter_context(_ColorSourceAnalysis(image,visible_factory=visible_rgb_image))
+        max_colors=max(1,int(max_colors))
+        source_pixels=None
+        try:
+            source_pixels,drawable,skipped_white=_drawable_source(image,source_data,skip_white)
+            if cancelled():
+                return None,None,None,None
+            if not np.any(drawable):
+                return [],(),(),{'mode':'dynamic-exact-v4','requested_colors':max_colors,'active_colors':0,
+                                 'custom_exact_colors':0,'palette_fallback_colors':0,'white_skipped':skipped_white,
+                                 'exact_available':bool(exact_available),
+                                 'color_fidelity_diagnostics':finalize_mapping_stats({'mapped_pixels':0})}
+            # Slightly higher temporary palette gives the reducer something to merge.
+            temp_colors=max(8,min(64,max_colors*3))
+            q,counts=_quantize_drawable(source_data.visible,source_pixels,drawable,temp_colors)
+            stack.callback(q.close)
+            source_data.release_visible()
+        finally:
+            source_pixels=None
+        if cancelled():return None,None,None,None
+        # Measure all original pixels belonging to every quantized region.  This
+        # provides mean/median/dominant RGB plus a robust source-backed target RGB.
+        source_stats=measure_quantized_regions(image,q,drawable_mask=drawable,_source_data=source_data)
+        source_data.alpha=None
+        entries=[]
+        for qindex,count in counts.items():
+            if cancelled():
+                return None,None,None,None
+            sample=source_stats.get(int(qindex))
+            if sample is None or count<=0:
+                continue
+            entries.append({'qindex':int(qindex),'rgb':tuple(sample.rgb),'count':int(count),
+                            'source_mean_rgb':tuple(sample.mean_rgb),'source_median_rgb':tuple(sample.median_rgb),
+                            'source_dominant_rgb':tuple(sample.dominant_rgb),'source_dominant_fraction':float(sample.dominant_fraction),
+                            'source_spread':float(sample.spread),'source_alpha_mean':float(sample.alpha_mean),
+                            'source_alpha_median':float(sample.alpha_median)})
+        if not entries:
+            return [],(),(),{'mode':'dynamic-exact-v4','requested_colors':max_colors,'active_colors':0,
+                             'custom_exact_colors':0,'palette_fallback_colors':0,'white_skipped':0,'exact_available':bool(exact_available)}
+        _source_hue_summaries=summarize_hue_families(
+            [e['rgb'] for e in entries],[float(e['count']) for e in entries],
+            fidelity=str(color_fidelity or 'Faithful'),max_families=max_colors)
+        # Step 4: build one compact spatial/structural analysis from the temporary
+        # quantizer labels. The AdaptiveDetail protected mask is reused when present;
+        # no second semantic/renderer pass is introduced.
+        region_context=build_region_context(image,q,entries,protected_mask=protected_mask,
+            cancelled=cancelled,drawable_mask=drawable,_source_data=source_data)
+        source_data.close()
+        if _palette_only:q.close()
+        region_quant_meta={}
+        clusters,source_to_cluster=_merge_quantized(
+            entries,max_colors,cancelled=cancelled,region_context=region_context,diagnostics=region_quant_meta)
+        if clusters is None:
             return None,None,None,None
-        sample=source_stats.get(int(qindex))
-        if sample is None or count<=0:
-            continue
-        entries.append({'qindex':int(qindex),'rgb':tuple(sample.rgb),'count':int(count),
-                        'source_mean_rgb':tuple(sample.mean_rgb),'source_median_rgb':tuple(sample.median_rgb),
-                        'source_dominant_rgb':tuple(sample.dominant_rgb),'source_dominant_fraction':float(sample.dominant_fraction),
-                        'source_spread':float(sample.spread),'source_alpha_mean':float(sample.alpha_mean),
-                        'source_alpha_median':float(sample.alpha_median)})
-    if not entries:
-        return [],(),(),{'mode':'dynamic-exact-v4','requested_colors':max_colors,'active_colors':0,
-                         'custom_exact_colors':0,'palette_fallback_colors':0,'white_skipped':0,'exact_available':bool(exact_available)}
-    _source_hue_summaries=summarize_hue_families(
-        [e['rgb'] for e in entries],[float(e['count']) for e in entries],
-        fidelity=str(color_fidelity or 'Faithful'),max_families=max_colors)
-    # Step 4: build one compact spatial/structural analysis from the temporary
-    # quantizer labels. The AdaptiveDetail protected mask is reused when present;
-    # no second semantic/renderer pass is introduced.
-    region_context=build_region_context(src,q,entries,protected_mask=protected_mask,cancelled=cancelled,drawable_mask=drawable)
-    region_quant_meta={}
-    clusters,source_to_cluster=_merge_quantized(
-        entries,max_colors,cancelled=cancelled,region_context=region_context,diagnostics=region_quant_meta)
-    if clusters is None:
-        return None,None,None,None
-    # Sort by coverage so large visual colours receive priority first.
-    order=sorted(range(len(clusters)), key=lambda i:(-clusters[i]['count'], i))
-    old_to_new={old:new for new,old in enumerate(order)}
-    selected=[]
-    total_pixels=sum(c['count'] for c in clusters) or 1
-    for old in order:
+        # Sort by coverage so large visual colours receive priority first.
+        order=sorted(range(len(clusters)), key=lambda i:(-clusters[i]['count'], i))
+        old_to_new={old:new for new,old in enumerate(order)}
+        selected=[]
+        total_pixels=sum(c['count'] for c in clusters) or 1
+        for old in order:
+            if cancelled():return None,None,None,None
+            c=clusters[old]
+            pal_d2,pal_idx=_closest_palette_index(c['rgb'],palette,color_fidelity)
+            # Preserve source measurements for diagnostics and exact RGB entry.
+            # Merged clusters use the weighted robust RGB, while the largest source
+            # bucket supplies median/dominant diagnostics for the UI/logs.
+            primary=max(c.get('items') or [{}],key=lambda item:int(item.get('count',0)))
+            selected.append({
+                'rgb':tuple(c['rgb']),
+                'count':int(c['count']),
+                'coverage':c['count']/total_pixels,
+                'fallback_palette_index':int(pal_idx),
+                'palette_distance':float(delta_e2000(c['rgb'],palette[pal_idx])),
+                'palette_distance_oklab':float(delta_e_oklab(c['rgb'],palette[pal_idx])),
+                'mean_rgb':tuple(primary.get('source_mean_rgb',c['rgb'])),
+                'median_rgb':tuple(primary.get('source_median_rgb',c['rgb'])),
+                'dominant_rgb':tuple(primary.get('source_dominant_rgb',c['rgb'])),
+                'dominant_fraction':float(primary.get('source_dominant_fraction',0.0)),
+                'spread':float(primary.get('source_spread',0.0)),
+                'alpha_mean':float(primary.get('source_alpha_mean',255.0)),
+                'alpha_median':float(primary.get('source_alpha_median',255.0)),
+                'hue_family':dominant_hue_family(c['rgb']),
+            })
+        # Decide where exact custom colours are actually worth using.
+        selectors=[None]*len(selected)
+        rendered=[None]*len(selected)
+        groups=[[] for _ in selected]
+        # v1.0.124: Paint Faithful/Exact can reproduce arbitrary RGB after the
+        # exact-color controls are calibrated. Spend more of the bounded color plan
+        # on real custom RGB rather than accepting a visibly poor 20-swatch palette
+        # approximation. Browser/game profiles keep the older conservative budget.
+        custom_budget,custom_threshold,tiny_region_penalty=_custom_color_policy(
+            max_colors,color_fidelity=color_fidelity,profile_name=profile_name,exact_threshold=exact_threshold)
+        custom_budget=min(len(selected),int(custom_budget))
+        ranked_custom=sorted(
+            range(len(selected)),
+            key=lambda i:(selected[i]['palette_distance']*(1.0+selected[i]['coverage']*3.0),
+                          selected[i]['coverage'], -i),
+            reverse=True
+        )
+        if source_palette and exact_available:
+            custom_budget=len(selected)
+        use_custom=set(range(len(selected))) if source_palette and exact_available else set()
+        if exact_available and not source_palette:
+            for i in ranked_custom:
+                item=selected[i]
+                # Require visible improvement over palette. Tiny regions need an even
+                # larger miss before they deserve a modal custom-colour selection.
+                needed=float(custom_threshold) + (float(tiny_region_penalty) if item['coverage'] < 0.01 else 0.0)
+                if item['palette_distance'] >= needed and len(use_custom) < custom_budget:
+                    use_custom.add(i)
+        for i,item in enumerate(selected):
+            if cancelled():return None,None,None,None
+            fallback=int(item['fallback_palette_index'])
+            if exact_available and i in use_custom:
+                selectors[i]={'kind':'custom','rgb':tuple(item['rgb']),'fallback_palette_index':fallback,
+                              'prefer_numeric':True,'source_rgb':tuple(item['rgb']),
+                              'source_mean_rgb':tuple(item['mean_rgb']),'source_median_rgb':tuple(item['median_rgb']),
+                              'source_dominant_rgb':tuple(item['dominant_rgb']),
+                              'source_dominant_fraction':float(item['dominant_fraction']),'source_spread':float(item['spread']),
+                              'source_alpha_mean':float(item['alpha_mean']),'source_alpha_median':float(item['alpha_median'])}
+                rendered[i]=tuple(item['rgb'])
+            else:
+                selectors[i]={'kind':'palette','palette_index':fallback,'rgb':tuple(palette[fallback])}
+                rendered[i]=tuple(palette[fallback])
+        source_rendered=tuple(rendered)
+        rendered,selectors,coverage_priority,action_indexes=_coalesce_color_actions(
+            rendered,selectors,[item['coverage'] for item in selected])
+        final_group_by_q={int(src_index):action_indexes[old_to_new[old_cluster]] for src_index,old_cluster in source_to_cluster.items()}
+        groups=None if _palette_only else _groups_from_labels(q,drawable,final_group_by_q,len(rendered),lines,cancelled)
+        q.close()
+        if not _palette_only and groups is None:return None,None,None,None
+        active=len(rendered)
+        fidelity_stats={
+            'mapped_pixels':0,'source_lightness_sum':0.0,'mapped_lightness_sum':0.0,
+            'source_saturation_sum':0.0,'mapped_saturation_sum':0.0,
+            'source_luminance_sum':0.0,'mapped_luminance_sum':0.0,
+            'delta_e_sum':0.0,'delta_e_max':0.0,'delta_e2000_sum':0.0,'delta_e2000_max':0.0,
+            'delta_e_oklab_sum':0.0,'delta_e_oklab_max':0.0,'hue_error_sum':0.0,
+        }
+        for item,mapped in zip(selected,source_rendered):
+            if cancelled():return None,None,None,None
+            n=max(0,int(item.get('count',0)));pair=mapping_pair_metrics(item['rgb'],mapped)
+            fidelity_stats['mapped_pixels']+=n
+            fidelity_stats['source_lightness_sum']+=pair['source_lightness']*n;fidelity_stats['mapped_lightness_sum']+=pair['mapped_lightness']*n
+            fidelity_stats['source_saturation_sum']+=pair['source_saturation']*n;fidelity_stats['mapped_saturation_sum']+=pair['mapped_saturation']*n
+            fidelity_stats['source_luminance_sum']+=pair['source_luminance']*n;fidelity_stats['mapped_luminance_sum']+=pair['mapped_luminance']*n
+            fidelity_stats['delta_e_sum']+=pair['delta_e76']*n;fidelity_stats['delta_e_max']=max(fidelity_stats['delta_e_max'],pair['delta_e76'])
+            fidelity_stats['delta_e2000_sum']+=pair['delta_e2000']*n;fidelity_stats['delta_e2000_max']=max(fidelity_stats['delta_e2000_max'],pair['delta_e2000'])
+            fidelity_stats['delta_e_oklab_sum']+=pair['delta_e_oklab']*n;fidelity_stats['delta_e_oklab_max']=max(fidelity_stats['delta_e_oklab_max'],pair['delta_e_oklab'])
+            fidelity_stats['hue_error_sum']+=pair.get('hue_error',0.0)*n
+        color_diag=finalize_mapping_stats(fidelity_stats)
+        # Human-readable names are diagnostics only. They never enter candidate
+        # selection or palette reduction, so rendering remains purely RGB/OKLab.
+        try:
+            from NamedColorIntelligence import describe_color_mapping
+            named_color_mappings=tuple(
+                dict(describe_color_mapping(item['rgb'],mapped),coverage=round(float(item.get('coverage',0.0)),4))
+                for item,mapped in list(zip(selected,source_rendered))[:12])
+        except Exception:
+            named_color_mappings=()
         if cancelled():return None,None,None,None
-        c=clusters[old]
-        pal_d2,pal_idx=_closest_palette_index(c['rgb'],palette,color_fidelity)
-        # Preserve source measurements for diagnostics and exact RGB entry.
-        # Merged clusters use the weighted robust RGB, while the largest source
-        # bucket supplies median/dominant diagnostics for the UI/logs.
-        primary=max(c.get('items') or [{}],key=lambda item:int(item.get('count',0)))
-        selected.append({
-            'rgb':tuple(c['rgb']),
-            'count':int(c['count']),
-            'coverage':c['count']/total_pixels,
-            'fallback_palette_index':int(pal_idx),
-            'palette_distance':float(delta_e2000(c['rgb'],palette[pal_idx])),
-            'palette_distance_oklab':float(delta_e_oklab(c['rgb'],palette[pal_idx])),
-            'mean_rgb':tuple(primary.get('source_mean_rgb',c['rgb'])),
-            'median_rgb':tuple(primary.get('source_median_rgb',c['rgb'])),
-            'dominant_rgb':tuple(primary.get('source_dominant_rgb',c['rgb'])),
-            'dominant_fraction':float(primary.get('source_dominant_fraction',0.0)),
-            'spread':float(primary.get('source_spread',0.0)),
-            'alpha_mean':float(primary.get('source_alpha_mean',255.0)),
-            'alpha_median':float(primary.get('source_alpha_median',255.0)),
-            'hue_family':dominant_hue_family(c['rgb']),
-        })
-    # Decide where exact custom colours are actually worth using.
-    selectors=[None]*len(selected)
-    rendered=[None]*len(selected)
-    groups=[[] for _ in selected]
-    # v1.0.124: Paint Faithful/Exact can reproduce arbitrary RGB after the
-    # exact-color controls are calibrated. Spend more of the bounded color plan
-    # on real custom RGB rather than accepting a visibly poor 20-swatch palette
-    # approximation. Browser/game profiles keep the older conservative budget.
-    custom_budget,custom_threshold,tiny_region_penalty=_custom_color_policy(
-        max_colors,color_fidelity=color_fidelity,profile_name=profile_name,exact_threshold=exact_threshold)
-    custom_budget=min(len(selected),int(custom_budget))
-    ranked_custom=sorted(
-        range(len(selected)),
-        key=lambda i:(selected[i]['palette_distance']*(1.0+selected[i]['coverage']*3.0),
-                      selected[i]['coverage'], -i),
-        reverse=True
-    )
-    if source_palette and exact_available:
-        custom_budget=len(selected)
-    use_custom=set(range(len(selected))) if source_palette and exact_available else set()
-    if exact_available and not source_palette:
-        for i in ranked_custom:
-            item=selected[i]
-            # Require visible improvement over palette. Tiny regions need an even
-            # larger miss before they deserve a modal custom-colour selection.
-            needed=float(custom_threshold) + (float(tiny_region_penalty) if item['coverage'] < 0.01 else 0.0)
-            if item['palette_distance'] >= needed and len(use_custom) < custom_budget:
-                use_custom.add(i)
-    for i,item in enumerate(selected):
-        if cancelled():return None,None,None,None
-        fallback=int(item['fallback_palette_index'])
-        if exact_available and i in use_custom:
-            selectors[i]={'kind':'custom','rgb':tuple(item['rgb']),'fallback_palette_index':fallback,
-                          'prefer_numeric':True,'source_rgb':tuple(item['rgb']),
-                          'source_mean_rgb':tuple(item['mean_rgb']),'source_median_rgb':tuple(item['median_rgb']),
-                          'source_dominant_rgb':tuple(item['dominant_rgb']),
-                          'source_dominant_fraction':float(item['dominant_fraction']),'source_spread':float(item['spread']),
-                          'source_alpha_mean':float(item['alpha_mean']),'source_alpha_median':float(item['alpha_median'])}
-            rendered[i]=tuple(item['rgb'])
-        else:
-            selectors[i]={'kind':'palette','palette_index':fallback,'rgb':tuple(palette[fallback])}
-            rendered[i]=tuple(palette[fallback])
-    source_rendered=tuple(rendered)
-    rendered,selectors,coverage_priority,action_indexes=_coalesce_color_actions(
-        rendered,selectors,[item['coverage'] for item in selected])
-    final_group_by_q={int(src_index):action_indexes[old_to_new[old_cluster]] for src_index,old_cluster in source_to_cluster.items()}
-    groups=None if _palette_only else _groups_from_labels(q,drawable,final_group_by_q,len(rendered),lines,cancelled)
-    if not _palette_only and groups is None:return None,None,None,None
-    active=len(rendered)
-    fidelity_stats={
-        'mapped_pixels':0,'source_lightness_sum':0.0,'mapped_lightness_sum':0.0,
-        'source_saturation_sum':0.0,'mapped_saturation_sum':0.0,
-        'source_luminance_sum':0.0,'mapped_luminance_sum':0.0,
-        'delta_e_sum':0.0,'delta_e_max':0.0,'delta_e2000_sum':0.0,'delta_e2000_max':0.0,
-        'delta_e_oklab_sum':0.0,'delta_e_oklab_max':0.0,'hue_error_sum':0.0,
-    }
-    for item,mapped in zip(selected,source_rendered):
-        if cancelled():return None,None,None,None
-        n=max(0,int(item.get('count',0)));pair=mapping_pair_metrics(item['rgb'],mapped)
-        fidelity_stats['mapped_pixels']+=n
-        fidelity_stats['source_lightness_sum']+=pair['source_lightness']*n;fidelity_stats['mapped_lightness_sum']+=pair['mapped_lightness']*n
-        fidelity_stats['source_saturation_sum']+=pair['source_saturation']*n;fidelity_stats['mapped_saturation_sum']+=pair['mapped_saturation']*n
-        fidelity_stats['source_luminance_sum']+=pair['source_luminance']*n;fidelity_stats['mapped_luminance_sum']+=pair['mapped_luminance']*n
-        fidelity_stats['delta_e_sum']+=pair['delta_e76']*n;fidelity_stats['delta_e_max']=max(fidelity_stats['delta_e_max'],pair['delta_e76'])
-        fidelity_stats['delta_e2000_sum']+=pair['delta_e2000']*n;fidelity_stats['delta_e2000_max']=max(fidelity_stats['delta_e2000_max'],pair['delta_e2000'])
-        fidelity_stats['delta_e_oklab_sum']+=pair['delta_e_oklab']*n;fidelity_stats['delta_e_oklab_max']=max(fidelity_stats['delta_e_oklab_max'],pair['delta_e_oklab'])
-        fidelity_stats['hue_error_sum']+=pair.get('hue_error',0.0)*n
-    color_diag=finalize_mapping_stats(fidelity_stats)
-    # Human-readable names are diagnostics only. They never enter candidate
-    # selection or palette reduction, so rendering remains purely RGB/OKLab.
-    try:
-        from NamedColorIntelligence import describe_color_mapping
-        named_color_mappings=tuple(
-            dict(describe_color_mapping(item['rgb'],mapped),coverage=round(float(item.get('coverage',0.0)),4))
-            for item,mapped in list(zip(selected,source_rendered))[:12])
-    except Exception:
-        named_color_mappings=()
-    if cancelled():return None,None,None,None
-    return groups,tuple(rendered),tuple(selectors),{
-        'mode':'dynamic-exact-v4',
-        'color_rendering':'Perceptual match',
-        'color_fidelity':str(color_fidelity),
-        'color_fidelity_diagnostics':color_diag,
-        'named_color_intelligence':True,
-        'named_color_mappings':named_color_mappings,
-        'requested_colors':max_colors,
-        'intermediate_quantized_colors':len(entries),
-        'reduced_colors':len(rendered),
-        'source_reduced_colors':len(selected),
-        'color_actions_coalesced':len(selected)-len(rendered),
-        'active_colors':active,
-        'custom_exact_colors':sum(s['kind']=='custom' for s in selectors),
-        'palette_fallback_colors':sum(s['kind']=='palette' for s in selectors),
-        'white_skipped':skipped_white,
-        'exact_available':bool(exact_available),
-        'custom_dialog_budget':custom_budget,
-        'custom_color_threshold_deltae2000':round(float(custom_threshold),3),
-        'custom_color_profile_policy':'paint-faithful-expanded' if str(profile_name or '')=='Microsoft Paint' and str(color_fidelity) in ('Faithful','Exact') else 'bounded-default',
-        'coverage_priority':tuple(round(value,4) for value in coverage_priority),
-        'dominant_hue_preservation':bool(_source_hue_summaries),
-        'dominant_hue_families':tuple(s.family for s in _source_hue_summaries),
-        'dominant_hue_coverage':{s.family:round(float(s.coverage),5) for s in _source_hue_summaries},
-        'selected_hue_families':tuple(dict.fromkeys(item['hue_family'] for item in selected if item.get('hue_family'))),
-        'region_aware_quantization':True,
-        'region_quantization':dict(region_quant_meta),
-        'average_palette_distance': round(sum(item['palette_distance'] for item in selected)/max(1,len(selected)),3),
-        'source_color_measurement':'mean + median + dominant + source-backed robust RGB + OKLab palette geometry',
-        'sampled_source_colors':tuple({
-            'rgb':tuple(item['rgb']),'mean':tuple(item['mean_rgb']),'median':tuple(item['median_rgb']),
-            'dominant':tuple(item['dominant_rgb']),'dominant_fraction':round(float(item['dominant_fraction']),3),
-            'spread':round(float(item['spread']),2),'coverage':round(float(item['coverage']),4)
-        } for item in selected[:12]),
-    }
+        return groups,tuple(rendered),tuple(selectors),{
+            'mode':'dynamic-exact-v4',
+            'color_rendering':'Perceptual match',
+            'color_fidelity':str(color_fidelity),
+            'color_fidelity_diagnostics':color_diag,
+            'named_color_intelligence':True,
+            'named_color_mappings':named_color_mappings,
+            'requested_colors':max_colors,
+            'intermediate_quantized_colors':len(entries),
+            'reduced_colors':len(rendered),
+            'source_reduced_colors':len(selected),
+            'color_actions_coalesced':len(selected)-len(rendered),
+            'active_colors':active,
+            'custom_exact_colors':sum(s['kind']=='custom' for s in selectors),
+            'palette_fallback_colors':sum(s['kind']=='palette' for s in selectors),
+            'white_skipped':skipped_white,
+            'exact_available':bool(exact_available),
+            'custom_dialog_budget':custom_budget,
+            'custom_color_threshold_deltae2000':round(float(custom_threshold),3),
+            'custom_color_profile_policy':'paint-faithful-expanded' if str(profile_name or '')=='Microsoft Paint' and str(color_fidelity) in ('Faithful','Exact') else 'bounded-default',
+            'coverage_priority':tuple(round(value,4) for value in coverage_priority),
+            'dominant_hue_preservation':bool(_source_hue_summaries),
+            'dominant_hue_families':tuple(s.family for s in _source_hue_summaries),
+            'dominant_hue_coverage':{s.family:round(float(s.coverage),5) for s in _source_hue_summaries},
+            'selected_hue_families':tuple(dict.fromkeys(item['hue_family'] for item in selected if item.get('hue_family'))),
+            'region_aware_quantization':True,
+            'region_quantization':dict(region_quant_meta),
+            'average_palette_distance': round(sum(item['palette_distance'] for item in selected)/max(1,len(selected)),3),
+            'source_color_measurement':'mean + median + dominant + source-backed robust RGB + OKLab palette geometry',
+            'sampled_source_colors':tuple({
+                'rgb':tuple(item['rgb']),'mean':tuple(item['mean_rgb']),'median':tuple(item['median_rgb']),
+                'dominant':tuple(item['dominant_rgb']),'dominant_fraction':round(float(item['dominant_fraction']),3),
+                'spread':round(float(item['spread']),2),'coverage':round(float(item['coverage']),4)
+            } for item in selected[:12]),
+        }
 
 
 def build_dynamic_color_palette(image,palette_rgb,**options):

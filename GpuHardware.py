@@ -378,6 +378,7 @@ def cupy_smoke_test() -> tuple[bool, str]:
     from that same CUDA runtime instead of borrowing another API's identity.
     """
     gpu = best_nvidia_gpu(refresh=True)
+    from GpuResourceCache import used_cuda_device
     try:
         import cupy as cp
         import numpy as np
@@ -389,7 +390,7 @@ def cupy_smoke_test() -> tuple[bool, str]:
             arr = kernel = None
             label = f"CUDA device {target}"
             try:
-                with cp.cuda.Device(target):
+                with used_cuda_device(cp, target):
                     properties = cp.cuda.runtime.getDeviceProperties(target)
                     label = properties.get("name") or label
                     if isinstance(label, bytes):

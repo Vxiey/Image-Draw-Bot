@@ -160,25 +160,31 @@ class BrowserHtmlDropTests(unittest.TestCase):
         raw = clipboard_html('<img src="../images/chosen.png?token=a%2Fb">',
             prefix='<html><body><img src="https://example.test/unselected.png">')
         app, _loaded = drop_fixtures.CanvasDropToDrawV1083Tests().make_app('unused')
+        previous_tk = app.root.tk
         app.root.tk = tk.Tcl()
-        loaded = []
-        def load(source, label, action=None):
-            with closing(read_image(source)) as decoded:
-                loaded.append((source, label, action, decoded.size, decoded.getpixel((0, 0))))
-            return True
-        app.load_source = load
-        def download(stream, url, limit, cancelled):
-            self.assertEqual(url, wanted)
-            self.assertFalse(cancelled())
-            with closing(Image.new('RGB', (7, 5), (10, 90, 180))) as image:
-                image.save(stream, 'PNG')
-        with patch('ImageImport._download', side_effect=download) as transfer, \
-                patch.object(DrawBotApp, '_manual_drop_in_armed', return_value=False), \
-                patch.object(DrawBotApp, 'draw') as draw:
-            self.assertEqual(DrawBotApp.drop_image(app, SimpleNamespace(data=raw)), 'copy')
-        transfer.assert_called_once()
-        draw.assert_not_called()
-        self.assertEqual(loaded, [(wanted, 'Dropped web image', None, (7, 5), (10, 90, 180, 255))])
+        try:
+            loaded = []
+            def load(source, label, action=None):
+                with closing(read_image(source)) as decoded:
+                    loaded.append((source, label, action, decoded.size, decoded.getpixel((0, 0))))
+                return True
+            app.load_source = load
+            def download(stream, url, limit, cancelled):
+                self.assertEqual(url, wanted)
+                self.assertFalse(cancelled())
+                with closing(Image.new('RGB', (7, 5), (10, 90, 180))) as image:
+                    image.save(stream, 'PNG')
+            with patch('ImageImport._download', side_effect=download) as transfer, \
+                    patch.object(DrawBotApp, '_manual_drop_in_armed', return_value=False), \
+                    patch.object(DrawBotApp, 'draw') as draw:
+                self.assertEqual(DrawBotApp.drop_image(app, SimpleNamespace(data=raw)), 'copy')
+            transfer.assert_called_once()
+            draw.assert_not_called()
+            self.assertEqual(loaded, [(wanted, 'Dropped web image', None, (7, 5), (10, 90, 180, 255))])
+        finally:
+            # Retained Mock calls or an assertion traceback may keep this fake
+            # root alive. Its borrowed interpreter belongs to this test thread.
+            app.root.tk = previous_tk
 
 
 if __name__ == '__main__':

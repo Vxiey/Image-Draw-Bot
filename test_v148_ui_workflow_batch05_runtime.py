@@ -1,6 +1,8 @@
 """UI lifecycle and absolute placement through fakes, plus Windows Tk smoke."""
 from contextlib import ExitStack
 import ctypes
+from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import sys
 import threading
@@ -85,8 +87,17 @@ class GuideHarness:
         self.body = next(child for child in self.window.children if '<Configure>' in child.bindings)
         return self
     def __exit__(self, *args):
-        self.window.destroy()
-        self.stack.close()
+        try:
+            self.window.destroy()
+        finally:
+            try:
+                self.stack.close()
+            finally:
+                # Fake widget callbacks can keep this app alive after the real
+                # guide removed its traces/jobs. Retire only our fixture's Tcl
+                # owners here, on their creator thread, after real destruction.
+                vars(self.app).clear()
+                self.interpreter = None
     def page(self, title):
         self.menu.options['command'](title)
         self.window.flush()
@@ -183,6 +194,83 @@ class GuideTests(unittest.TestCase):
                 guide.show_guide(app)
         self.assertIsNone(app._getting_started_window)
         self.assertEqual(app.root.children, [])
+
+
+class GuideFixtureOwnershipTests(unittest.TestCase):
+    def test_success_and_retained_failure_release_tcl_before_later_worker_collection(self):
+        code = '''import gc, threading, tkinter as tk, unittest, weakref
+from unittest.mock import patch
+import test_v148_ui_workflow_batch05_runtime as fixtures
+
+owners, variables, windows, callbacks, finalized, failures = [], [], [], [], [], []
+creator = threading.get_ident()
+actual_finalize = tk.Variable.__del__
+
+def finalize(variable):
+    finalized.append(threading.get_ident())
+    actual_finalize(variable)
+
+class ObservedHarness(fixtures.GuideHarness):
+    def __enter__(self):
+        result = super().__enter__()
+        owners.append(weakref.ref(self.interpreter))
+        variables.append(weakref.ref(self.app.game))
+        windows.append(self.window)
+        callbacks.append((self.menu.options['command'], 'Your first drawing'))
+        callbacks.extend((self.window.bindings[name], None)
+                         for name in ('<Alt-Left>', '<Alt-Right>', '<Escape>'))
+        return result
+
+class ObservedCase(fixtures.GuideTests):
+    failing = False
+    def assertIn(self, member, container, *args, **kwargs):
+        super().assertIn(member, container, *args, **kwargs)
+        if self.failing and member == 'First browser attempt':
+            try:
+                raise RuntimeError('retained error after actual guide refresh')
+            except RuntimeError as error:
+                failures.append(error)
+                raise
+
+# Delay cyclic collection only in this diagnostic child. Actual Tcl Variable
+# finalizers remain installed, and no application GC policy changes.
+gc.disable()
+tk.Variable.__del__ = finalize
+with patch.object(fixtures, 'GuideHarness', ObservedHarness):
+    for failing in (False, True):
+        case = ObservedCase('test_profile_change_refreshes_the_current_topic_without_navigation')
+        case.failing = failing
+        result = unittest.TestResult()
+        case.run(result)
+        if failing:
+            assert len(result.errors) == 1 and not result.failures, (result.errors, result.failures)
+            assert 'retained error after actual guide refresh' in result.errors[0][1], result.errors
+        else:
+            assert result.wasSuccessful(), (result.errors, result.failures)
+        del case
+
+assert failures and failures[0].__traceback__ is not None
+assert len(owners) == len(variables) == 2
+assert all(reference() is None for reference in owners)
+assert all(reference() is None for reference in variables)
+assert len(finalized) == 2 and set(finalized) == {creator}, finalized
+assert all(window.destroyed and not window.jobs for window in windows)
+for callback, argument in callbacks:
+    callback(argument)
+assert all(window.destroyed and not window.jobs for window in windows)
+worker = threading.Thread(target=gc.collect)
+worker.start()
+worker.join(timeout=5)
+assert not worker.is_alive()
+assert len(finalized) == 2 and set(finalized) == {creator}, finalized
+print('Real guide success/failure retired Tcl before worker GC; late callbacks stayed inert')
+'''
+        result = subprocess.run([sys.executable, '-X', 'faulthandler', '-c', code],
+            cwd=Path(__file__).resolve().parent, capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('late callbacks stayed inert', result.stdout)
+        self.assertNotIn('Tcl_AsyncDelete', result.stderr)
+        self.assertNotIn('Exception ignored in', result.stderr)
 
 
 class ScopedScrollTests(unittest.TestCase):

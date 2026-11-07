@@ -79,7 +79,7 @@ def switch_app(interpreter):
     return app
 
 
-def actual_switch_rows(app, parent, constructor=KeyboardSwitch):
+def actual_switch_rows(app, parent, constructor=KeyboardSwitch, *, scopes):
     """Execute the live twelve constructors and loops, with their real callbacks."""
     tree = ast.parse(Path(StudioUI.__file__).read_text(encoding='utf8'))
     build = next(node for node in tree.body
@@ -100,9 +100,10 @@ def actual_switch_rows(app, parent, constructor=KeyboardSwitch):
         created.append(widget)
         return widget
 
-    scope = dict(vars(StudioUI), a=app, KeyboardSwitch=create)
+    scope = dict(vars(StudioUI), a=app, KeyboardSwitch=create, _fixture_controls=created)
     scope.update({name: parent for name in
                   ('step1', 'step2', 'step4', 'precision_card', 'smart_card', 'preview_options')})
+    scopes.append(scope)
     exec(compile(ast.Module(body=nodes, type_ignores=[]), StudioUI.__file__, 'exec'), scope)
     return created
 
@@ -113,6 +114,7 @@ class SwitchKeyboardTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         self.interpreter = tk.Tcl()
         self.widgets = []
+        self.factory_scopes = []
         self.addCleanup(self.close_widgets)
         self.stack.enter_context(patch.object(ctk.CTkSwitch, '__init__',
             lambda widget, *args, **kwargs: self.native_init(widget, *args, **kwargs)))
@@ -178,6 +180,11 @@ class SwitchKeyboardTests(unittest.TestCase):
         for widget in self.widgets:
             if not widget._keyboard_closed:
                 widget.destroy()
+        for widget in self.widgets:
+            numeric_fixtures.release_control_references(widget)
+        numeric_fixtures.release_factory_scopes(self.factory_scopes)
+        self.widgets.clear()
+        self.interpreter = None
 
     def switch(self, **kwargs):
         kwargs.setdefault('variable', tk.BooleanVar(self.interpreter, value=False))
@@ -195,7 +202,7 @@ class SwitchKeyboardTests(unittest.TestCase):
 
     def test_actual_factory_reaches_all_twelve_variables_and_preserves_callback_kinds(self):
         app = switch_app(self.interpreter)
-        widgets = actual_switch_rows(app, object())
+        widgets = actual_switch_rows(app, object(), scopes=self.factory_scopes)
         self.assertEqual(len(widgets), 12)
         self.assertEqual([widget.cget('variable') for widget in widgets],
                          [getattr(app, name) for name in SWITCH_VARIABLES])
@@ -392,7 +399,7 @@ class SwitchKeyboardTests(unittest.TestCase):
         self.stack.enter_context(patch('DrawBot.log_event'))
         self.stack.enter_context(patch.object(DrawBot.DrawBotApp, '_refresh_start_buttons_text'))
         self.stack.enter_context(patch.object(DrawBot.DrawBotApp, '_refresh_target_lock_text'))
-        return app, actual_switch_rows(app, object())
+        return app, actual_switch_rows(app, object(), scopes=self.factory_scopes)
 
     def test_actual_factory_options_callback_invalidates_once_without_requesting_input(self):
         app, widgets = self.controller()
@@ -440,12 +447,14 @@ class SwitchKeyboardTests(unittest.TestCase):
 class WindowsSwitchKeyboardTests(unittest.TestCase):
     def setUp(self):
         self.root = ctk.CTk()
+        self.factory_scopes = []
         self.root.geometry('760x680+50+50')
         self.errors = []
         self.root.report_callback_exception = lambda *error: self.errors.append(error)
 
     def tearDown(self):
         self.root.destroy()
+        numeric_fixtures.release_factory_scopes(self.factory_scopes)
         self.assertFalse(self.errors, self.errors)
 
     def settle(self, predicate):
@@ -471,7 +480,7 @@ class WindowsSwitchKeyboardTests(unittest.TestCase):
         app = switch_app(self.root)
         observed = []
         app.paint_mode_changed = lambda: observed.append(app.paint_simple.get())
-        widgets = actual_switch_rows(app, self.root)
+        widgets = actual_switch_rows(app, self.root, scopes=self.factory_scopes)
         for widget in widgets:
             widget.pack_forget()
         for widget in widgets:

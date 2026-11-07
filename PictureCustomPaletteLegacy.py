@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,10 +75,13 @@ def _visible_rgb(image):
 def _analysis_image(image):
     from PIL import Image
     source = _visible_rgb(image)
-    if max(source.size) <= MAX_ANALYSIS_DIMENSION:
+    try:
+        if max(source.size) > MAX_ANALYSIS_DIMENSION:
+            source.thumbnail((MAX_ANALYSIS_DIMENSION, MAX_ANALYSIS_DIMENSION), Image.Resampling.LANCZOS)
         return source
-    source.thumbnail((MAX_ANALYSIS_DIMENSION, MAX_ANALYSIS_DIMENSION), Image.Resampling.LANCZOS)
-    return source
+    except BaseException:
+        source.close()
+        raise
 
 
 def image_fingerprint(image, *, cancelled=lambda: False) -> str:
@@ -90,8 +94,9 @@ def image_fingerprint(image, *, cancelled=lambda: False) -> str:
     for top in range(0, image.height, rows):
         if cancelled():
             raise InterruptedError('Picture custom palette cancelled.')
-        strip = image.crop((0, top, image.width, min(image.height, top + rows)))
-        digest.update(_visible_rgb(strip).tobytes())
+        with closing(image.crop((0, top, image.width, min(image.height, top + rows)))) as strip:
+            with closing(_visible_rgb(strip)) as visible:
+                digest.update(visible.tobytes())
     if cancelled():
         raise InterruptedError('Picture custom palette cancelled.')
     return digest.hexdigest()
@@ -270,58 +275,58 @@ def build_picture_palette(image, palette_rgb: Iterable[Sequence[int]], *, max_co
     if cancelled():
         raise InterruptedError("Picture custom palette cancelled.")
 
-    analysis = _analysis_image(image)
-    fallback = tuple(_rgb(c) for c in palette_rgb)
-    if not fallback:
-        raise ValueError("No Paint palette colors are available. Read/calibrate the Paint palette first.")
-    planned, selectors, meta = build_dynamic_color_palette(
-        analysis, fallback, max_colors=max_colors, skip_white=False, lines=True,
-        exact_available=True, color_fidelity=fidelity, profile_name="Microsoft Paint", source_palette=True,
-        cancelled=cancelled,
-    )
-    if planned is None:
-        raise InterruptedError("Picture custom palette cancelled.")
-    planned = tuple(_rgb(c) for c in (planned or ()))
-    selectors = tuple(selectors or ())
-    coverages = tuple((meta or {}).get("coverage_priority") or ())
-
-    custom: list[tuple[int, int, int]] = []
-    custom_cov: list[float] = []
-    palette_colors: list[tuple[int, int, int]] = []
-    for index, selector in enumerate(selectors):
-        if cancelled():
+    with closing(_analysis_image(image)) as analysis:
+        fallback = tuple(_rgb(c) for c in palette_rgb)
+        if not fallback:
+            raise ValueError("No Paint palette colors are available. Read/calibrate the Paint palette first.")
+        planned, selectors, meta = build_dynamic_color_palette(
+            analysis, fallback, max_colors=max_colors, skip_white=False, lines=True,
+            exact_available=True, color_fidelity=fidelity, profile_name="Microsoft Paint", source_palette=True,
+            cancelled=cancelled,
+        )
+        if planned is None:
             raise InterruptedError("Picture custom palette cancelled.")
-        coverage = float(coverages[index]) if index < len(coverages) else 0.0
-        if selector.get("kind") == "custom":
-            rgb = _rgb(selector.get("rgb", planned[index] if index < len(planned) else (0, 0, 0)))
-            if rgb not in custom:
-                custom.append(rgb); custom_cov.append(coverage)
-        else:
-            rgb = _rgb(planned[index] if index < len(planned) else selector.get("rgb", (0, 0, 0)))
-            if rgb not in palette_colors:
-                palette_colors.append(rgb)
+        planned = tuple(_rgb(c) for c in (planned or ()))
+        selectors = tuple(selectors or ())
+        coverages = tuple((meta or {}).get("coverage_priority") or ())
 
-    # Reserve up to a quarter of the custom budget for high-edge colors that are
-    # materially different from the normal Paint palette.  This protects eyes,
-    # thin contours and small isolated color fields without exploding color count.
-    detail_budget = min(6, max(2, max_colors // 4))
-    details=(_edge_detail_colors(analysis,detail_budget,cancelled=cancelled)
-             if len(custom)<max_colors else ())
-    for rgb in details:
-        if len(custom) >= max_colors:
-            break
-        nearest = min(float(delta_e2000(rgb, p)) for p in fallback)
-        if nearest < 2.0:
-            continue
-        if any(float(delta_e2000(rgb, old)) < 2.0 for old in custom):
-            continue
-        custom.append(rgb); custom_cov.append(0.0)
+        custom: list[tuple[int, int, int]] = []
+        custom_cov: list[float] = []
+        palette_colors: list[tuple[int, int, int]] = []
+        for index, selector in enumerate(selectors):
+            if cancelled():
+                raise InterruptedError("Picture custom palette cancelled.")
+            coverage = float(coverages[index]) if index < len(coverages) else 0.0
+            if selector.get("kind") == "custom":
+                rgb = _rgb(selector.get("rgb", planned[index] if index < len(planned) else (0, 0, 0)))
+                if rgb not in custom:
+                    custom.append(rgb); custom_cov.append(coverage)
+            else:
+                rgb = _rgb(planned[index] if index < len(planned) else selector.get("rgb", (0, 0, 0)))
+                if rgb not in palette_colors:
+                    palette_colors.append(rgb)
 
-    custom = custom[:max_colors]
-    custom_cov = custom_cov[:len(custom)]
-    all_colors = _dedupe([*custom, *palette_colors], threshold=3)[:max_colors]
-    from PicturePaletteRefinement import refine_picture_palette
-    all_colors = refine_picture_palette(analysis, all_colors, max_colors, cancelled=cancelled)
+        # Reserve up to a quarter of the custom budget for high-edge colors that are
+        # materially different from the normal Paint palette.  This protects eyes,
+        # thin contours and small isolated color fields without exploding color count.
+        detail_budget = min(6, max(2, max_colors // 4))
+        details=(_edge_detail_colors(analysis,detail_budget,cancelled=cancelled)
+                 if len(custom)<max_colors else ())
+        for rgb in details:
+            if len(custom) >= max_colors:
+                break
+            nearest = min(float(delta_e2000(rgb, p)) for p in fallback)
+            if nearest < 2.0:
+                continue
+            if any(float(delta_e2000(rgb, old)) < 2.0 for old in custom):
+                continue
+            custom.append(rgb); custom_cov.append(0.0)
+
+        custom = custom[:max_colors]
+        custom_cov = custom_cov[:len(custom)]
+        all_colors = _dedupe([*custom, *palette_colors], threshold=3)[:max_colors]
+        from PicturePaletteRefinement import refine_picture_palette
+        all_colors = refine_picture_palette(analysis, all_colors, max_colors, cancelled=cancelled)
     custom = list(all_colors)
     custom_cov = [0.0] * len(custom)
     palette_colors = []

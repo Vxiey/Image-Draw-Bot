@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 818,
+  "implemented": 821,
   "release_published": false,
-  "validation": "Batch 19: 4,083 tests completed in 117.859 seconds: 4,025 passed and 58 platform/hardware cases skipped, with all 857 source/configuration hashes unchanged. Three independently reviewed behavior groups and existing window-lifetime completions passed the combined gate. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. Complete historical comparisons cover 96 color/merge pairs, 36 scoring pairs and 72 native-simulation pairs; 18 workloads have six balanced timing pairs and separate traced-memory evidence. All three measurements share 807 unchanged root Python hashes. Nine real Xorg/Tk lifecycle/control cases passed. Published-commit Windows/CI results are separate in PR46; the preceding 7f41 checkpoint passed all seven checks. Version 1.0.148 is not released.",
+  "validation": "Batch 20: 4,162 tests completed in 200.541 seconds: 4,104 passed and 58 platform/hardware cases skipped, with all 869 source/configuration hashes unchanged. Three independently reviewed behavior groups bring the total to 821; automatic-preview/Stop/image ownership, browser drawing-region and learning-reset completions add no IDs. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Fourteen workloads have six balanced AB/BA pairs, separate traced allocation evidence and the same 819 unchanged root Python hashes. The preceding 4777715 checkpoint passed all seven CI checks, including 4,083 Windows tests. New exact-commit Windows/CI results are recorded separately in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6363,6 +6363,30 @@
       "description": "Read and validate the saved hardware profile once per actual numerical scoring operation, lazily sharing one observation across four evaluator routes or all twelve final-canvas routes. Keep explicit CPU at zero reads, recheck current backend health for every route, and reload file/runtime state on the next operation. Independent concurrent owners and explicit finally cleanup preserve Stop/error behavior without global stale state; complete metrics, route provenance and diagnostic images remain identical.",
       "batch": 19,
       "id": 818
+    },
+    {
+      "local_id": "C2001",
+      "area": "batch20-colour",
+      "ledger": "v148-batch20-colour-source.md",
+      "description": "Share one operation-local visible RGB and alpha analysis across actual dynamic quantization, source measurement and regional analysis. Preserve exact compositing, stable label/member order, selectors, diagnostics and complete Standard/High/Ultra/picture-plan output. Release owned Pillow images at their final consumers and clear shared export aliases through Stop and retained exceptions. Distinct cross-stage work is reduced; accompanying older ownership completions add no IDs.",
+      "batch": 20,
+      "id": 819
+    },
+    {
+      "local_id": "P2001",
+      "area": "batch20-platform",
+      "ledger": "v148-batch20-platform.md",
+      "description": "Make the actual Clear GPU cache action maintain only resources this process has already used, independently of the selected compute policy. Clear free CUDA/pinned blocks after a switch to CPU without probing unused backends, preserving live allocations, device selection, policy, limits and quarantine. Drop only idle OpenCL cache references and leave active/building contexts owned. Use the tracked worker and existing Stop/event lifetime; controlled native boundaries verify behavior without claiming physical GPU performance.",
+      "batch": 20,
+      "id": 820
+    },
+    {
+      "local_id": "U2001",
+      "area": "batch20-ui",
+      "ledger": "v148-batch20-ui-estimate.md",
+      "description": "Transfer the completed preview worker estimate once to the actual planned-result consumer, removing repeated sequence/path costing and calibration reads on the UI thread. Match the exact metadata object after existing generation/Stop/publication checks, then consume the private transfer. Legacy producers, changed metadata and failed preparation retain fresh estimation; later previews read current calibration. Full historical controller comparisons preserve plan output and labels while disclosing UI-adoption and complete-pipeline timing separately.",
+      "batch": 20,
+      "id": 821
     }
   ]
 }

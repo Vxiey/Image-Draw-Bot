@@ -11,6 +11,7 @@ large outlines/forms survive before micro detail.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import contextmanager
 import json
 import math
 import time
@@ -53,6 +54,39 @@ def load_all(path: Path = SPEED_FILE) -> dict:
 def save_all(data: dict, path: Path = SPEED_FILE) -> None:
     with file_transaction(path):
         atomic_write_text(Path(path),json.dumps({'version':VERSION,'profiles':data.get('profiles') or {}},ensure_ascii=False,indent=2,allow_nan=False))
+
+
+@contextmanager
+def profile_reset_changes(profile_key: str, *, path: Path | None = None):
+    """Prepare one profile's speed reset while holding the shared writer lock.
+
+    The caller publishes these replacements together with its own reset files
+    before leaving this context. Unreadable shared history must fail the reset,
+    rather than erase other profiles or claim an old speed sample is gone.
+    """
+    key = str(profile_key or '').lower()
+    if key not in SUPPORTED:
+        yield {}
+        return
+    resolved = Path(SPEED_FILE if path is None else path)
+    with file_transaction(resolved):
+        try:
+            raw = read_json(resolved, max_bytes=MAX_SPEED_FILE_BYTES)
+        except FileNotFoundError:
+            raw = _empty()
+        if (not isinstance(raw, dict) or type(raw.get('version')) is not int or
+                raw['version'] != VERSION or not isinstance(raw.get('profiles'), dict)):
+            raise ValueError('Real-Speed history cannot be reset safely: unsupported or invalid data.')
+        profiles = dict(raw['profiles'])
+        if key not in profiles:
+            yield {}
+            return
+        profiles.pop(key)
+        text = json.dumps({'version': VERSION, 'profiles': profiles},
+                          ensure_ascii=False, indent=2, allow_nan=False)
+        if len(text.encode('utf-8')) > MAX_SPEED_FILE_BYTES:
+            raise ValueError('Real-Speed history exceeds its storage limit.')
+        yield {resolved: text}
 
 
 def load_profile(profile_key: str, path: Path = SPEED_FILE) -> dict | None:

@@ -10,6 +10,7 @@ stroke geometry, fill planning, time budgets, profile calibration or UI state.
 """
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import dataclass
 from math import sqrt
 from typing import Sequence
@@ -81,26 +82,29 @@ def _local_importance(rgb: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
     importance map, so Step 4 uses a compact NumPy signal unless the caller
     supplies the AdaptiveDetail protected mask.
     """
-    f=rgb.astype(np.float32)/255.0
-    lum=f[...,0]*.2126+f[...,1]*.7152+f[...,2]*.0722
-    diff=np.zeros_like(lum,dtype=np.float32)
-    count=np.zeros_like(lum,dtype=np.float32)
-    if lum.shape[1]>1:
-        d=np.abs(lum[:,1:]-lum[:,:-1])
-        diff[:,1:]+=d; diff[:,:-1]+=d; count[:,1:]+=1; count[:,:-1]+=1
-    if lum.shape[0]>1:
-        d=np.abs(lum[1:,:]-lum[:-1,:])
-        diff[1:,:]+=d; diff[:-1,:]+=d; count[1:,:]+=1; count[:-1,:]+=1
-    local=diff/np.maximum(count,1.0)
-    # Fixed thresholds make diagnostics deterministic across images.
-    importance=np.clip(local*5.5,0.0,1.0).astype(np.float32,copy=False)
-    edge=(local>=0.075).astype(np.float32,copy=False)
-    return importance,edge
+    try:
+        f=rgb.astype(np.float32)/255.0
+        lum=f[...,0]*.2126+f[...,1]*.7152+f[...,2]*.0722
+        diff=np.zeros_like(lum,dtype=np.float32)
+        count=np.zeros_like(lum,dtype=np.float32)
+        if lum.shape[1]>1:
+            d=np.abs(lum[:,1:]-lum[:,:-1])
+            diff[:,1:]+=d; diff[:,:-1]+=d; count[:,1:]+=1; count[:,:-1]+=1
+        if lum.shape[0]>1:
+            d=np.abs(lum[1:,:]-lum[:-1,:])
+            diff[1:,:]+=d; diff[:-1,:]+=d; count[1:,:]+=1; count[:-1,:]+=1
+        local=diff/np.maximum(count,1.0)
+        # Fixed thresholds make diagnostics deterministic across images.
+        importance=np.clip(local*5.5,0.0,1.0).astype(np.float32,copy=False)
+        edge=(local>=0.075).astype(np.float32,copy=False)
+        return importance,edge
+    finally:
+        rgb=None
 
 
 def build_region_context(source: Image.Image, labels: Image.Image, entries: Sequence[dict], *,
                          protected_mask: Image.Image | None=None, grid_size: int=6,
-                         cancelled=lambda:False, drawable_mask=None) -> dict:
+                         cancelled=lambda:False, drawable_mask=None, _source_data=None) -> dict:
     """Analyse spatial adjacency, local structure and relative tone roles.
 
     ``labels`` is the temporary quantizer label image.  The analysis is O(pixels)
@@ -110,30 +114,42 @@ def build_region_context(source: Image.Image, labels: Image.Image, entries: Sequ
     """
     if cancelled():
         raise InterruptedError()
-    src=np.asarray(source.convert('RGB'),dtype=np.uint8)
-    lab=np.asarray(labels,dtype=np.int32)
-    if src.shape[:2] != lab.shape[:2]:
-        raise ValueError('Region-aware quantization requires source and label images at the same resolution.')
-    if cancelled():raise InterruptedError()
-    if lab.ndim != 2:
-        raise ValueError('Region color labels must be a single-channel image.')
-    h,w=lab.shape
-    draw=np.ones((h,w),dtype=bool) if drawable_mask is None else np.asarray(drawable_mask)
-    if draw.shape!=lab.shape or draw.dtype!=np.bool_:
-        raise ValueError('Drawable region mask must be Boolean and match the label image.')
-    pixels=max(1,int(np.count_nonzero(draw)))
-    grid=max(2,min(12,int(grid_size)))
-    qindexes=sorted({int(e['qindex']) for e in entries})
-    if not qindexes:
-        return {'stats':{},'adjacency':{},'grid_size':grid,'diagnostics':{'region_aware_quantization':False}}
-    max_label=max(max(qindexes),int(lab.max(initial=0)))+1
+    src=None
+    try:
+        if _source_data is None:
+            # Direct callers keep their existing RGB conversion semantics. Dynamic
+            # color planning already prepared the visible (composited) RGB pixels.
+            with closing(source.convert('RGB')) as converted:
+                src=np.asarray(converted,dtype=np.uint8)
+        else:
+            src=_source_data.rgb_for(source)
+        lab=np.asarray(labels,dtype=np.int32)
+        if src.shape[:2] != lab.shape[:2]:
+            raise ValueError('Region-aware quantization requires source and label images at the same resolution.')
+        if cancelled():raise InterruptedError()
+        if lab.ndim != 2:
+            raise ValueError('Region color labels must be a single-channel image.')
+        h,w=lab.shape
+        draw=np.ones((h,w),dtype=bool) if drawable_mask is None else np.asarray(drawable_mask)
+        if draw.shape!=lab.shape or draw.dtype!=np.bool_:
+            raise ValueError('Drawable region mask must be Boolean and match the label image.')
+        pixels=max(1,int(np.count_nonzero(draw)))
+        grid=max(2,min(12,int(grid_size)))
+        qindexes=sorted({int(e['qindex']) for e in entries})
+        if not qindexes:
+            return {'stats':{},'adjacency':{},'grid_size':grid,'diagnostics':{'region_aware_quantization':False}}
+        max_label=max(max(qindexes),int(lab.max(initial=0)))+1
 
-    local_importance,edge=_local_importance(src)
+        local_importance,edge=_local_importance(src)
+    finally:
+        src=None
     if cancelled():raise InterruptedError()
     protected=np.zeros((h,w),dtype=np.float32)
     if protected_mask is not None:
         try:
-            pm=np.asarray(protected_mask.resize((w,h),Image.Resampling.NEAREST).convert('L'),dtype=np.float32)/255.0
+            with closing(protected_mask.resize((w,h),Image.Resampling.NEAREST)) as resized:
+                with closing(resized.convert('L')) as grayscale:
+                    pm=np.asarray(grayscale,dtype=np.float32)/255.0
             protected=np.clip(pm,0.0,1.0)
             # Hard AdaptiveDetail protection is authoritative; soft focus values
             # contribute proportionally instead of turning the whole centre into

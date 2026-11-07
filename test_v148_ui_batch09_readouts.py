@@ -48,13 +48,23 @@ class LiveReadoutTests(unittest.TestCase):
         interpreter = tk.Tcl()
         app = SimpleNamespace(**{name: tk.StringVar(interpreter, value=f'Initial {name}')
                                  for name in READOUTS.values()})
-        with patch.object(ctk, 'CTkLabel', side_effect=lambda parent, **kwargs: kwargs):
-            widgets = actual_live_readouts(object(), app)
-        for widget_name, variable_name in READOUTS.items():
-            with self.subTest(readout=variable_name):
-                options = widgets[widget_name]
-                self.assertIs(options['textvariable'], getattr(app, variable_name))
-                self.assertEqual(options['text'], '')
+        widgets = {}
+        try:
+            # No mock call history is needed here; its cycles would retain the
+            # real textvariables beyond their creator thread's fixture lifetime.
+            with patch.object(ctk, 'CTkLabel', new=lambda parent, **kwargs: kwargs):
+                widgets = actual_live_readouts(object(), app)
+            for widget_name, variable_name in READOUTS.items():
+                with self.subTest(readout=variable_name):
+                    options = widgets[widget_name]
+                    self.assertIs(options['textvariable'], getattr(app, variable_name))
+                    self.assertEqual(options['text'], '')
+        finally:
+            for options in widgets.values():
+                options.clear()
+            widgets.clear()
+            vars(app).clear()
+            interpreter = None
 
 
 @unittest.skipUnless(sys.platform == 'win32', 'Actual Windows Tk live readout binding')

@@ -180,13 +180,19 @@ class ProfileIntegrityTests(unittest.TestCase):
                 raise OSError('file is locked')
             return real_replace(source, destination)
         with patch.object(PP, 'profile_reset_paths', return_value=paths), \
+             patch.object(PP, 'profile_timing_file', return_value=paths[2]), \
              patch.object(PP.os, 'replace', side_effect=fail_once), patch.object(PP, '_reload_profile') as reload_profile:
             with self.assertRaises(PP.ProfilePortabilityError):
                 PP.reset_profile(self.app())
             reload_profile.assert_not_called()
         for path in paths:
             self.assertEqual(path.read_bytes(), path.name.encode())
-        self.assertEqual(set(self.root.iterdir()), set(paths))
+        # The logical writer lock intentionally retains its coordination file.
+        # Keep it in this fixture's directory and still reject staging debris.
+        sidecar = paths[2].with_name(paths[2].name + '.lock')
+        self.assertTrue(sidecar.is_file())
+        self.assertLessEqual(sidecar.stat().st_size, 1)
+        self.assertEqual(set(self.root.iterdir()), set(paths) | {sidecar})
 
     def test_tools_share_profile_storage_key_without_unsafe_name_collisions(self):
         for key in ('generic', 'microsoft-paint', 'custom-' + 'a' * 32, 'a/b', 'a-b', 'x' * 90, 'x' * 89 + 'y'):

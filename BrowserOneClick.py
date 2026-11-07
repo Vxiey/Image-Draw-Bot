@@ -225,7 +225,7 @@ def discover_browser_target(profile_key: str, *, exclude_pid=None, preferred_han
         if best_shot is not None:best_shot.close()
 
 
-def one_click_setup(profile_name: str, profile_key: str, palette_path: Path, *, current_handle=None, exclude_pid=None, cancelled=lambda:False):
+def one_click_setup(profile_name: str, profile_key: str, palette_path: Path, *, current_handle=None, exclude_pid=None, cancelled=lambda:False, verify_canvas=False):
     """Return a BrowserAutoCalibration-compatible payload for one-click setup."""
     from PIL import ImageGrab
     from TargetCapture import probe_handle_isolated
@@ -247,6 +247,14 @@ def one_click_setup(profile_name: str, profile_key: str, palette_path: Path, *, 
         if cancelled():raise InterruptedError('Browser setup cancelled.')
         if cached.hit:
             payload=cached.as_dict();payload.update({'palette_confidence':cached.confidence,'canvas_confidence':cached.confidence,'method':'Layout Fingerprint v2 cache','note':'One-Click restored sampled palette points; canvas still requires live preflight.','target_meta':meta,'profile_name':profile_name,'layout_fingerprint_meta':cached.as_dict(),'one_click':True})
+            if verify_canvas:
+                # An explicit drawing region needs fresh containment evidence;
+                # palette cache samples alone cannot verify the stored canvas.
+                from BrowserAutoCalibration import detect_browser_canvas
+                live=detect_browser_canvas(key,screenshot,screen_origin=tuple(meta['client_rect'])[:2],cancelled=cancelled)
+                payload.update(canvas_box=live['canvas_box'],canvas_confidence=live['canvas_confidence'],
+                               confidence=min(float(cached.confidence),float(live['canvas_confidence'])),
+                               note='Cached palette points sampled; canvas independently detected in the same current screenshot.')
             return payload
         from BrowserAutoRecalibration import calibrate_browser_with_retry
         result,retry_meta=calibrate_browser_with_retry(

@@ -18,6 +18,7 @@ import numpy as np
 from PIL import Image
 
 from GpuHardware import best_nvidia_gpu
+from GpuResourceCache import remember_cuda_device
 
 ACCELERATION_MODES = ("Auto", "CPU", "NVIDIA CUDA")
 VRAM_BUDGETS = ("Auto", "25%", "50%", "75%", "90%", "2 GB", "4 GB", "6 GB", "8 GB", "12 GB", "16 GB", "24 GB")
@@ -209,6 +210,7 @@ def _resolve_backend(mode: str):
                 # successful probe on the UI thread does not select that device
                 # on later analysis/benchmark worker threads.
                 cp.cuda.Device(_BACKEND_DEVICE_ID).use()
+                remember_cuda_device(cp, _BACKEND_DEVICE_ID)
             except InterruptedError:
                 raise
             except Exception as exc:
@@ -504,26 +506,23 @@ def resize_gray_advanced(gray: Image.Image, size: tuple[int,int], mode: str="Aut
         # Resizing is never allowed to disable the entire drawing workflow.
         return gray.resize(target,Image.Resampling.LANCZOS),replace(_fallback_info(mode,f"CUDA scaler fallback: {type(exc).__name__}: {exc}",performance),scaler="CPU Lanczos fallback")
 
-def clear_gpu_cache(mode: str = "Auto") -> dict:
-    backend = _resolve_backend(mode)
-    if backend is None:
-        return {"cleared": False, "reason": _DISABLED_REASON or "CUDA backend is not active."}
-    _, module, *_ = backend
-    cp, _ = module
-    with _GPU_LOCK:
-        before_used, before_cached = _pool_stats(cp)
-        try:
-            cp.cuda.Stream.null.synchronize()
-        except Exception:
-            pass
-        cp.get_default_memory_pool().free_all_blocks()
-        try:
-            cp.get_default_pinned_memory_pool().free_all_blocks()
-        except Exception:
-            pass
-        after_used, after_cached = _pool_stats(cp)
-    return {"cleared": True, "before_used_mb": before_used, "before_cached_mb": before_cached,
-            "after_used_mb": after_used, "after_cached_mb": after_cached}
+def clear_gpu_cache(mode: str = "Auto", *, cancelled=lambda: False) -> dict:
+    """Release unused resources independently of the selected compute policy."""
+    validate_acceleration_mode(mode)
+    from GpuResourceCache import clear_unused_cuda_cache
+    import sys
+    result = clear_unused_cuda_cache(cancelled=cancelled)
+    result.update(opencl_entries=0, opencl_busy=0)
+    # Do not import/probe an optional backend just to discover there is no cache.
+    universal = sys.modules.get('UniversalGpuAcceleration')
+    if universal is not None:
+        result.update(universal.clear_idle_opencl_cache(cancelled=cancelled))
+    _cancel(cancelled)
+    result['cleared'] = bool(result['cuda_devices'] or result['pinned_pools'] or result['opencl_entries'])
+    if not result['cleared']:
+        result['reason'] = ('OpenCL resources are still in use.' if result['opencl_busy'] else
+                            'No previously used GPU caches are available.')
+    return result
 
 
 def palette_indices_rgba(image: Image.Image, palette: list[tuple[int, int, int]] | tuple[tuple[int, int, int], ...],

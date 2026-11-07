@@ -14,6 +14,7 @@ import customtkinter as ctk
 
 import StudioUI
 from test_v148_ui_batch08_keyboard import actual_menu_factory
+from test_v148_ui_batch10_numeric import release_factory_scopes
 from test_v148_ui_batch12_switches import actual_switch_rows, switch_app
 
 
@@ -216,6 +217,7 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
             self.root = None
             return
         self.root = ctk.CTk()
+        self.factory_scopes = []
         self.root.geometry('740x620+30+30')
         self.errors = []
         self.root.report_callback_exception = lambda *error: self.errors.append(error)
@@ -236,6 +238,7 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
         for token in self.root.tk.call('after', 'info'):
             self.root.tk.call('after', 'cancel', token)
         self.root.destroy()
+        release_factory_scopes(self.factory_scopes)
         for image in self.images:
             image.close()
         self.assertFalse(self.errors, self.errors)
@@ -353,7 +356,7 @@ class NativeCompositePointerFocusTests(unittest.TestCase):
 
     def test_real_switch_row_canvas_text_and_background_preserve_state_and_trace_lifetime(self):
         app = switch_app(self.root)
-        widgets = actual_switch_rows(app, self.root)
+        widgets = actual_switch_rows(app, self.root, scopes=self.factory_scopes)
         widget = widgets[0]
         widget.pack()
         command = app.paint_mode_changed

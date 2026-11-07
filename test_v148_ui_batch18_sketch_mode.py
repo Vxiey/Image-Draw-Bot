@@ -23,7 +23,7 @@ class SketchModeWorkflowTests(unittest.TestCase):
         # retain CTk's real variable trace, toggle and command implementation.
         self.surface = switch_fixtures.SwitchKeyboardTests(methodName='runTest')
         self.surface.setUp()
-        self.addCleanup(self.surface.doCleanups)
+        self.addCleanup(self.close_surface)
         self.tcl = self.surface.interpreter
         self.directory = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
         self.stack.enter_context(patch('RuntimePaths.source_dir', return_value=self.directory))
@@ -36,6 +36,12 @@ class SketchModeWorkflowTests(unittest.TestCase):
         drawing = ImageDraw.Draw(self.source)
         drawing.rectangle((6, 5, 22, 30), fill='red', outline='black', width=2)
         drawing.rectangle((25, 5, 41, 30), fill='blue', outline='black', width=2)
+
+    def close_surface(self):
+        try:
+            self.assertTrue(self.surface.doCleanups(), 'Switch fixture cleanup failed')
+        finally:
+            self.tcl = None
 
     def app(self, profile='Skribbl.io'):
         app = DrawBot.DrawBotApp.__new__(DrawBot.DrawBotApp)
@@ -67,7 +73,8 @@ class SketchModeWorkflowTests(unittest.TestCase):
         app.palette_ready = False
         app.saved_area = None
         app.calibration_path = self.directory / 'calibration.json'
-        widgets = switch_fixtures.actual_switch_rows(app, object())
+        widgets = switch_fixtures.actual_switch_rows(
+            app, object(), scopes=self.surface.factory_scopes)
         app.switches = dict(zip(switch_fixtures.SWITCH_VARIABLES, widgets))
         app.refresh_palette()
         return app

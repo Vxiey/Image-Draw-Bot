@@ -25,6 +25,7 @@ from typing import Any, Callable
 import numpy as np
 
 from GpuHardware import GpuDevice, detect_gpus
+from GpuResourceCache import used_cuda_device
 from ResourceAllocation import available_ram_mb, logical_cpu_count
 from RuntimePaths import atomic_binary_writer, data_dir, is_finite_number, read_json
 from ImageGradients import luminance_edges
@@ -310,7 +311,7 @@ def benchmark_cuda(*, size: int = 512, repeats: int = 2, cancelled=lambda: False
         _cancel(cancelled)
         try:
             name, total_mb, free_mb, sms = _cupy_props(cp, device_id)
-            with cp.cuda.Device(device_id):
+            with used_cuda_device(cp, device_id):
                 def sync(value):
                     # Blocking whole-result download measures usable host output
                     # on the current stream, rather than a single scalar sample.

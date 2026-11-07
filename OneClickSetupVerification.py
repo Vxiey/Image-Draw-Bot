@@ -103,7 +103,7 @@ def _live_palette_rows(data,rows,client,*,require_anchor=False):
     return result
 
 
-def verify_browser_live(profile_key: str, target_meta: dict, canvas_box, palette_path, *, screenshot=None) -> SetupVerificationResult:
+def verify_browser_live(profile_key: str, target_meta: dict, canvas_box, palette_path, *, screenshot=None, drawing_region=None) -> SetupVerificationResult:
     profile_key=str(profile_key or '').lower()
     if setup_mode(profile_key)!='browser':
         raise ValueError('Browser one-click verification is unavailable for this profile.')
@@ -122,8 +122,14 @@ def verify_browser_live(profile_key: str, target_meta: dict, canvas_box, palette
     palette_ok=visual.palette_tested>=3 and visual.palette_verified >= (visual.palette_tested if visual.palette_tested<=4 else max(3,(visual.palette_tested*4+4)//5))
     confidence=min(finite_confidence(visual.confidence),saved_confidence)
     if confidence<.68:reasons.append('saved or live calibration confidence is too low')
-    passed=bool(visual.passed and visual.canvas_ok and palette_ok and confidence>=.68)
-    return SetupVerificationResult(passed,profile_key,'browser',confidence,bool(visual.canvas_ok),bool(palette_ok),int(visual.palette_verified),int(visual.palette_tested),True,tuple(reasons))
+    region_ok=True
+    if drawing_region is not None:
+        try:drawing_region.with_canvas(profile_key,target_meta,visual.detected_canvas)
+        except ValueError as error:
+            region_ok=False;reasons.append(str(error))
+    canvas_ok=bool(visual.canvas_ok and region_ok)
+    passed=bool(visual.passed and canvas_ok and palette_ok and confidence>=.68)
+    return SetupVerificationResult(passed,profile_key,'browser',confidence,canvas_ok,bool(palette_ok),int(visual.palette_verified),int(visual.palette_tested),True,tuple(reasons))
 
 
 def verify_paint_live(target_meta: dict, canvas_box, palette_path, *, tool_path=None, screenshot=None) -> SetupVerificationResult:

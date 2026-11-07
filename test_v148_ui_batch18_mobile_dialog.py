@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 from types import SimpleNamespace
 import tkinter as tk
 import unittest
@@ -68,6 +69,9 @@ class MobileDialogWorkflowTests(unittest.TestCase):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         self.tcl = tk.Tcl()
+        self.tcl_thread = threading.get_ident()
+        self.apps = []
+        self.addCleanup(self.release_apps)
         for name, kind in (('CTkToplevel', 'window'), ('CTkFrame', 'frame'),
                            ('CTkLabel', 'label'), ('CTkTextbox', 'text'),
                            ('CTkButton', 'button')):
@@ -99,6 +103,7 @@ class MobileDialogWorkflowTests(unittest.TestCase):
 
     def app(self):
         app = DrawBotApp.__new__(DrawBotApp)
+        self.apps.append(app)
         app.root = NativeSurface(kind='root')
         self.addCleanup(app.root.destroy)
         app.closing = False
@@ -112,6 +117,16 @@ class MobileDialogWorkflowTests(unittest.TestCase):
             setattr(app, name, tk.StringVar(self.tcl, value=''))
         self.addCleanup(app.stop_mobile_preview, quiet=True)
         return app
+
+    def release_apps(self):
+        # All subsequently registered real server/panel cleanups run first.
+        # Old fake-widget callbacks may retain their app, so release its Tcl
+        # variables explicitly before any later worker collects those graphs.
+        self.assertEqual(threading.get_ident(), self.tcl_thread)
+        for app in self.apps:
+            vars(app).clear()
+        self.apps.clear()
+        self.tcl = None
 
     @staticmethod
     def windows(app):

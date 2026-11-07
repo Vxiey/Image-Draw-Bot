@@ -18,7 +18,9 @@ from customtkinter.windows.widgets.core_widget_classes import CTkBaseClass
 import DrawBot
 import StudioUI
 from UiKeyboardNavigation import KeyboardSlider
-from test_v148_ui_batch10_numeric import controller_app
+from test_v148_ui_batch10_numeric import (
+    controller_app, release_control_references, release_factory_scopes,
+)
 from test_v148_ui_batch12_switches import Scheduler
 from test_v148_ui_layout_batch04 import ScrollHarness, panel
 from test_v148_application_batch14_browser_start import DeferredThread
@@ -55,7 +57,7 @@ class Surface:
         return result
 
 
-def actual_contrast_row(app, parent):
+def actual_contrast_row(app, parent, *, scopes):
     """Run the active StudioUI row and its real factories/callbacks."""
     tree = ast.parse(Path(StudioUI.__file__).read_text(encoding='utf8'))
     build = next(node for node in tree.body
@@ -70,6 +72,7 @@ def actual_contrast_row(app, parent):
         if 'gpu_card' in names: break
         if active: nodes.append(node)
     scope = dict(vars(StudioUI), a=app, smart_card=parent)
+    scopes.append(scope)
     exec(compile(ast.Module(body=nodes, type_ignores=[]), StudioUI.__file__, 'exec'), scope)
     return scope['contrast_slider'], scope['contrast_value']
 
@@ -80,6 +83,7 @@ class ContrastKeyboardTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         self.interpreter = tk.Tcl()
         self.widgets = []
+        self.factory_scopes = []
         self.addCleanup(self.close_widgets)
         self.stack.enter_context(patch.object(ctk.CTkSlider, '__init__',
             lambda widget, *args, **kwargs: self.native_init(widget, *args, **kwargs)))
@@ -144,6 +148,11 @@ class ContrastKeyboardTests(unittest.TestCase):
     def close_widgets(self):
         for widget in self.widgets:
             if not widget._keyboard_closed: widget.destroy()
+        for widget in self.widgets:
+            release_control_references(widget)
+        release_factory_scopes(self.factory_scopes)
+        self.widgets.clear()
+        self.interpreter = None
 
     def slider(self, **kwargs):
         kwargs.setdefault('variable', tk.DoubleVar(self.interpreter, value=1.25))
@@ -198,7 +207,7 @@ class ContrastKeyboardTests(unittest.TestCase):
         for name in ('_refresh_start_buttons_text', '_refresh_target_lock_text'):
             self.stack.enter_context(patch.object(DrawBot.DrawBotApp, name))
         self.stack.enter_context(patch('DrawBot.log_event'))
-        widget, label = actual_contrast_row(app, object())
+        widget, label = actual_contrast_row(app, object(), scopes=self.factory_scopes)
         self.assertEqual(app.controls, [(widget, 'normal')])
         self.assertIs(widget.cget('variable'), app.contrast)
         self.assertEqual(label.cget('text'), 'Contrast · 1.25×')
@@ -256,7 +265,7 @@ class ContrastKeyboardTests(unittest.TestCase):
         app.worker = None
         app._safe_widget_configure = DrawBot.DrawBotApp._safe_widget_configure
         app.set_busy = MethodType(DrawBot.DrawBotApp.set_busy, app)
-        widget, label = actual_contrast_row(app, object())
+        widget, label = actual_contrast_row(app, object(), scopes=self.factory_scopes)
         task = Mock()
         with patch('DrawBot.log_event'), patch('ScreenTaskWindow.ScreenTaskWindow'), \
                 patch('DrawBot.threading.Thread', DeferredThread), \
@@ -309,7 +318,7 @@ class ContrastKeyboardTests(unittest.TestCase):
     def test_pointer_focus_native_drag_and_programmatic_updates_keep_readout_synchronized(self):
         app = SimpleNamespace(controls=[], contrast=tk.DoubleVar(self.interpreter, value=1.25),
                               options_changed=Mock())
-        widget, label = actual_contrast_row(app, object())
+        widget, label = actual_contrast_row(app, object(), scopes=self.factory_scopes)
         widget.focus_get.return_value = None
         widget._canvas.deliver('<Button-1>', event(x=80))
         self.assertIs(widget.focus_get(), widget)
@@ -368,19 +377,21 @@ class ContrastKeyboardTests(unittest.TestCase):
 class NativeContrastKeyboardTests(unittest.TestCase):
     def setUp(self):
         self.root = ctk.CTk()
+        self.factory_scopes = []
         self.root.geometry('680x460+50+50')
         self.errors = []
         self.root.report_callback_exception = lambda *error: self.errors.append(error)
 
     def tearDown(self):
         self.root.destroy()
+        release_factory_scopes(self.factory_scopes)
         self.assertFalse(self.errors, self.errors)
 
     def test_factory_tab_pointer_focus_value_readout_busy_state_and_teardown(self):
         entry = ttk.Entry(self.root); entry.pack()
         app = SimpleNamespace(controls=[], contrast=tk.DoubleVar(self.root, value=1.25),
                               options_changed=Mock())
-        widget, label = actual_contrast_row(app, self.root)
+        widget, label = actual_contrast_row(app, self.root, scopes=self.factory_scopes)
         disabled = KeyboardSlider(self.root, state='disabled'); disabled.pack()
         after = ttk.Entry(self.root); after.pack()
         self.root.update()

@@ -15,12 +15,15 @@ Safety/compatibility rules:
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from contextlib import contextmanager
 from functools import wraps
 import math
 import threading
 from typing import Any, Callable, Sequence
 
 import numpy as np
+
+from GpuResourceCache import used_cuda_device
 
 # Step 23 logical workloads reuse the closest Step 22 microbenchmark where the
 # exact operation was not benchmarked independently.  This preserves the user's
@@ -38,6 +41,7 @@ _LOCK = threading.RLock()
 _HEALTH_LOCK = threading.RLock()
 _FAILED: dict[tuple[str, str], str] = {}
 _OPENCL_CACHE: dict[str, tuple[Any, Any, Any, Any]] = {}
+_OPENCL_IN_USE: dict[int, int] = {}
 
 
 class HardwareProfileObservation:
@@ -381,6 +385,53 @@ def _opencl_context(backend_id: str):
         return value
 
 
+@contextmanager
+def _opencl_session(backend_id: str):
+    """Keep a cached context borrowed until this operation releases its work."""
+    with _LOCK:
+        value = _opencl_context(backend_id)
+        identity = id(value)
+        _OPENCL_IN_USE[identity] = _OPENCL_IN_USE.get(identity, 0) + 1
+    try:
+        yield value
+    finally:
+        with _LOCK:
+            remaining = _OPENCL_IN_USE[identity] - 1
+            if remaining:
+                _OPENCL_IN_USE[identity] = remaining
+            else:
+                _OPENCL_IN_USE.pop(identity)
+
+
+def clear_idle_opencl_cache(*, cancelled=lambda: False):
+    """Drop only this module's idle cache references; never release native objects."""
+    _cancel(cancelled)
+    # A native context build holds this lock. Cache maintenance need not wait
+    # for it, and must not interrupt or release the operation that owns it.
+    if not _LOCK.acquire(blocking=False):
+        return {'opencl_entries': 0, 'opencl_busy': 1}
+    removed = []
+    busy = 0
+    value = None
+    try:
+        for key in list(_OPENCL_CACHE):
+            _cancel(cancelled)
+            value = _OPENCL_CACHE[key]
+            if _OPENCL_IN_USE.get(id(value), 0):
+                busy += 1
+            else:
+                removed.append(_OPENCL_CACHE.pop(key))
+    finally:
+        _LOCK.release()
+        count = len(removed)
+        # Destructors run outside our cache lock, including after Stop. Any
+        # independent owner keeps its context/queue/program alive normally.
+        removed.clear()
+        value = None
+    _cancel(cancelled)
+    return {'opencl_entries': count, 'opencl_busy': busy}
+
+
 def _backend_indices(backend_id: str, kind: str, count: int) -> tuple[int, ...]:
     parts = str(backend_id).split(':')
     if len(parts) != count + 1 or parts[0] != kind or any(
@@ -427,7 +478,7 @@ def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInpu
     try:
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
-            with cp.cuda.Device(_cuda_device_id(route.backend_id)):
+            with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
                 c = cp.asarray(_rgb01(arr), dtype=cp.float32)
                 linear = cp.where(c <= 0.04045, c/12.92, cp.power((c+0.055)/1.055, 2.4))
                 r,g,b=linear[...,0],linear[...,1],linear[...,2]
@@ -440,13 +491,14 @@ def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInpu
                 cp.cuda.Stream.null.synchronize(); host=cp.asnumpy(out).astype(np.float32,copy=False)
             return host, route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            cl,ctx,queue,program=_opencl_context(route.backend_id); mf=cl.mem_flags
-            host4=_float4_host(arr)
-            src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4)
-            dst=cl.Buffer(ctx,mf.WRITE_ONLY,host4.nbytes)
-            program.ds_oklab_kernel(queue,(pixels,),None,src,dst,np.int32(pixels))
-            sink=np.empty_like(host4);cl.enqueue_copy(queue,sink,dst);queue.finish()
-            return sink[:,:3].reshape(shape).astype(np.float32,copy=False),route.as_dict()
+            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+                mf=cl.mem_flags
+                host4=_float4_host(arr)
+                src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4)
+                dst=cl.Buffer(ctx,mf.WRITE_ONLY,host4.nbytes)
+                program.ds_oklab_kernel(queue,(pixels,),None,src,dst,np.int32(pixels))
+                sink=np.empty_like(host4);cl.enqueue_copy(queue,sink,dst);queue.finish()
+                return sink[:,:3].reshape(shape).astype(np.float32,copy=False),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     except InterruptedError:
         raise
@@ -475,7 +527,7 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
     try:
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
-            with cp.cuda.Device(_cuda_device_id(route.backend_id)):
+            with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
                 a=cp.asarray(_rgb01(src),dtype=cp.float32);b=cp.asarray(_rgb01(dst),dtype=cp.float32)
                 def lab(c):
                     lin=cp.where(c<=0.04045,c/12.92,cp.power((c+0.055)/1.055,2.4));r,g,bb=lin[...,0],lin[...,1],lin[...,2]
@@ -485,15 +537,16 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
                 cp.cuda.Stream.null.synchronize(); hs=cp.asnumpy(sl).astype(np.float32,copy=False);hd=cp.asnumpy(dl).astype(np.float32,copy=False);he=cp.asnumpy(de).astype(np.float32,copy=False)
             return hs,hd,he,route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags
-            a4=_float4_host(src);b4=_float4_host(dst)
-            ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4)
-            la=cl.Buffer(ctx,mf.READ_WRITE,a4.nbytes);lb=cl.Buffer(ctx,mf.READ_WRITE,b4.nbytes);bd=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4)
-            program.ds_oklab_kernel(queue,(pixels,),None,ba,la,np.int32(pixels));program.ds_oklab_kernel(queue,(pixels,),None,bb,lb,np.int32(pixels));program.ds_delta_kernel(queue,(pixels,),None,la,lb,bd,np.int32(pixels))
-            sa=np.empty_like(a4);sb=np.empty_like(b4);de=np.empty((pixels,),dtype=np.float32)
-            cl.enqueue_copy(queue,sa,la);cl.enqueue_copy(queue,sb,lb);cl.enqueue_copy(queue,de,bd);queue.finish()
-            target=src.shape
-            return sa[:,:3].reshape(target),sb[:,:3].reshape(target),de.reshape(target[:-1]),route.as_dict()
+            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+                mf=cl.mem_flags
+                a4=_float4_host(src);b4=_float4_host(dst)
+                ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4)
+                la=cl.Buffer(ctx,mf.READ_WRITE,a4.nbytes);lb=cl.Buffer(ctx,mf.READ_WRITE,b4.nbytes);bd=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4)
+                program.ds_oklab_kernel(queue,(pixels,),None,ba,la,np.int32(pixels));program.ds_oklab_kernel(queue,(pixels,),None,bb,lb,np.int32(pixels));program.ds_delta_kernel(queue,(pixels,),None,la,lb,bd,np.int32(pixels))
+                sa=np.empty_like(a4);sb=np.empty_like(b4);de=np.empty((pixels,),dtype=np.float32)
+                cl.enqueue_copy(queue,sa,la);cl.enqueue_copy(queue,sb,lb);cl.enqueue_copy(queue,de,bd);queue.finish()
+                target=src.shape
+                return sa[:,:3].reshape(target),sb[:,:3].reshape(target),de.reshape(target[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     except InterruptedError:
         raise
@@ -518,12 +571,13 @@ def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: Pr
     try:
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
-            with cp.cuda.Device(_cuda_device_id(route.backend_id)):
+            with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
                 x=cp.asarray(lum,dtype=cp.float32);out=luminance_edges(x,xp=cp);cp.cuda.Stream.null.synchronize();host=cp.asnumpy(out).astype(np.float32,copy=False)
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags
-            flat=np.ascontiguousarray(lum.reshape(-1),dtype=np.float32);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=flat);dst=cl.Buffer(ctx,mf.WRITE_ONLY,flat.nbytes);program.ds_edge_kernel(queue,(pixels,),None,src,dst,np.int32(w),np.int32(h));sink=np.empty_like(flat);cl.enqueue_copy(queue,sink,dst);queue.finish();return sink.reshape(h,w),route.as_dict()
+            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+                mf=cl.mem_flags
+                flat=np.ascontiguousarray(lum.reshape(-1),dtype=np.float32);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=flat);dst=cl.Buffer(ctx,mf.WRITE_ONLY,flat.nbytes);program.ds_edge_kernel(queue,(pixels,),None,src,dst,np.int32(w),np.int32(h));sink=np.empty_like(flat);cl.enqueue_copy(queue,sink,dst);queue.finish();return sink.reshape(h,w),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     except InterruptedError:
         raise
@@ -543,11 +597,12 @@ def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: s
     try:
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
-            with cp.cuda.Device(_cuda_device_id(route.backend_id)):
+            with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
                 aa=cp.asarray(a);bb=cp.asarray(b);out=cp.mean(cp.abs(aa-bb),axis=-1,dtype=cp.float32);cp.cuda.Stream.null.synchronize();host=cp.asnumpy(out).astype(np.float32,copy=False)
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags;a4=_float4_host(a);b4=_float4_host(b);ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4);bo=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4);program.ds_absdiff_kernel(queue,(pixels,),None,ba,bb,bo,np.int32(pixels));sink=np.empty((pixels,),dtype=np.float32);cl.enqueue_copy(queue,sink,bo);queue.finish();return sink.reshape(a.shape[:-1]),route.as_dict()
+            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+                mf=cl.mem_flags;a4=_float4_host(a);b4=_float4_host(b);ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4);bo=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4);program.ds_absdiff_kernel(queue,(pixels,),None,ba,bb,bo,np.int32(pixels));sink=np.empty((pixels,),dtype=np.float32);cl.enqueue_copy(queue,sink,bo);queue.finish();return sink.reshape(a.shape[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     except InterruptedError:
         raise
@@ -681,7 +736,7 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
     try:
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
-            with cp.cuda.Device(_cuda_device_id(route.backend_id)):
+            with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
                 from CudaPalette import match
                 out = match(
                     cp, rgb, pal, _oklab_cpu(pal / 255.0), ids, custom,
@@ -689,31 +744,32 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
                     custom_first=custom_first, cancelled=cancelled)
             return (out,visible.astype(np.bool_,copy=False)),route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags
-            # Reuse bounded buffers on AMD/Intel/NVIDIA OpenCL as well.
-            chunk = min(262144, max(1, 8_000_000 // len(candidates)))
-            pal4=np.ones((len(candidates),4),dtype=np.float32);pal4[:,:3]=pal
-            pl4=np.ones_like(pal4);pl4[:,:3]=_oklab_cpu(pal / 255.0)
-            bp=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=pal4)
-            bl=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=pl4)
-            bi=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=ids)
-            bc=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=custom)
-            br=cl.Buffer(ctx,mf.READ_ONLY,chunk*16)
-            bo=cl.Buffer(ctx,mf.WRITE_ONLY,chunk*2)
-            bm=cl.Buffer(ctx,mf.WRITE_ONLY,chunk)
-            oi=np.empty(pixels,dtype=np.int16);om=np.empty(pixels,dtype=np.uint8)
-            flat=raw.reshape(-1,4)
-            for start in range(0,pixels,chunk):
-                _cancel(cancelled)
-                end=min(pixels,start+chunk);n=end-start
-                tile=np.ascontiguousarray(flat[start:end],dtype=np.float32)
-                cl.enqueue_copy(queue,br,tile,is_blocking=True)
-                program.ds_palette_kernel(queue,(n,),None,br,bp,bl,bi,bc,bo,bm,
-                    np.int32(n),np.int32(len(candidates)),np.int32(perceptual),
-                    np.int32(fidelity),np.int32(custom_first),np.int32(skip_white))
-                cl.enqueue_copy(queue,oi[start:end],bo,is_blocking=True)
-                cl.enqueue_copy(queue,om[start:end],bm,is_blocking=True)
-            return (oi.reshape(h,w),om.reshape(h,w).astype(np.bool_)),route.as_dict()
+            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+                mf=cl.mem_flags
+                # Reuse bounded buffers on AMD/Intel/NVIDIA OpenCL as well.
+                chunk = min(262144, max(1, 8_000_000 // len(candidates)))
+                pal4=np.ones((len(candidates),4),dtype=np.float32);pal4[:,:3]=pal
+                pl4=np.ones_like(pal4);pl4[:,:3]=_oklab_cpu(pal / 255.0)
+                bp=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=pal4)
+                bl=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=pl4)
+                bi=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=ids)
+                bc=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=custom)
+                br=cl.Buffer(ctx,mf.READ_ONLY,chunk*16)
+                bo=cl.Buffer(ctx,mf.WRITE_ONLY,chunk*2)
+                bm=cl.Buffer(ctx,mf.WRITE_ONLY,chunk)
+                oi=np.empty(pixels,dtype=np.int16);om=np.empty(pixels,dtype=np.uint8)
+                flat=raw.reshape(-1,4)
+                for start in range(0,pixels,chunk):
+                    _cancel(cancelled)
+                    end=min(pixels,start+chunk);n=end-start
+                    tile=np.ascontiguousarray(flat[start:end],dtype=np.float32)
+                    cl.enqueue_copy(queue,br,tile,is_blocking=True)
+                    program.ds_palette_kernel(queue,(n,),None,br,bp,bl,bi,bc,bo,bm,
+                        np.int32(n),np.int32(len(candidates)),np.int32(perceptual),
+                        np.int32(fidelity),np.int32(custom_first),np.int32(skip_white))
+                    cl.enqueue_copy(queue,oi[start:end],bo,is_blocking=True)
+                    cl.enqueue_copy(queue,om[start:end],bm,is_blocking=True)
+                return (oi.reshape(h,w),om.reshape(h,w).astype(np.bool_)),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     except InterruptedError:raise
     except Exception as exc:
@@ -760,12 +816,13 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
     try:
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
-            with cp.cuda.Device(_cuda_device_id(route.backend_id)):
+            with used_cuda_device(cp, _cuda_device_id(route.backend_id)):
                 c=cp.asarray(_rgb01(arr),dtype=cp.float32);lin=cp.where(c<=0.04045,c/12.92,cp.power((c+0.055)/1.055,2.4));r,g,b=lin[:,0],lin[:,1],lin[:,2];l=cp.cbrt(.4122214708*r+.5363325363*g+.0514459929*b);m=cp.cbrt(.2119034982*r+.6806995451*g+.1073969566*b);ss=cp.cbrt(.0883024619*r+.2817188376*g+.6299787005*b);lab=cp.stack((.2104542553*l+.7936177850*m-.0040720468*ss,1.9779984951*l-2.4285922050*m+.4505937099*ss,.0259040371*l+.7827717662*m-.8086757660*ss),axis=1)
                 host=_pairwise_lab_distance(lab,xp=cp,cancelled=cancelled)
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            cl,ctx,queue,program=_opencl_context(route.backend_id);mf=cl.mem_flags;host4=_float4_host(arr);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4);lab=cl.Buffer(ctx,mf.READ_WRITE,host4.nbytes);outb=cl.Buffer(ctx,mf.WRITE_ONLY,n*n*4);program.ds_oklab_kernel(queue,(n,),None,src,lab,np.int32(n));program.ds_pairwise_lab(queue,(n*n,),None,lab,outb,np.int32(n));sink=np.empty((n*n,),dtype=np.float32);cl.enqueue_copy(queue,sink,outb);queue.finish();return sink.reshape(n,n),route.as_dict()
+            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+                mf=cl.mem_flags;host4=_float4_host(arr);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4);lab=cl.Buffer(ctx,mf.READ_WRITE,host4.nbytes);outb=cl.Buffer(ctx,mf.WRITE_ONLY,n*n*4);program.ds_oklab_kernel(queue,(n,),None,src,lab,np.int32(n));program.ds_pairwise_lab(queue,(n*n,),None,lab,outb,np.int32(n));sink=np.empty((n*n,),dtype=np.float32);cl.enqueue_copy(queue,sink,outb);queue.finish();return sink.reshape(n,n),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     except InterruptedError:
         raise

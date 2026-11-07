@@ -94,6 +94,8 @@ def _cpu_map(rgb: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
 
 def _gpu_map(rgb: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
     import cupy as cp
+    from GpuResourceCache import remember_current_cuda_device
+    remember_current_cuda_device(cp)
     x = cp.asarray(rgb, dtype=cp.float32) / 255.0
     lum = x[..., 0] * .2126 + x[..., 1] * .7152 + x[..., 2] * .0722
     from ImageGradients import luminance_edges
