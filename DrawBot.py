@@ -730,7 +730,6 @@ def make_plan(original, area, options, cancelled=lambda: False):
         if options.get('outline') or options.get('paint_current_color') or options.get('erase_mode'):
             raise ValueError('Subject focus needs full colour drawing. Turn off Outline, Eraser and current-colour-only mode.')
         options['draw_quality'] = 'Pixel Accurate'
-        options['brush_px'] = 1
     profiler_begin(options)
     try:
         if 'cpu_workers_resolved' not in options or 'ram_budget_mb' not in options:
@@ -967,6 +966,9 @@ def make_plan(original, area, options, cancelled=lambda: False):
     if str(options.get('draw_quality') or '') == 'Pixel Accurate' and not options.get('outline'):
         from PixelAccuratePlanner import build_pixel_map
         from PixelStrokeEngine import build_pixel_stroke_plan
+        # Block B prices the actual selector workflow while ordering components;
+        # attach the resolved palette before its cost model is constructed.
+        options=dict(options,color_selectors=picture_selectors)
         _prof_color = profiler_start(options, 'color_planning')
         pixel_map=build_pixel_map(
             image, picture_plan_colors,
@@ -991,6 +993,19 @@ def make_plan(original, area, options, cancelled=lambda: False):
         stroke_plan['execution_sequence']=adaptive_brush['execution_sequence']
         stroke_plan['metadata']=dict(stroke_plan.get('metadata') or {})
         stroke_plan['metadata']['adaptive_brush']=adaptive_brush['metadata']
+        subject_brush_meta=None
+        if options.get('subject_focus')=='Subject only':
+            from SubjectFocus import clip_subject_brush_sequence
+            stroke_plan['execution_sequence'],subject_brush_meta=clip_subject_brush_sequence(
+                stroke_plan['execution_sequence'],pixel_map.drawable_mask,
+                default_brush_px=max(1,int(options.get('brush_px') or 1)),cancelled=cancelled)
+            stroke_plan['metadata']['subject_brush_mask']=subject_brush_meta
+            stroke_plan['metadata']['execution_paths']=subject_brush_meta['retained_paths']
+            adaptive_brush['metadata']=dict(adaptive_brush['metadata'],
+                **{key:subject_brush_meta[key] for key in ('used_brush_sizes','brush_path_counts',
+                    'brush_reason_counts','planned_brush_switches')},
+                geometry_changed=bool(subject_brush_meta['trimmed_source_paths']),subject_mask_constrained=True)
+            stroke_plan['metadata']['adaptive_brush']=adaptive_brush['metadata']
         # v1.0.89 Block D: preserve the full Block-B plan, then optionally fit
         # execution to a user timer by phase/importance only. CUDA performs the
         # expensive brush simulation when available; corrections stay inside the
@@ -1058,12 +1073,16 @@ def make_plan(original, area, options, cancelled=lambda: False):
             pixel_map,stroke_plan['execution_sequence'],picture_plan_colors,
             brush_px=max(1,int(options.get('brush_px',1) or 1)),cancelled=cancelled)
         accuracy_meta=dict(accuracy_plan['metadata'])
+        if subject_brush_meta is not None:
+            accuracy_meta['subject_brush_mask']=dict(subject_brush_meta,
+                missing_subject_pixels=int(accuracy_meta.get('missing_pixels',0)),
+                subject_coverage_percent=float(accuracy_meta.get('coverage_percent',0)))
         accuracy_meta['progressive_time_budget']={k:v for k,v in progressive_budget.items() if k!='execution_sequence'}
         accuracy_meta['accuracy_checkpoints']=checkpoints
         accuracy_meta['block_d']=True
         if options.get('subject_focus','Off')!='Off':
             accuracy_meta['automatic_corrections']=False
-            accuracy_meta['correction_note']='Subject focus uses exact 1 px paths; correction passes disabled to avoid restoring intentionally omitted background.'
+            accuracy_meta['correction_note']='Subject focus preserves the available brush width; Subject only clips its footprint to the selection. Correction passes are disabled to avoid restoring intentionally omitted background.'
         accuracy_meta['adaptive_brush']=adaptive_brush['metadata']
         accuracy_meta['draw_motor']='Adaptive Brush Draw Motor v2'
         plan_options['pixel_accuracy_meta']=accuracy_meta
@@ -7419,15 +7438,15 @@ class DrawBotApp:
         return 'copy'
 
     def update_guesses(self):
-        if not hasattr(self,'guess_list'):return
+        if not hasattr(self,'guess_list') or getattr(self,'closing',False):return
         from WordGuesser import find_candidates
-        self.guess_list.delete(0,'end')
+        from WordHelperResults import results_for
+        results=results_for(self)
         try:
             matches=find_candidates(self.guess_words,self.guess_pattern.get(),self.guess_length.get())
-            for word in matches[:200]:self.guess_list.insert('end',word)
-            if matches:self.guess_list.selection_set(0)
-            self.guess_result.set(f'{len(matches)} possible words' + (' · showing first 200' if len(matches)>200 else '') + '. No confidence ranking.')
-        except ValueError as error:self.guess_result.set(str(error))
+        except ValueError as error:
+            return results.set_error(str(error))
+        return results.set_matches(matches)
 
     def import_words(self):
         if self.activity:return
@@ -7611,35 +7630,15 @@ class DrawBotApp:
         return 'break'
 
     def paste_image(self):
-        if self.activity or self.closing or getattr(self,'pending_clear_drawing',None) is not None:return
-        from PIL import Image,ImageGrab,ImageOps
+        if not DrawBotApp._profile_action_ready(self):return
+        from PIL import Image,ImageGrab
         try:
             content=ImageGrab.grabclipboard()
             if isinstance(content,Image.Image):
                 if content.width*content.height>25_000_000:
                     raise ValueError('The image is too large. Choose an image up to 25 megapixels.')
-                with closing(ImageOps.exif_transpose(content)) as oriented:
-                    oriented.info.pop('draw_studio_color_managed',None)
-                    oriented.info.pop('draw_studio_bit_depth',None)
-                    from SourcePixelDepth import UNSIGNED_16BIT_MODES
-                    if oriented.info.get('icc_profile') or oriented.mode in UNSIGNED_16BIT_MODES:
-                        from ImageColorManagement import srgb_source
-                        prepared=srgb_source(oriented)
-                    else:prepared=oriented.convert('RGBA')
-                self._suppress_recovery=False;self.original=prepared;self.plan=None
-                self.original.info.pop('draw_studio_format',None)
-                self.upscale_original=None
-                self.background_removal_original=None;self.background_removal_meta=None
-                self.subject_region=None
-                if hasattr(self,'subject_hint'): self.subject_hint.set('Auto: simple background or transparent PNG. Mark busy photos.')
                 action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self))
-                DrawBotApp._clear_render_resume(self,'new pasted image')
-                from ImageFormatInfo import image_label
-                self.file_label.set(image_label(self.original,'Pasted image'));self._mark_plan_stale('Image pasted. Press Build preview when ready.');self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40);self._maybe_auto_preview(delay=900, reason='paste-image')
-                if DrawBotApp._queue_drop_in_start(self,action,source_label='pasted image'):
-                    DrawBotApp._schedule_pending_drop_in_start(self)
-                elif action is None:
-                    DrawBotApp._queue_browser_one_click_after_import(self,'pasted image')
+                return DrawBotApp._queue_clipboard_bitmap(self,content,action)
             elif isinstance(content,list) and content:
                 from CanvasDropPayload import parse_canvas_drop
                 source=parse_canvas_drop('',split_items=content)
@@ -7651,6 +7650,20 @@ class DrawBotApp:
                 else:self.status.set('Copy an image or use Win+Shift+S, then press Ctrl+V here.')
         except (OSError,ValueError,tk.TclError) as error:
             self.status.set(f'Could not paste. Copy an image first. {error}')
+
+    def _queue_clipboard_bitmap(self,content,action):
+        if not DrawBotApp._profile_action_ready(self):return False
+        self.status.set('Preparing clipboard image…')
+        def work():
+            from ClipboardImport import prepare_bitmap
+            prepared=prepare_bitmap(content,cancelled=self.stop.is_set)
+            try:
+                if self.stop.is_set():raise InterruptedError()
+                self.events.put(('pasted',(prepared,action)))
+            except BaseException:
+                prepared.close()
+                raise
+        return bool(self.begin_worker('load',work))
 
     def capture_screen(self):
         if not DrawBotApp._profile_action_ready(self):return False
@@ -7944,8 +7957,7 @@ class DrawBotApp:
             return
         if self.subject_focus.get() != 'Off':
             self.draw_quality.set('Pixel Accurate')
-            self.brush_px.set('1')
-            self.status.set('Subject focus uses Pixel Accurate and a 1 px pencil. Match the target brush and check Coverage preview before Start.')
+            self.status.set('Subject focus uses Pixel Accurate with the selected brush width. Match the target brush and check Coverage preview for details too narrow to draw before Start.')
         self.options_changed()
 
     def mark_subject(self):
@@ -9561,7 +9573,8 @@ class DrawBotApp:
         context=self._diagnostics_context()
         def work():
             from DiagnosticsPackage import create_diagnostics_package
-            path=create_diagnostics_package(context)
+            path=create_diagnostics_package(context,cancelled=self.stop.is_set)
+            if self.stop.is_set():raise InterruptedError('Diagnostics export cancelled.')
             self.events.put(('diagnostics_ready',str(path)))
         self.begin_worker('diagnostics',work)
 
@@ -10032,7 +10045,7 @@ class DrawBotApp:
             _release_trial(value,retained['original'],retained,getattr(self,'plan',None))
             return
         candidate=None
-        if kind in ('loaded','upscaled') and isinstance(value,(list,tuple)) and value:
+        if kind in ('loaded','pasted','upscaled') and isinstance(value,(list,tuple)) and value:
             candidate=value[0]
         elif kind=='recovery_loaded' and isinstance(value,(list,tuple)) and len(value)==2:
             candidate=value[1]
@@ -10056,7 +10069,7 @@ class DrawBotApp:
             # The matching completion event below confirms when it has exited.
             return
         if (stop is not None and stop.is_set() and kind in
-                ('loaded','planned','background_removed','screen','recovery_loaded','paint_auto_calibration_complete',
+                ('loaded','pasted','planned','background_removed','screen','recovery_loaded','paint_auto_calibration_complete',
                  'browser_one_click_setup_complete','browser_auto_calibration_complete',
                  'one_click_setup_verification_complete','picture_palette_complete')):
             log_event(f'Ignored cancelled worker result: {kind}.')
@@ -10298,6 +10311,7 @@ class DrawBotApp:
                 self.status.set(f'Color calibration failed safely in its helper process (exit {code} / 0x{unsigned:08X}). Main Image Draw Bot stayed open.{crash_hint} Check the palette calibration log.')
                 log_event(f'Color calibration helper failed safely: exit={code} / 0x{unsigned:08X}.')
         elif kind=='diagnostics_ready':
+            if self.closing or (stop is not None and stop.is_set()):return
             path=Path(str(value))
             self.status.set(f'Diagnostics package created: {path.name}')
             messagebox.showinfo('Diagnostics created',f'Privacy-safe diagnostics ZIP created at:\n{path}\n\nSource/recovery images are not included.',parent=self.root)
@@ -10431,6 +10445,26 @@ class DrawBotApp:
         elif kind=='png_saved':
             self.status.set(f'PNG saved: {value}')
             log_event(f'PNG export saved: {value!r}.')
+        elif kind=='pasted':
+            self._suppress_recovery=False;self.original,action=value;self.plan=None
+            self.upscale_original=None
+            self.background_removal_original=None;self.background_removal_meta=None
+            self.subject_region=None
+            if hasattr(self,'subject_hint'):self.subject_hint.set('Auto: simple background or transparent PNG. Mark busy photos.')
+            DrawBotApp._clear_render_resume(self,'new pasted image')
+            from ImageFormatInfo import image_label
+            self.file_label.set(image_label(self.original,'Pasted image'))
+            self._mark_plan_stale('Image pasted. Press Build preview when ready.')
+            self.show_previews();self._schedule_recovery_checkpoint(include_image=True,delay=40)
+            # Publication occurs while the tracked loader still owns the UI.
+            # poll consumes this only after its matching done event; cancel()
+            # clears the request and Manual still locks automatic previews.
+            self.needs_plan=True
+            # done(load) schedules an accepted Drop-In only after the loader
+            # releases the UI, exactly like file/URL imports.
+            queued=DrawBotApp._queue_drop_in_start(self,action,source_label='pasted image')
+            if not queued and action is None:
+                DrawBotApp._queue_browser_one_click_after_import(self,'pasted image')
         elif kind=='loaded':
             self._suppress_recovery=False
             self.background_removal_original=None;self.background_removal_meta=None

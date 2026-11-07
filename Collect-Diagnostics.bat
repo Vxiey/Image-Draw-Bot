@@ -10,10 +10,10 @@ if exist "%~dp0..\ImageDrawBot.exe" (
  goto done
 )
 if exist "%~dp0.venv\Scripts\python.exe" (
- "%~dp0.venv\Scripts\python.exe" "%~dp0DiagnosticsPackage.py"
+ "%~dp0.venv\Scripts\python.exe" -E -s "%~dp0DiagnosticsPackage.py"
  goto done
 )
-py -3 "%~dp0DiagnosticsPackage.py"
+py -3 -E -s "%~dp0DiagnosticsPackage.py"
 :done
 set "DIAG_RESULT=%errorlevel%"
 if not "%DIAG_RESULT%"=="0" echo Collection failed. Read the message above.

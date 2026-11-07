@@ -623,9 +623,12 @@ def import_package_into_app(app, package: dict, *, action: str = "replace", copy
     return destination_name
 
 
-def reset_profile(app):
+def reset_profile(app, *, expected_name=None, expected_key=None):
     _require_idle_profile(app)
     name, key = _profile_identity(str(app.game.get()))
+    if ((expected_name is not None and name != expected_name) or
+            (expected_key is not None and key != expected_key)):
+        raise ProfilePortabilityError('The selected profile changed. Open profile management again.')
     # Do not let the profile-change wrapper save the old values after deletion.
     changes = {path: None for path in profile_reset_paths(key)}
     # A missing per-profile ETA file triggers one-time migration from the old
@@ -822,23 +825,23 @@ def import_profile_dialog(app):
 def reset_profile_dialog(app):
     from tkinter import messagebox
     try:
-        name, _key = _profile_identity(str(app.game.get()))
-    except ProfilePortabilityError as error:
-        messagebox.showerror("Could not reset profile", str(error), parent=getattr(app, "root", None)); return None
-    if not messagebox.askyesno(
-        "Reset profile to defaults",
-        f"Reset '{name}' to Image Draw Bot defaults?\n\nThis removes this profile's saved settings and calibration/cache files only. Other profiles are not changed.",
-        parent=getattr(app, "root", None),
-    ):
-        return None
-    try:
-        result = reset_profile(app)
-        messagebox.showinfo(
-            "Profile reset",
-            f"'{result}' was restored to defaults. Re-run calibration/setup before drawing.",
-            parent=getattr(app, "root", None),
-        )
+        _require_idle_profile(app)
+        name, key = _profile_identity(str(app.game.get()))
+        if not messagebox.askyesno(
+            "Reset profile to defaults",
+            f"Reset '{name}' to Image Draw Bot defaults?\n\nThis removes this profile's saved settings and calibration/cache files only. Other profiles are not changed.",
+            parent=getattr(app, "root", None), default='no',
+        ):
+            return None
+        result = reset_profile(app, expected_name=name, expected_key=key)
+        if not getattr(app, 'closing', False):
+            messagebox.showinfo(
+                "Profile reset",
+                f"'{result}' was restored to defaults. Re-run calibration/setup before drawing.",
+                parent=getattr(app, "root", None),
+            )
         return result
     except ProfilePortabilityError as error:
-        messagebox.showerror("Could not reset profile", str(error), parent=getattr(app, "root", None))
+        if not getattr(app, 'closing', False):
+            messagebox.showerror("Could not reset profile", str(error), parent=getattr(app, "root", None))
         return None

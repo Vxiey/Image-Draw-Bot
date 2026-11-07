@@ -1,0 +1,44 @@
+{
+  "batch": 9,
+  "baseline_commit": "ab2a59bd1432aac7528d378cef2c4ebcf689a47b",
+  "added_behavior_groups": 6,
+  "implemented": 765,
+  "remaining": 235,
+  "release_published": false,
+  "local_tests": 3514,
+  "skipped": 42,
+  "test_seconds": 190.952,
+  "source_changed": false,
+  "source_hash_manifest_sha256": "9af9a3b0042c6f551a9582ebeea435bf73ae5b3b7c8f85f32ead756821d517dd",
+  "source_gate": {
+    "schema": 1,
+    "version": "1.0.148",
+    "file_version": "1.0.148",
+    "channel": "stable",
+    "repository": "Vxiey/Image-Draw-Bot",
+    "soak_cycles": 5000,
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "passed": true
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1047,
+    "missing_required": [],
+    "forbidden_paths": [],
+    "warnings": [],
+    "ok": true
+  },
+  "exact_raster_fixtures": 8,
+  "checkpoint_native_ci": "pending",
+  "previous_checkpoint_ci": "42309898941: all four jobs and all seven commit checks passed"
+}

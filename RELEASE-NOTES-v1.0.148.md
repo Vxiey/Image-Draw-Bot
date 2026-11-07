@@ -1,6 +1,16 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 759 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07 and 14 changes in batch 08. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 765 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08 and 6 changes in batch 09. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 09: complete UI results and actual drawing boundaries
+
+- Prepare clipboard bitmap orientation, color and depth conversion in a tracked worker; preserve Stop, Manual and loader/Drop-In ordering.
+- Keep the actual brush footprint inside a marked subject, retain fixed/verified widths and report details that a wide brush cannot reach.
+- Connect live drawing readouts to their Tk variables, reach all word-helper matches through bounded pages, and show each renderer's real progressive phases.
+- Honor Stop during diagnostics collection and before ZIP publication, preserving prior exports and suppressing stale success presentation.
+- Complete existing profile-confirmation identity, custom-selector costing and isolated source-helper launch contracts without counting them again.
+
+Batch 09: final frozen-source discovery passed 3,514 tests in 190.952 seconds (42 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.
 
 ## Batch 08: executable Fill, consistent controls and reliable release builds
 
@@ -12,7 +22,7 @@
 - Build release candidates in one staging workspace and verify the complete artifact set before rollback-capable publication. Use one verified private Python environment for dependency installation, tests and packaging.
 - Complete existing capture/export ownership, updater save-failure handling, private source startup and bounded network Stop/deadline policies. Raw time estimates reprice retained color/brush/phase/Fill work before measured correction. These completions do not add duplicate improvement IDs.
 
-Batch 08: final frozen-source discovery passed 3,462 tests in 81.280 seconds (39 platform/hardware skips), with unchanged source hashes. All four counted-area source reviews are closed; review findings were corrected with regressions. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. The earlier full-suite failure was an outdated fake cost-model interface; its swap-selection assertions are preserved. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.
+Batch 08: final frozen-source discovery passed 3,462 tests in 81.280 seconds (39 platform/hardware skips), with unchanged source hashes. All four counted-area source reviews are closed; review findings were corrected with regressions. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. The earlier full-suite failure was an outdated fake cost-model interface; its swap-selection assertions are preserved. The batch08 checkpoint plus its native keyboard-test fixture repair at `ab2a59bd1432aac7528d378cef2c4ebcf689a47b` passed complete Windows/Linux regressions, both dependency audits, CodeQL, Windows self-test, bundle build and packaged GUI/native drag-and-drop in [run 42309898941](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42309898941). The repair starts Tab traversal from the actually focused native entry and adds no improvement ID. No 1.0.148 release is published.
 
 ## Batch 07: faithful imports, useful drawing plans and responsive controls
 

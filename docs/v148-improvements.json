@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 759,
+  "implemented": 765,
   "release_published": false,
-  "validation": "Batch 08: final frozen-source discovery passed 3,462 tests in 81.280 seconds (39 platform/hardware skips), with unchanged source hashes. All four counted-area source reviews are closed; review findings were corrected with regressions. The 5,000-cycle source gate, source-package hygiene and eight exact-raster fixtures passed. The earlier full-suite failure was an outdated fake cost-model interface; its swap-selection assertions are preserved. This checkpoint still requires its own Windows/Linux CI. No 1.0.148 release is published.",
+  "validation": "Batch 09: final frozen-source discovery passed 3,514 tests in 190.952 seconds (42 platform/hardware skips), with unchanged Python and batch-script hashes. All four area source reviews are closed. The 5,000-cycle source gate, source-package hygiene and eight exact-raster engine fixtures passed. This checkpoint still requires its own Windows/Linux, dependency, CodeQL and packaged Windows checks. No 1.0.148 release is published.",
   "improvements": [
     {
       "id": 1,
@@ -5891,6 +5891,54 @@
       "local_id": "BP02",
       "description": "`Build-Release.bat` selected base Python, then `build_release` upgraded pip and installed requirements into that caller environment. Release tests ran there while PyInstaller used a separate `.build-venv`, so the build could alter unrelated host packages and test different dependencies from those being bundled. `BuildEnvironment.prepare_builder` creates/reuses the private environment, verifies its actual prefix, architecture, supported Python and isolated site directories, and applies the existing pip-target policy before any package changes. Install build/runtime/selected GPU requirements once into that interpreter. Both release test processes and `build_exe.build_application` use it and an explicit trusted source path. Direct `build_exe.main` uses the same preparation; the batch launcher ignores inherited Python startup overrides. Proxy, CA, index and ordinary pip configuration remain available, while target/prefix/root/user/interpreter relocation and inherited Python startup overrides cannot redirect installation. Public-entry tests replace external processes, assert that every pip operation targets the private interpreter, and check shared test/packaging execution. A real no-pip temporary venv probe also distinguishes isolated environments from ones exposing system site packages.",
       "ledger": "v148-batch08-platform.md"
+    },
+    {
+      "id": 760,
+      "area": "batch09-application",
+      "batch": 9,
+      "local_id": "BA01",
+      "description": "Paste performed EXIF orientation, ICC/unsigned-16-bit conversion and RGBA normalization on the GUI thread. A tracked load worker now prepares an owned image without mutating or closing the OS snapshot. The UI adopts only a current, uncancelled result; failed/obsolete results release their owned images. Automatic preview and explicitly armed Drop-In wait for matching loader completion, while Manual and Stop retain their existing semantics. Ten actual worker/event-order regressions and the existing pixel/color/depth fixtures cover the workflow. OS clipboard acquisition remains on the GUI thread, and native Pillow calls are not preemptible.",
+      "ledger": "v148-batch09-application.md"
+    },
+    {
+      "id": 761,
+      "area": "batch09-rendering",
+      "batch": 9,
+      "local_id": "R901",
+      "description": "Subject only forced a modeled 1px brush even when only wider verified controls existed or the user had declared a fixed wider brush. A real 2px public plan painted 65 pixels outside a 32x32 subject. Preserve the requested/verified width and constrain executable centers against the unchanged subject mask using the actual brush footprint. Split paths at unsafe boundaries and retain missing-coverage diagnostics when no usable brush fits. Public UI-to-plan-to-fake-native regressions cover verified 2 px and fixed 4 px, centered canvases and signed origins; independent square-footprint oracles have zero spill. The existing morphology and brush-selection contracts are reused without duplicate counts.",
+      "ledger": "v148-batch09-rendering.md"
+    },
+    {
+      "id": 762,
+      "area": "batch09-ui-workflow",
+      "batch": 9,
+      "local_id": "U901",
+      "description": "Four live drawing readouts passed Tk StringVar objects as literal label text and displayed internal variable names. Bind the color-plan, estimated-time, live-time and total-time readouts through the actual label factory textvariable argument. Portable Tcl binding tests and native Windows repeated-value tests verify the four readouts as one shared presentation correction.",
+      "ledger": "v148-batch09-ui-workflow.md"
+    },
+    {
+      "id": 763,
+      "area": "batch09-ui-workflow",
+      "batch": 9,
+      "local_id": "U902",
+      "description": "Word helper discarded visible access to every match after the first 200. Preserve the deterministic complete result and expose bounded 200-row Previous/Next pages with the exact visible range. Query/error/dictionary changes reset the page and selection, Copy uses the visible selected row, and busy/closing/destruction cannot advance stale navigation. Actual filter/controller/workspace tests reach all 451 fixture words; native Windows tests cover listbox and keyboard navigation. Bulk insertion is part of this same browsing flow, not a separate performance count.",
+      "ledger": "v148-batch09-ui-workflow.md"
+    },
+    {
+      "id": 764,
+      "area": "batch09-ui-workflow",
+      "batch": 9,
+      "local_id": "U903",
+      "description": "The workspace always read legacy progressive counters, so real Sketch Fill and Pixel Accurate plans displayed unrelated zero forms/contours/details. A metadata-only formatter uses each renderer's complete counter schema or its declared full phase order; missing counts remain unknown. Actual make_plan-to-workspace regressions verify Sketch Fill and Pixel Accurate; legacy, hybrid, deadline and extended correction orders are covered. The formatter never scans execution geometry during UI refresh.",
+      "ledger": "v148-batch09-ui-workflow.md"
+    },
+    {
+      "id": 765,
+      "area": "batch09-platform",
+      "batch": 9,
+      "local_id": "PX901",
+      "description": "Diagnostics exposed Stop through its tracked worker but continued collecting files, published a ZIP and showed success after cancellation. Propagate cooperative cancellation through candidate enumeration, bounded reads, redaction/section boundaries and the pre-publication check. Discard staging, preserve earlier completed exports and retain InterruptedError over cleanup failures. Late worker/UI/standalone completion suppresses success and folder opening after Stop. Ten actual collector/worker/fault regressions preserve existing privacy exclusions. OS calls and native compression already executing remain nonpreemptible, and Stop after atomic commit does not delete an already complete ZIP.",
+      "ledger": "v148-batch09-platform.md"
     }
   ]
 }

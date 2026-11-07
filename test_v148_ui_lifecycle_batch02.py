@@ -2,6 +2,7 @@
 from contextlib import ExitStack
 from types import SimpleNamespace
 import threading
+import queue
 import tkinter as tk
 import unittest
 from unittest.mock import Mock, patch
@@ -29,6 +30,22 @@ def ui_app():
         setattr(app,name,Mock())
     app.game=Mock();app.game.get.return_value='Gartic Phone'
     return app
+
+
+def paste_and_deliver_bitmap(app):
+    """Drive the deferred clipboard worker before the original pixel assertions."""
+    app.events=queue.Queue()
+    if not hasattr(app,'stop'):app.stop=threading.Event()
+    tasks=[]
+    def enqueue(activity,task):
+        if activity!='load':raise AssertionError('Unexpected clipboard activity')
+        app.activity=activity;tasks.append(task);return True
+    app.begin_worker=enqueue
+    if DrawBotApp.paste_image(app) is not True or len(tasks)!=1:
+        raise AssertionError('Clipboard bitmap was not queued')
+    tasks[0]()
+    while not app.events.empty():
+        DrawBotApp._handle_event(app,*app.events.get_nowait())
 
 
 class IncomingStateTests(unittest.TestCase):
@@ -101,10 +118,11 @@ class IncomingStateTests(unittest.TestCase):
                 stack.enter_context(patch.object(DrawBotApp,'_queue_drop_in_start',return_value=armed))
                 pending=stack.enter_context(patch.object(DrawBotApp,'_schedule_pending_drop_in_start'))
                 one_click=stack.enter_context(patch.object(DrawBotApp,'_queue_browser_one_click_after_import'))
-                DrawBotApp.paste_image(app)
+                paste_and_deliver_bitmap(app)
                 self.assertIsNone(app.background_removal_original)
                 self.assertIsNone(app.background_removal_meta)
-                self.assertEqual(pending.call_count,int(armed))
+                # The tracked loader's done event owns deferred start scheduling.
+                self.assertEqual(pending.call_count,0)
                 self.assertEqual(one_click.call_count,int(not armed))
 
 

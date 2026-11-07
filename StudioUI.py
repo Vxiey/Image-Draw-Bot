@@ -19,6 +19,7 @@ from PictureCustomPalette import start_picture_custom_palette
 from UIState import compute_workspace_state, classify_error
 from TimeBudget import TIME_BUDGET_MODES, TARGET_STROKE_COUNTS
 from ProgressiveRenderer import PROGRESSIVE_RENDERING_MODES
+from ProgressiveSummary import progressive_summary
 from PlanningWatchdog import PLANNING_WATCHDOG_MODES
 from ShapePaths import SHAPE_MODEL_MODES
 from QuickSketchFillContour import QUICK_SKETCH_RENDER_STYLE, QUICK_SKETCH_STYLES, QUICK_SKETCH_FILL_PREFERENCES
@@ -674,13 +675,13 @@ def build_ui(a, quality, speed):
     wizard_open_btn.pack(fill='x', pady=(0, 7)); tooltip(wizard_open_btn,'Shows target-specific missing requirements, warnings and the next safe action before Start.')
     plan_metrics = label(step5, 'No plan yet.', muted=True, size=9, wraplength=270)
     plan_metrics.pack(anchor='w', pady=(0, 4))
-    color_plan = label(step5, a.color_plan_text, muted=True, size=9, wraplength=270)
+    color_plan = label(step5, var=a.color_plan_text, muted=True, size=9, wraplength=270)
     color_plan.pack(anchor='w', pady=(0, 3))
-    draw_time_side = label(step5, a.draw_time_text, muted=True, size=9, wraplength=270)
+    draw_time_side = label(step5, var=a.draw_time_text, muted=True, size=9, wraplength=270)
     draw_time_side.pack(anchor='w', pady=(0, 3))
-    draw_live_side = label(step5, a.draw_live_time_text, muted=True, size=9, wraplength=270)
+    draw_live_side = label(step5, var=a.draw_live_time_text, muted=True, size=9, wraplength=270)
     draw_live_side.pack(anchor='w', pady=(0, 2))
-    total_draw_side = label(step5, a.total_draw_time_text, size=10, bold=True, wraplength=270)
+    total_draw_side = label(step5, var=a.total_draw_time_text, size=10, bold=True, wraplength=270)
     total_draw_side.pack(anchor='w', pady=(0, 6))
     review_card = frame(step5, PANEL_ALT, border_width=1, border_color=LINE, radius=10)
     review_card.pack(fill='x', pady=(0, 7))
@@ -899,6 +900,14 @@ def build_ui(a, quality, speed):
                               activestyle='none')
     a.guess_list.pack(fill='x', padx=14, pady=5)
     label(word_card, var=a.guess_result, muted=True, size=9).pack(anchor='w', padx=14)
+    word_pages = frame(word_card)
+    word_pages.pack(fill='x', padx=14, pady=(7, 0))
+    previous_words = btn(word_pages, 'Previous', lambda: None, width=100, height=32)
+    previous_words.pack(side='left')
+    next_words = btn(word_pages, 'Next', lambda: None, width=100, height=32)
+    next_words.pack(side='left', padx=(6, 0))
+    from WordHelperResults import results_for
+    results_for(a).set_navigation(previous_words, next_words)
     btn(word_card, 'Copy selected word', a.copy_guess, height=32).pack(anchor='w', padx=14, pady=(7, 12))
 
     center_mode = {'name': 'workspace'}
@@ -1074,9 +1083,8 @@ def build_ui(a, quality, speed):
                 colors = sum(bool(g) for g in plan.get('groups', []))
                 tool = opts.get('effective_paint_tool') or opts.get('paint_tool') or 'Brush'
                 path_stats = plan.get('path_stats') or {}
-                progressive = ''
-                if path_stats.get('progressive_enabled'):
-                    progressive = f"\nProgressive: {int(path_stats.get('progressive_foundation_paths', 0)):,} forms → {int(path_stats.get('progressive_contour_paths', 0)):,} contours → {int(path_stats.get('progressive_detail_paths', 0)):,} details"
+                progressive_line = progressive_summary(path_stats)
+                progressive = f'\n{progressive_line}' if progressive_line else ''
                 if time_meta.get('is_projection'):
                     time_line=f"final ≈ {shown_unit} · range {range_text}"
                 else:
@@ -1128,6 +1136,10 @@ def build_ui(a, quality, speed):
                 primary_state = 'disabled'
             ready = primary_state == 'normal' and not a.activity and not a.closing
             a._safe_widget_configure(a.start_secondary, state='normal' if ready else 'disabled')
+            # Restore page-specific bounds after the controller's shared busy
+            # controls pass; callbacks also recheck the live operation state.
+            word_results=getattr(a,'_word_helper_results',None)
+            if word_results is not None:word_results.refresh_controls()
             action_bar=getattr(a,'draw_action_bar',None)
             if action_bar is not None:action_bar.schedule()
             workspace_layout=getattr(a,'workspace_layout',None)

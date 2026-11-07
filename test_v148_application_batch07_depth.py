@@ -14,7 +14,7 @@ from ImageFormatInfo import image_label
 from ImageImport import read_image
 from SourcePixelDepth import grayscale_8bit
 from test_v148_application_batch06_color_import import gray_profile
-from test_v148_ui_lifecycle_batch02 import ui_app
+from test_v148_ui_lifecycle_batch02 import ui_app, paste_and_deliver_bitmap
 
 
 class HighDepthSourceTests(unittest.TestCase):
@@ -59,7 +59,7 @@ class HighDepthSourceTests(unittest.TestCase):
             stack.enter_context(patch('PIL.ImageGrab.grabclipboard',return_value=source))
             for name in ('_clear_render_resume','_queue_drop_in_start','_queue_browser_one_click_after_import','_manual_drop_in_armed'):
                 stack.enter_context(patch.object(DrawBotApp,name,return_value=False))
-            DrawBotApp.paste_image(app);self.addCleanup(app.original.close)
+            paste_and_deliver_bitmap(app);self.addCleanup(app.original.close)
             self.assertEqual([app.original.getpixel((x,0))[0] for x in range(4)],[0,1,128,255])
             self.assertEqual(source.tobytes(),before);self.assertEqual(source.info,info)
 

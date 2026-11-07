@@ -161,3 +161,103 @@ def focused_stroke_plan(pixel_map, image, palette_count, mode, region=None, *, l
                        execution_sequence=sequence, metadata=dict(engine='Subject Focus / Pixel Stroke Engine',
                        execution_paths=len(sequence), subject_focus=mode, subject_method=method,
                        sections={section:plan['metadata'] for section,plan in plans}))
+
+
+def clip_subject_brush_sequence(sequence, subject_mask, *, default_brush_px=1, cancelled=lambda: False):
+    """Retain only centers whose actual square brush stays inside the subject.
+
+    Pixel Accurate supplies full target-resolution paths and brush widths in
+    the same planning-pixel coordinates as its simulator. Keep the target mask
+    unchanged: features that cannot fit the verified brush remain measurable
+    missing pixels, rather than being silently added to the subject or erased.
+    """
+    from AdaptiveBrushEngine import brush_for_entry
+    from RasterGeometry import clipped_bresenham
+    if cancelled(): raise InterruptedError('Subject brush clipping cancelled.')
+    mask=np.asarray(subject_mask,dtype=np.bool_)
+    if mask.ndim!=2: raise ValueError('Subject brush mask must be two-dimensional.')
+    height,width=mask.shape
+    _mask_size((width,height))
+    masks={};current_brush=max(1,int(default_brush_px));result=[]
+    source_paths=omitted_paths=split_paths=trimmed_paths=rejected_visits=0
+
+    def safe_centers(brush):
+        if brush==1:return mask
+        cached=masks.pop(brush,None)
+        if cached is None:
+            # Reuse the exact asymmetric footprint already used by regional
+            # simulation, with at most two private full-plane masks retained.
+            from AdaptiveRegionHybrid import _eroded_centers
+            cached=_eroded_centers(mask,brush,cancelled=cancelled)
+        masks[brush]=cached
+        if len(masks)>2:masks.pop(next(iter(masks)))
+        return cached
+
+    def append_point(fragment,point):
+        if not fragment or fragment[-1]!=point:
+            if len(fragment)>=2:
+                a,b=fragment[-2:]
+                if ((a[0]==b[0]==point[0] and (b[1]-a[1])*(point[1]-b[1])>0)
+                        or (a[1]==b[1]==point[1] and (b[0]-a[0])*(point[0]-b[0])>0)):
+                    fragment[-1]=point
+                    return
+            fragment.append(point)
+
+    for entry in sequence:
+        if cancelled(): raise InterruptedError('Subject brush clipping cancelled.')
+        current_brush=brush_for_entry(entry,current_brush)
+        path=tuple(entry.get('path') or ())
+        if not path:
+            result.append(dict(entry))
+            continue
+        source_paths+=1
+        safe=safe_centers(current_brush)
+        fragments=[];fragment=[];last_sample=None;sample_number=0;changed=False
+        segments=((path[0],path[0]),) if len(path)==1 else zip(path,path[1:])
+        for a,b in segments:
+            if cancelled(): raise InterruptedError('Subject brush clipping cancelled.')
+            if any(not (0<=int(p[0])<width and 0<=int(p[1])<height) for p in (a,b)):
+                changed=True
+            for point in clipped_bresenham(a,b,width,height):
+                if sample_number%256==0 and cancelled(): raise InterruptedError('Subject brush clipping cancelled.')
+                sample_number+=1
+                if point==last_sample:continue
+                last_sample=point
+                if not safe[point[1],point[0]]:
+                    changed=True;rejected_visits+=1
+                    if fragment:fragments.append(tuple(fragment));fragment=[]
+                    continue
+                # Clipping an off-canvas segment can omit a nonadjacent prefix
+                # or suffix. Never join two returned pieces across that gap.
+                if fragment and max(abs(point[0]-fragment[-1][0]),abs(point[1]-fragment[-1][1]))>1:
+                    fragments.append(tuple(fragment));fragment=[]
+                append_point(fragment,point)
+        if fragment:fragments.append(tuple(fragment))
+        if not changed:
+            result.append(dict(entry,path=path))
+            continue
+        trimmed_paths+=1
+        if not fragments:omitted_paths+=1
+        if len(fragments)>1:split_paths+=1
+        for fragment in fragments:
+            result.append(dict(entry,path=fragment))
+    if cancelled(): raise InterruptedError('Subject brush clipping cancelled.')
+    brush_counts={};reason_counts={};previous_brush=None;brush_switches=0
+    for entry in result:
+        if not entry.get('path'):continue
+        brush=brush_for_entry(entry,previous_brush or default_brush_px)
+        brush_counts[str(brush)]=brush_counts.get(str(brush),0)+1
+        reason=str(entry.get('brush_reason') or 'unknown')
+        reason_counts[reason]=reason_counts.get(reason,0)+1
+        if previous_brush is not None and brush!=previous_brush:brush_switches+=1
+        previous_brush=brush
+    return result,{'enabled':True,'mode':'Subject only','mask_unchanged':True,
+        'footprint_model':'exact asymmetric square in planning pixels',
+        'source_paths':source_paths,'retained_paths':sum(bool(e.get('path')) for e in result),
+        'trimmed_source_paths':trimmed_paths,'omitted_source_paths':omitted_paths,
+        'split_source_paths':split_paths,'rejected_center_visits':rejected_visits,
+        'used_brush_sizes':tuple(sorted(map(int,brush_counts))),
+        'brush_path_counts':brush_counts,'brush_reason_counts':reason_counts,
+        'planned_brush_switches':brush_switches,
+        'coverage_policy':'unreachable subject pixels remain missing in accuracy diagnostics',
+        'maximum_cached_footprint_masks':2}

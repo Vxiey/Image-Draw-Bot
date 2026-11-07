@@ -57,13 +57,14 @@ class ClipboardRuntimeTests(unittest.TestCase):
         app.fetch_url.assert_called_once()
 
     def test_pasted_exif_orientation_is_applied_once(self):
+        from test_v148_ui_lifecycle_batch02 import paste_and_deliver_bitmap
         source = Image.new('RGB', (3, 2), 'red'); source.getexif()[274] = 6
         app = SimpleNamespace(activity=None, closing=False, file_label=Mock(), status=Mock(),
                               _mark_plan_stale=Mock(), show_previews=Mock(),
                               _schedule_recovery_checkpoint=Mock(), _maybe_auto_preview=Mock())
         with patch('PIL.ImageGrab.grabclipboard', return_value=source), \
              patch.object(DrawBotApp, '_clear_render_resume'), patch.object(DrawBotApp, '_queue_drop_in_start'):
-            DrawBotApp.paste_image(app)
+            paste_and_deliver_bitmap(app)
         self.assertEqual(app.original.size, (2, 3))
         self.assertNotIn(274, app.original.getexif())
         self.assertEqual(source.size, (3, 2))

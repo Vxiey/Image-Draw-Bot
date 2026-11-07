@@ -12,10 +12,10 @@ if exist "%~dp0..\ImageDrawBot.exe" (
  goto done
 )
 if exist "%~dp0.venv\Scripts\python.exe" (
- "%~dp0.venv\Scripts\python.exe" "%~dp0CrashDumpConfig.py" disable --include-python
+ "%~dp0.venv\Scripts\python.exe" -E -s "%~dp0CrashDumpConfig.py" disable --include-python
  goto done
 )
-py -3 "%~dp0CrashDumpConfig.py" disable --include-python
+py -3 -E -s "%~dp0CrashDumpConfig.py" disable --include-python
 :done
 set "DUMP_RESULT=%errorlevel%"
 if not "%DUMP_RESULT%"=="0" echo Setup FAILED. Read the error above.

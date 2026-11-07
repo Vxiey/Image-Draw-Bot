@@ -28,6 +28,18 @@ MAX_JSON_BYTES = 4 * 1024 * 1024
 MAX_SUMMARY_FILES = 100
 
 
+def _check_cancelled(cancelled):
+    if cancelled():
+        raise InterruptedError('Diagnostics export cancelled.')
+
+
+def _cancellable_items(items, cancelled):
+    for item in items:
+        _check_cancelled(cancelled)
+        yield item
+    _check_cancelled(cancelled)
+
+
 def _regular_input(path: Path, base: Path) -> bool:
     """Collect local regular files, without following substituted links."""
     try:
@@ -40,11 +52,14 @@ def _regular_input(path: Path, base: Path) -> bool:
                     or getattr(metadata, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)):
                 return False
         return path.is_file() and path.resolve().is_relative_to(base.resolve())
+    except InterruptedError:
+        raise
     except (OSError, ValueError):
         return False
 
 
-def _json_input(path: Path, base: Path):
+def _json_input(path: Path, base: Path, *, cancelled=lambda: False):
+    _check_cancelled(cancelled)
     if not _regular_input(path, base):
         return None
     try:
@@ -52,27 +67,52 @@ def _json_input(path: Path, base: Path):
             data = stream.read(MAX_JSON_BYTES + 1)
         if len(data) > MAX_JSON_BYTES:
             return None
-        return data, json.loads(data)
+        _check_cancelled(cancelled)
+        result = json.loads(data)
+        _check_cancelled(cancelled)
+        return data, result
+    except InterruptedError:
+        raise
     except (OSError, ValueError, UnicodeDecodeError, TypeError, RecursionError):
         return None
 
 
 @contextmanager
-def _atomic_archive(path: Path):
+def _atomic_archive(path: Path, *, cancelled=lambda: False):
+    _check_cancelled(cancelled)
     descriptor, temporary = tempfile.mkstemp(prefix='.diagnostics-', suffix='.tmp', dir=path.parent)
     os.close(descriptor)
     temporary = Path(temporary)
     try:
-        with zipfile.ZipFile(temporary, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive = zipfile.ZipFile(temporary, 'w', compression=zipfile.ZIP_DEFLATED)
+        try:
             yield archive
+        except BaseException as failure:
+            try:
+                archive.close()
+            except Exception as error:
+                failure.add_note(f'Diagnostics archive cleanup also failed: {type(error).__name__}.')
+            raise
+        else:
+            archive.close()
+        _check_cancelled(cancelled)
         os.replace(temporary, path)
+        temporary = None
     finally:
-        temporary.unlink(missing_ok=True)
+        if temporary is not None:
+            failure = sys.exc_info()[1]
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError as error:
+                if failure is None:
+                    raise
+                failure.add_note(f'Diagnostics staging cleanup also failed: {type(error).__name__}.')
 
 
-def _package_versions(issues=None):
+def _package_versions(issues=None, *, cancelled=lambda: False):
     result = {}
     for name in ('Pillow', 'requests', 'keyboard', 'tkinterdnd2', 'customtkinter', 'cupy-cuda12x', 'cupy'):
+        _check_cancelled(cancelled)
         try:
             result[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
@@ -85,6 +125,7 @@ def _package_versions(issues=None):
             if issues is not None:
                 issues.append({'section': 'package-version', 'package': name,
                                'error': type(error).__name__})
+    _check_cancelled(cancelled)
     return result
 
 
@@ -107,19 +148,24 @@ def _memory_total_mb():
                 return int(status.ullTotalPhys // (1024*1024))
         pages=os.sysconf('SC_PHYS_PAGES'); page_size=os.sysconf('SC_PAGE_SIZE')
         return int(pages*page_size//(1024*1024))
+    except InterruptedError:
+        raise
     except Exception:
         return None
 
 
-def _technical_info(context=None):
+def _technical_info(context=None, *, cancelled=lambda: False):
+    _check_cancelled(cancelled)
     collection_issues = []
+    packages = _package_versions(collection_issues, cancelled=cancelled)
+    _check_cancelled(cancelled)
     info = {
         'app':'Image Draw Bot', 'app_version':APP_VERSION, 'file_version':FILE_VERSION,
         'channel':BUILD_CHANNEL, 'created_at':time.strftime('%Y-%m-%dT%H:%M:%S%z'),
         'platform':platform.platform(), 'python':platform.python_version(),
         'architecture':platform.machine(), 'cpu_logical':os.cpu_count(),
         'ram_total_mb':_memory_total_mb(), 'frozen':bool(getattr(sys,'frozen',False)),
-        'packages':_package_versions(collection_issues), 'recovery':diagnostics_summary(),
+        'packages':packages, 'recovery':diagnostics_summary(),
         'collection_issues':collection_issues,
         'privacy': {
             'source_images_included': False,
@@ -131,10 +177,12 @@ def _technical_info(context=None):
     if isinstance(context, dict):
         info['app_context']=safe_context(context)
     info['gpu']={'probe_skipped':True,'reason':'Diagnostics collection must not initialize a potentially failing CUDA driver.'}
+    _check_cancelled(cancelled)
     return info
 
 
-def _read_text(path: Path, limit=MAX_LOG_CHARS):
+def _read_text(path: Path, limit=MAX_LOG_CHARS, *, cancelled=lambda: False):
+    _check_cancelled(cancelled)
     if limit <= 0:
         return ''
     omitted = False
@@ -157,20 +205,25 @@ def _read_text(path: Path, limit=MAX_LOG_CHARS):
                 # if it has no newline, none of that line is safe to export.
                 newline=data.find(b'\n')
                 data=data[newline+1:] if newline>=0 else b''
+    except InterruptedError:
+        raise
     except OSError:
         return None
+    _check_cancelled(cancelled)
     text=sanitize_text(data.decode('utf-8',errors='replace'))
     if len(text)>limit:
         omitted=True
         text=text[-limit:]
+    _check_cancelled(cancelled)
     return ('[older content omitted]\n' if omitted else '')+text
 
 
-def _settings_summary():
+def _settings_summary(*, cancelled=lambda: False):
+    _check_cancelled(cancelled)
     result={}
     base=data_dir()
-    for path in nsmallest(MAX_SUMMARY_FILES, base.glob('settings*.json')):
-        loaded = _json_input(path, base)
+    for path in nsmallest(MAX_SUMMARY_FILES, _cancellable_items(base.glob('settings*.json'), cancelled)):
+        loaded = _json_input(path, base, cancelled=cancelled)
         if loaded is None:
             continue
         _, raw = loaded
@@ -181,14 +234,16 @@ def _settings_summary():
         # Opaque labels also preserve separate records when redaction would
         # collapse two secret-bearing names to the same dictionary key.
         result[f'settings-{len(result)+1:03d}.json']=safe_context(raw)
+    _check_cancelled(cancelled)
     return result
 
 
-def _calibration_summary():
+def _calibration_summary(*, cancelled=lambda: False):
+    _check_cancelled(cancelled)
     result={}
     base=data_dir()
-    for path in nsmallest(MAX_SUMMARY_FILES, base.glob('calibration*.json')):
-        loaded = _json_input(path, base)
+    for path in nsmallest(MAX_SUMMARY_FILES, _cancellable_items(base.glob('calibration*.json'), cancelled)):
+        loaded = _json_input(path, base, cancelled=cancelled)
         if loaded is None:
             continue
         data, raw = loaded
@@ -204,19 +259,25 @@ def _calibration_summary():
             summary['color_count']=len(colors) if isinstance(colors,list) else None
             summary['has_anchor']=bool(raw.get('anchor') or raw.get('client_rect'))
         result[f'calibration-{len(result)+1:03d}.json']=summary
+    _check_cancelled(cancelled)
     return result
 
 
-def create_diagnostics_package(context=None) -> Path:
+def create_diagnostics_package(context=None, *, cancelled=lambda: False) -> Path:
+    """Collect a bounded local export, checking Stop between files/sections."""
+    _check_cancelled(cancelled)
     DIAGNOSTICS_DIR.mkdir(parents=True,exist_ok=True)
     stamp=time.strftime('%Y%m%d-%H%M%S')
     path=DIAGNOSTICS_DIR/f'ImageDrawBot-Diagnostics-{stamp}-{uuid.uuid4().hex[:8]}.zip'
-    with _atomic_archive(path) as archive:
+    with _atomic_archive(path, cancelled=cancelled) as archive:
         # JSON escapes also represent an isolated surrogate from a damaged
         # local record without making UTF-8 ZIP serialization fail.
-        archive.writestr('system.json',json.dumps(_technical_info(context),indent=2,ensure_ascii=True))
-        archive.writestr('settings-summary.json',json.dumps(_settings_summary(),indent=2,ensure_ascii=True))
-        archive.writestr('calibration-summary.json',json.dumps(_calibration_summary(),indent=2,ensure_ascii=True))
+        archive.writestr('system.json',json.dumps(_technical_info(context,cancelled=cancelled),indent=2,ensure_ascii=True))
+        _check_cancelled(cancelled)
+        archive.writestr('settings-summary.json',json.dumps(_settings_summary(cancelled=cancelled),indent=2,ensure_ascii=True))
+        _check_cancelled(cancelled)
+        archive.writestr('calibration-summary.json',json.dumps(_calibration_summary(cancelled=cancelled),indent=2,ensure_ascii=True))
+        _check_cancelled(cancelled)
         archive.writestr('README.txt',
             'Image Draw Bot diagnostics package.\n\n'
             'Privacy: source images, the local recovery image cache, clipboard contents and raw palette/tool screen coordinates are not included. '
@@ -225,29 +286,35 @@ def create_diagnostics_package(context=None) -> Path:
         for name in ('ImageDrawBot-session.log','ImageDrawBot-session.log.1','ImageDrawBot-crash.log','ImageDrawBot-crash.log.1',
                      'ImageDrawBot-debug-errors.log','ImageDrawBot-debug-errors.log.1',
                      'ImageDrawBot-target-probe.log','ImageDrawBot-mouse-probe.log'):
+            _check_cancelled(cancelled)
             if not _regular_input(log_dir/name, data_dir()):
                 continue
-            text=_read_text(log_dir/name)
+            text=_read_text(log_dir/name,cancelled=cancelled)
             if text:
                 archive.writestr(f'logs/{name}',text)
         from CrashDumpConfig import user_dump_folder
         dumps=user_dump_folder()
         def dump_candidates():
-            for dump in dumps.glob('*.dmp'):
+            for dump in _cancellable_items(dumps.glob('*.dmp'),cancelled):
                 try:
                     info=dump.stat()
+                except InterruptedError:raise
                 except OSError:continue
                 if stat.S_ISREG(info.st_mode):
                     yield (info.st_mtime, dump.name, info.st_size)
         inventory = [{'name':sanitize_text(name),'bytes':size}
                      for _,name,size in nlargest(5, dump_candidates())] if dumps.is_dir() else []
         archive.writestr('dump-files.json',json.dumps({'files':inventory,'memory_dumps_included':False},indent=2))
+        _check_cancelled(cancelled)
     return path
 
 
-def main():
+def main(*, cancelled=lambda: False):
     try:
-        path=create_diagnostics_package()
+        path=create_diagnostics_package(cancelled=cancelled)
+        _check_cancelled(cancelled)
+    except InterruptedError:
+        raise
     except Exception as error:
         print(f'Could not collect diagnostics: {error}')
         if getattr(sys,'frozen',False):
@@ -256,9 +323,11 @@ def main():
         return 1
     print(f'Diagnostics ZIP: {path}')
     if os.name=='nt':
+        _check_cancelled(cancelled)
         try:
             os.startfile(str(path.parent))
         except (OSError, NotImplementedError):
+            _check_cancelled(cancelled)
             print('The ZIP was saved successfully. Its folder could not be opened automatically; use the path above.')
             if getattr(sys,'frozen',False):
                 # The windowed helper has no console in which to read that

@@ -11,7 +11,7 @@ from PIL import Image,ImageCms
 from DrawBot import DrawBotApp
 from ImageColorManagement import MAX_ICC_BYTES,srgb_source
 from ImageImport import read_image
-from test_v148_ui_lifecycle_batch02 import ui_app
+from test_v148_ui_lifecycle_batch02 import ui_app, paste_and_deliver_bitmap
 
 
 def swapped_primaries_profile():
@@ -106,7 +106,7 @@ class SourceProfileTests(unittest.TestCase):
             stack.enter_context(patch('PIL.ImageGrab.grabclipboard',return_value=source))
             for name in ('_clear_render_resume','_queue_drop_in_start','_queue_browser_one_click_after_import','_manual_drop_in_armed'):
                 stack.enter_context(patch.object(DrawBotApp,name,return_value=False))
-            DrawBotApp.paste_image(app)
+            paste_and_deliver_bitmap(app)
             self.addCleanup(app.original.close)
             self.assertEqual(app.original.getpixel((0,0)),(10,40,220,100))
             self.assertEqual(source.getpixel((0,0)),(220,40,10,100))
