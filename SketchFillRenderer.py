@@ -8,12 +8,102 @@ path-based fills so no bucket prelude can run before the sketch.
 from __future__ import annotations
 
 import math
+from contextlib import closing, contextmanager
+from contextvars import ContextVar
+import threading
 from typing import Any, Callable, Sequence
 from PIL import Image, ImageDraw
 
 SKETCH_FILL_RENDER_STYLE='Sketch + Auto Fill'
 SKETCH_FILL_VERSION='2.0'
 SKETCH_FILL_PHASES=('sketch','color_fill','reoutline')
+
+
+def _plan_images(plan):
+    """Known renderer-owned buffers, including the normalized-source aliases."""
+    if not isinstance(plan,dict):return ()
+    images=[plan.get('image'),plan.get('preview')]
+    previews=plan.get('ui_previews')
+    if isinstance(previews,dict):images.extend(previews.values())
+    options=plan.get('options')
+    if isinstance(options,dict):
+        for key in ('_accuracy_original_source','_accuracy_quantized_target',
+                    '_pixel_coverage_preview','_pixel_error_preview','_preview_quantized_target'):
+            images.append(options.get(key))
+        cache=options.get('_accuracy_normalized_source_cache')
+        if isinstance(cache,dict):images.extend((cache.get('image'),cache.get('source')))
+    return [image for image in images if isinstance(image,Image.Image)]
+
+
+class _PlanImageOwner:
+    """Operation-local image/core ownership; never stored in plan options."""
+    def __init__(self,borrowed=()):
+        self.borrowed={id(image) for image in borrowed if isinstance(image,Image.Image)}
+        self.images={}
+        self.drawings=[]
+        self.thread=threading.current_thread()
+        self.closed=False
+
+    def own(self,image):
+        if isinstance(image,Image.Image) and id(image) not in self.borrowed:
+            self.images[id(image)]=image
+        return image
+
+    def capture(self,plan):
+        for image in _plan_images(plan):self.own(image)
+
+    def drawing(self,drawing):
+        self.drawings.append(drawing)
+        return drawing
+
+    def retire(self,retained=None,failure=None):
+        keep=self.borrowed|{id(image) for image in _plan_images(retained)}
+        errors=[]
+        try:
+            for key,image in tuple(self.images.items()):
+                if key not in keep:
+                    try:image.close()
+                    except Exception as error:errors.append(error)
+                    finally:self.images.pop(key,None)
+        finally:
+            image=None
+        if errors:
+            if failure is not None:
+                failure.add_note('Sketch presentation image cleanup also failed: '+type(errors[0]).__name__)
+            else:raise errors[0]
+
+    def close(self,retained=None,failure=None):
+        if self.closed:return
+        self.closed=True
+        try:
+            # A retained Pillow traceback can hold its ImageDraw instance even
+            # after the image wrapper is closed. Drop all native-core aliases.
+            for drawing in self.drawings:
+                drawing.draw=drawing.im=drawing._image=None
+            self.retire(retained,failure)
+        finally:
+            self.drawings.clear();self.images.clear();self.borrowed.clear()
+            drawing=None
+
+
+_COLOR_PLAN_IMAGES=ContextVar('sketch_fill_color_plan_images',default=None)
+
+
+def _current_plan_image_owner():
+    owner=_COLOR_PLAN_IMAGES.get()
+    return owner if owner is not None and not owner.closed and owner.thread is threading.current_thread() else None
+
+
+def _own_color_plan_image(image):
+    owner=_current_plan_image_owner()
+    return owner.own(image) if owner is not None else image
+
+
+@contextmanager
+def _color_plan_image_scope(owner):
+    token=_COLOR_PLAN_IMAGES.set(owner)
+    try:yield
+    finally:_COLOR_PLAN_IMAGES.reset(token)
 
 
 def is_sketch_fill(options: dict[str,Any]) -> bool:
@@ -79,7 +169,31 @@ def _reoutline_paths(paths, detail):
 
 
 def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], make_plan, finish_plan,
-                           cancelled: Callable[[],bool]=lambda:False):
+                           cancelled: Callable[[],bool]=lambda:False,*,_finalize=None):
+    borrowed=[original]+[value for value in options.values() if isinstance(value,Image.Image)]
+    borrowed.extend(_plan_images({'options':options}))
+    owner=_PlanImageOwner(borrowed)
+    result=plan=failure=None
+    try:
+        with _color_plan_image_scope(owner):
+            plan=_build_sketch_fill_plan(original,area,options,make_plan,finish_plan,cancelled,owner)
+            owner.capture(plan)
+            # Acceptance/rescue needs this completed composite, never the
+            # discarded colour diagnostics. Keep its images owned until the
+            # actual public result is known, including an interrupted rescue.
+            owner.retire(plan)
+            result=_finalize(plan,original,area,cancelled) if _finalize is not None else plan
+            owner.capture(result)
+        return result
+    except BaseException as error:
+        failure=error
+        raise
+    finally:
+        owner.close(result,failure)
+        borrowed=result=plan=failure=None
+
+
+def _build_sketch_fill_plan(original,area,options,make_plan,finish_plan,cancelled,owner):
     if not _is_paint(options):
         raise ValueError('Sketch + Auto Fill is currently optimized for Microsoft Paint. Choose another rendering style for browser targets.')
     if options.get('erase_mode'):
@@ -90,6 +204,7 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
     inner=dict(options)
     inner.update({
         '_sketch_fill_inner':True,'auto_engine_resolved':True,
+        '_sketch_fill_defer_presentation':True,
         'render_style':'Standard / pixel','outline':False,'paint_current_color':False,'erase_mode':False,
         'drawing_mode':'Smart paths (recommended)','smart_paths':True,'lines':True,
         'fill_tool_available':False,'background_fill':'Off','use_region_fill_engine':False,
@@ -97,6 +212,7 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
     })
     inner.pop('background_fill_plan',None);inner.pop('fill_regions',None)
     color_plan=make_plan(original,area,inner,cancelled)
+    owner.capture(color_plan)
     if cancelled():raise InterruptedError()
     colors=tuple(color_plan.get('colors') or ())
     selectors=tuple(color_plan.get('color_selectors') or ())
@@ -107,11 +223,14 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
     from Sketch2Planner import contour_image_v2
     from PixelData import monochrome_strokes
     from ContinuousPaths import build_execution_paths
-    source=original.convert('RGBA').resize(color_plan['image'].size,Image.Resampling.LANCZOS)
     detail=str(options.get('sketch_detail') or 'Detailed')
     if detail=='Auto':detail='Balanced'
-    sketch_image,sketch_meta=contour_image_v2(source,cancelled,detail=detail)
-    ink=monochrome_strokes(sketch_image,True,cancelled)[0]
+    with closing(original.convert('RGBA')) as rgba:
+        source=rgba.resize(color_plan['image'].size,Image.Resampling.LANCZOS)
+    with closing(source):
+        sketch_image,sketch_meta=contour_image_v2(source,cancelled,detail=detail)
+    with closing(sketch_image):
+        ink=monochrome_strokes(sketch_image,True,cancelled)[0]
     sketch_paths=build_execution_paths([ink],enabled=True,cancelled=cancelled)[0] if ink else []
     sketch_paths=[tuple(map(tuple,p)) for p in sketch_paths if p]
     reoutline=_reoutline_paths(sketch_paths,detail)
@@ -146,6 +265,7 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
     # existing small-brush interpolation. It is not a measurement or a compiled
     # sequence. Drop references only; the inner plan may own these buffers.
     for key in (
+        '_sketch_fill_defer_presentation',
         '_pixel_execution_groups','_pixel_execution_sequence',
         'pixel_map_meta','pixel_stroke_meta','pixel_stroke_engine','pixel_accuracy_meta',
         '_adaptive_hybrid_execution_groups','_adaptive_hybrid_execution_sequence',
@@ -164,7 +284,7 @@ def build_sketch_fill_plan(original: Image.Image, area, options: dict[str,Any], 
         'detail_zoom':'Off','stroke_optimizer':'Off','progressive_rendering':'On','color_workflow':'Progressive passes',
         'plan_palette_rgb':tuple(colors),'color_selectors':tuple(selectors),
         '_sketch_fill_execution_groups':combined,'_sketch_fill_execution_sequence':sequence,
-        '_accuracy_original_source':original.copy(),
+        '_accuracy_original_source':owner.own(original.copy()),
     })
     outer.pop('background_fill_plan',None)
     outer['sketch_fill_meta']={

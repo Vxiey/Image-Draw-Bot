@@ -58,14 +58,22 @@ class SketchOwnershipTests(unittest.TestCase):
                     inner.append((result, copy.deepcopy(result['options'].get('pixel_accuracy_meta'))))
                 return result
             from AccuracyEvaluator import evaluate_preview
-            evaluations = 0
+            actual_finish_plan = DrawBot.finish_plan
+            final_presentation = False
+            def finish_plan(image, fitted, groups, settings, cancelled=lambda: False):
+                nonlocal final_presentation
+                previous = final_presentation
+                final_presentation = bool(settings.get('sketch_fill_active'))
+                try:
+                    return actual_finish_plan(image, fitted, groups, settings, cancelled)
+                finally:
+                    final_presentation = previous
             def accuracy(*args, **kwargs):
-                nonlocal evaluations
-                evaluations += 1
-                if failed_final_accuracy and evaluations == 2:
+                if failed_final_accuracy and final_presentation:
                     raise MemoryError('controlled final accuracy failure')
                 return evaluate_preview(*args, **kwargs)
             with patch('DrawBot.make_plan', side_effect=make_plan), \
+                    patch('DrawBot.finish_plan', side_effect=finish_plan), \
                     patch('AccuracyEvaluator.evaluate_preview', side_effect=accuracy):
                 plan = DrawBot.make_plan(source, source.size, options)
             try:
@@ -135,7 +143,10 @@ class SketchOwnershipTests(unittest.TestCase):
             options = plan['options']
             inner_options = inner[0]['options']
             self.assertEqual(inner_options['pixel_accuracy_meta']['spill_pixels'], 0)
-            self.assertIn('coverage', inner[0]['ui_previews'])
+            # The colour handoff retains exact Pixel measurements, but its
+            # unpublished presentation maps no longer need to be allocated.
+            self.assertNotIn('ui_previews', inner[0])
+            self.assertIn('_pixel_coverage_preview', inner_options)
             self.assertEqual(options['sketch_fill_meta']['pixel_metrics_status'], 'not_calculated')
             self.assertNotIn('pixel_accuracy_meta', options)
             self.assertNotIn('_pixel_coverage_preview', options)
@@ -171,7 +182,8 @@ class SketchOwnershipTests(unittest.TestCase):
 
     def test_final_accuracy_failure_cannot_resurrect_color_subplan_success(self):
         with self.planned(failed_final_accuracy=True) as (_source, _requested, plan, inner):
-            self.assertIn('adaptive_accuracy_meta', inner[0]['options'])
+            self.assertNotIn('adaptive_accuracy_meta', inner[0]['options'])
+            self.assertIn('pixel_accuracy_meta', inner[0]['options'])
             self.assertNotIn('adaptive_accuracy_meta', tuple(plan['options']))
             self.assertNotIn('pixel_accuracy_meta', tuple(plan['options']))
             self.assertFalse(plan['preview_diagnostics']['accuracy'])

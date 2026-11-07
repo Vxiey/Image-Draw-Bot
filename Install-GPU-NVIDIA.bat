@@ -13,7 +13,7 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 1
 )
 echo Detecting NVIDIA hardware and installing/repairing CUDA acceleration...
-".venv\Scripts\python.exe" -E -s AutoGpuSetup.py --ensure --force --require-nvidia
+".venv\Scripts\python.exe" -E -s SourceStartup.py --setup-gpu nvidia --force --require-nvidia
 if errorlevel 1 goto :fail
 if exist ".venv\gpu-install-failed.marker" del /q ".venv\gpu-install-failed.marker" >nul 2>&1
 echo.
@@ -25,6 +25,6 @@ exit /b 0
 echo.
 echo Automatic NVIDIA CUDA setup did not complete.
 echo Image Draw Bot can still run with CPU fallback.
-echo Run Start.bat again to retry automatically, or inspect %%TEMP%%\ImageDrawBot-start.log.
+echo Retry this installer after closing Image Draw Bot, or run Start.bat --gpu.
 pause
 exit /b 1

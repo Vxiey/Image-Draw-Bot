@@ -6,6 +6,7 @@ optional GPU setup and the application run with its verified interpreter.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import stat
@@ -37,20 +38,14 @@ def _run(command, *, root, environment, check=False, capture=False, timeout=None
     return subprocess.run(command, **options)
 
 
-def start_source(root=ROOT, *, update=False, gpu=False):
-    """Own the private environment through setup and the launched app's exit.
-
-    A second Start/Update must not run pip against an environment currently
-    being created, repaired or used by the first source application. The
-    stable lock lives in the already excluded build directory, outside .venv
-    so it also protects first-time environment creation.
-    """
-    root = Path(root).resolve()
+@contextmanager
+def _source_session(root):
+    """Share one checkout owner across startup and explicit optional setup."""
     acquired = False
     try:
         with file_transaction(root / 'build' / '.source-startup', timeout=0.):
             acquired = True
-            return _start_source(root, update=update, gpu=gpu)
+            yield
     except TimeoutError as error:
         if acquired:
             raise
@@ -60,13 +55,20 @@ def start_source(root=ROOT, *, update=False, gpu=False):
         ) from error
 
 
-def _start_source(root, *, update=False, gpu=False):
-    if not (root/'DrawBot.py').is_file():
-        raise SetupEnvironmentError('Required source files are missing. Extract the entire source ZIP before starting.')
-    try:
-        requirements = checked_requirements(root/'requirements.txt')
-    except SetupEnvironmentError as error:
-        raise SetupEnvironmentError('The source requirements file is missing or invalid; no packages were changed.') from error
+def start_source(root=ROOT, *, update=False, gpu=False):
+    """Own the private environment through setup and the launched app's exit.
+
+    A second Start/Update or optional GPU installer must not run pip against
+    an environment currently being created, repaired or used by the first
+    source application. The stable lock lives in the already excluded build
+    directory, outside .venv, so it also protects first-time creation.
+    """
+    root = Path(root).resolve()
+    with _source_session(root):
+        return _start_source(root, update=update, gpu=gpu)
+
+
+def _private_environment(root, *, create):
     directory = root/'.venv'
     try:
         metadata = directory.lstat()
@@ -79,6 +81,8 @@ def _start_source(root, *, update=False, gpu=False):
     python = str(directory/('Scripts/python.exe' if sys.platform=='win32' else 'bin/python'))
     environment = _source_environment(root)
     if not Path(python).is_file():
+        if not create:
+            raise SetupEnvironmentError('The private .venv was not found. Run Start.bat once first.')
         print('Creating the private Python environment…')
         _run([sys.executable, '-I', '-m', 'venv', str(directory)],
              root=root, environment=environment, check=True)
@@ -88,6 +92,41 @@ def _start_source(root, *, update=False, gpu=False):
                     capture=True, timeout=timeout)
 
     require_private_environment(python, directory, runner)
+    return python, environment, runner
+
+
+def setup_gpu_source(root=ROOT, *, backend, force=False, require_nvidia=False):
+    """Install only one optional backend under the existing checkout owner.
+
+    The selected public helper does not acquire this lock: Start --gpu/update
+    already invokes those helpers while its parent owns the same environment.
+    """
+    scripts = {'nvidia': 'AutoGpuSetup.py', 'universal': 'AutoUniversalGpuSetup.py'}
+    if backend not in scripts or (require_nvidia and backend != 'nvidia'):
+        raise SetupEnvironmentError('Choose nvidia or universal optional GPU setup; only nvidia accepts --require-nvidia.')
+    root = Path(root).resolve()
+    with _source_session(root):
+        script = root / scripts[backend]
+        if not script.is_file():
+            raise SetupEnvironmentError('The optional GPU setup helper is missing. Extract the entire source ZIP first.')
+        python, environment, _runner = _private_environment(root, create=False)
+        command = [python, '-s', str(script), '--ensure']
+        if force:
+            command.append('--force')
+        if require_nvidia:
+            command.append('--require-nvidia')
+        return _run(command, root=root, environment=environment).returncode
+
+
+def _start_source(root, *, update=False, gpu=False):
+    if not (root/'DrawBot.py').is_file():
+        raise SetupEnvironmentError('Required source files are missing. Extract the entire source ZIP before starting.')
+    try:
+        requirements = checked_requirements(root/'requirements.txt')
+    except SetupEnvironmentError as error:
+        raise SetupEnvironmentError('The source requirements file is missing or invalid; no packages were changed.') from error
+    python, environment, runner = _private_environment(root, create=True)
+    directory = root/'.venv'
     marker = directory/'installed-requirements.txt'
     try:
         with marker.open('rb') as stream:
@@ -138,8 +177,21 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Start Image Draw Bot in its private source environment.')
     parser.add_argument('--update', action='store_true', help='Refresh source and optional GPU dependencies.')
     parser.add_argument('--gpu', action='store_true', help='Explicitly set up optional GPU dependencies.')
+    parser.add_argument('--setup-gpu', choices=('nvidia', 'universal'),
+                        help='Set up only the selected optional backend in the existing private environment, then exit.')
+    parser.add_argument('--force', action='store_true', help='Force the selected --setup-gpu helper to reinstall/update.')
+    parser.add_argument('--require-nvidia', action='store_true', help='Fail --setup-gpu nvidia if NVIDIA hardware is absent.')
     args = parser.parse_args(argv)
+    if args.setup_gpu and (args.update or args.gpu):
+        parser.error('--setup-gpu cannot be combined with --update or --gpu.')
+    if (args.force or args.require_nvidia) and not args.setup_gpu:
+        parser.error('--force and --require-nvidia require --setup-gpu.')
+    if args.require_nvidia and args.setup_gpu != 'nvidia':
+        parser.error('--require-nvidia requires --setup-gpu nvidia.')
     try:
+        if args.setup_gpu:
+            return setup_gpu_source(ROOT, backend=args.setup_gpu,
+                                    force=args.force, require_nvidia=args.require_nvidia)
         return start_source(ROOT, update=args.update, gpu=args.gpu)
     except (OSError, SetupEnvironmentError, subprocess.SubprocessError) as error:
         print(f'Source startup failed: {error}')

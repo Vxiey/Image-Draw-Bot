@@ -55,7 +55,8 @@ from QuickSketchFillContour import (QUICK_SKETCH_RENDER_STYLE, QUICK_SKETCH_STYL
                                       validate_quick_sketch_style, validate_fill_preference)
 from HybridRenderer3 import (HYBRID_RENDER_STYLE, HYBRID_MODES, apply_hybrid_policy,
                              is_hybrid_renderer, validate_hybrid_mode)
-from SketchFillRenderer import (SKETCH_FILL_RENDER_STYLE, build_sketch_fill_plan, is_sketch_fill)
+from SketchFillRenderer import (SKETCH_FILL_RENDER_STYLE, build_sketch_fill_plan, is_sketch_fill,
+                                _PlanImageOwner, _current_plan_image_owner, _own_color_plan_image)
 from VisualVerification import (VISUAL_VERIFICATION_MODES, resolve_visual_verification,
                                 validate_visual_verification, planned_batch_points,
                                 planned_batch_boxes, compare_batch_snapshot, summarize_result)
@@ -75,6 +76,7 @@ from ResourceAllocation import (CPU_WORKER_CHOICES, CPU_ENGINE_MODES, RAM_BUDGET
                                 validate_ram_budget, validate_planning_resolution, parse_custom_ram_mb)
 from ResourceScheduler import (RESOURCE_SCHEDULER_MODES, benchmark_scheduler,
                                load_recommendation as load_resource_recommendation,
+                               machine_signature as resource_machine_signature,
                                resolve_resource_schedule, validate_resource_scheduler)
 from PerformanceProfiler import (begin as profiler_begin, start as profiler_start, stop as profiler_stop,
                                  finalize as profiler_finalize, format_profile as format_performance_profile,
@@ -701,8 +703,8 @@ def _make_plan(original, area, options, cancelled=lambda: False):
     # Route it before AutoDrawing so Auto cannot replace the user's selected
     # renderer. The recursive colour sub-plan is marked _sketch_fill_inner.
     if is_sketch_fill(options):
-        plan=build_sketch_fill_plan(original,area,options,make_plan,finish_plan,cancelled)
-        return _finalize_auto_tuned_plan(plan,original,area,cancelled)
+        return build_sketch_fill_plan(original,area,options,make_plan,finish_plan,cancelled,
+                                      _finalize=_finalize_auto_tuned_plan)
     # Step 29: Hybrid Renderer 3.0 resolves specialised deterministic policy
     # before the generic AutoDrawing selector. It only changes renderer/planner
     # fields; CanvasGuard, calibration and input authorisation remain separate.
@@ -713,7 +715,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
     # preview accuracy. Downstream preprocessing/contrast/palette stages must not
     # overwrite the reference used by AccuracyEvaluator.
     if not isinstance(options.get('_accuracy_original_source'), Image.Image):
-        options['_accuracy_original_source']=original.copy()
+        options['_accuracy_original_source']=_own_color_plan_image(original.copy())
     # Sketch wins over stale/restored subject settings before any colour policy.
     if options.get('outline'):
         options = dict(options, subject_focus='Off')
@@ -948,7 +950,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
     if preview_detail_meta:options['preview_detail_meta']=preview_detail_meta
     from VisibleContrast import enhance_contrast
     with closing(image) as prepared_source:
-        image = enhance_contrast(prepared_source, options['contrast'], cancelled=cancelled)
+        image = _own_color_plan_image(enhance_contrast(prepared_source, options['contrast'], cancelled=cancelled))
     profiler_stop(options, 'preprocessing', _prof_pre)
     if options.get('paint_current_color'):
         from PixelData import monochrome_strokes
@@ -1097,7 +1099,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
                 if _pal_np.ndim==2 and len(_pal_np):
                     _safe_idx=np.clip(_idx,0,len(_pal_np)-1)
                     _target_rgb[_drawable]=_pal_np[_safe_idx[_drawable]]
-                    plan_options['_accuracy_quantized_target']=Image.fromarray(_target_rgb,'RGB')
+                    plan_options['_accuracy_quantized_target']=_own_color_plan_image(Image.fromarray(_target_rgb,'RGB'))
                     plan_options['_accuracy_quantized_target_available']=True
             except Exception:
                 plan_options['_accuracy_quantized_target_available']=False
@@ -1145,8 +1147,8 @@ def _make_plan(original, area, options, cancelled=lambda: False):
                 plan_options['_pixel_coverage_preview']=native_subject_accuracy['coverage_preview']
                 plan_options['_pixel_error_preview']=native_subject_accuracy['error_preview']
             else:
-                plan_options['_pixel_coverage_preview']=render_coverage_map(pixel_map,accuracy_plan['simulation'])
-                plan_options['_pixel_error_preview']=render_error_map(pixel_map,accuracy_plan['simulation'])
+                plan_options['_pixel_coverage_preview']=_own_color_plan_image(render_coverage_map(pixel_map,accuracy_plan['simulation']))
+                plan_options['_pixel_error_preview']=_own_color_plan_image(render_error_map(pixel_map,accuracy_plan['simulation']))
             plan_options['color_workflow']='Progressive passes'
             plan_options['progressive_rendering']='On'
             plan_options['target_stroke_count_resolved']=None
@@ -1197,6 +1199,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
                     adaptive_source,adaptive_mode,
                     subject_focus=bool(options.get('portrait_focus',False)),
                     drawing_mode=options.get('drawing_mode'),preview=is_preview_plan(options),cancelled=cancelled)
+                _own_color_plan_image(adaptive_mask)
             with closing(adaptive_rgba):palette_image=adaptive_rgba.convert('RGB')
             plan_options['adaptive_detail_meta']=adaptive_stats.as_dict()
             plan_options['adaptive_detail_effective']=adaptive_stats.effective_mode
@@ -1210,7 +1213,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
             palette_image,simplification=simplify_background(unsimplified,simplification_mode,cancelled=cancelled)
         plan_options['background_simplification_meta']=simplification.as_dict()
         with closing(palette_image):
-            image=palette_image.convert('RGBA')
+            image=_own_color_plan_image(palette_image.convert('RGBA'))
         if source_has_transparency:
             with closing(alpha.point([0]+[255]*255)) as drawable_alpha:
                 image.putalpha(drawable_alpha)
@@ -1591,7 +1594,35 @@ def _make_plan(original, area, options, cancelled=lambda: False):
 
 
 def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
+    # Presentation allocations have a separate lifetime from the caller's
+    # prepared image/geometry. In Sketch Fill the outer scope additionally owns
+    # the unpublished colour plan, including a full auto-tuner/rescue result.
+    owner=_PlanImageOwner()
+    color_owner=_current_plan_image_owner()
+    if color_owner is not None:color_owner.capture({'image':image,'options':options})
+    plan=failure=None
+    try:
+        plan=_finish_plan(image,fitted,groups,options,cancelled,owner)
+        if color_owner is not None:color_owner.capture(plan)
+        return plan
+    except BaseException as error:
+        failure=error
+        raise
+    finally:
+        owner.close(plan,failure)
+        plan=failure=color_owner=None
+
+
+def _finish_plan(image,fitted,groups,options,cancelled,owner):
     from PIL import Image,ImageDraw
+    defer_presentation=bool(options.pop('_sketch_fill_defer_presentation',False))
+    tuner=options.get('auto_tuner_meta')
+    defer_presentation=(defer_presentation and bool(options.get('_sketch_fill_inner'))
+                        and not options.get('sketch_fill_active')
+                        and not options.get('_adaptive_hybrid_inner')
+                        and not options.get('adaptive_hybrid_active')
+                        and str(options.get('detail_zoom') or 'Off')=='Off'
+                        and not (isinstance(tuner,dict) and tuner.get('active')))
     _prof_preview = profiler_start(options, 'preview_rendering')
     # Model physical brush width and the same centered coordinates used for drawing.
     scale=1 if options.get('_full_detail_preview') else min(1,1600/max(fitted))
@@ -1605,19 +1636,21 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     if fill_meta.get('enabled') and fill_meta.get('color_index') is not None:
         try:preview_bg=palette_rgb[int(fill_meta['color_index'])]
         except (IndexError,TypeError,ValueError):preview_bg='white'
-    preview=Image.new('RGB',size,preview_bg);draw=ImageDraw.Draw(preview)
+    preview=owner.own(Image.new('RGB',size,preview_bg));draw=owner.drawing(ImageDraw.Draw(preview))
     # Step 10: preserve a palette/quantized target independently from physical
     # brush simulation so the preview can show Original → Target → Final.
     try:
         from PreviewDiagnostics import render_quantized_target
-        _explicit_target=options.get('_accuracy_quantized_target')
-        _quantized_source=render_quantized_target(
-            image.size,groups,palette_rgb,fill_regions=options.get('fill_regions') or (),
-            background_fill_plan=fill_meta,color_order=options.get('color_order'),
-            explicit_target=_explicit_target if isinstance(_explicit_target,Image.Image) else None,
-            cancelled=cancelled)
-        options['_preview_quantized_target']=_quantized_source.resize(size,Image.Resampling.NEAREST)
-        options['_accuracy_quantized_target_available']=True
+        if not defer_presentation:
+            _explicit_target=options.get('_accuracy_quantized_target')
+            _quantized_source=owner.own(render_quantized_target(
+                image.size,groups,palette_rgb,fill_regions=options.get('fill_regions') or (),
+                background_fill_plan=fill_meta,color_order=options.get('color_order'),
+                explicit_target=_explicit_target if isinstance(_explicit_target,Image.Image) else None,
+                cancelled=cancelled))
+            with closing(_quantized_source):
+                options['_preview_quantized_target']=owner.own(_quantized_source.resize(size,Image.Resampling.NEAREST))
+            options['_accuracy_quantized_target_available']=True
     except InterruptedError:
         raise
     except Exception as _diag_target_error:
@@ -1996,7 +2029,7 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
                         background_fill_plan=fill_meta,color_order=options.get('color_order'),
                         execution_sequence=execution_sequence or None,cancelled=cancelled)
                     with closing(_zoom_target):
-                        _zoom_resized=_zoom_target.resize(size,Image.Resampling.NEAREST)
+                        _zoom_resized=owner.own(_zoom_target.resize(size,Image.Resampling.NEAREST))
                     _old_target=options.get('_preview_quantized_target')
                     options['_preview_quantized_target']=_zoom_resized
                     if isinstance(_old_target,Image.Image):_old_target.close()
@@ -2032,8 +2065,8 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
         options['_preview_safety_groups']=preview_safety.groups
         if options.get('subject_focus')=='Subject only':
             from SubjectFocus import render_native_subject_preview
-            _native_preview=render_native_subject_preview(preview_safety,fitted,size,palette_rgb,cancelled=cancelled)
-            try:_native_draw=ImageDraw.Draw(_native_preview)
+            _native_preview=owner.own(render_native_subject_preview(preview_safety,fitted,size,palette_rgb,cancelled=cancelled))
+            try:_native_draw=owner.drawing(ImageDraw.Draw(_native_preview))
             except BaseException:
                 _native_preview.close()
                 raise
@@ -2112,7 +2145,10 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     if options.get('sketch_fill_active') and execution_sequence:
         try:
             from SketchFillRenderer import render_sequence_preview
-            preview=render_sequence_preview(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled)
+            _sf_preview=owner.own(render_sequence_preview(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled))
+            draw.draw=draw.im=draw._image=None
+            preview.close()
+            preview=_sf_preview
         except InterruptedError:
             raise
         except Exception as _sf_preview_error:
@@ -2120,13 +2156,22 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     if options.get('adaptive_hybrid_active') and execution_sequence:
         try:
             from AdaptiveRegionHybrid import render_adaptive_preview
-            preview=render_adaptive_preview(image.size,size,execution_sequence,palette_rgb,options.get('fill_regions') or (),
-                cancelled=cancelled,fitted=fitted,options=options)
+            preview=owner.own(render_adaptive_preview(image.size,size,execution_sequence,palette_rgb,options.get('fill_regions') or (),
+                cancelled=cancelled,fitted=fitted,options=options))
         except InterruptedError:
             raise
         except Exception as _ah_preview_error:
             log_event(f'Adaptive Region simulated-final preview fallback: {_ah_preview_error!r}')
     profiler_stop(options, 'preview_rendering', _prof_preview)
+    if defer_presentation:
+        # Geometry, native brush projection, cancellation and PreviewSafety ran
+        # above exactly as for a standalone colour plan. Only the published
+        # composite needs targets, UI maps, source accuracy and a final ETA.
+        if cancelled():raise InterruptedError()
+        return {'image':image,'fitted':fitted,'groups':groups,'execution_groups':execution_groups,
+                'execution_sequence':execution_sequence,'count':path_meta['execution_paths'],
+                'source_count':path_meta['source_strokes'],'path_stats':path_meta,'options':options,
+                'colors':palette_rgb,'color_selectors':tuple(options.get('color_selectors') or ())}
     _prof_estimate = profiler_start(options, 'execution_estimate')
     count=path_meta['execution_paths']
     retained_groups=execution_groups if execution_groups is not None else groups
@@ -2229,6 +2274,7 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     try:
         from PreviewLayers import build_auxiliary_previews
         ui_previews=build_auxiliary_previews(image,size,groups,palette_rgb,point,brush,options,cancelled,include_color_map=False)
+        for _layer in ui_previews.values():owner.own(_layer)
         # Color map represents the executed palette, not a second 20-colour quantization.
         ui_previews['color']=preview
         for _key,_option_key in (('coverage','_pixel_coverage_preview'),('accuracy_error','_pixel_error_preview')):
@@ -2238,10 +2284,10 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
                     or (_key=='coverage' and (options.get('adaptive_hybrid_meta') or {}).get('coverage_coordinate_space')=='full physical canvas'))
                 # Physical coverage includes letterboxes; fitting it back to
                 # the source aspect can distort or hide real native spill.
-                ui_previews[_key]=_im.copy() if _full_canvas else _im.resize(size,Image.Resampling.NEAREST)
+                ui_previews[_key]=owner.own(_im.copy() if _full_canvas else _im.resize(size,Image.Resampling.NEAREST))
         if preview_safety is not None:
-            ui_previews['safety']=render_preview_safety_map(image,size,preview_safety,palette_rgb,brush,cancelled)
-            ui_previews['safety_debug']=render_safety_debug_overlay(size,preview_safety,palette_rgb,brush,cancelled)
+            ui_previews['safety']=owner.own(render_preview_safety_map(image,size,preview_safety,palette_rgb,brush,cancelled))
+            ui_previews['safety_debug']=owner.own(render_safety_debug_overlay(size,preview_safety,palette_rgb,brush,cancelled))
     except InterruptedError:
         raise
     except Exception as error:
@@ -2258,14 +2304,16 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
     if options.get('sketch_fill_active') and execution_sequence:
         try:
             from SketchFillRenderer import build_phase_previews
-            ui_previews.update(build_phase_previews(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled))
+            _phase_previews=build_phase_previews(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled)
+            for _layer in _phase_previews.values():owner.own(_layer)
+            ui_previews.update(_phase_previews)
         except InterruptedError:
             raise
         except Exception as _sf_layers_error:
             log_event(f'Sketch Fill phase previews skipped safely: {_sf_layers_error!r}')
     try:
         from DetailZoomPass import render_detail_zoom_preview
-        _zoom_overlay=render_detail_zoom_preview(size,options.get('detail_zoom_meta') or {})
+        _zoom_overlay=owner.own(render_detail_zoom_preview(size,options.get('detail_zoom_meta') or {}))
         if isinstance(_zoom_overlay,Image.Image) and (options.get('detail_zoom_meta') or {}).get('enabled'):
             ui_previews['detail_zoom']=_zoom_overlay
     except Exception as _detail_preview_error:
@@ -2279,14 +2327,14 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
         from AccuracyEvaluator import evaluate_preview, normalize_source
         _accuracy_source=options.get('_accuracy_original_source')
         if not isinstance(_accuracy_source,Image.Image):
-            _accuracy_source=image.copy()
+            _accuracy_source=owner.own(image.copy())
             options['_accuracy_original_source']=_accuracy_source
         _cache=options.get('_accuracy_normalized_source_cache')
         _normalized=None
         if isinstance(_cache,dict) and tuple(_cache.get('size') or ())==tuple(size) and _cache.get('source') is _accuracy_source and isinstance(_cache.get('image'),Image.Image):
             _normalized=_cache['image']
         if _normalized is None:
-            _normalized=normalize_source(_accuracy_source,size)
+            _normalized=owner.own(normalize_source(_accuracy_source,size))
             options['_accuracy_normalized_source_cache']={'size':tuple(size),'image':_normalized,'source':_accuracy_source}
 
         _plan_accuracy=options.get('pixel_accuracy_meta') or {}
@@ -2302,8 +2350,8 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
             plan_execution_accuracy_percent=_plan_exec,cancelled=cancelled,
             return_error_map=True,return_delta_e_heatmap=True,
             gpu_mode=str(options.get('gpu_mode') or 'Auto'))
-        _source_error=_source_meta.pop('_error_map_image',None)
-        _delta_e_heatmap=_source_meta.pop('_delta_e_heatmap_image',None)
+        _source_error=owner.own(_source_meta.pop('_error_map_image',None))
+        _delta_e_heatmap=owner.own(_source_meta.pop('_delta_e_heatmap_image',None))
         options['preview_delta_e_meta']=dict(_source_meta.get('delta_e_oklab') or {})
         options['adaptive_accuracy_meta']=_source_meta
         options['accuracy_buffer_meta']={
@@ -2317,7 +2365,8 @@ def finish_plan(image,fitted,groups,options,cancelled=lambda: False):
             ui_previews['delta_e']=_delta_e_heatmap
         if options.get('_visual_importance_map') is not None:
             from VisualImportanceMap import render_importance_preview
-            _imp_preview=render_importance_preview(options['_visual_importance_map']).resize(size,Image.Resampling.BILINEAR)
+            with closing(render_importance_preview(options['_visual_importance_map'])) as _importance_source:
+                _imp_preview=owner.own(_importance_source.resize(size,Image.Resampling.BILINEAR))
             ui_previews['importance']=_imp_preview
     except InterruptedError:
         raise
@@ -4412,6 +4461,8 @@ class DrawBotApp:
         self.mobile_preview_server = None
         self.mobile_preview_after = None
         self.mobile_preview_ticket = None
+        self.mobile_preview_discovery = None
+        self.mobile_preview_request = None
         root.title('Image Draw Bot')
         try:
             import customtkinter as ctk
@@ -7624,7 +7675,11 @@ class DrawBotApp:
             area_size=(self.area()[2],self.area()[3]) if len(self.corners)==2 else None
         except Exception:
             area_size=None
-        recommendation=load_resource_recommendation() if resource_scheduler!='Off' else None
+        # Validate against this operation's resolved RAM policy as well as its
+        # usable CPU capacity. The loader's default retains the saved RAM bucket.
+        recommendation=(load_resource_recommendation(signature=resource_machine_signature(
+            logical_cpus=allocation['logical_cpus'], ram_mb=allocation['ram_budget_mb']))
+            if resource_scheduler!='Off' else None)
         scheduler_plan=resolve_resource_schedule(
             allocation, mode=resource_scheduler, area=area_size, drawing_mode=mode,
             gpu_mode=gpu_mode, gpu_available=(gpu_mode!='CPU' and draw_quality in ('GPU enhanced','Pixel Accurate')),
@@ -9014,6 +9069,7 @@ class DrawBotApp:
             self.status.set(f'Could not copy Mobile Preview address: {error}')
 
     def stop_mobile_preview(self, *, quiet=False):
+        DrawBotApp._cancel_mobile_preview_discovery(self)
         DrawBotApp._cancel_after_attr(self,'mobile_preview_after')
         self.mobile_preview_ticket=None
         from MobilePreviewDialog import close_mobile_preview_dialog
@@ -9032,34 +9088,130 @@ class DrawBotApp:
             self.status.set('Mobile Preview stopped. The local preview address is no longer available.')
         log_event('Mobile Preview stopped.')
 
-    def show_mobile_preview(self):
-        """Start/show the opt-in LAN preview page for phones and tablets."""
-        if self.closing:return
-        try:
+    def _cancel_mobile_preview_discovery(self, *, retire=False):
+        """Release GUI-owned context on Tk; the resolver itself never joins."""
+        request=getattr(self,'mobile_preview_request',None)
+        if request is not None:request['cancel'].set()
+        self.mobile_preview_request=None
+        discovery=getattr(self,'mobile_preview_discovery',None)
+        if discovery is not None:
+            if retire:discovery.retire()
+            else:discovery.cancel()
+        if not getattr(self,'closing',False):
             server=getattr(self,'mobile_preview_server',None)
-            if server is None:
-                server=MobilePreviewServer();self.mobile_preview_server=server
+            status=getattr(self,'mobile_preview_status',None)
+            if status is not None:
+                status.set('Mobile Preview LIVE · same Wi-Fi/LAN required · auto-refresh 1s'
+                    if server is not None and server.running else 'Mobile Preview is off · local network only.')
+
+    def _mobile_preview_request_current(self,request,*,session=None,check_panel=True):
+        if (request is None or self.closing or request is not getattr(self,'mobile_preview_request',None)
+                or request['cancel'].is_set() or request['server'] is not getattr(self,'mobile_preview_server',None)):
+            return False
+        expected=request['session'] if session is None else session
+        if request['server'].session_identity()!=expected:return False
+        if not check_panel:return True
+        panel=request['panel']
+        return panel is None or (not panel.closed and getattr(self,'_mobile_preview_dialog',None) is panel)
+
+    def _poll_mobile_preview_discovery(self):
+        discovery=getattr(self,'mobile_preview_discovery',None)
+        if discovery is None:return False
+        request=getattr(self,'mobile_preview_request',None)
+        if self.closing:
+            DrawBotApp._cancel_mobile_preview_discovery(self,retire=True)
+            return False
+        if request is not None and not DrawBotApp._mobile_preview_request_current(self,request):
+            DrawBotApp._cancel_mobile_preview_discovery(self)
+        outcome=discovery.take()
+        if outcome is None:return False
+        ticket,kind,value=outcome
+        request=getattr(self,'mobile_preview_request',None)
+        if (request is None or request['cancel'] is not ticket
+                or not DrawBotApp._mobile_preview_request_current(self,request)):
+            return False
+        if kind=='error':
+            self.mobile_preview_request=None
+            message=f'Could not refresh Mobile Preview addresses: {value}'
+            self.mobile_preview_status.set(message)
+            if not self.activity:self.status.set(message)
+            log_event(message)
+            return False
+        server=request['server'];session=request['session'];started=False
+        def discard_unadopted():
+            current=getattr(self,'mobile_preview_request',None)
+            adopted_elsewhere=(current is not None and current is not request and
+                current['server'] is server and current['session']==session and not current['cancel'].is_set())
+            if started and server.session_identity()==session and not adopted_elsewhere:
+                server.stop()
+        try:
             if not server.running:
-                state=server.start()
+                state=server.start(addresses=value);started=True
                 log_event(f'Mobile Preview started locally on port {state.port}. No cloud service or telemetry is used.')
             else:
-                server.refresh_addresses()
-            DrawBotApp._sync_mobile_preview(self)
+                state=server.refresh_addresses(addresses=value)
+            session=(request['session'][0],state.port,state.token)
+            if not state.running or not DrawBotApp._mobile_preview_request_current(self,request,session=session):
+                discard_unadopted()
+                if request is getattr(self,'mobile_preview_request',None):
+                    DrawBotApp._cancel_mobile_preview_discovery(self)
+                return False
             urls=server.urls()
             url=urls[0] if urls else f'http://127.0.0.1:{server.port}/{server.token}/'
             self.mobile_preview_url.set(url)
             self.mobile_preview_status.set('Mobile Preview LIVE · same Wi-Fi/LAN required · auto-refresh 1s')
             from MobilePreviewDialog import show_mobile_preview_dialog
             window=show_mobile_preview_dialog(self,server,url)
+            if not DrawBotApp._mobile_preview_request_current(self,request,session=session):
+                if request is getattr(self,'mobile_preview_request',None):
+                    self.stop_mobile_preview(quiet=True)
+                else:discard_unadopted()
+                return False
+            DrawBotApp._sync_mobile_preview(self)
+            if window is not None and not self.activity:
+                self.status.set('Mobile Preview is live. Open the local address on a phone connected to the same network.')
+            return window
         except Exception as error:
-            self.stop_mobile_preview(quiet=True)
-            self.status.set(f'Could not start Mobile Preview: {error}')
-            log_event(f'Mobile Preview start failed safely: {error!r}')
-            return
+            if DrawBotApp._mobile_preview_request_current(self,request,session=session,check_panel=False):
+                self.stop_mobile_preview(quiet=True)
+                message=f'Could not start Mobile Preview: {error}'
+                self.mobile_preview_status.set(message)
+                if not self.activity:self.status.set(message)
+                log_event(f'Mobile Preview start failed safely: {error!r}')
+            else:discard_unadopted()
+            return False
+        finally:
+            if request is getattr(self,'mobile_preview_request',None):self.mobile_preview_request=None
 
-        if window is not None:
-            self.status.set('Mobile Preview is live. Open the local address on a phone connected to the same network.')
-        return window
+    def show_mobile_preview(self):
+        """Queue opt-in LAN discovery without blocking or borrowing drawing work."""
+        if self.closing:return
+        try:
+            server=getattr(self,'mobile_preview_server',None)
+            if server is None:
+                server=MobilePreviewServer();self.mobile_preview_server=server
+            discovery=getattr(self,'mobile_preview_discovery',None)
+            if discovery is None:
+                from MobilePreviewDiscovery import MobilePreviewDiscovery
+                discovery=MobilePreviewDiscovery();self.mobile_preview_discovery=discovery
+            previous=getattr(self,'mobile_preview_request',None)
+            if previous is not None:previous['cancel'].set()
+            panel=getattr(self,'_mobile_preview_dialog',None)
+            if panel is not None and not panel.current():panel=None
+            request=dict(cancel=threading.Event(),server=server,
+                session=server.session_identity(),panel=panel)
+            self.mobile_preview_request=request
+            discovery.submit(request['cancel'])
+            if request['cancel'].is_set():return
+            self.mobile_preview_status.set('Finding local Mobile Preview addresses…')
+            if not self.activity:self.status.set('Finding local Mobile Preview addresses… You can keep using Image Draw Bot.')
+            return panel.window if panel is not None else None
+        except Exception as error:
+            DrawBotApp._cancel_mobile_preview_discovery(self)
+            message=f'Could not start Mobile Preview: {error}'
+            self.mobile_preview_status.set(message)
+            if not self.activity:self.status.set(message)
+            log_event(f'Mobile Preview discovery failed safely: {error!r}')
 
     def export_preview(self):
         if self.activity or self.closing:return False
@@ -10193,6 +10345,10 @@ class DrawBotApp:
 
     def _request_stop(self):
         """Keyboard-thread-safe Stop: no Tk calls or resettable update token."""
+        mobile=getattr(self,'mobile_preview_request',None)
+        if mobile is not None:mobile['cancel'].set()
+        discovery=getattr(self,'mobile_preview_discovery',None)
+        if discovery is not None:discovery.cancel()
         request=getattr(self,'update_request',None)
         if isinstance(request,UpdateRequest):request.cancel()
         recheck=getattr(self,'result_recheck_request',None)
@@ -12095,6 +12251,7 @@ class DrawBotApp:
             DrawBotApp._cancel_after_attr(self,'poll_after')
             DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
             self._remove_hotkeys()
+            DrawBotApp._cancel_mobile_preview_discovery(self,retire=True)
             self.stop_mobile_preview(quiet=True)
             try:
                 self.root.destroy()
@@ -12121,6 +12278,7 @@ class DrawBotApp:
 
     def poll(self):
         self.poll_after=None
+        DrawBotApp._poll_mobile_preview_discovery(self)
         processed=0
         started=time.monotonic()
         while processed<250 and (processed==0 or time.monotonic()-started<.015):
@@ -12175,6 +12333,7 @@ class DrawBotApp:
         self.smart_drop_pending_payload=None
         self.smart_drop_generation=int(getattr(self,'smart_drop_generation',0))+1
         self.closing=True
+        DrawBotApp._cancel_mobile_preview_discovery(self,retire=True)
         DrawBotApp._runtime_safety_view(self).clear()
         DrawBotApp._cancel_recovery_image_job(self)
         log_event('Shutdown requested.')

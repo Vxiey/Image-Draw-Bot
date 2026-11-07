@@ -15,6 +15,7 @@ import ipaddress
 import json
 import secrets
 import socket
+import socketserver
 import threading
 from typing import Dict, Iterable, Optional
 from urllib.parse import urlsplit
@@ -79,6 +80,13 @@ class _PreviewHTTPServer(ThreadingHTTPServer):
     def __init__(self, *args, **kwargs):
         self._client_slots = threading.BoundedSemaphore(MOBILE_PREVIEW_MAX_CLIENTS)
         super().__init__(*args, **kwargs)
+
+    def server_bind(self):
+        # HTTPServer's default also calls getfqdn(), which can hold the session
+        # lock in reverse DNS. Our handler uses tokenized numeric URLs and does
+        # not need a canonical hostname. Keep the actual TCP bind/getsockname.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     def get_request(self):
         connection, address = super().get_request()
@@ -306,19 +314,33 @@ class MobilePreviewServer:
         with self._lock:
             return MobilePreviewState(self.running, self.port, self.token, self._revision, tuple(self.urls()))
 
-    def refresh_addresses(self) -> MobilePreviewState:
+    def session_identity(self):
+        """Bind a pending GUI lookup to this exact start/stop generation."""
+        with self._lock:
+            return self._generation, self.port, self.token
+
+    @staticmethod
+    def _prepared_addresses(addresses):
+        if addresses is None:
+            return tuple(local_ipv4_addresses()) or ('127.0.0.1',)
+        if not isinstance(addresses, (list, tuple)) or any(
+                not isinstance(value, str) or not _is_local_client(value) for value in addresses):
+            raise ValueError('Mobile Preview addresses must be local IPv4 addresses.')
+        return tuple(dict.fromkeys(addresses)) or ('127.0.0.1',)
+
+    def refresh_addresses(self, *, addresses=None) -> MobilePreviewState:
         """Refresh the share links when the user reopens the preview panel."""
         with self._lock:
             server, generation = self._server, self._generation
             if server is None:
                 return self.state()
-        addresses = tuple(local_ipv4_addresses()) or ('127.0.0.1',)
+        addresses = self._prepared_addresses(addresses)
         with self._lock:
             if self._server is server and self._generation == generation:
                 self._addresses = addresses
             return self.state()
 
-    def start(self, port: int = 0) -> MobilePreviewState:
+    def start(self, port: int = 0, *, addresses=None) -> MobilePreviewState:
         with self._lock:
             if self.running:
                 return self.state()
@@ -327,7 +349,7 @@ class MobilePreviewServer:
             raise ValueError('Mobile preview port must be an integer from 0 to 65535.')
         # DNS/interface discovery may block. Never perform it while holding the
         # lock used by image encoding, HTTP responses, state() and stop().
-        addresses = tuple(local_ipv4_addresses()) or ('127.0.0.1',)
+        addresses = self._prepared_addresses(addresses)
         with self._lock:
             if generation != self._generation:
                 raise InterruptedError('Mobile preview start was cancelled.')

@@ -6,11 +6,23 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 27 implements **839 total distinct improvements, with 161 remaining**.
+
+Batch 27: 4,481 tests completed in 218.814 seconds: 4,408 passed and 73 platform/hardware cases skipped, with 931 source/configuration hashes unchanged. One independently reviewed Sketch Fill presentation-handoff group brings the total to 839, with 161 remaining; all 838 preceding entries are preserved. Current RAM recommendation matching, legacy CPU source-white handling, direct GPU-installer ownership, responsive Mobile Preview discovery and monochrome/Sketch image lifetime complete existing contracts with zero additional IDs. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical comparisons cover 22 public cases and eight native-executor raster cases over three complete caller graphs, plus eight separate current-ink/outline pairs. Eight workloads have six balanced pairs and separate peak/retained allocation probes. The timed graph holds current PixelData constant but includes the uncounted DrawBot/Sketch ownership work; its entire delta is not attributed solely to the new group. All final gates bind the same 881 root Python hashes. Slower individual pairs, control allocation costs and the pre-existing scaled Sketch preview/native-model discrepancy remain explicit. Exact-commit Windows/package checks are recorded separately in PR46. Version 1.0.148 is not released.
+
+[Final local evidence](v148-batch27-validation.json) binds the frozen source. [Sketch Fill](v148-batch27-sketch-finalization.md) records the one new group. [Completion evidence](v148-batch27-completion-evidence.json) preserves the actual before/after observations for [RAM recommendations](v148-batch27-scheduler-completion.md), [CPU source-white](v148-batch27-cpu-white-completion.md), [GPU installers](v148-batch27-gpu-installer-completion.md), [Mobile Preview](v148-batch27-mobile-discovery-completion.md) and [monochrome ownership](v148-batch27-monochrome-ownership-completion.md).
+
+<details>
+<summary>Previous batch26 checkpoint</summary>
+
 Batch 26 implements **838 total distinct improvements, with 162 remaining**.
 
 Batch 26: 4,431 tests completed in 215.945 seconds: 4,361 passed and 70 platform/hardware cases skipped, with 923 source/configuration hashes unchanged. One independently reviewed topology-reuse group brings the total to 838, with 162 remaining; all 837 preceding entries and the incoming batch25 implementation and fixture repairs are preserved. OpenCL host-failure ownership completes already-counted P2504; strict calibration/grid/legacy/cache storage, shared GIF publication, normalized dictionary round trips and unused shadow-output retirement complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical comparisons cover 36 regional score pairs, 38 full public plans including two active-timer pairs, 24 independent brush-one rasters and 692 GPU cases against each of two historical checkpoints. Seventeen workloads have six balanced pairs and separate allocation probes; the OpenCL comparison reproduces already-counted work against586, not a new gain over837. All final gates bind the same 873 root Python hashes. Slower controls and topology retention costs remain disclosed, without a general planner/GPU/RSS claim. Exact-commit Windows/package checks are recorded separately in PR46. Version 1.0.148 is not released.
 
 [Final local evidence](v148-batch26-validation.json) binds the merged source. [Target topology](v148-batch26-topology.md) records the one unique group; [OpenCL completion](v148-batch26-opencl-host.md), [palette storage](v148-batch26-color-storage-completion.md), [GIF publication](v148-batch26-gif-storage-completion.md), [dictionary persistence](v148-batch26-word-storage-completion.md) and [shadow ownership](v148-batch26-shadow-ownership-completion.md) record zero-ID completions.
+
+
+</details>
 
 <details>
 <summary>Previous batch25 checkpoint</summary>

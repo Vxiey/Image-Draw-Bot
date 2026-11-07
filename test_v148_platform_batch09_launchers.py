@@ -15,8 +15,8 @@ HELPERS = {
     'Enable-Crash-Dumps.bat': ('CrashDumpConfig.py', ['enable', '--include-python']),
     'Disable-Crash-Dumps.bat': ('CrashDumpConfig.py', ['disable', '--include-python']),
     'Collect-Diagnostics.bat': ('DiagnosticsPackage.py', []),
-    'Install-GPU-NVIDIA.bat': ('AutoGpuSetup.py', ['--ensure', '--force', '--require-nvidia']),
-    'Install-GPU-Universal.bat': ('AutoUniversalGpuSetup.py', ['--ensure', '--force']),
+    'Install-GPU-NVIDIA.bat': ('SourceStartup.py', ['--setup-gpu', 'nvidia', '--force', '--require-nvidia']),
+    'Install-GPU-Universal.bat': ('SourceStartup.py', ['--setup-gpu', 'universal', '--force']),
 }
 
 

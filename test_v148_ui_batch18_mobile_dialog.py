@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+import time
 from types import SimpleNamespace
 import tkinter as tk
 import unittest
@@ -15,6 +16,26 @@ import qrcode
 
 from DrawBot import DrawBotApp
 from test_v148_ui_workflow_batch05_runtime import Widget
+
+
+def show_mobile_preview_ready(app):
+    """Wait for this fixture's real fast lookup, then run its actual GUI adoption.
+
+    Do not pump native timers here: the existing first-widget DPI regression
+    deliberately closes its panel before the first scaling tick can run.
+    Responsiveness with a blocked resolver is covered by the batch27 native
+    event-loop tests, which never use this fixture readiness helper.
+    """
+    app.show_mobile_preview()
+    deadline = time.monotonic() + 3
+    while getattr(app, 'mobile_preview_request', None) is not None:
+        DrawBotApp._poll_mobile_preview_discovery(app)
+        if time.monotonic() >= deadline:
+            raise AssertionError('Mobile Preview lookup/adoption did not become ready')
+        if getattr(app, 'mobile_preview_request', None) is not None:
+            time.sleep(.001)
+    owner = getattr(app, '_mobile_preview_dialog', None)
+    return owner.window if owner is not None and not owner.closed else None
 
 
 class NativeSurface(Widget):
@@ -157,12 +178,12 @@ class MobileDialogWorkflowTests(unittest.TestCase):
 
     def test_reopening_refreshes_the_existing_panel_instead_of_forking_its_address(self):
         app = self.app()
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         first = self.windows(app)[0]
         token = app.mobile_preview_server.token
         self.assert_current_panel(app, first)
         self.addresses.return_value = ['127.0.0.2']
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         with self.subTest(behavior='one live panel'):
             self.assertEqual(self.windows(app), [first])
         with self.subTest(behavior='original visible panel follows refresh'):
@@ -171,7 +192,7 @@ class MobileDialogWorkflowTests(unittest.TestCase):
 
     def test_stop_closes_the_current_panel_and_restart_rotates_its_real_token(self):
         app = self.app()
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         first = self.windows(app)[0]
         old_token = app.mobile_preview_server.token
         server = app.mobile_preview_server
@@ -179,7 +200,7 @@ class MobileDialogWorkflowTests(unittest.TestCase):
         with self.subTest(phase='stop'):
             self.assertFalse(first.winfo_exists())
             self.assertEqual(self.windows(app), [])
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         self.assertIs(app.mobile_preview_server, server)
         self.assertNotEqual(server.token, old_token)
         self.assert_current_panel(app, self.windows(app)[-1])
@@ -195,10 +216,10 @@ class MobileDialogWorkflowTests(unittest.TestCase):
         for action in ('Open on this PC', 'Copy address', 'Stop Mobile Preview'):
             with self.subTest(action=action):
                 app = self.app()
-                app.show_mobile_preview()
+                show_mobile_preview_ready(app)
                 old = self.controls(self.windows(app)[0])[0][action].options['command']
                 app.stop_mobile_preview()
-                app.show_mobile_preview()
+                show_mobile_preview_ready(app)
                 server = app.mobile_preview_server
                 session = (server.port, server.token)
                 app.root.clipboard = 'keep the existing clipboard'
@@ -211,13 +232,13 @@ class MobileDialogWorkflowTests(unittest.TestCase):
 
     def test_closing_only_the_panel_keeps_sharing_and_a_later_panel_owns_its_callbacks(self):
         app = self.app()
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         first = self.windows(app)[0]
         session = (app.mobile_preview_server.port, app.mobile_preview_server.token)
         first.protocols['WM_DELETE_WINDOW']()
         self.assertEqual(self.windows(app), [])
         self.assertTrue(app.mobile_preview_server.running)
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         second = self.windows(app)[0]
         self.assertIsNot(second, first)
         first.destroy()
@@ -232,29 +253,29 @@ class MobileDialogWorkflowTests(unittest.TestCase):
                 if stage == 'construction':
                     failure = patch('WorkspaceLayout.fit_window', side_effect=ValueError('geometry failure'))
                 else:
-                    app.show_mobile_preview()
+                    show_mobile_preview_ready(app)
                     _buttons, address, _qr = self.controls(self.windows(app)[0])
                     failure = patch.object(address, 'insert', side_effect=tk.TclError('widget failure'))
                 with failure:
-                    app.show_mobile_preview()
+                    show_mobile_preview_ready(app)
                 self.assertEqual(self.windows(app), [])
                 self.assertIsNone(getattr(app, '_mobile_preview_dialog', None))
                 self.assertFalse(app.mobile_preview_server.running)
                 self.assertFalse(app.root.jobs)
                 self.assertEqual(app.mobile_preview_url.get(), '')
                 self.assertIn('Could not start Mobile Preview', app.status.get())
-                app.show_mobile_preview()
+                show_mobile_preview_ready(app)
                 self.assert_current_panel(app, self.windows(app)[0])
 
     def test_failed_qr_refresh_does_not_leave_the_old_session_address_in_an_image(self):
         app = self.app()
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         window = self.windows(app)[0]
         buttons, address, qr = self.controls(window)
         old_url = app.mobile_preview_url.get()
         self.addresses.return_value = ['127.0.0.2']
         with patch('qrcode.QRCode.make', side_effect=ValueError('QR unavailable')):
-            app.show_mobile_preview()
+            show_mobile_preview_ready(app)
         current_url = app.mobile_preview_url.get()
         self.assertNotEqual(current_url, old_url)
         self.assertEqual(self.windows(app), [window])
@@ -270,7 +291,7 @@ class MobileDialogWorkflowTests(unittest.TestCase):
 
     def test_external_window_destruction_and_late_old_destroy_do_not_clear_the_new_owner(self):
         app = self.app()
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         old_window = self.windows(app)[0]
         late_destroy = old_window.bindings['<Destroy>']
         old_callbacks = [control.options['command']
@@ -278,7 +299,7 @@ class MobileDialogWorkflowTests(unittest.TestCase):
         old_window.destroy()
         self.assertIsNone(app._mobile_preview_dialog)
         self.assertTrue(app.mobile_preview_server.running)
-        app.show_mobile_preview()
+        show_mobile_preview_ready(app)
         new_owner = app._mobile_preview_dialog
         late_destroy(SimpleNamespace(widget=old_window))
         for callback in old_callbacks:
@@ -329,7 +350,7 @@ raise SystemExit(not result.wasSuccessful())
         original_binding = root.bind_all('<Button-1>')
         with patch('MobilePreview.local_ipv4_addresses', return_value=['127.0.0.1']), \
                 patch('DrawBot.log_event'):
-            panel = app.show_mobile_preview()
+            panel = show_mobile_preview_ready(app)
             self.assertIsNotNone(panel)
             self.assertTrue(ScalingTracker.update_loop_running)
             survivors = []
@@ -377,7 +398,7 @@ raise SystemExit(not result.wasSuccessful())
         with patch('MobilePreview.local_ipv4_addresses', return_value=['127.0.0.1']) as addresses, \
                 patch('DrawBot.log_event'), patch('webbrowser.open', return_value=True) as browser:
             original_click_binding = root.bind_all('<Button-1>')
-            first = app.show_mobile_preview()
+            first = show_mobile_preview_ready(app)
             root.update()
             owner = app._mobile_preview_dialog
             old_photo = str(owner.photo)
@@ -391,7 +412,7 @@ raise SystemExit(not result.wasSuccessful())
                     record_commands(child)
 
             addresses.return_value = ['127.0.0.2']
-            self.assertIs(app.show_mobile_preview(), first)
+            self.assertIs(show_mobile_preview_ready(app), first)
             root.update()
             self.assertIs(app._mobile_preview_dialog, owner)
             url = app.mobile_preview_url.get()
@@ -416,7 +437,7 @@ raise SystemExit(not result.wasSuccessful())
             self.assertNotIn(current_photo, root.tk.call('image', 'names'))
             self.assertEqual(root.bind_all('<Button-1>').strip(), original_click_binding.strip())
             self.assertNotIn(future_job, root.tk.call('after', 'info'))
-            second = app.show_mobile_preview()
+            second = show_mobile_preview_ready(app)
             root.update()
             self.assertIsNot(second, first)
             current_owner = app._mobile_preview_dialog
@@ -425,12 +446,12 @@ raise SystemExit(not result.wasSuccessful())
             self.assertTrue(app.mobile_preview_server.running)
             with patch.object(current_owner.address, 'insert',
                               side_effect=tk.TclError('native refresh failure')):
-                self.assertIsNone(app.show_mobile_preview())
+                self.assertIsNone(show_mobile_preview_ready(app))
             self.assertFalse(second.winfo_exists())
             self.assertFalse(app.mobile_preview_server.running)
             self.assertIsNone(app._mobile_preview_dialog)
             self.assertIn('Could not start Mobile Preview', app.status.get())
-            third = app.show_mobile_preview()
+            third = show_mobile_preview_ready(app)
             root.update()
             stop_button = next(widget for widget in self._widgets(third)
                 if isinstance(widget, ctk.CTkButton) and widget.cget('text') == 'Stop Mobile Preview')

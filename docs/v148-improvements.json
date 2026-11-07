@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 838,
+  "implemented": 839,
   "release_published": false,
-  "validation": "Batch 26: 4,431 tests completed in 215.945 seconds: 4,361 passed and 70 platform/hardware cases skipped, with 923 source/configuration hashes unchanged. One independently reviewed topology-reuse group brings the total to 838, with 162 remaining; all 837 preceding entries and the incoming batch25 implementation and fixture repairs are preserved. OpenCL host-failure ownership completes already-counted P2504; strict calibration/grid/legacy/cache storage, shared GIF publication, normalized dictionary round trips and unused shadow-output retirement complete existing contracts with zero IDs. Ten real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical comparisons cover 36 regional score pairs, 38 full public plans including two active-timer pairs, 24 independent brush-one rasters and 692 GPU cases against each of two historical checkpoints. Seventeen workloads have six balanced pairs and separate allocation probes; the OpenCL comparison reproduces already-counted work against586, not a new gain over837. All final gates bind the same 873 root Python hashes. Slower controls and topology retention costs remain disclosed, without a general planner/GPU/RSS claim. Exact-commit Windows/package checks are recorded separately in PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 27: 4,481 tests completed in 218.814 seconds: 4,408 passed and 73 platform/hardware cases skipped, with 931 source/configuration hashes unchanged. One independently reviewed Sketch Fill presentation-handoff group brings the total to 839, with 161 remaining; all 838 preceding entries are preserved. Current RAM recommendation matching, legacy CPU source-white handling, direct GPU-installer ownership, responsive Mobile Preview discovery and monochrome/Sketch image lifetime complete existing contracts with zero additional IDs. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical comparisons cover 22 public cases and eight native-executor raster cases over three complete caller graphs, plus eight separate current-ink/outline pairs. Eight workloads have six balanced pairs and separate peak/retained allocation probes. The timed graph holds current PixelData constant but includes the uncounted DrawBot/Sketch ownership work; its entire delta is not attributed solely to the new group. All final gates bind the same 881 root Python hashes. Slower individual pairs, control allocation costs and the pre-existing scaled Sketch preview/native-model discrepancy remain explicit. Exact-commit Windows/package checks are recorded separately in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6523,6 +6523,14 @@
       "description": "Reuse the already extracted exact connected target topology between Pixel stroke planning and regional accuracy within one Subject Off/Lines operation. Keep bounded int32 labels and seven scalar fields per region, validate current visible colors and mask in bounded chunks before consuming once, and release before finalization and on errors. Changed targets, capacity or allocation limits, standalone scoring, dots and subject plans retain fresh extraction. Complete historical caller parity includes active timed admission with unchanged original execution order, scores and metadata; independent topology and brush-one raster oracles and retained-error checks preserve public behavior. Paired observations retain slower controls and the bounded inter-stage storage tradeoff; no persistent cache or physical drawing-speed claim.",
       "batch": 26,
       "id": 838
+    },
+    {
+      "local_id": "R2701",
+      "area": "batch27-rendering",
+      "ledger": "v148-batch27-sketch-finalization.md",
+      "description": "Omit unused late target, auxiliary, source-accuracy, ETA and diagnostic presentation in the private color sub-plan of ordinary Sketch Fill. Preserve its complete geometry, correction choices, active cap/deadline, optimizer, physical base preview and safety; the final composite remains fully presented. Active tuner/rescue, nested Adaptive Hybrid and standalone consumers retain full presentation. Complete historical public plans and delivered native-emulator rasters remain equal; counters establish the distinct removed work. Paired elapsed/allocation observations include the separately uncounted DrawBot/Sketch image-ownership completion, hold current PixelData constant, and retain slower individual pairs and control allocation costs. Existing scaled Sketch preview/native-model differences are disclosed and are not claimed fixed by this group.",
+      "batch": 27,
+      "id": 839
     }
   ]
 }

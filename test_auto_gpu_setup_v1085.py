@@ -71,7 +71,7 @@ class AutoGpuSetupV1085Tests(unittest.TestCase):
 
     def test_manual_gpu_installer_uses_same_bootstrap(self):
         text = (ags.BASE / "Install-GPU-NVIDIA.bat").read_text(encoding="utf-8", errors="replace")
-        self.assertIn("AutoGpuSetup.py --ensure --force --require-nvidia", text)
+        self.assertIn("SourceStartup.py --setup-gpu nvidia --force --require-nvidia", text)
 
 
 if __name__ == "__main__":
