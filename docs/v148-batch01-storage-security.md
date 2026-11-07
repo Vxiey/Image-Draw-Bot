@@ -96,6 +96,14 @@ timing noise.
 - The retained checked-in JSON fixtures `resource-scheduler-v2.json` and
   `verified-colors-microsoft-paint.json` remain part of source archives. Their
   existing regression explicitly distinguishes them from private runtime state.
+  **Later correction (batch 21, 2026-11-07):** the actual color-cache writer uses
+  that root Paint filename and overwrites the seed with local verification data.
+  [The source-privacy completion](v148-batch21-source-privacy-completion.md)
+  therefore moves the unchanged synthetic seed to
+  `tests/fixtures/verified-color-cache-v2.json` and excludes root
+  `verified-colors-*.json` runtime files. The separate fixture and documentation
+  examples remain distributable. This corrects the earlier classification and
+  adds no improvement ID.
 - No signing credentials, network trust rules, antivirus exclusions, execution
   names or release triggers are changed by this batch.
 

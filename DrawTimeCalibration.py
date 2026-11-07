@@ -10,7 +10,10 @@ from __future__ import annotations
 import json
 import math
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
+from threading import current_thread
 from typing import Any
 from urllib.parse import quote
 
@@ -24,6 +27,107 @@ MAX_CONTEXTS = 256
 MAX_DATABASE_BYTES = 4 * 1024 * 1024
 MAX_DATABASE_ITEMS = 100000
 MAX_OPERATION_KINDS = 64
+
+_planning_observation = ContextVar('draw_time_calibration_observation', default=None)
+
+
+def _isolated_value(value):
+    """Copy a reader-bounded JSON value without retaining it in failure frames."""
+    result = item = iterator = None
+    try:
+        if isinstance(value, dict):
+            result = {}
+            iterator = iter(value.items())
+            for key, item in iterator:
+                result[key] = _isolated_value(item)
+            return result
+        if isinstance(value, list):
+            result = []
+            iterator = iter(value)
+            for item in iterator:
+                result.append(_isolated_value(item))
+            return result
+        return value
+    finally:
+        value = result = item = iterator = None
+
+
+def _observed_profile(db, options, *, shared):
+    item = None
+    try:
+        item = db['profiles'].get(_key(options))
+        if not isinstance(item, dict):
+            item = db['profiles'].get(_v2_key(options))
+        if not isinstance(item, dict):
+            item = db['profiles'].get(_legacy_key(options))
+        if not isinstance(item, dict):
+            return None
+        # A fresh reader already owns its nested JSON values. Only a shared
+        # database needs isolation from mutations of a returned public row.
+        return _isolated_value(item) if shared else dict(item)
+    finally:
+        db = item = None
+
+
+class _PlanningCalibrationObservation:
+    """One lazy validated database; other identities use the ordinary reader."""
+    def __init__(self):
+        self.thread = current_thread()
+        self.identity = None
+        self.database = None
+
+    def active(self):
+        # Contexts can be explicitly copied into another thread. Such a worker
+        # must neither borrow nor close the originating operation's snapshot.
+        return self.thread is current_thread()
+
+    def profile(self, options, path):
+        db = None
+        try:
+            # The explicit/default distinction preserves missing-file legacy
+            # migration, and the profile keeps its migration prefix distinct.
+            identity = (_resolved_path(options, path).absolute(),
+                        _profile(options), path is None)
+            if self.database is None:
+                _resolved, db = _ensure_profile_db(options, path)
+                self.identity, self.database = identity, db
+            elif identity != self.identity:
+                _resolved, db = _ensure_profile_db(options, path)
+                return _observed_profile(db, options, shared=False)
+            return _observed_profile(self.database, options, shared=True)
+        finally:
+            # A retained lookup/Stop traceback must not pin the shared owner.
+            db = self = None
+
+    def close(self):
+        self.database = self.identity = self.thread = None
+
+
+@contextmanager
+def planning_calibration_scope():
+    """Borrow one thread-owned observation for an entire nested public plan.
+
+    Only the first profile/path is retained, within the existing JSON reader's
+    byte/item bounds. Other identities stream through fresh reads. No writers
+    use this scope: a new operation observes current files and normal migration.
+    """
+    observation = _planning_observation.get()
+    if observation is not None and observation.active():
+        try:
+            yield
+        finally:
+            observation = None
+        return
+    observation = _PlanningCalibrationObservation()
+    token = _planning_observation.set(observation)
+    try:
+        yield
+    finally:
+        try:
+            observation.close()
+        finally:
+            _planning_observation.reset(token)
+            observation = token = None
 
 
 def _empty() -> dict[str, Any]:
@@ -173,6 +277,12 @@ def _ensure_profile_db(options: dict[str, Any], path: Path | None) -> tuple[Path
 
 
 def load_profile(options: dict[str, Any], path: Path | None = None) -> dict[str, Any] | None:
+    observation = _planning_observation.get()
+    try:
+        if observation is not None and observation.active():
+            return observation.profile(options, path)
+    finally:
+        observation = None
     _resolved, db = _ensure_profile_db(options, path)
     item = db["profiles"].get(_key(options))
     if not isinstance(item, dict):

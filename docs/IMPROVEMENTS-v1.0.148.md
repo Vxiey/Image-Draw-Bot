@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 821 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **179 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 823 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **177 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -86,8 +86,12 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 819 | C2001 | Batch 20 shared visible-source color analysis | 1 | [Evidence](v148-batch20-colour-source.md); independent source/actual-flow review. |
 | 820 | P2001 | Batch 20 explicit GPU resource maintenance | 1 | [Evidence](v148-batch20-platform.md); independent source/actual-flow review. |
 | 821 | U2001 | Batch 20 prepared preview-estimate handoff | 1 | [Evidence](v148-batch20-ui-estimate.md); independent source/actual-flow review. |
+| 822 | R2101 | Batch 21 one timing database observation per public plan | 1 | [Evidence](v148-batch21-rendering-calibration.md); independent source/actual-flow review. |
+| 823 | R2102 | Batch 21 prepared generic polygon clipping and projection | 1 | [Evidence](v148-batch21-clipping.md); independent source/actual-flow review. |
 
 ## Integration evidence
+
+- Batch 21: two independently reviewed behavior groups bring the total to **823**, with **177 remaining**. Frozen-source integration completed **4,198 tests: 4,140 passed, 58 skipped**, with all 876 source/configuration hashes unchanged. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Sixteen paired workloads share 826 unchanged root Python hashes. Retained-image Undo, actual profile warnings and source-archive privacy complete existing contracts with zero IDs. [Final local validation](v148-batch21-validation.json). New exact-commit CI results belong to PR46.
 
 - Batch 20: three independently reviewed behavior groups bring the total to **821**, with **179 remaining**. Frozen-source integration completed **4,162 tests: 4,104 passed, 58 skipped**, with all 869 source/configuration hashes unchanged. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Fourteen paired workloads share 819 unchanged root Python hashes. Source-analysis reuse, explicit GPU maintenance and prepared UI estimates are new groups; automatic-preview, browser drawing-region, image-ownership and learning-reset completions add zero IDs. [Final local validation](v148-batch20-validation.json). New exact-commit Windows/CI results belong to PR46.
 

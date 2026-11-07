@@ -74,7 +74,7 @@ EXCLUDED_FILE_NAMES = {
 RUNTIME_FILE_PATTERNS = (
     "settings*.json", "calibration*.json", "release-state.json",
     "session-recovery*.json", "session-recovery*.png", "render-resume*.json",
-    "exact-colors-*.json", "app-tools-*.json", "paint-tools*.json",
+    "exact-colors-*.json", "verified-colors-*.json", "app-tools-*.json", "paint-tools*.json",
     "draw-time-calibration*.json", "auto-tuner-feedback-*.json",
     "correction-history-*.json", "layout-fingerprints-v2*.json",
     "hardware-performance-profile-v1.json", "real-speed-profiles.json",

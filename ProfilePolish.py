@@ -258,7 +258,12 @@ def profile_release_warnings(profile_name: str | None, calibration_state: Mappin
     preset = profile_release_preset(profile_name)
     warnings = list(preset.warnings)
     state_data = calibration_state if isinstance(calibration_state, Mapping) else {}
-    state = str(state_data.get("palette_state") or state_data.get("state") or "").lower()
+    # Keep the original flat aliases authoritative, and also accept the nested
+    # palette evidence produced by CalibrationState for actual app callers.
+    palette = state_data.get("palette")
+    palette = palette if isinstance(palette, Mapping) else {}
+    state = str(state_data.get("palette_state") or state_data.get("state") or
+                palette.get("state") or "").lower()
     if state in ("estimated", "unavailable", "none"):
         warnings.append("Palette is not verified for this profile; use Auto Setup or Read colors before relying on color accuracy.")
     if str(profile_name or "") in BROWSER_RELEASE_PROFILES:

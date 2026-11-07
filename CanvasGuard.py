@@ -68,7 +68,10 @@ def _signed_area(points: Sequence[FloatPoint]) -> float:
 
 
 def _centroid(points: Sequence[Sequence[float | int]]) -> FloatPoint:
-    pts = [_float_point(p) for p in points]
+    return _centroid_prepared(tuple(_float_point(p) for p in points))
+
+
+def _centroid_prepared(pts: Sequence[FloatPoint]) -> FloatPoint:
     if not pts:
         raise ValueError('Canvas polygon is empty.')
     area = _signed_area(pts)
@@ -131,6 +134,16 @@ def _point_in_prepared_polygon(point: FloatPoint, pts: Sequence[FloatPoint]) -> 
                 inside = not inside
         j = i
     return inside
+
+
+def _prepared_contains(point: Sequence[float | int], pts: Sequence[FloatPoint]) -> bool:
+    """Validate a query point while borrowing already validated polygon vertices.
+
+    Derived intersection/rounding points still pass finite-number validation.
+    A clipping operation can reuse its private immutable polygon without
+    rebuilding the same vertices for every midpoint and endpoint query.
+    """
+    return _point_in_prepared_polygon(_float_point(point), pts)
 
 
 def _line_intersection(n1: FloatPoint, c1: float, n2: FloatPoint, c2: float) -> FloatPoint | None:
@@ -471,16 +484,21 @@ def clip_segment_to_polygon(start: Sequence[float | int], end: Sequence[float | 
     """
     a = _float_point(start)
     b = _float_point(end)
-    pts = [_float_point(p) for p in polygon]
+    pts = tuple(_float_point(p) for p in polygon)
+    return _clip_segment_prepared(a, b, pts)
+
+
+def _clip_segment_prepared(a: FloatPoint, b: FloatPoint, pts: tuple[FloatPoint, ...]) -> tuple[tuple[Point, Point], ...]:
+    """Clip validated endpoints against one operation's immutable polygon."""
     if len(pts) < 3:
         return ()
     if math.hypot(b[0] - a[0], b[1] - a[1]) <= 1e-7:
-        if point_in_polygon(a, pts):
+        if _prepared_contains(a, pts):
             rounded = _round_point(a)
-            if point_in_polygon(rounded, pts):
+            if _prepared_contains(rounded, pts):
                 return ((rounded, rounded),)
-            safe = _safe_projection(a, pts)
-            return ((safe, safe),) if point_in_polygon(safe, pts) else ()
+            safe = _safe_projection_prepared(a, pts)
+            return ((safe, safe),) if _prepared_contains(safe, pts) else ()
         return ()
 
     t_values = [0.0, 1.0]
@@ -494,17 +512,17 @@ def clip_segment_to_polygon(start: Sequence[float | int], end: Sequence[float | 
         if t1 - t0 <= 1e-7:
             continue
         mid = _lerp(a, b, (t0 + t1) * 0.5)
-        if not point_in_polygon(mid, pts):
+        if not _prepared_contains(mid, pts):
             continue
         p0f = _lerp(a, b, t0)
         p1f = _lerp(a, b, t1)
         p0 = _round_point(p0f)
         p1 = _round_point(p1f)
-        if not point_in_polygon(p0, pts):
-            p0 = _safe_projection(p0f, pts)
-        if not point_in_polygon(p1, pts):
-            p1 = _safe_projection(p1f, pts)
-        if point_in_polygon(p0, pts) and point_in_polygon(p1, pts):
+        if not _prepared_contains(p0, pts):
+            p0 = _safe_projection_prepared(p0f, pts)
+        if not _prepared_contains(p1, pts):
+            p1 = _safe_projection_prepared(p1f, pts)
+        if _prepared_contains(p0, pts) and _prepared_contains(p1, pts):
             if out and out[-1][1] == p0:
                 out[-1] = (out[-1][0], p1)
             else:
@@ -513,14 +531,14 @@ def clip_segment_to_polygon(start: Sequence[float | int], end: Sequence[float | 
     # Entirely-inside segments have no intersections and produce exactly one
     # interval. If rounding collapsed it, keep a safe dot instead of inventing a
     # rectangle clamp.
-    if not out and point_in_polygon(a, pts) and point_in_polygon(b, pts):
+    if not out and _prepared_contains(a, pts) and _prepared_contains(b, pts):
         p0 = _round_point(a)
         p1 = _round_point(b)
-        if not point_in_polygon(p0, pts):
-            p0 = _safe_projection(a, pts)
-        if not point_in_polygon(p1, pts):
-            p1 = _safe_projection(b, pts)
-        if point_in_polygon(p0, pts) and point_in_polygon(p1, pts):
+        if not _prepared_contains(p0, pts):
+            p0 = _safe_projection_prepared(a, pts)
+        if not _prepared_contains(p1, pts):
+            p1 = _safe_projection_prepared(b, pts)
+        if _prepared_contains(p0, pts) and _prepared_contains(p1, pts):
             return ((p0, p1),)
     return tuple(out)
 
@@ -534,23 +552,23 @@ def clip_path_to_polygon(points: Iterable[Sequence[float | int]], polygon: Seque
         if index % 512 == 0 and cancelled():
             raise InterruptedError()
         raw.append(_float_point(point))
-    pts = [_float_point(p) for p in polygon]
+    pts = tuple(_float_point(p) for p in polygon)
     if not raw or len(pts) < 3:
         return ()
     if len(raw) == 1:
-        if not point_in_polygon(raw[0], pts):
+        if not _prepared_contains(raw[0], pts):
             return ()
         rounded = _round_point(raw[0])
-        if not point_in_polygon(rounded, pts):
-            rounded = _safe_projection(raw[0], pts)
-        return ((rounded,),) if point_in_polygon(rounded, pts) else ()
+        if not _prepared_contains(rounded, pts):
+            rounded = _safe_projection_prepared(raw[0], pts)
+        return ((rounded,),) if _prepared_contains(rounded, pts) else ()
 
     subpaths: list[list[Point]] = []
     current: list[Point] = []
     for index, (a, b) in enumerate(zip(raw, raw[1:])):
         if index % 512 == 0 and cancelled():
             raise InterruptedError()
-        pieces = clip_segment_to_polygon(a, b, pts)
+        pieces = _clip_segment_prepared(a, b, pts)
         if not pieces:
             if current:
                 subpaths.append(current)
@@ -572,8 +590,13 @@ def clip_path_to_polygon(points: Iterable[Sequence[float | int]], polygon: Seque
 
 
 def _nearest_boundary_point(point: Sequence[float | int], polygon: Sequence[Sequence[float | int]]) -> FloatPoint:
-    px, py = _float_point(point)
-    pts = [_float_point(p) for p in polygon]
+    point = _float_point(point)
+    pts = tuple(_float_point(p) for p in polygon)
+    return _nearest_boundary_prepared(point, pts)
+
+
+def _nearest_boundary_prepared(point: FloatPoint, pts: Sequence[FloatPoint]) -> FloatPoint:
+    px, py = point
     best: FloatPoint | None = None
     best_dist = float('inf')
     for (x1, y1), (x2, y2) in zip(pts, pts[1:] + pts[:1]):
@@ -586,7 +609,7 @@ def _nearest_boundary_point(point: Sequence[float | int], polygon: Sequence[Sequ
             best_dist = dist
             best = candidate
     if best is None:
-        return _centroid(pts)
+        return _centroid_prepared(pts)
     return best
 
 
@@ -596,27 +619,30 @@ def _safe_projection(point: Sequence[float | int], polygon: Sequence[Sequence[fl
     The initial boundary projection is pulled toward the polygon centroid so the
     rounded result lands inside the safe polygon even on thin/inset shapes.
     """
-    pts = [_float_point(p) for p in polygon]
-    cx, cy = _centroid(pts)
+    return _safe_projection_prepared(point, tuple(_float_point(p) for p in polygon))
+
+
+def _safe_projection_prepared(point: Sequence[float | int], pts: tuple[FloatPoint, ...]) -> Point:
+    cx, cy = _centroid_prepared(pts)
     rounded_point = _round_point(point)
-    if point_in_polygon(point, pts) and point_in_polygon(rounded_point, pts):
+    if _prepared_contains(point, pts) and _prepared_contains(rounded_point, pts):
         return rounded_point
-    bx, by = _nearest_boundary_point(point, pts)
+    bx, by = _nearest_boundary_prepared(_float_point(point), pts)
     candidates = {(x, y) for x in (math.floor(bx), math.ceil(bx))
                   for y in (math.floor(by), math.ceil(by))}
     for candidate in sorted(candidates, key=lambda p: ((p[0]-bx)**2 + (p[1]-by)**2, p)):
-        if point_in_polygon(candidate, pts):
+        if _prepared_contains(candidate, pts):
             return candidate
     # Nudge toward center to avoid sitting just outside after rounding.
     for ratio in (0.02, 0.05, 0.10, 0.20, 0.35, 0.50, 0.75, 1.0):
         nx = bx + (cx - bx) * ratio
         ny = by + (cy - by) * ratio
         rounded = _round_point((nx, ny))
-        if point_in_polygon(rounded, pts):
+        if _prepared_contains(rounded, pts):
             return rounded
     for raw in pts:
         rounded = _round_point(raw)
-        if point_in_polygon(rounded, pts):
+        if _prepared_contains(rounded, pts):
             return rounded
     raise CanvasSafetyStop('Canvas Guard cannot project this point to a verified integer canvas coordinate.')
 

@@ -26,7 +26,19 @@ class ExtraFastRegionQualityRc24Tests(unittest.TestCase):
         source=Path('DrawBot.py').read_text(encoding='utf-8')
         tree=ast.parse(source)
         make_plan=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='make_plan')
-        calls=[n for n in ast.walk(make_plan) if isinstance(n,ast.Call)]
+        scope=next(n for n in make_plan.body if isinstance(n,ast.With))
+        context=scope.items[0].context_expr
+        self.assertIsInstance(context,ast.Call)
+        self.assertIsInstance(context.func,ast.Name)
+        self.assertEqual(context.func.id,'planning_calibration_scope')
+        returned=scope.body[0]
+        self.assertIsInstance(returned,ast.Return)
+        self.assertIsInstance(returned.value,ast.Call)
+        self.assertIsInstance(returned.value.func,ast.Name)
+        self.assertEqual(returned.value.func.id,'_make_plan')
+        self.assertEqual([n.id for n in returned.value.args],['original','area','options','cancelled'])
+        implementation=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_make_plan')
+        calls=[n for n in ast.walk(implementation) if isinstance(n,ast.Call)]
         names=[]
         for call in calls:
             fn=call.func

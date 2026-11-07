@@ -326,12 +326,13 @@ class StorageSafetyTests(unittest.TestCase):
         self.assertEqual(CorrectionHistory.load_correction_history({'profile_key': 'test'}, path=self.path)['entry_count'], 6)
 
     def test_transaction_sidecars_are_excluded_without_removing_shipped_fixtures(self):
-        for name in ('auto-tuner-feedback-test.json.lock', 'draw-time-calibration-test.json.lock'):
+        for name in ('auto-tuner-feedback-test.json.lock', 'draw-time-calibration-test.json.lock',
+                     'verified-colors-microsoft-paint.json', 'verified-colors-microsoft-paint.json.lock'):
             self.assertTrue(ReleasePackage.is_forbidden_path(name))
             self.assertTrue(ReleasePackage.is_nonfatal_excluded_path(name))
             self.assertFalse(ReleasePackage.is_forbidden_path('docs/examples/' + name))
         self.assertFalse(ReleasePackage.is_forbidden_path('resource-scheduler-v2.json'))
-        self.assertFalse(ReleasePackage.is_forbidden_path('verified-colors-microsoft-paint.json'))
+        self.assertFalse(ReleasePackage.is_forbidden_path('tests/fixtures/verified-color-cache-v2.json'))
 
     def test_signing_link_preflight_stops_before_any_signature_is_changed(self):
         import CodeSigning

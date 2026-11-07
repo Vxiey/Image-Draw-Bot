@@ -687,6 +687,12 @@ def _finalize_auto_tuned_plan(plan, original, area, cancelled=lambda: False):
 
 
 def make_plan(original, area, options, cancelled=lambda: False):
+    from DrawTimeCalibration import planning_calibration_scope
+    with planning_calibration_scope():
+        return _make_plan(original, area, options, cancelled)
+
+
+def _make_plan(original, area, options, cancelled=lambda: False):
     from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageOps
     from AutoDrawing import resolve_drawing
     if cancelled():raise InterruptedError('Planning cancelled.')
@@ -4890,10 +4896,10 @@ class DrawBotApp:
         remove_image=getattr(self,'pending_clear_drawing',False)
         self.plan=None;self.pending_render_resume=None;self.needs_plan=False
         DrawBotApp._clear_plan_feedback(self)
-        self.upscale_original=None;self.small_test_passed=False
+        self.small_test_passed=False
         self.color_session_cache.clear()
         if remove_image:
-            self.original=None;self.subject_region=None
+            self.original=None;self.subject_region=None;self.upscale_original=None
             DrawBotApp._clear_source_time_feedback(self)
             self.background_removal_original=None;self.background_removal_meta=None
             self.file_label.set('No image loaded');self.url.set('')
@@ -7694,6 +7700,9 @@ class DrawBotApp:
                 context_fingerprint=calibration_fingerprint)
         except Exception:
             calibration_state={'profile_key':profile_key,'fingerprint':calibration_fingerprint}
+        if profile_polish_meta:
+            from ProfilePolish import profile_release_warnings
+            profile_polish_meta['warnings']=list(profile_release_warnings(self.game.get(),calibration_state))
         result={'detail':QUALITY[quality],'delay':SPEED[speed],'speed':speed,'precision':precision,'profile_name':self.game.get(),'profile_key':profile_key,'paint_profile':bool(paint_profile),'calibration_fingerprint':calibration_fingerprint,'calibration_state':calibration_state,
                 'lines':mode!=DOT_MODE,'drawing_mode':mode,'smart_paths':mode==SMART_PATH_MODE,'shape_order':shape_order,'shape_model':shape_model,'max_stroke_cap':max_stroke_cap,'progressive_rendering':progressive_rendering,'planning_watchdog':planning_watchdog,'planning_timeout_seconds':45 if mode==SHAPE_PATH_MODE else 75,'drawing_style':getattr(getattr(self,'drawing_style',None),'get',lambda:'Auto')(),'render_style':render_style,'draw_quality':draw_quality,'human_mode':human_mode,'gpu_mode':gpu_mode,'gpu_vram':gpu_vram,'gpu_performance':gpu_performance,'cpu_workers':cpu_workers,'cpu_engine':cpu_engine,'ram_budget':ram_budget,'ram_custom_mb':ram_custom_mb,'planning_resolution':planning_resolution,'resource_scheduler':resource_scheduler,'profile_engine':profile_engine,'profile_policy_meta':profile_policy_meta,'profile_polish_meta':profile_polish_meta,**allocation,'background_fill':background_fill,'fill_engine':fill_engine,'background_simplification':background_simplification,'color_grouping':color_grouping,'color_workflow':color_workflow,'stroke_optimizer':stroke_optimizer,'stroke_optimizer_resolved':resolve_stroke_optimizer(stroke_optimizer,drawing_mode=mode),'adaptive_detail':adaptive_detail,'detail_zoom':detail_zoom,'quick_sketch_style':quick_sketch_style,'quick_sketch_fill_preference':quick_sketch_fill_preference,'hybrid_mode':hybrid_mode,'visual_verification':visual_verification,'visual_verification_resolved':resolve_visual_verification(visual_verification,paint_profile=paint_profile,dry_run=False,test=False),'color_rendering':color_rendering,'color_fidelity':color_fidelity,'color_layers':color_layers,'custom_color_workflow':custom_color_workflow,'exact_color_limit':exact_color_limit,'exact_color_limit_resolved':resolve_exact_color_limit(exact_color_limit,draw_quality=draw_quality,preview=False),'exact_color_available':custom_rgb_available(PROFILES[self.game.get()][0]),'preview_mode':preview_mode,'preview_detail_level':preview_detail_level,'auto_clear_canvas':bool(getattr(getattr(self,'auto_clear_canvas',None),'get',lambda:False)()),'canvas_clear_strategy':'pending','canvas_clear_actions':[],'canvas_clear_restore_actions':[],'canvas_clear_estimate_seconds':0.0,'tool_strategy':tool_strategy,'subject_focus':self.subject_focus.get() if hasattr(self,'subject_focus') else 'Off','subject_region':getattr(self,'subject_region',None),'portrait_focus':bool(self.portrait_focus.get()),'skip_white':bool(self.skip_white.get()),'contrast':contrast,'outline':bool(self.outline.get()),'sketch_detail':getattr(getattr(self,'sketch_detail',None),'get',lambda:'Auto')(),'brush_px':brush,'brush_px_requested':brush_raw,'auto_brush_width_meta':auto_brush_width_meta,'gartic_opacity':getattr(getattr(self,'gartic_opacity',None),'get',lambda:'Auto')(),'canvas_edge_verification':'Auto','canvas_edge_margin_px':24,'canvas_edge_tolerance_px':4,'canvas_edge_search_px':24,'edge_behavior':edge_behavior,'edge_behavior_resolved':resolve_edge_behavior(edge_behavior, profile_name=self.game.get(), drawing_mode=mode, outline=bool(self.outline.get())),'max_seconds':effective_limit,'manual_max_seconds':limit,'time_budget_mode':time_budget_mode,'time_budget_seconds':effective_limit,'time_budget_active':time_budget_active,'adaptive_deadline_renderer':adaptive_deadline_renderer,'deadline_safety_reserve':deadline_safety_reserve,'target_stroke_count':target_stroke_count,'target_stroke_custom':target_stroke_custom,'target_stroke_count_resolved':target_cap,**target_meta,
                 **anchor_options,
@@ -8061,7 +8070,7 @@ class DrawBotApp:
             self.status.set('No background-removal change to undo.')
             return False
         DrawBotApp._cancel_browser_one_click(self,'background removal undone')
-        self.original=previous.copy();self.background_removal_original=None;self.background_removal_meta=None
+        self.original=previous;self.background_removal_original=None;self.background_removal_meta=None
         DrawBotApp._clear_source_time_feedback(self)
         self.plan=None;DrawBotApp._clear_render_resume(self,'background removal undone')
         self.file_label.set(image_label(self.original,'Background removal undone'))

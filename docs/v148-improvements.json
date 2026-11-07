@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 821,
+  "implemented": 823,
   "release_published": false,
-  "validation": "Batch 20: 4,162 tests completed in 200.541 seconds: 4,104 passed and 58 platform/hardware cases skipped, with all 869 source/configuration hashes unchanged. Three independently reviewed behavior groups bring the total to 821; automatic-preview/Stop/image ownership, browser drawing-region and learning-reset completions add no IDs. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Fourteen workloads have six balanced AB/BA pairs, separate traced allocation evidence and the same 819 unchanged root Python hashes. The preceding 4777715 checkpoint passed all seven CI checks, including 4,083 Windows tests. New exact-commit Windows/CI results are recorded separately in PR46. Version 1.0.148 is not released.",
+  "validation": "Batch 21: 4,198 tests completed in 199.785 seconds: 4,140 passed and 58 platform/hardware cases skipped, with all 876 source/configuration hashes unchanged. Two independently reviewed behavior groups bring the total to 823; retained-image Undo, source-archive privacy and profile-warning completions add zero IDs. The 5,000-cycle source gate, package hygiene and eight exact-raster fixtures passed. Sixteen workloads have six balanced AB/BA pairs, the same 826 root Python hashes, and separate traced-allocation observations. Complete historical comparisons cover 84 public plan/file pairs and 3,386 geometry cases. The preceding ec22fd8 checkpoint passed all seven CI checks, including 4,162 Windows tests. New exact-commit CI results are recorded separately in PR46. Version 1.0.148 is not released.",
   "improvements": [
     {
       "id": 1,
@@ -6387,6 +6387,22 @@
       "description": "Transfer the completed preview worker estimate once to the actual planned-result consumer, removing repeated sequence/path costing and calibration reads on the UI thread. Match the exact metadata object after existing generation/Stop/publication checks, then consume the private transfer. Legacy producers, changed metadata and failed preparation retain fresh estimation; later previews read current calibration. Full historical controller comparisons preserve plan output and labels while disclosing UI-adoption and complete-pipeline timing separately.",
       "batch": 20,
       "id": 821
+    },
+    {
+      "local_id": "R2101",
+      "area": "batch21-rendering",
+      "ledger": "v148-batch21-rendering-calibration.md",
+      "description": "Read and validate one primary timing-calibration database across an entire nested public plan while resolving every full v4/v2/legacy context separately. Keep the observation lazy, reader-bounded and thread-owned; isolate returned nested rows, preserve explicit/default migration, and release the owner through Stop or retained errors. Other identities and writers/reset remain fresh, and the next operation observes changed files. Complete historical public-plan/file parity and distinct correction values verify actual Pixel, Fill, hybrid, Dynamic and Auto Sketch consumers.",
+      "batch": 21,
+      "id": 822
+    },
+    {
+      "local_id": "R2102",
+      "area": "batch21-delivery",
+      "ledger": "v148-batch21-clipping.md",
+      "description": "Prepare finite immutable polygon vertices once per public segment/polyline operation and reuse them through intersection membership and integer-safe projection. Preserve arithmetic, edge ties, rounding, split gaps, Stop and exceptions while removing repeated vertex and already validated segment conversions. Existing full-canvas/source checks, safe-output checks and FinalMouseGuard remain authoritative. Complete historical clipping, real PreviewSafety/public-plan output and actual executor actions/probes are identical; this addresses the generic clipping path left outside the earlier SafePolygon membership preparation.",
+      "batch": 21,
+      "id": 823
     }
   ]
 }

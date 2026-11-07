@@ -1,6 +1,15 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 821 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19 and three in batch 20. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current development checkpoint contains 823 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19, three in batch 20 and two in batch 21. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+
+## Batch 21: shared timing observations and polygon clipping
+
+- Read the primary timing database once per nested plan while preserving all full-context corrections, fresh writers/reset and next-operation file observation.
+- Reuse finite polygon vertices through segment/polyline clipping and integer projection, retaining exact delivered geometry and all source/final mouse guards.
+- Preserve Upscale Undo when clearing only the drawing cache, and transfer a consumed private background Undo image without copying it again.
+- Display actual nested palette-state warnings and keep runtime verified-color history out of source ZIPs, with the byteidentical synthetic seed moved into test fixtures. These existing-contract completions add no IDs.
+
+Two new groups bring the registry to **823**, leaving **177**. Frozen-source discovery completed **4,198 tests: 4,140 passed and 58 skipped**. The 5,000-cycle source gate, package hygiene, eight exact-raster fixtures and full historical comparisons passed. Sixteen paired workloads disclose actual CPU work separately from physical drawing/GPU claims and keep unchanged/slower controls visible. See [final local validation](docs/v148-batch21-validation.json). The new exact-commit Windows/CI gate remains separate in PR46.
 
 ## Batch 20: shared color analysis and complete UI handoffs
 
