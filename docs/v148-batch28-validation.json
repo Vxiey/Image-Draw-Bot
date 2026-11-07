@@ -1,0 +1,732 @@
+{
+  "schema": 1,
+  "batch": 28,
+  "baseline_commit": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+  "implemented": 839,
+  "target": 1000,
+  "remaining": 161,
+  "added_behavior_groups": [],
+  "preserved_registry_entries": 839,
+  "release_published": false,
+  "local_regressions": {
+    "base_commit": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+    "command": ".venv/bin/python -B -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 4498,
+    "runner_seconds": 224.479,
+    "wall_seconds": 226.281,
+    "status": "OK (skipped=73)",
+    "skipped": 73,
+    "source_files": 933,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+    "source_hash_manifest_after_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+    "source_manifest_file": "v148-batch28-source-hashes.json",
+    "source_manifest_after_file": "v148-batch28-source-hashes-after.json",
+    "head_after": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+    "log_file": "v148-batch28-fullsuite.log",
+    "log_sha256": "258a08383c6f6aab55391314db086db80d244bb93dd8f488bd1f5b99b9a62508",
+    "runner_failure": null,
+    "passed": true
+  },
+  "native_validation": {
+    "base_commit": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+    "cases": [
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_palette_scan.NativePaletteScanTests.test_native_cancel_closes_dialog_while_analysis_owns_only_private_pixels",
+        "run": 1,
+        "seconds": 0.41989567700511543,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_palette_scan.NativePaletteScanTests.test_native_heartbeat_and_preview_adoption_stay_on_gui_thread",
+        "run": 1,
+        "seconds": 0.39914321399555774,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_actual_tab_selection_return_worker_adoption_and_undo_preserve_pixels",
+        "run": 1,
+        "seconds": 0.5570783630028018,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_escape_from_each_control_and_late_key_release_cancel_without_editing",
+        "run": 1,
+        "seconds": 0.49476272099855123,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_keyboard_apply_retains_stop_and_source_identity_at_real_result_boundary",
+        "run": 1,
+        "seconds": 0.4730780949976179,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_keyboard_dimension_limit_disables_apply_and_recovers_without_hidden_job",
+        "run": 1,
+        "seconds": 0.4737327090042527,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_widget_timers.NativeButtonTimerTests.test_actual_click_then_child_disposal_leaves_only_live_owners",
+        "run": 1,
+        "seconds": 1.131022262001352,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_button_canvas_and_late_text_image_labels_keep_pointer_to_key_activation",
+        "run": 1,
+        "seconds": 0.12188476799929049,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_real_switch_row_canvas_text_and_background_preserve_state_and_trace_lifetime",
+        "run": 1,
+        "seconds": 0.16723912399902474,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_selector_decorations_keep_logical_focus_without_stealing_native_popup_or_entry",
+        "run": 1,
+        "seconds": 1.1692864300057408,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch27_mobile_discovery.NativeMobileDiscoveryTests.test_actual_buttons_heartbeat_stop_reopen_and_app_close_while_dns_stays_blocked",
+        "run": 1,
+        "seconds": 0.33274638599687023,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch27_mobile_discovery.NativeMobileDiscoveryTests.test_actual_panel_close_late_refresh_stop_and_new_session_keep_displayed_identity",
+        "run": 1,
+        "seconds": 0.5255421900001238,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch18_mobile_dialog.NativeMobileDialogLifecycleTests.test_first_scaling_poll_survives_when_mobile_is_the_first_widget_window",
+        "run": 1,
+        "seconds": 0.7742347959938343,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch18_mobile_dialog.NativeMobileDialogLifecycleTests.test_real_panel_refresh_close_restart_has_one_owner_and_releases_tcl_resources",
+        "run": 1,
+        "seconds": 0.6182065969987889,
+        "skipped": 0,
+        "success": true
+      }
+    ],
+    "diagnostics": [],
+    "exit_code": 0,
+    "full_source_files": 933,
+    "full_source_hash_manifest_after_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+    "full_source_hash_manifest_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+    "full_source_manifest_after_file": "v148-batch28-native-source-hashes-after.json",
+    "full_source_manifest_file": "v148-batch28-source-hashes.json",
+    "full_sources_unchanged": true,
+    "head_after": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+    "log_sha256": "25b57ce1d1b8e6bf7327c62c5ccd3222a41f17ce089f7401708f440200a9bcfa",
+    "platform": "Linux/Xorg/Tk 9.0.4",
+    "runner_failures": [],
+    "runner_seconds": 7.657853331998922,
+    "scope": "Real native Tk widgets, timers, PhotoImage/QR, local HTTP bind, worker/Stop/Close/reopen event delivery on Linux. Each method uses its own interpreter. Only the older Mobile18 class display gate is enabled for these portable Tk cases; no sys.platform replacement and no repository skip changes. Windows and packaged behavior require exact-commit CI.",
+    "skipped": 0,
+    "source_hash_manifest_sha256": "74a659994b8f25037a6b233eb05efcafd2f60bffd3fa0de073d3623355c7929c",
+    "sources_unchanged": true,
+    "tests": 14,
+    "wall_seconds": 12.675569683000504,
+    "identical_before_after_source_map": {
+      "artifact": "v148-batch28-completion-evidence.json",
+      "source_manifest": "74a659994b8f25037a6b233eb05efcafd2f60bffd3fa0de073d3623355c7929c",
+      "note": "Both complete source maps are identical to this preserved manifest."
+    }
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "initial_source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1330,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1333,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "final_gates": {
+    "base_commit": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+    "head_after": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+    "exit_code": 0,
+    "passed": true,
+    "jobs": [
+      {
+        "name": "source-gate",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch28/.venv/bin/python",
+          "-B",
+          "ReleaseCandidateHardening.py",
+          "--source-gate",
+          "--soak-cycles",
+          "5000"
+        ],
+        "log_file": "v148-batch28-final-source-gate.log",
+        "exit_code": 0,
+        "wall_seconds": 0.11477202300011413,
+        "log_sha256": "bc07056ea2a6181147997413164e1cdf7dfa7b4d3775a1431f774aea6c934741",
+        "source_hash_manifest_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+        "sources_match_full_suite": true,
+        "passed": true
+      },
+      {
+        "name": "engine-gate",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch28/.venv/bin/python",
+          "-B",
+          "benchmark_v148_existing_rasters.py",
+          "--output",
+          "/workspace/scratch/97bfc35400fb/batch28-engine-gate-novpjavt/engine.json"
+        ],
+        "log_file": "v148-batch28-final-engine-gate.log",
+        "exit_code": 0,
+        "wall_seconds": 5.183368632999191,
+        "log_sha256": "b26afd1bd369b0c5c859fa918ee60e44ab1e0e1902dc6e7323ff7ac53009cc69",
+        "source_hash_manifest_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+        "sources_match_full_suite": true,
+        "artifact": "docs/v148-batch28-engine-benchmarks.json",
+        "artifact_sha256": "4f0fea787371e6a6741293412cc255bc4b13a4d82b306523bb7f4ab7130b6fb2",
+        "passed": true
+      },
+      {
+        "name": "source-hygiene",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch28/.venv/bin/python",
+          "-B",
+          "ReleasePackage.py",
+          "--check"
+        ],
+        "log_file": "v148-batch28-final-source-hygiene.log",
+        "exit_code": 0,
+        "wall_seconds": 0.16421411999908742,
+        "log_sha256": "f637549570cd913a5d07aba1b269a7c01d9b3ccfc4dd48358cb1f985d37e7a44",
+        "source_hash_manifest_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+        "sources_match_full_suite": true,
+        "passed": true
+      }
+    ],
+    "runner_failure": null,
+    "source_files": 933,
+    "source_manifest_file": "v148-batch28-source-hashes.json",
+    "source_manifest_after_file": "v148-batch28-final-source-hashes-after.json",
+    "source_hash_manifest_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+    "source_hash_manifest_after_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+    "source_changed": []
+  },
+  "independent_reviews": {
+    "all_closed": true,
+    "root_python_files": 883,
+    "source_hash_manifest_sha256": "74a659994b8f25037a6b233eb05efcafd2f60bffd3fa0de073d3623355c7929c",
+    "source_reviews": {
+      "physical_preview_and_phase_handoff": {
+        "closed": true,
+        "reviewers": [
+          "root",
+          "preview_fix",
+          "completion_audit"
+        ],
+        "scope": "Actual admitted paths, per-entry physical widths and phase fragments; signed precision coordinates, fixed-square footprints, reduced/letterboxed views, real executor oracles, cancellation and retained image/drawing-core failures."
+      },
+      "bounded_axis_work": {
+        "closed": true,
+        "reviewers": [
+          "root",
+          "completion_audit"
+        ],
+        "scope": "Unchanged safe integer endpoints/origin, convex inset and signed32 restriction; continuous axis footprint with precision_path_count validation including 100000/100001; fallback and Stop preserved. Two work observations only, not a general performance claim."
+      },
+      "png_snapshot_ownership": {
+        "closed": true,
+        "reviewers": [
+          "root",
+          "github_status"
+        ],
+        "scope": "Only the actual worker-owned snapshot may be normalized/reused; GUI isolation copy and borrowed default remain independent. Actual encoder/decoder, modes, alpha/ICC/EXIF, retained Stop/error and old-file atomicity."
+      },
+      "historical_replay_linkage": {
+        "closed": true,
+        "reviewers": [
+          "root",
+          "github_status",
+          "completion_audit"
+        ],
+        "scope": "Historical before/after complete caller graphs pinned to8e0/f800 with explicit shared dependencies and aliases. Verify-only raw22 public and8 native cases, exclusive new output, old raw unchanged."
+      },
+      "count_deduplication": {
+        "closed": true,
+        "reviewers": [
+          "root",
+          "completion_audit",
+          "github_status"
+        ],
+        "scope": "RP38/global552, R1004/global770, S1101/global777, IW08/global582 and AZ01/global746 complete existing contracts; all839 entries unchanged, no new IDs for product completions, tests, reports or replay maintenance."
+      },
+      "raw_provenance": {
+        "closed": true,
+        "reviewers": [
+          "root",
+          "github_status"
+        ],
+        "scope": "Independently expanded all84 artifacts:22JSON exact parsed values and semantic hashes,30UTF8 texts and32PNG files byteexact; all original byte counts/SHA, six complete source manifests and every reference verified. Whitespace-compacted data is identical to its preserved backup. Final4498-test raw log, before/after933 sources, final883 observer maps and separately retained873/881/12-method snapshots verified."
+      },
+      "final_metadata": {
+        "closed": true,
+        "reviewers": [
+          "root",
+          "github_status"
+        ],
+        "scope": "Independently verified all839 unchanged registry entries, zero new IDs,161 remaining and release false; all75 prior raw benchmarks byteidentical;4498/4425/73 tests,14 native cases,5000 cycles,eight exact rasters,initial1330 and final1333 package records; all artifact/ledger hashes and links, model/timing/active-tuner limits and parent f800 seven-check CI versus new-head Windows boundary.",
+        "reviewed_validation_before_closure_sha256": "0e2dfd9b0c4fb58a7da0f14c058718078c9c5043a606120fa40633eaf10259b2",
+        "artifact_sha256": {
+          "v148-batch28-completion-evidence.json": "6d1e7d45db518768fea790213cdeeb650b74e38edaf94c1e4dbd35fc1b0acae9",
+          "v148-batch28-historical-replay.json": "033936b062e7abab6b6b22eb08931d279e102edfb015d8d83d3d759289520f00",
+          "v148-batch28-sketch-preview.md": "58d239aa5791b320bfc375ebebddbe7b14932c129871d4d1eb7653de5f6fb7e8",
+          "v148-batch28-png-snapshot.md": "5054dbccd21d82a5087e050dea5d8f4ceced689b645b7de24ca929d8eda73671"
+        }
+      }
+    }
+  },
+  "source_binding": {
+    "root_python_files": 883,
+    "source_hash_manifest_sha256": "74a659994b8f25037a6b233eb05efcafd2f60bffd3fa0de073d3623355c7929c",
+    "source_config_files": 933,
+    "source_config_manifest_sha256": "680f297ff6c85d9e054e26a6b3108ccfe8eeb8c7729bdb891c7ea85e672b2683",
+    "manifest_artifact": "v148-batch28-completion-evidence.json",
+    "common_to": [
+      "full regression suite",
+      "native UI gate",
+      "source/raster/package gates",
+      "five-case final Sketch physical replay",
+      "actual PNG worker final observer",
+      "historical batch27 verify-only replay"
+    ],
+    "focused_axis_scope": "The axis-work after observation uses the same product sources but the preceding12-method fixture hash. Final13-method fixture and full-source binding are explicit, not conflated."
+  },
+  "completion_evidence": {
+    "artifact": "v148-batch28-completion-evidence.json",
+    "sha256": "6d1e7d45db518768fea790213cdeeb650b74e38edaf94c1e4dbd35fc1b0acae9",
+    "new_improvement_ids": 0,
+    "artifacts": 84,
+    "unique_source_manifests": 6,
+    "note": "Parsed JSON is preserved exactly through documented manifest references; text and PNG bytes are retained exactly, with all original byte counts/hashes. Exploratory and fixture-error records remain distinct."
+  },
+  "comparisons": {
+    "sketch": {
+      "cases": 5,
+      "final_different_pixels": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "axis_native_pixels": 15,
+      "axis_preview_before_pixels": 32,
+      "axis_preview_after_pixels": 15,
+      "same_native_actions_in_fixed_controls": true,
+      "physical_paint_capture": false,
+      "note": "The corrected final image changes derived Accuracy/delta-E and may legitimately change active tuner choices; no universal tuner geometry parity claim."
+    },
+    "png": {
+      "modes": [
+        "RGBA",
+        "RGB",
+        "L",
+        "P"
+      ],
+      "identity_copy_count_before": 2,
+      "identity_copy_count_after": 1,
+      "decoded_pixels_identical": true,
+      "icc_preserved": true,
+      "peak_memory_claim": false,
+      "timing_claim": false
+    },
+    "historical_replay": {
+      "artifact": "v148-batch28-historical-replay.json",
+      "sha256": "033936b062e7abab6b6b22eb08931d279e102edfb015d8d83d3d759289520f00",
+      "before_checkpoint": "8e0a0e4c61ca0742dfb7857649103477cd307516",
+      "after_checkpoint": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+      "verify_only": true,
+      "public_three_graph_cases": 22,
+      "native_three_graph_cases": 8,
+      "workloads": 8,
+      "new_timing_samples": 0
+    }
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch28-engine-benchmarks.json",
+    "sha256": "4f0fea787371e6a6741293412cc255bc4b13a4d82b306523bb7f4ab7130b6fb2",
+    "fixtures": 8,
+    "all_exact_palette_geometry": true,
+    "mismatched_plan_pixels": {
+      "red-bananas": 0,
+      "yellow-banana": 0,
+      "small-details": 0,
+      "dominant-hues": 0,
+      "icon-crop": 0,
+      "paint-reference": 0,
+      "application-webp": 0,
+      "application-png-crop": 0
+    },
+    "existing_tracked_assets": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "preserved_old_benchmark_reports": {
+    "count": 75,
+    "byte_identical_to_parent": true,
+    "sha256": {
+      "docs/v148-batch01-benchmarks.json": "2ff838f783800d2c9cfd561cbde06704cff11e657aeed0e352bbb556347a422a",
+      "docs/v148-batch02-calibration-benchmarks.json": "2920c7a79f60df29563b20352bd1c1189afa70abeda871d60ab1f56019216d7e",
+      "docs/v148-batch02-delivery-benchmarks.json": "f2cb3b2c436bd4407d4ead03f5d6021d98dfed11890bd9101d37d0bb8cb2e89e",
+      "docs/v148-batch02-engine-benchmarks.json": "f365afaa12a7974fd682a671fee8cb2fbb6368ec37507d8803b2afdb23b78cd1",
+      "docs/v148-batch02-runtime-benchmarks.json": "bb2597bed0e8c5f21cb5670d29a0b30fef849549916068f24b9e8bf6aa750cf8",
+      "docs/v148-batch02-storage-benchmarks.json": "75574b2aad6888377de345d213693365b767a37962506c4956ef622ce0ff4a5b",
+      "docs/v148-batch03-colour-benchmarks.json": "d523c7c3efe0fa3e16ba0255ba4e6249672f7173e27cdb6fb7e3ff3d0f1a4073",
+      "docs/v148-batch03-engine-benchmarks.json": "04b391abfc9bd36af905db6655177a4ab09b18bb49c1fda83c71e9335b247757",
+      "docs/v148-batch03-gpu-platform-benchmarks.json": "3731fa654f5ebe504d113ac708637d563a418c226cd7f0a0452f45069ece3b03",
+      "docs/v148-batch03-image-benchmarks.json": "6f14204b4dc0f4e6588d2c69f8e714dde190a721c17d2a6c2529af4b05b0d254",
+      "docs/v148-batch03-rendering-benchmarks.json": "c1cb43f3cde8a585a7ab322ba15025a4d885e3d9b1adb6754de2b14c6325ef1c",
+      "docs/v148-batch04-application-benchmarks.json": "b76f63ba3aeb1191c194909096d7728e052e7bd5b1c566522c9c33a9beb4db00",
+      "docs/v148-batch04-engine-benchmarks.json": "9d23ca7ec7cca75fbed92e7626e48bd4606bb8fd9641ff94eab123095f936925",
+      "docs/v148-batch04-planner-benchmarks.json": "a20857041bfc844ad97cfc9c6c48242f937268d4be8acfbc81bd188ac85add59",
+      "docs/v148-batch04-ui-profiles-benchmarks.json": "f1bbb3b29dd7a130e1f9bd5058f658122675714234c69d7d926d5efac533c685",
+      "docs/v148-batch05-colour-planning-benchmarks.json": "92abe805510eefbfbe5092102304d95e88e0a125a85cf025662cf4078b7071ab",
+      "docs/v148-batch05-engine-benchmarks.json": "1958647992f511d796a45b38cf67d7385b2537137f8ec94e3ed6cfefd1597bbe",
+      "docs/v148-batch05-platform-benchmarks.json": "ab8fc69d47488373130fa0a7ff0768eac51b76921990e439c3ee225e492b4edc",
+      "docs/v148-batch05-runtime-benchmarks.json": "69d4998916ec97c996966dfb907e799c63ad9024c9ccb6b102e2c6825937ab3f",
+      "docs/v148-batch05-ui-workflow-benchmarks.json": "190c3a2c459526a349d918e6f6e4cf8afcb342c5f3be9b13dfe27042dce2ec50",
+      "docs/v148-batch06-engine-benchmarks.json": "f6140c279d7193a8d3854438cca0610e6b5c33c2713cb127fc47385d9ec99ff4",
+      "docs/v148-batch06-platform-benchmarks.json": "f47dac4c26e042f1aa5e15f49f9c8f4cf1d99c32fe6dfec2987bdea2f75b6113",
+      "docs/v148-batch06-probe-benchmarks.json": "4972fa0fc0c47f40a30bc24953a5de7c7cebffcb41f81502e6ecdf5a144681de",
+      "docs/v148-batch06-rendering-benchmarks.json": "8f4836d4ac4afda9bedd8a11968a05872f2facbc3f2bad1bfa93b24b8070c10d",
+      "docs/v148-batch06-ui-calibration-benchmarks.json": "e922669eb5b7e48cbdf351bd6fdf385a321200d041c0750e11c54c6b0461abf8",
+      "docs/v148-batch07-engine-benchmarks.json": "daebbe55eacee370b66757ac4140ba1cd4b92efba9420a21cbe66d7e235d0c1d",
+      "docs/v148-batch07-mobile-benchmarks.json": "1a19b4310e4132cacc65c226df0f129bc5042770c1eddf71dd5046a8ce49b6c5",
+      "docs/v148-batch07-recording-benchmarks.json": "32d62a69462d68d944b6f22c19a9b3b99e8ec90a270677eef601e7fb29848e52",
+      "docs/v148-batch07-rendering-benchmarks.json": "7e619500b42713dbb6a6bdb367b7ba11951081025c45fdd66b3020e148199e2f",
+      "docs/v148-batch08-background-benchmarks.json": "8254e5d736be6ec43328dd607b95ac819d9a37c2a427547be6b8a35f5983da00",
+      "docs/v148-batch08-engine-benchmarks.json": "17d945ea1b36772ad38b4a4b6f25b20675c9e10dc6008e19d18f186e06da6e92",
+      "docs/v148-batch08-rendering-benchmarks.json": "f8b72754303cdd5606e46c37f83457309020fae107397fbd92ca483ac03a9cbb",
+      "docs/v148-batch09-engine-benchmarks.json": "941d955c4f0f3290bd3744ef7884e20bece4b880ef7421c3d3dc6e67683cf2f1",
+      "docs/v148-batch10-engine-benchmarks.json": "042a3c8117e5c2f06643ff24da04a27e2393433badccb78a7bac26783bc3c239",
+      "docs/v148-batch10-recovery-benchmarks.json": "75eec7117591171476b62a2cf55dac52c2b7efe65ba376603348d77eb07cb04a",
+      "docs/v148-batch10-rendering-benchmarks.json": "e47a6d15491c019768707ce1cf234234223f0bba2911934088f6933951ff2002",
+      "docs/v148-batch11-engine-benchmarks.json": "45d7409ca26d3cec6e462893f7982ff448eeaa975bbbaf6af72830610d965134",
+      "docs/v148-batch11-rendering-benchmarks.json": "c5fd9e32b63c4c1ccf3d9b02e292645e99b338920b7c5d1d421def6166b1866d",
+      "docs/v148-batch12-engine-benchmarks.json": "2a798ba606358e414961038d626ceccc0fdc39491bc49fd424154797f4078f9d",
+      "docs/v148-batch12-rendering-benchmarks.json": "1d18c9268cebacfa34817d5a0c9d8cb7c37cda3d6533fa52258b0eef9e5cd03d",
+      "docs/v148-batch14-engine-benchmarks.json": "4d43f147977f50f2d66938e1a323c76ef7b90aa3708069990698798d17ff8ac6",
+      "docs/v148-batch14-rendering-benchmarks.json": "bc196c430321afd7b60943574a3e182b54494b301e9447ee100485dff6b03c5c",
+      "docs/v148-batch15-engine-benchmarks.json": "884f228913bd6f6c818a0ba9f7db3995af157a01fa1ecf0ccd93bedbaea8abd9",
+      "docs/v148-batch15-platform-benchmarks.json": "b9b6b24ae82645100748434825afc2951bcf33181dca9643a3f551c09bcabcf2",
+      "docs/v148-batch15-prepare-benchmarks.json": "13c4ac5aad161f9f05450fac32bd4e97c31d8e6a31948586192b544a88f45422",
+      "docs/v148-batch15-rendering-benchmarks.json": "901b71484a56bbd3d9218d0ae8bd3fa10501abd44b69fe1b0056f10e3a77ea14",
+      "docs/v148-batch16-detail-benchmarks.json": "07d5b8298608429ab6878f4dfc177242cd05058735aeda231ec436080813cdf5",
+      "docs/v148-batch16-engine-benchmarks.json": "c00ae5ac87760df6d36c51aace85d2343a8ee22a9cd335b5c52ae1a799c26625",
+      "docs/v148-batch17-engine-benchmarks.json": "d5baddeef507f46de51c5de7b0dd1d2aede252cf30db3836ea138b95e8fbabbf",
+      "docs/v148-batch18-engine-benchmarks.json": "24475debb3c96d67578526c180eebb3a7e0f30ef718b609a408c1ff6b6b72133",
+      "docs/v148-batch18-rendering-benchmarks.json": "5f41ce551b7dd29168e66ed94523a876b0867728543c8e8c3ed55f6e493e4e00",
+      "docs/v148-batch19-colour-benchmarks.json": "a34705ec47ee54f219df981b47890288f55fafbce39d9c96c752a8d87bc503f2",
+      "docs/v148-batch19-engine-benchmarks.json": "43e48272683c41c551b01b394d4b37b96914654664f8ebd6cb605a7a3e5efea1",
+      "docs/v148-batch19-platform-profile-benchmarks.json": "04e3a0638ec591f1e685cc5b76b49c6a544991af5cdb303d25f54d564e295836",
+      "docs/v148-batch19-rendering-benchmarks.json": "d5a1d7c16702bfab4595641dc3fdff895b244f86daa8de3e5a8683de5f438799",
+      "docs/v148-batch20-colour-benchmarks.json": "fd99453a0e329b206f98c21db9fed35c0a308b9ed3c7dc3ac4e0655ef6caa028",
+      "docs/v148-batch20-engine-benchmarks.json": "bb774c674ed79058c74c185a6ae4c1e0ebd46668981d476e30d0a56ac0e29699",
+      "docs/v148-batch20-ui-estimate-benchmarks.json": "610b6bdd9c96752dd2da59790d0b8da2ed2b843a1348536a48130185fc38dbe5",
+      "docs/v148-batch21-calibration-benchmarks.json": "6e591e870a65d41f67da2847ddc9b0f27e2d9f8bf1691539387a3cde43f17835",
+      "docs/v148-batch21-clipping-benchmarks.json": "0394f303031c0d99b118e1f380d019b25f14f8ce275231a74b94bf3cbcdd1164",
+      "docs/v148-batch21-engine-benchmarks.json": "d16964e994eb6275624b83d247718fbf4d42b9e24b812c929fc7e787ffd2328f",
+      "docs/v148-batch22-engine-benchmarks.json": "3cf997dc21da28297e11085e6e17d18d65bec5033cd24b6bdd98fd809ce276a8",
+      "docs/v148-batch22-spectrum-benchmarks.json": "e5bbeee96a81ae16743e80e813e17b881939d4bc96a430c5d2b5d72592ae4e78",
+      "docs/v148-batch23-colour-mixed-benchmarks.json": "070e810ac5462a2b71bccb97b918f097ee5a1ceba3cfa77e73d27cbfe8650dab",
+      "docs/v148-batch23-engine-benchmarks.json": "a63186dc6dc7c4af37db56b1b00d3ce2683c136125ab74dbe7a3b672480290d9",
+      "docs/v148-batch23-json-reader-benchmarks.json": "d112a988335bc2f79009d08ef6de6bf3e8e86708b78edda85956d85e467d1385",
+      "docs/v148-batch24-component-queue-benchmarks.json": "ea40ba06ae9b68d924bdb9d9015ac3a41219001b84dfb18d8ae121e07fc62ef5",
+      "docs/v148-batch24-engine-benchmarks.json": "69c63bf94c79f2ac5cc98aceb05ae5a5768bec8777eaeaf6407487bf9097450a",
+      "docs/v148-batch25-engine-benchmarks.json": "13712d784951b126e156dd7adfd9d6b67528823ca50970a07087ba3e0c82fd9f",
+      "docs/v148-batch26-engine-benchmarks.json": "08cf002e48fe65de0ac07422b5b4fcaa7d5c63ed1f678162c6be24cc5d50cc07",
+      "docs/v148-batch26-opencl-host-benchmarks.json": "16d81bbd15e274653b49a5ed7741db9061c6c9ca5223111383cf903a52a19c49",
+      "docs/v148-batch26-topology-benchmarks.json": "22694492a512805267a3b01e54c14c102d95296a9092b1dc94868aa558440018",
+      "docs/v148-batch27-engine-benchmarks.json": "b84e69b1de6b19aed1c800adcd847333d50198cd5626709f32cbe031280dd57b",
+      "docs/v148-batch27-sketch-finalization-benchmarks.json": "b906d364edbbcfc4a36fa0d9da1877e15c418350325b482f4b8f8fcc3141e689",
+      "docs/v148-maintenance-stroke-benchmarks.json": "6556fa5cb163462be7e9a4984ee6074a8ea44fff214dfaf418c55e22f0241782"
+    }
+  },
+  "prior_checkpoint_validation": {
+    "commit": "f800da5785731bbe0b0f8e3908bc330a65ac79c6",
+    "ci_run": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421246829",
+    "codeql_run": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421243688",
+    "windows_job": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421246829/job/128549929938",
+    "checks": [
+      {
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success",
+        "details_url": "https://github.com/Vxiey/Image-Draw-Bot/runs/128550098967"
+      },
+      {
+        "name": "dependencies-ubuntu-latest-py3.11",
+        "status": "completed",
+        "conclusion": "success",
+        "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421246829/job/128549930029"
+      },
+      {
+        "name": "core-ubuntu-latest-py312",
+        "status": "completed",
+        "conclusion": "success",
+        "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421246829/job/128549929976"
+      },
+      {
+        "name": "core-windows-latest-py312",
+        "status": "completed",
+        "conclusion": "success",
+        "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421246829/job/128549929938"
+      },
+      {
+        "name": "dependencies-windows-latest-py3.12",
+        "status": "completed",
+        "conclusion": "success",
+        "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421246829/job/128549929868"
+      },
+      {
+        "name": "Analyze (actions)",
+        "status": "completed",
+        "conclusion": "success",
+        "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421243688/job/128549923840"
+      },
+      {
+        "name": "Analyze (python)",
+        "status": "completed",
+        "conclusion": "success",
+        "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42421243688/job/128549923598"
+      }
+    ],
+    "windows_steps": [
+      {
+        "name": "Set up job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 1
+      },
+      {
+        "name": "Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 2
+      },
+      {
+        "name": "Set up Python",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 3
+      },
+      {
+        "name": "Install application and test dependencies",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 4
+      },
+      {
+        "name": "Validate source package hygiene",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 5
+      },
+      {
+        "name": "Run exact raster and portable planner regressions",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 6
+      },
+      {
+        "name": "Run Extra Fast benchmark smoke",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 7
+      },
+      {
+        "name": "Run complete regressions",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 8
+      },
+      {
+        "name": "Run Image Draw Bot Windows self-test",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 9
+      },
+      {
+        "name": "Build and validate the Windows bundle",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 10
+      },
+      {
+        "name": "Verify packaged GUI and native drag and drop",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 11
+      },
+      {
+        "name": "Post Set up Python",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 21
+      },
+      {
+        "name": "Post Checkout",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 22
+      },
+      {
+        "name": "Complete job",
+        "status": "completed",
+        "conclusion": "success",
+        "number": 23
+      }
+    ],
+    "windows_full_suite": {
+      "tests": 4481,
+      "passed": 4478,
+      "skipped": 3,
+      "seconds": 502.507
+    },
+    "windows_exact_rasters": {
+      "tests": 56,
+      "seconds": 11.479
+    },
+    "raw_summary_lines": [
+      "2026-11-07T22:35:20.0303350Z Ran 56 tests in 11.479s\r",
+      "2026-11-07T22:43:47.5425431Z Ran 4481 tests in 502.507s\r",
+      "2026-11-07T22:43:47.5425843Z OK (skipped=3)\r"
+    ],
+    "raw_native_cases": [
+      "2026-11-07T22:39:35.8166857Z test_actual_batches_keep_arguments_markers_and_exit_codes (test_v148_platform_batch27_gpu_installers.DirectGpuInstallerTests.test_actual_batches_keep_arguments_markers_and_exit_codes) ... ok\r",
+      "2026-11-07T22:39:36.1296954Z test_both_batch_entries_cannot_mutate_a_running_source_environment (test_v148_platform_batch27_gpu_installers.DirectGpuInstallerTests.test_both_batch_entries_cannot_mutate_a_running_source_environment) ... ok\r",
+      "2026-11-07T22:39:36.1763725Z test_existing_start_gpu_and_update_use_direct_helpers_under_the_parent_lock (test_v148_platform_batch27_gpu_installers.DirectGpuInstallerTests.test_existing_start_gpu_and_update_use_direct_helpers_under_the_parent_lock) ... ok\r",
+      "2026-11-07T22:39:36.2437825Z test_helper_errors_keep_exit_status_and_release_the_lock_for_retry (test_v148_platform_batch27_gpu_installers.DirectGpuInstallerTests.test_helper_errors_keep_exit_status_and_release_the_lock_for_retry) ... ok\r",
+      "2026-11-07T22:39:36.3188525Z test_private_environment_failure_and_absence_never_reach_helper (test_v148_platform_batch27_gpu_installers.DirectGpuInstallerTests.test_private_environment_failure_and_absence_never_reach_helper) ... ok\r",
+      "2026-11-07T22:39:36.3582253Z test_setup_only_verifies_private_interpreter_and_preserves_helper_policy (test_v148_platform_batch27_gpu_installers.DirectGpuInstallerTests.test_setup_only_verifies_private_interpreter_and_preserves_helper_policy) ... ok\r",
+      "2026-11-07T22:39:36.5385953Z test_setup_owner_blocks_other_setup_and_start_until_helper_returns (test_v148_platform_batch27_gpu_installers.DirectGpuInstallerTests.test_setup_owner_blocks_other_setup_and_start_until_helper_returns) ... ok\r",
+      "2026-11-07T22:43:45.2553452Z test_actual_buttons_heartbeat_stop_reopen_and_app_close_while_dns_stays_blocked (test_v148_ui_batch27_mobile_discovery.NativeMobileDiscoveryTests.test_actual_buttons_heartbeat_stop_reopen_and_app_close_while_dns_stays_blocked) ... ok\r",
+      "2026-11-07T22:43:46.0678318Z test_actual_panel_close_late_refresh_stop_and_new_session_keep_displayed_identity (test_v148_ui_batch27_mobile_discovery.NativeMobileDiscoveryTests.test_actual_panel_close_late_refresh_stop_and_new_session_keep_displayed_identity) ... ok\r"
+    ],
+    "diagnostic_counts": {
+      "invalid_command": 0,
+      "Tcl_AsyncDelete": 0,
+      "actions_errors": 0
+    },
+    "windows_zip_sha256": "b822a711364a39d5fd63f8e8d143a5b3bc84b213f91cd122a246d130234b4ec4",
+    "raw_zip_line": "2026-11-07T22:45:07.3809546Z   b822a711364a39d5fd63f8e8d143a5b3bc84b213f91cd122a246d130234b4ec4  ImageDrawBot-1.0.148-Windows-x64.zip\r",
+    "scope": "Exact published batch27 commit only. Source/packaged self-tests, Windows bundle validation and native packaged GUI/drop passed. Nonfatal library/build warnings remain; no physical GPU installation or benchmark claim. This does not certify later batch28 changes.",
+    "release_published": false
+  },
+  "uncounted_completions": [
+    "RP38/global552, R1004/global770 and S1101/global777: final and phase Sketch previews follow the accepted physical execution model; final diagnostics derive from that corrected image.",
+    "IW08/global582: failed/aborted physical previews release owned images and ImageDraw cores while borrowed inputs survive.",
+    "IW08/global582 and AZ01/global746: reuse the PNG worker private snapshot after required GUI isolation, preserving public borrowed-input behavior and atomic publication.",
+    "A bounded axis renderer avoids needless per-point work within that same preview correction; no new group.",
+    "Historical replay maintenance, tests, evidence, source binding, package checks and metadata add no IDs."
+  ],
+  "remote_validation": "Exact new-head Windows/Linux, dependency, CodeQL and packaged GUI/native-drop checks are recorded in PR46 after publication. Parent f800 checks and local platform skips do not certify the new Windows package.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46",
+  "final_package_hygiene_evidence": {
+    "original_file": "v148-batch28-final-package-hygiene.json",
+    "sha256": "43cb25f63852ffa4b2e14e7846343f3ad0c98114c858ba77739fd8010bf2abd5",
+    "reason": "Recheck the concrete final package inventory after adding completion, replay and validation reports; the original1330-file gate remains preserved separately."
+  }
+}

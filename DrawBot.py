@@ -2060,7 +2060,8 @@ def _finish_plan(image,fitted,groups,options,cancelled,owner):
         # Every final pass order belongs to the preview, including progressive
         # scheduling and Pixel corrections when Detail Zoom is disabled.
         preview_safety=build_preview_safety_plan(image.size,fitted,groups,execution_groups,options,cancelled,
-                                                execution_sequence=execution_sequence or None)
+                                                execution_sequence=execution_sequence or None,
+                                                retain_phases=bool(options.get('sketch_fill_active')))
         options['preview_safety_meta']=preview_safety.as_dict()
         options['_preview_safety_groups']=preview_safety.groups
         if options.get('subject_focus')=='Subject only':
@@ -2145,7 +2146,8 @@ def _finish_plan(image,fitted,groups,options,cancelled,owner):
     if options.get('sketch_fill_active') and execution_sequence:
         try:
             from SketchFillRenderer import render_sequence_preview
-            _sf_preview=owner.own(render_sequence_preview(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled))
+            _sf_preview=owner.own(render_sequence_preview(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled,
+                                                        safety_plan=preview_safety,fitted=fitted,options=options))
             draw.draw=draw.im=draw._image=None
             preview.close()
             preview=_sf_preview
@@ -2304,7 +2306,8 @@ def _finish_plan(image,fitted,groups,options,cancelled,owner):
     if options.get('sketch_fill_active') and execution_sequence:
         try:
             from SketchFillRenderer import build_phase_previews
-            _phase_previews=build_phase_previews(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled)
+            _phase_previews=build_phase_previews(image.size,size,execution_sequence,palette_rgb,brush,cancelled=cancelled,
+                                                safety_plan=preview_safety,fitted=fitted,options=options)
             for _layer in _phase_previews.values():owner.own(_layer)
             ui_previews.update(_phase_previews)
         except InterruptedError:
@@ -8196,7 +8199,7 @@ class DrawBotApp:
             from RuntimePaths import atomic_binary_writer
             with closing(snapshot):
                 if self.stop.is_set():raise InterruptedError()
-                with closing(png_export_ready(snapshot)) as ready:
+                with closing(png_export_ready(snapshot,reuse_owned=True)) as ready:
                     with atomic_binary_writer(Path(path),cancelled=self.stop.is_set) as stream:
                         ready.save(stream,format='PNG',optimize=True)
             self.events.put(('png_saved',path))

@@ -6,11 +6,23 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 28 retains **839 total distinct improvements, with 161 remaining**.
+
+Batch 28 completes existing Sketch physical-preview and private PNG-snapshot contracts with zero new IDs: **839 total improvements, 161 remaining**. All 839 registry entries and 75 preceding raw benchmark reports are preserved. Frozen discovery completed **4,498 tests in 224.479 seconds: 4,425 passed and 73 platform/hardware cases skipped**. All 933 source/configuration hashes remained unchanged. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and package hygiene passed on the same 883 root Python sources. Five actual public/controller-to-executor Sketch comparisons now have exact physical-model previews, including the prior 32-versus-15-pixel axis failure and both scaled Balanced fixtures. Native actions and delivered pixels are unchanged in those fixed controls. Corrected Accuracy/delta-E may legitimately change an active tuner rescue decision. PNG export removes one unnecessary identity copy for unrotated private snapshots while preserving decoded pixels, ICC, borrowed inputs, Stop and atomic publication. Historical batch27 replay is pinned to its published caller graphs and adds no timing samples. This is no physical Paint, general speed, peak-memory or GPU claim. Parent f800 has seven green exact-commit GitHub checks; the new published head requires its own Windows/package checks in PR46. Version 1.0.148 remains unreleased.
+
+[Final local evidence](v148-batch28-validation.json) binds the frozen source. [Sketch physical previews](v148-batch28-sketch-preview.md) and [PNG snapshot reuse](v148-batch28-png-snapshot.md) complete existing contracts with zero IDs. [Raw completion evidence](v148-batch28-completion-evidence.json) preserves the actual before/after controls and all diagnostic provenance. [Pinned historical replay](v148-batch28-historical-replay.json) keeps the prior experiment reproducible.
+
+<details>
+<summary>Previous batch27 checkpoint</summary>
+
 Batch 27 implements **839 total distinct improvements, with 161 remaining**.
 
 Batch 27: 4,481 tests completed in 218.814 seconds: 4,408 passed and 73 platform/hardware cases skipped, with 931 source/configuration hashes unchanged. One independently reviewed Sketch Fill presentation-handoff group brings the total to 839, with 161 remaining; all 838 preceding entries are preserved. Current RAM recommendation matching, legacy CPU source-white handling, direct GPU-installer ownership, responsive Mobile Preview discovery and monochrome/Sketch image lifetime complete existing contracts with zero additional IDs. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, package hygiene and eight existing-raster fixtures passed. Complete historical comparisons cover 22 public cases and eight native-executor raster cases over three complete caller graphs, plus eight separate current-ink/outline pairs. Eight workloads have six balanced pairs and separate peak/retained allocation probes. The timed graph holds current PixelData constant but includes the uncounted DrawBot/Sketch ownership work; its entire delta is not attributed solely to the new group. All final gates bind the same 881 root Python hashes. Slower individual pairs, control allocation costs and the pre-existing scaled Sketch preview/native-model discrepancy remain explicit. Exact-commit Windows/package checks are recorded separately in PR46. Version 1.0.148 is not released.
 
 [Final local evidence](v148-batch27-validation.json) binds the frozen source. [Sketch Fill](v148-batch27-sketch-finalization.md) records the one new group. [Completion evidence](v148-batch27-completion-evidence.json) preserves the actual before/after observations for [RAM recommendations](v148-batch27-scheduler-completion.md), [CPU source-white](v148-batch27-cpu-white-completion.md), [GPU installers](v148-batch27-gpu-installer-completion.md), [Mobile Preview](v148-batch27-mobile-discovery-completion.md) and [monochrome ownership](v148-batch27-monochrome-ownership-completion.md).
+
+
+</details>
 
 <details>
 <summary>Previous batch26 checkpoint</summary>

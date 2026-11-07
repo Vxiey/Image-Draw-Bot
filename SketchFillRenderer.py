@@ -300,7 +300,112 @@ def _build_sketch_fill_plan(original,area,options,make_plan,finish_plan,cancelle
     return finish_plan(color_plan['image'],color_plan['fitted'],groups,outer,cancelled)
 
 
-def render_sequence_preview(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, phases=None,cancelled=lambda:False):
+def _render_guarded_sequence_preview(safety_plan, fitted, preview_size, palette_rgb, options, *,
+                                     phases=None, cancelled=lambda:False):
+    """Sample delivered, fixed-width ink rather than enlarge a source bitmap.
+
+    PreviewSafety has already applied the native centre transform and edge
+    policy. Its paths are canvas-local and its brush widths are physical pixels.
+    Replay the same precision moves in screen coordinates (including negative
+    origins), then sample square footprints into the fitted display crop. No
+    full-size desktop/canvas bitmap or second source raster is needed.
+    """
+    from bisect import bisect_left, bisect_right
+    from PixelMapValidation import validate_color_index
+    from Precision import precision_path, precision_path_count
+    from PreviewSafety import _canvas_size, _target_area, preview_canvas_guard
+    from RasterGeometry import clipped_bresenham
+    from StrokeDelivery import interpolation_step, resolve_stroke_delivery
+
+    if cancelled():raise InterruptedError()
+    if safety_plan is None or safety_plan.sequence is None:
+        raise ValueError('Sketch physical preview needs its guarded execution sequence.')
+    options=options or {}
+    pw,ph=map(int,preview_size)
+    fw,fh=map(float,fitted)
+    if min(pw,ph,fw,fh)<=0 or not all(map(math.isfinite,(fw,fh))):
+        raise ValueError('Sketch preview dimensions must be finite and positive.')
+    width,height=_canvas_size(options,fitted)
+    ox,oy=map(float,_target_area(options,(width,height))[:2])
+    offset=safety_plan.meta.get('image_offset') or (0,0)
+    xs=[math.floor(float(offset[0])+(x+.5)*fw/pw) for x in range(pw)]
+    ys=[math.floor(float(offset[1])+(y+.5)*fh/ph) for y in range(ph)]
+    allowed=set(phases) if phases is not None else None
+    delivery=resolve_stroke_delivery(options,dry_run=False)
+    precision=options.get('precision','High')
+    guards={}
+    preview=draw=None
+    try:
+        preview=Image.new('RGB',(pw,ph),'white')
+        draw=ImageDraw.Draw(preview)
+
+        def stamp_rectangle(x0,y0,x1,y1,color):
+            left,right=bisect_left(xs,max(0,x0)),bisect_right(xs,min(width-1,x1))
+            top,bottom=bisect_left(ys,max(0,y0)),bisect_right(ys,min(height-1,y1))
+            if left<right and top<bottom:
+                draw.rectangle((left,top,right-1,bottom-1),fill=color)
+
+        def paint_segment(a,b,brush,color):
+            before,after=(brush-1)//2,brush//2
+            if a[0]==b[0] or a[1]==b[1]:
+                stamp_rectangle(min(a[0],b[0])-before,min(a[1],b[1])-before,
+                                max(a[0],b[0])+after,max(a[1],b[1])+after,color)
+            else:
+                for visit,(x,y) in enumerate(clipped_bresenham(a,b,width,height,before=before,after=after)):
+                    if visit%256==0 and cancelled():raise InterruptedError()
+                    stamp_rectangle(x-before,y-before,x+after,y+after,color)
+
+        for entry in safety_plan.sequence:
+            if cancelled():raise InterruptedError()
+            if allowed is not None and str(entry.get('phase')) not in allowed:continue
+            path=entry.get('path') or ()
+            if not path:continue
+            color=palette_rgb[validate_color_index(entry['color_index'],palette_count=len(palette_rgb))]
+            brush=max(1,int(entry['brush_px']))
+            if brush not in guards:
+                guards[brush]=preview_canvas_guard(dict(options,brush_px=brush),fitted)
+            guard=guards[brush]
+            step=interpolation_step(delivery.step_px,brush,pixel_accurate=bool(options.get('pixel_accurate')))
+            previous=guard.protect_point(path[0],'Sketch preview stroke start')
+            paint_segment(previous,previous,brush,color)
+            for a,b in zip(path,path[1:]):
+                if cancelled():raise InterruptedError()
+                if a==b:continue
+                if (a[0]==b[0] or a[1]==b[1]) and previous==a and ox.is_integer() and oy.is_integer():
+                    end=guard.protect_point(b,'Sketch preview stroke point')
+                    screen_a=(a[0]+ox,a[1]+oy);screen_b=(b[0]+ox,b[1]+oy)
+                    if end==b and max(map(abs,screen_a+screen_b))<=2**31:
+                        # The verified inset is convex: safe axis endpoints
+                        # cover the same rectangle as all intervening moves.
+                        # Retain precision and excessive-length validation.
+                        precision_path_count(screen_a,screen_b,precision,step)
+                        paint_segment(previous,end,brush,color)
+                        previous=end
+                        continue
+                # precision_path's half ties depend on signed desktop position.
+                # Convert back only after sampling, as FinalMouseGuard does.
+                for number,point in enumerate(precision_path((a[0]+ox,a[1]+oy),(b[0]+ox,b[1]+oy),precision,step)):
+                    if number%256==0 and cancelled():raise InterruptedError()
+                    current=guard.protect_point((point[0]-ox,point[1]-oy),'Sketch preview stroke point')
+                    paint_segment(previous,current,brush,color)
+                    previous=current
+        if cancelled():raise InterruptedError()
+        return preview
+    except BaseException:
+        if preview is not None:preview.close()
+        raise
+    finally:
+        # Retained Pillow exceptions can keep ImageDraw's core alive after
+        # Image.close(); release the drawing aliases on success and failure.
+        if draw is not None:draw.draw=draw.im=draw._image=None
+        draw=None
+
+
+def render_sequence_preview(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, phases=None,cancelled=lambda:False,
+                            safety_plan=None,fitted=None,options=None):
+    if fitted is not None:
+        return _render_guarded_sequence_preview(safety_plan,fitted,preview_size,palette_rgb,options,
+                                                phases=phases,cancelled=cancelled)
     from AdaptiveRegionHybrid import render_adaptive_preview
     allowed=set(phases) if phases is not None else None
     def selected():
@@ -312,14 +417,17 @@ def render_sequence_preview(source_size, preview_size, sequence, palette_rgb, br
     return render_adaptive_preview(source_size,preview_size,selected(),palette_rgb,cancelled=cancelled)
 
 
-def build_phase_previews(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, cancelled=lambda:False):
+def build_phase_previews(source_size, preview_size, sequence, palette_rgb, brush_px=1, *, cancelled=lambda:False,
+                         safety_plan=None,fitted=None,options=None):
     previews={}
     try:
         for key,phases in (('sketch2',('sketch',)),('sketch_fill',('sketch','color_fill')),
                            ('sketch_fill_final',None)):
             if cancelled():raise InterruptedError()
             previews[key]=render_sequence_preview(source_size,preview_size,sequence,palette_rgb,brush_px,
-                                                   phases=phases,cancelled=cancelled)
+                                                   phases=phases,cancelled=cancelled,
+                                                   **({'safety_plan':safety_plan,'fitted':fitted,'options':options}
+                                                      if fitted is not None else {}))
         if cancelled():raise InterruptedError()
         return previews
     except BaseException:

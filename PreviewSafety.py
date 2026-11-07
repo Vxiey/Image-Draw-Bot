@@ -116,6 +116,7 @@ def build_preview_safety_plan(
     cancelled=lambda: False,
     *,
     execution_sequence=None,
+    retain_phases=False,
 ) -> PreviewSafetyPlan:
     """Replay execution path safety in preview-local canvas coordinates."""
     if cancelled():
@@ -183,7 +184,7 @@ def build_preview_safety_plan(
                 if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(safe_groups):
                     raise ValueError('Invalid sequence palette index.')
                 current_brush=brush_for_entry(entry,current_brush)
-                yield index, path, current_brush, True
+                yield index, path, current_brush, True, entry.get('phase')
         else:
             seen = set()
             for index in color_order:
@@ -191,9 +192,9 @@ def build_preview_safety_plan(
                 retain = index not in seen
                 seen.add(index)
                 for item in source_groups[index]:
-                    yield index, item, max(1, int(options.get('brush_px', 3))), retain
+                    yield index, item, max(1, int(options.get('brush_px', 3))), retain, None
 
-    for path_index, (color_index, item, physical_brush, retain) in enumerate(source_paths(), 1):
+    for path_index, (color_index, item, physical_brush, retain, phase) in enumerate(source_paths(), 1):
         if cancelled():
             raise InterruptedError()
         meta['paths_in'] += 1
@@ -232,7 +233,12 @@ def build_preview_safety_plan(
                 # time. Storing it twice would paint that batch twice again.
                 if retain:safe_groups[color_index].append(path)
                 if safe_sequence is not None:
-                    safe_sequence.append({'color_index': color_index, 'path': path, 'brush_px': physical_brush})
+                    entry = {'color_index': color_index, 'path': path, 'brush_px': physical_brush}
+                    # Only Sketch's phase views need this transient association.
+                    # Keep it with every admitted fragment, not with a parallel
+                    # source index: an edge policy can drop or split one path.
+                    if retain_phases:entry['phase'] = phase
+                    safe_sequence.append(entry)
                 meta['drawable_subpaths'] += 1
                 meta['output_points'] += len(subpath)
     skipped = int(meta.get('hard_skip', 0)) + int(meta.get('safe_skip', 0)) + int(meta.get('source_outside_canvas', 0))

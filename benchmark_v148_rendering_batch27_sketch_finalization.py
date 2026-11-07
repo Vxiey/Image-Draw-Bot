@@ -1,8 +1,10 @@
-"""Full Sketch Fill caller parity and isolated presentation-work measurements.
+"""Replay the published batch27 Sketch Fill presentation experiment.
 
 No final timing run is valid without a coordinated quiet CPU/source window.
 Verify-only performs full historical/public/raster comparisons, without timers
-or allocation tracing. Historical artifacts are never modified by this script.
+or allocation tracing. Both complete caller graphs are pinned to their published
+checkpoints; later preview changes are not part of this historical comparison.
+Output requires a new explicit path; published raw evidence cannot be overwritten.
 """
 import argparse
 from collections import Counter
@@ -39,12 +41,14 @@ import PreviewLayers
 from test_drawbot import NoWait
 from test_v148_rendering_batch15_sketch_memory import VOLATILE_PATHS
 from test_v148_rendering_batch16_selector import PaletteInkMouse, ORIGIN
+import test_v148_rendering_batch27_sketch_finalization as planner_fixtures
 from test_v148_rendering_batch27_sketch_finalization import (
     PALETTE, close_plan, is_open, plan_images, planner_fixture, source_image)
 
 
 ROOT = Path(__file__).resolve().parent
 BASELINE = '8e0a0e4c61ca0742dfb7857649103477cd307516'
+AFTER_CHECKPOINT = 'f800da5785731bbe0b0f8e3908bc330a65ac79c6'
 GRAPH_NAMES = ('PixelData', 'SketchFillRenderer', 'DrawBot')
 EVIDENCE_ROOT = None
 
@@ -108,8 +112,9 @@ def historical_graph(revision, *, shared_pixel_data=None):
     """Compile complete modules under matching public import names.
 
     The full historical graph includes old PixelData. The isolated presentation
-    graph instead holds today's complete PixelData module on BOTH timed sides,
-    so the separately reviewed monochrome/white changes are not credited here.
+    graph instead holds the published after checkpoint's complete PixelData on
+    BOTH timed sides, so the separately reviewed monochrome/white changes are
+    not credited here. Other dependencies are shared from the current checkout.
     """
     current = current_graph()
     sources = {name: subprocess.check_output(['git', 'show', f'{revision}:{name}.py'], cwd=ROOT)
@@ -387,19 +392,21 @@ def workload_specs():
 def measure(revision=BASELINE, repeats=6, verify_only=False):
     if type(repeats) is not int or repeats < 2 or repeats % 2:
         raise ValueError('Use an even number of balanced AB/BA pairs, at least two.')
-    after = current_graph()
+    after, after_hashes = historical_graph(AFTER_CHECKPOINT)
     full_before, historical_hashes = historical_graph(revision)
     before, isolated_hashes = historical_graph(revision, shared_pixel_data=after['PixelData'])
     source_before = source_hashes()
     report = dict(baseline=revision, historical_module_sha256=historical_hashes,
+        after_checkpoint=AFTER_CHECKPOINT, after_module_sha256=after_hashes,
         isolated_historical_module_sha256=isolated_hashes,
-        isolated_shared_pixel_data_sha256=source_before['PixelData.py'],
+        isolated_shared_pixel_data_sha256=after_hashes['PixelData'],
         python=sys.version.split()[0], platform=platform.platform(), numpy=np.__version__, pillow=pillow_version,
         source_sha256=source_before, verify_only=verify_only, repeats=0 if verify_only else repeats,
         method=('Complete historical three-graph output/native parity and separate untimed work observations; no elapsed or allocation probes.'
                 if verify_only else f'Complete historical parity, one warm pair, {repeats} balanced AB/BA pairs, then separate before/after tracemalloc probes.'),
-        historical_linkage='Full published DrawBot, SketchFillRenderer and PixelData are linked together, including AutoSketchBudget.monochrome_strokes and FillOptimizer.closest_color aliases. Every public case is also compared with the isolated baseline and current graph.',
-        causal_timing_linkage='Timed before uses complete historical DrawBot and SketchFillRenderer with the SAME CURRENT PixelData as after. This holds the separately reviewed monochrome lifetime and CPU white-mask completions constant. All other dependencies are shared; real UI options are prepared identically outside timing.',
+        historical_linkage='Complete DrawBot, SketchFillRenderer and PixelData from the requested before revision and the fixed f800da5 after checkpoint are linked as their public modules, including AutoSketchBudget.monochrome_strokes and FillOptimizer.closest_color aliases. Every public case compares the full before, isolated before and published after graphs; no current-code after graph is used.',
+        causal_timing_linkage='Timed before uses complete historical DrawBot and SketchFillRenderer with the SAME f800da5 PixelData as the complete published after graph. This reproduces the batch27 causal scope: current-at-f800 monochrome lifetime and CPU white-mask completions are held constant; DrawBot/Sketch ownership completion remains included alongside the omitted presentation. Real UI options are prepared through the f800 controller identically outside timing.',
+        shared_dependency_scope='Every module outside DrawBot, SketchFillRenderer and PixelData, including AccuracyEvaluator, PreviewDiagnostics, PreviewLayers, PixelAccuracyEngine, EndToEndAutoTuner, AutoSketchBudget, FillOptimizer, calibration/resource modules and fixture/oracle helpers, is shared from the recorded current checkout. Only the two documented PixelData import aliases are rebound with each graph. The planner fixture controller and PixelData cache owner are pinned to f800. This is an isolated historical replay, not an entire historical application checkout or a comparison with current product code.',
         timing_scope='Only actual public make_plan, including required geometry/safety, Pixel correction selection, internal cleanup, active tuner/rescue and outer diagnostics. Source/settings construction, import linkage, fingerprints, calibration, raster replay and caller-owned result cleanup occur outside timing.',
         allocation_scope='Separate same-call tracemalloc peak and retained-with-result including Python/NumPy allocations, excluding prepared borrowed sources. Not every native Pillow allocation and not total RSS.',
         limits='CPU-only real public planners. Native ink verification compares exact delivered rasters/counts/colour actions across all three graphs using a controlled mouse/Pillow surface, never physical Paint input. Some RGBA fixtures already differ between the historical preview and emulated native ink; these exact pre-existing deltas are retained in every graph and reported rather than asserted correct. The older strict native goldens remain unchanged. Active tuner and nested AdaptiveHybrid retain full inner presentation. Ordinary inner PreviewSafety and physical base simulation are deliberately retained.',
@@ -407,6 +414,9 @@ def measure(revision=BASELINE, repeats=6, verify_only=False):
         environment=dict(gpu_mode='CPU', available_ram_mb=8192, real_temporary_palette_file=True,
                          palette=PALETTE, native_input=False), workloads=[])
     with ExitStack() as stack:
+        stack.enter_context(patch.object(planner_fixtures, 'DrawBot', after['DrawBot']))
+        stack.enter_context(patch.object(planner_fixtures, 'PixelData', after['PixelData']))
+        stack.enter_context(linked(after))
         for graph in (full_before, before, after):
             stack.enter_context(patch.object(graph['DrawBot'], 'custom_rgb_available', return_value=False))
             stack.enter_context(patch.object(graph['DrawBot'], 'log_event', new=lambda *_a, **_k: None))
@@ -477,9 +487,13 @@ if __name__ == '__main__':
     parser.add_argument('--repeats', type=int, default=6)
     parser.add_argument('--verify-only', action='store_true')
     parser.add_argument('--evidence-dir', type=Path, help='Optional scratch directory for pre-existing native/preview-difference PNGs and full raw plans.')
-    parser.add_argument('--output', type=Path, default=ROOT/'docs/v148-batch27-sketch-finalization-benchmarks.json')
+    parser.add_argument('--output', type=Path, required=True,
+                        help='Explicit new replay report; existing historical evidence cannot be overwritten.')
     args = parser.parse_args()
+    if args.output.exists():
+        parser.error('--output must name a previously unused file; published evidence is immutable')
     EVIDENCE_ROOT = args.evidence_dir
     result = measure(args.revision, args.repeats, args.verify_only)
-    args.output.write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n', encoding='utf-8')
+    with args.output.open('x', encoding='utf-8') as output:
+        output.write(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
     print(str(args.output), flush=True)

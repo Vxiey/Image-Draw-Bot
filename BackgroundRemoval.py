@@ -307,7 +307,12 @@ def _multiply_alpha(alpha, old_alpha, cancelled=lambda: False):
         raise
 
 
-def _oriented_rgba(image):
+def _oriented_rgba(image, *, reuse_owned=False):
+    if reuse_owned:
+        # The PNG worker already owns an isolated snapshot. Pillow can orient
+        # that buffer without making another identity copy of all its pixels.
+        ImageOps.exif_transpose(image, in_place=True)
+        return image if image.mode == 'RGBA' else image.convert('RGBA')
     oriented = ImageOps.exif_transpose(image)
     if oriented.mode == 'RGBA':
         return oriented
@@ -441,5 +446,6 @@ def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", f
                 value.close()
 
 
-def png_export_ready(image: Image.Image) -> Image.Image:
-    return _oriented_rgba(image)
+def png_export_ready(image: Image.Image, *, reuse_owned=False) -> Image.Image:
+    """Prepare RGBA; only an explicitly owned input may be changed/reused."""
+    return _oriented_rgba(image, reuse_owned=reuse_owned)
