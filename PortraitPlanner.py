@@ -405,27 +405,34 @@ def _saliency_map(gray: Image.Image, subject_focus: bool, profile: dict,
         raise InterruptedError()
     if accelerated is not None:
         return accelerated
-    px=gray.load(); w,h=gray.size
-    blur=gray.filter(ImageFilter.GaussianBlur(radius=1.2)); bp=blur.load()
-    cx,cy=(w-1)/2,(h-1)/2; radius=max(1.0,math.hypot(cx,cy))
-    scores=[1.0]*(w*h)
-    for y in range(h):
-        if cancelled():
-            raise InterruptedError()
-        ym=max(0,y-1); yp=min(h-1,y+1)
-        for x in range(w):
-            xm=max(0,x-1); xp=min(w-1,x+1)
-            gx=abs(px[xp,y]-px[xm,y]); gy=abs(px[x,yp]-px[x,ym])
-            gradient=min(1.0,(gx+gy)/190.0)
-            local=min(1.0,abs(px[x,y]-bp[x,y])/42.0)
-            darkness=(255-px[x,y])/255.0
-            centre=0.0
-            if subject_focus:
-                centre=max(0.0,1.0-math.hypot(x-cx,y-cy)/radius)
-            scores[y*w+x]=(1.0 + profile["structure_weight"]*(.72*gradient+.28*local)
-                             + profile["dark_weight"]*darkness
-                             + profile["centre_bias"]*centre)
-    return scores
+    px = bp = blur = None
+    try:
+        px=gray.load(); w,h=gray.size
+        blur=gray.filter(ImageFilter.GaussianBlur(radius=1.2)); bp=blur.load()
+        cx,cy=(w-1)/2,(h-1)/2; radius=max(1.0,math.hypot(cx,cy))
+        scores=[1.0]*(w*h)
+        for y in range(h):
+            if cancelled():
+                raise InterruptedError()
+            ym=max(0,y-1); yp=min(h-1,y+1)
+            for x in range(w):
+                xm=max(0,x-1); xp=min(w-1,x+1)
+                gx=abs(px[xp,y]-px[xm,y]); gy=abs(px[x,yp]-px[x,ym])
+                gradient=min(1.0,(gx+gy)/190.0)
+                local=min(1.0,abs(px[x,y]-bp[x,y])/42.0)
+                darkness=(255-px[x,y])/255.0
+                centre=0.0
+                if subject_focus:
+                    centre=max(0.0,1.0-math.hypot(x-cx,y-cy)/radius)
+                scores[y*w+x]=(1.0 + profile["structure_weight"]*(.72*gradient+.28*local)
+                                 + profile["dark_weight"]*darkness
+                                 + profile["centre_bias"]*centre)
+        return scores
+    finally:
+        px = bp = None
+        if blur is not None:
+            blur.close()
+        blur = None
 
 
 def _stroke_score(stroke: tuple[int,int,int,int], saliency: Sequence[float], pixels,
@@ -450,38 +457,42 @@ def _evenly_sample(items, wanted):
 def _select_tone_candidates(candidates, wanted, saliency, pixels, width, height,
                             priority_fraction: float, *, cancelled=lambda: False):
     """Blend high-value detail selection with spatially even coverage."""
-    if wanted <= 0 or not candidates:return [],0
-    wanted=min(wanted,len(candidates))
-    priority_n=min(wanted,max(0,round(wanted*priority_fraction)))
-    def scores():
-        for index, stroke in enumerate(candidates):
-            if index % 128 == 0 and cancelled():raise InterruptedError()
-            yield (_stroke_score(stroke,saliency,pixels,width,height),index,stroke)
-    # A heap reduces both sorting work and retained records for a small cap;
-    # selecting most candidates is faster with one stable full sort.
-    score_key=lambda item:(item[0],-item[1])
-    if priority_n >= max(1, len(candidates) // 4):
-        priority=sorted(scores(),key=score_key,reverse=True)[:priority_n]
-    else:
-        priority=heapq.nlargest(priority_n,scores(),key=score_key)
-    selected_indices={i for _,i,_ in priority}
-    rest_count=len(candidates)-priority_n
-    coverage_count=wanted-priority_n
-    coverage=[];rest_index=0
-    if coverage_count:
-        next_position=min(rest_count-1,int(.5*rest_count/coverage_count))
-        for index,stroke in enumerate(candidates):
-            if index % 128 == 0 and cancelled():raise InterruptedError()
-            if index in selected_indices:continue
-            if rest_index == next_position:
-                coverage.append(stroke)
-                if len(coverage) == coverage_count:break
-                next_position=min(rest_count-1,int((len(coverage)+.5)*rest_count/coverage_count))
-            rest_index+=1
-    if cancelled():raise InterruptedError()
-    # Priority strokes are intentionally drawn first so an interrupted portrait
-    # keeps more identity-bearing structure than a scan-order prefix.
-    return [stroke for _,_,stroke in priority]+coverage,priority_n
+    try:
+        if wanted <= 0 or not candidates:return [],0
+        wanted=min(wanted,len(candidates))
+        priority_n=min(wanted,max(0,round(wanted*priority_fraction)))
+        def scores():
+            for index, stroke in enumerate(candidates):
+                if index % 128 == 0 and cancelled():raise InterruptedError()
+                yield (_stroke_score(stroke,saliency,pixels,width,height),index,stroke)
+        # A heap reduces both sorting work and retained records for a small cap;
+        # selecting most candidates is faster with one stable full sort.
+        score_key=lambda item:(item[0],-item[1])
+        if priority_n >= max(1, len(candidates) // 4):
+            priority=sorted(scores(),key=score_key,reverse=True)[:priority_n]
+        else:
+            priority=heapq.nlargest(priority_n,scores(),key=score_key)
+        selected_indices={i for _,i,_ in priority}
+        rest_count=len(candidates)-priority_n
+        coverage_count=wanted-priority_n
+        coverage=[];rest_index=0
+        if coverage_count:
+            next_position=min(rest_count-1,int(.5*rest_count/coverage_count))
+            for index,stroke in enumerate(candidates):
+                if index % 128 == 0 and cancelled():raise InterruptedError()
+                if index in selected_indices:continue
+                if rest_index == next_position:
+                    coverage.append(stroke)
+                    if len(coverage) == coverage_count:break
+                    next_position=min(rest_count-1,int((len(coverage)+.5)*rest_count/coverage_count))
+                rest_index+=1
+        if cancelled():raise InterruptedError()
+        # Priority strokes are intentionally drawn first so an interrupted portrait
+        # keeps more identity-bearing structure than a scan-order prefix.
+        return [stroke for _,_,stroke in priority]+coverage,priority_n
+    finally:
+        # This is also the scores() generator's captured cell.
+        pixels = None
 
 
 def _edge_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool],
@@ -489,64 +500,73 @@ def _edge_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool],
                   gpu_mode: str = "Auto", acceleration_meta: dict | None = None,
                   gpu_vram: str = "Auto", gpu_performance: str = "Balanced") -> list[tuple[int,int,int,int]]:
     """Create contour strokes, strongest and most useful edges first."""
-    cfg=_detail_config(detail); profile=_quality_profile(draw_quality)
-    px=gray.load(); w,h=gray.size; step=cfg["edge_step"]
-    session = acceleration_meta.get("_gpu_session") if acceleration_meta else None
-    accelerated_sobel, accel_info = gpu_sobel(gray, gpu_mode, gpu_vram, gpu_performance, session, subject_focus, profile,cancelled=cancelled)
-    if acceleration_meta is not None and (accel_info.accelerated or not acceleration_meta.get("accelerated")):
-        acceleration_meta.update(accel_info.as_dict())
-    gx_flat=gy_flat=None
-    if accelerated_sobel is not None:
-        gx_flat,gy_flat=accelerated_sobel
-    threshold=cfg["edge_threshold"]*profile["edge_threshold"]
-    base_len=cfg["edge_length"]
-    occupied={}
-    cell=max(1,round(step*profile["edge_cell_scale"]))
-    cx,cy=(w-1)/2,(h-1)/2; max_radius=max(1.0,math.hypot(cx,cy))
-    for y in range(1,h-1,step):
-        if cancelled():raise InterruptedError()
-        for x in range(1,w-1,step):
-            if gx_flat is not None:
-                index=y*w+x;gx=gx_flat[index];gy=gy_flat[index]
-            else:
-                gx=((px[x+1,y-1]+2*px[x+1,y]+px[x+1,y+1])-(px[x-1,y-1]+2*px[x-1,y]+px[x-1,y+1]))
-                gy=((px[x-1,y+1]+2*px[x,y+1]+px[x+1,y+1])-(px[x-1,y-1]+2*px[x,y-1]+px[x+1,y-1]))
-            mag=abs(gx)+abs(gy)
-            if mag < threshold:continue
-            length=math.hypot(gx,gy)
-            if length<=0:continue
-            half=min(base_len*1.35,base_len*(.65+mag/650.0))/2
-            tx,ty=-gy/length*half,gx/length*half
-            x1=max(0,min(w-1,round(x-tx)));y1=max(0,min(h-1,round(y-ty)))
-            x2=max(0,min(w-1,round(x+tx)));y2=max(0,min(h-1,round(y+ty)))
-            if (x1,y1)==(x2,y2):continue
-            radial=math.hypot(x-cx,y-cy)/max_radius
-            centre=(1.0-min(1.0,radial)) if subject_focus else 0.0
-            darkness=(255-px[x,y])/255.0
-            score=mag*(1.0+profile["centre_bias"]*centre+.16*darkness)
-            key=(x//cell,y//cell); stroke=(x1,y1,x2,y2)
-            previous=occupied.get(key)
-            if previous is None or score>previous[0]:occupied[key]=(score,stroke)
-    candidates=list(occupied.values());candidates.sort(key=lambda item:item[0],reverse=True)
-    return [stroke for _,stroke in candidates]
+    px = None
+    try:
+        cfg=_detail_config(detail); profile=_quality_profile(draw_quality)
+        px=gray.load(); w,h=gray.size; step=cfg["edge_step"]
+        session = acceleration_meta.get("_gpu_session") if acceleration_meta else None
+        accelerated_sobel, accel_info = gpu_sobel(gray, gpu_mode, gpu_vram, gpu_performance, session, subject_focus, profile,cancelled=cancelled)
+        if acceleration_meta is not None and (accel_info.accelerated or not acceleration_meta.get("accelerated")):
+            acceleration_meta.update(accel_info.as_dict())
+        gx_flat=gy_flat=None
+        if accelerated_sobel is not None:
+            gx_flat,gy_flat=accelerated_sobel
+        threshold=cfg["edge_threshold"]*profile["edge_threshold"]
+        base_len=cfg["edge_length"]
+        occupied={}
+        cell=max(1,round(step*profile["edge_cell_scale"]))
+        cx,cy=(w-1)/2,(h-1)/2; max_radius=max(1.0,math.hypot(cx,cy))
+        for y in range(1,h-1,step):
+            if cancelled():raise InterruptedError()
+            for x in range(1,w-1,step):
+                if gx_flat is not None:
+                    index=y*w+x;gx=gx_flat[index];gy=gy_flat[index]
+                else:
+                    gx=((px[x+1,y-1]+2*px[x+1,y]+px[x+1,y+1])-(px[x-1,y-1]+2*px[x-1,y]+px[x-1,y+1]))
+                    gy=((px[x-1,y+1]+2*px[x,y+1]+px[x+1,y+1])-(px[x-1,y-1]+2*px[x,y-1]+px[x+1,y-1]))
+                mag=abs(gx)+abs(gy)
+                if mag < threshold:continue
+                length=math.hypot(gx,gy)
+                if length<=0:continue
+                half=min(base_len*1.35,base_len*(.65+mag/650.0))/2
+                tx,ty=-gy/length*half,gx/length*half
+                x1=max(0,min(w-1,round(x-tx)));y1=max(0,min(h-1,round(y-ty)))
+                x2=max(0,min(w-1,round(x+tx)));y2=max(0,min(h-1,round(y+ty)))
+                if (x1,y1)==(x2,y2):continue
+                radial=math.hypot(x-cx,y-cy)/max_radius
+                centre=(1.0-min(1.0,radial)) if subject_focus else 0.0
+                darkness=(255-px[x,y])/255.0
+                score=mag*(1.0+profile["centre_bias"]*centre+.16*darkness)
+                key=(x//cell,y//cell); stroke=(x1,y1,x2,y2)
+                previous=occupied.get(key)
+                if previous is None or score>previous[0]:occupied[key]=(score,stroke)
+        candidates=list(occupied.values());candidates.sort(key=lambda item:item[0],reverse=True)
+        return [stroke for _,stroke in candidates]
+    finally:
+        px = None
+        accelerated_sobel = gx_flat = gy_flat = None
 
 
 def _dot_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool],
                  max_strokes: int | None = None) -> list[tuple[int,int,int,int]]:
     """Ordered-dither portrait mode for users who explicitly choose Dots."""
-    bayer=((0,8,2,10),(12,4,14,6),(3,11,1,9),(15,7,13,5))
-    px=gray.load();w,h=gray.size;step=2 if detail<=8 else 1;strokes=[]
-    if max_strokes == 0:return strokes
-    for y in range(0,h,step):
-        if cancelled():raise InterruptedError()
-        for x in range(0,w,step):
-            darkness=255-px[x,y];threshold=(bayer[y%4][x%4]+.5)/16*255
-            if darkness>threshold:
-                strokes.append((x,y,x,y))
-                if max_strokes is not None and len(strokes)>=max_strokes:
-                    if cancelled():raise InterruptedError()
-                    return strokes
-    return strokes
+    px = None
+    try:
+        bayer=((0,8,2,10),(12,4,14,6),(3,11,1,9),(15,7,13,5))
+        px=gray.load();w,h=gray.size;step=2 if detail<=8 else 1;strokes=[]
+        if max_strokes == 0:return strokes
+        for y in range(0,h,step):
+            if cancelled():raise InterruptedError()
+            for x in range(0,w,step):
+                darkness=255-px[x,y];threshold=(bayer[y%4][x%4]+.5)/16*255
+                if darkness>threshold:
+                    strokes.append((x,y,x,y))
+                    if max_strokes is not None and len(strokes)>=max_strokes:
+                        if cancelled():raise InterruptedError()
+                        return strokes
+        return strokes
+    finally:
+        px = None
 
 
 def portrait_strokes(gray: Image.Image, detail: int = 8, lines: bool = True,
@@ -581,72 +601,76 @@ def _portrait_strokes_impl(gray: Image.Image, detail: int = 8, lines: bool = Tru
                      acceleration_meta: dict | None = None, gpu_vram: str = "Auto",
                      gpu_performance: str = "Balanced") -> tuple[list[list[tuple[int,int,int,int]]], PortraitStats]:
     """Build one black stroke group that approximates grayscale by density."""
-    profile=_quality_profile(draw_quality);cfg=dict(_detail_config(detail))
-    if max_strokes is not None:
-        from numbers import Integral
-        if isinstance(max_strokes,bool) or not isinstance(max_strokes,Integral) or max_strokes<0:
-            raise ValueError("max_strokes must be a nonnegative integer")
-        cfg["max_strokes"]=min(cfg["max_strokes"],int(max_strokes))
-    if not lines:
-        dots=_dot_strokes(gray,detail,cancelled,max_strokes=cfg["max_strokes"])
+    px = None
+    try:
+        profile=_quality_profile(draw_quality);cfg=dict(_detail_config(detail))
+        if max_strokes is not None:
+            from numbers import Integral
+            if isinstance(max_strokes,bool) or not isinstance(max_strokes,Integral) or max_strokes<0:
+                raise ValueError("max_strokes must be a nonnegative integer")
+            cfg["max_strokes"]=min(cfg["max_strokes"],int(max_strokes))
+        if not lines:
+            dots=_dot_strokes(gray,detail,cancelled,max_strokes=cfg["max_strokes"])
+            meta=acceleration_meta or {}
+            return [dots],PortraitStats(len(dots),0,1,gray.size,0,draw_quality,
+                                        str(meta.get("backend","CPU")),str(meta.get("device","CPU")),bool(meta.get("accelerated",False)))
+
+        px=gray.load();w,h=gray.size;total_budget=cfg["max_strokes"]
+        edge_budget=round(total_budget*(profile["edge_share"] if include_edges else 0))
+        tone_budget=total_budget-edge_budget
+        saliency=_saliency_map(gray,subject_focus,profile,gpu_mode,acceleration_meta,gpu_vram,gpu_performance,
+                               cancelled=cancelled)
+
+        layer_candidates=[]
+        for layer,(threshold,direction) in enumerate(zip(cfg["thresholds"],cfg["directions"])):
+            if cancelled():raise InterruptedError()
+            threshold=min(252,threshold+profile["threshold_boost"])
+            spacing=cfg["spacing"]+(1 if layer==0 and detail<=8 else 0);offset=layer%spacing
+            merge_gap=(1 if detail<=8 else 2) if profile["merge_gap"] is None else profile["merge_gap"]
+            candidates=[]
+            for path in _line_paths(w,h,direction,spacing,offset):
+                if cancelled():
+                    raise InterruptedError()
+                candidates.extend(_runs(path,px,threshold,min_run=2 if detail>=8 else 3,
+                                        merge_gap=merge_gap,max_run=profile["max_run"]))
+            layer_candidates.append(candidates)
+
+        count_layers=max(1,len(layer_candidates));weights=[1.0+.18*i for i in range(count_layers)]
+        weight_total=sum(weights);allocations=[int(tone_budget*wgt/weight_total) for wgt in weights]
+        while sum(allocations)<tone_budget:allocations[-1]+=1
+
+        selected_layers=[];priority_total=0;unused=0
+        for candidates,allocation in zip(layer_candidates,allocations):
+            take=min(len(candidates),allocation)
+            selected,priority=_select_tone_candidates(candidates,take,saliency,px,w,h,profile["priority_fraction"],cancelled=cancelled)
+            selected_layers.append(selected);priority_total+=priority;unused+=allocation-len(selected)
+
+        # Sparse bright layers can leave budget unused. Reallocate to darker layers,
+        # where eyes/hair/deep contours usually provide more useful information.
+        if unused:
+            for idx in reversed(range(len(layer_candidates))):
+                if unused<=0:break
+                existing=set(selected_layers[idx])
+                remaining=[s for s in layer_candidates[idx] if s not in existing]
+                extra,priority=_select_tone_candidates(remaining,min(unused,len(remaining)),saliency,px,w,h,profile["priority_fraction"],cancelled=cancelled)
+                selected_layers[idx].extend(extra);priority_total+=priority;unused-=len(extra)
+
+        # Darkest tonal layers first improves partial drawings and preserves small
+        # identity details before broad mid-tone hatching consumes time.
+        tone=[]
+        for selected in reversed(selected_layers):tone.extend(selected)
+
+        edges=[]
+        if include_edges and edge_budget:
+            edges=_edge_strokes(gray,detail,cancelled,draw_quality,subject_focus,gpu_mode,acceleration_meta,gpu_vram,gpu_performance)[:edge_budget]
+
+        strokes=edges+tone
         meta=acceleration_meta or {}
-        return [dots],PortraitStats(len(dots),0,1,gray.size,0,draw_quality,
-                                    str(meta.get("backend","CPU")),str(meta.get("device","CPU")),bool(meta.get("accelerated",False)))
-
-    px=gray.load();w,h=gray.size;total_budget=cfg["max_strokes"]
-    edge_budget=round(total_budget*(profile["edge_share"] if include_edges else 0))
-    tone_budget=total_budget-edge_budget
-    saliency=_saliency_map(gray,subject_focus,profile,gpu_mode,acceleration_meta,gpu_vram,gpu_performance,
-                           cancelled=cancelled)
-
-    layer_candidates=[]
-    for layer,(threshold,direction) in enumerate(zip(cfg["thresholds"],cfg["directions"])):
-        if cancelled():raise InterruptedError()
-        threshold=min(252,threshold+profile["threshold_boost"])
-        spacing=cfg["spacing"]+(1 if layer==0 and detail<=8 else 0);offset=layer%spacing
-        merge_gap=(1 if detail<=8 else 2) if profile["merge_gap"] is None else profile["merge_gap"]
-        candidates=[]
-        for path in _line_paths(w,h,direction,spacing,offset):
-            if cancelled():
-                raise InterruptedError()
-            candidates.extend(_runs(path,px,threshold,min_run=2 if detail>=8 else 3,
-                                    merge_gap=merge_gap,max_run=profile["max_run"]))
-        layer_candidates.append(candidates)
-
-    count_layers=max(1,len(layer_candidates));weights=[1.0+.18*i for i in range(count_layers)]
-    weight_total=sum(weights);allocations=[int(tone_budget*wgt/weight_total) for wgt in weights]
-    while sum(allocations)<tone_budget:allocations[-1]+=1
-
-    selected_layers=[];priority_total=0;unused=0
-    for candidates,allocation in zip(layer_candidates,allocations):
-        take=min(len(candidates),allocation)
-        selected,priority=_select_tone_candidates(candidates,take,saliency,px,w,h,profile["priority_fraction"],cancelled=cancelled)
-        selected_layers.append(selected);priority_total+=priority;unused+=allocation-len(selected)
-
-    # Sparse bright layers can leave budget unused. Reallocate to darker layers,
-    # where eyes/hair/deep contours usually provide more useful information.
-    if unused:
-        for idx in reversed(range(len(layer_candidates))):
-            if unused<=0:break
-            existing=set(selected_layers[idx])
-            remaining=[s for s in layer_candidates[idx] if s not in existing]
-            extra,priority=_select_tone_candidates(remaining,min(unused,len(remaining)),saliency,px,w,h,profile["priority_fraction"],cancelled=cancelled)
-            selected_layers[idx].extend(extra);priority_total+=priority;unused-=len(extra)
-
-    # Darkest tonal layers first improves partial drawings and preserves small
-    # identity details before broad mid-tone hatching consumes time.
-    tone=[]
-    for selected in reversed(selected_layers):tone.extend(selected)
-
-    edges=[]
-    if include_edges and edge_budget:
-        edges=_edge_strokes(gray,detail,cancelled,draw_quality,subject_focus,gpu_mode,acceleration_meta,gpu_vram,gpu_performance)[:edge_budget]
-
-    strokes=edges+tone
-    meta=acceleration_meta or {}
-    result=PortraitStats(len(tone),len(edges),len(cfg["thresholds"]),gray.size,
-                         priority_total,draw_quality,str(meta.get("backend","CPU")),
-                         str(meta.get("device","CPU")),bool(meta.get("accelerated",False)))
-    if cancelled():
-        raise InterruptedError()
-    return [strokes],result
+        result=PortraitStats(len(tone),len(edges),len(cfg["thresholds"]),gray.size,
+                             priority_total,draw_quality,str(meta.get("backend","CPU")),
+                             str(meta.get("device","CPU")),bool(meta.get("accelerated",False)))
+        if cancelled():
+            raise InterruptedError()
+        return [strokes],result
+    finally:
+        px = None

@@ -233,8 +233,14 @@ def _cleanup(mask, strength):
             with closing(expanded.filter(ImageFilter.MinFilter(radius))) as closed:
                 if strength == "Aggressive":
                     with closing(closed.filter(ImageFilter.MedianFilter(3))) as median:
-                        return (np.asarray(median, np.uint8) > 127).astype(np.uint8)
-                return (np.asarray(closed, np.uint8) > 127).astype(np.uint8)
+                        cleaned = (np.asarray(median, np.uint8) > 127).astype(np.uint8)
+                else:
+                    cleaned = (np.asarray(closed, np.uint8) > 127).astype(np.uint8)
+                # Morphology may retract a background classification, but it
+                # cannot establish colour/edge evidence or border connectivity.
+                # Do not turn protected thin details into removable background.
+                cleaned &= mask
+                return cleaned
 
 
 def _largest_component(mask, cancelled):

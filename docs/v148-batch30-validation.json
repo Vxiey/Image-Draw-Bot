@@ -1,0 +1,3320 @@
+{
+  "schema": 1,
+  "batch": 30,
+  "generated_at_utc": "2026-11-08T01:22:21.852512+00:00",
+  "baseline_commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+  "implemented": 842,
+  "target": 1000,
+  "remaining": 158,
+  "added_behavior_groups": [
+    "R3001",
+    "R3002"
+  ],
+  "preserved_registry_entries": 840,
+  "preserved_registry_prefix_sha256": "5df46c502c3cd38dd439022f02c54cf6049afe5a182b158bc473af9b0945df5d",
+  "release_published": false,
+  "count_decision": {
+    "new_groups": 2,
+    "note": "Root and independent reviewers accepted R3001 as one morphology-classification correction and R3002 as one incremental palette-assignment optimization. Neither duplicates a previously counted fix. All related strengths, modes, cases and controls remain grouped. Portrait image ownership completes IW08, Stop-copy handoff completes A1501, and calibration fixture disposal plus tests, diagnostics and metadata add zero IDs. Exact final local gates and independent raw-data review are closed; publication and new-head CI remain separate."
+  },
+  "local_regressions": {
+    "base_commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+    "command": ".venv/bin/python -B -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 4551,
+    "runner_seconds": 231.751,
+    "wall_seconds": 233.594,
+    "status": "OK (skipped=73)",
+    "skipped": 73,
+    "source_files": 943,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+    "source_hash_manifest_after_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+    "source_manifest_file": "v148-batch30-source-hashes.json",
+    "source_manifest_after_file": "v148-batch30-source-hashes-after.json",
+    "head_after": "4b90b715a9128a022774f411e14e8a1b45676339",
+    "log_file": "v148-batch30-fullsuite.log",
+    "log_sha256": "d473ad942563c8b0c0147366f8697fa3ccaa5fdbbac6ada5d008b987f3ac2693",
+    "runner_failure": null,
+    "passed": true
+  },
+  "native_validation": {
+    "base_commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+    "cases": [
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_palette_scan.NativePaletteScanTests.test_native_cancel_closes_dialog_while_analysis_owns_only_private_pixels",
+        "run": 1,
+        "seconds": 0.3444286150042899,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_palette_scan.NativePaletteScanTests.test_native_heartbeat_and_preview_adoption_stay_on_gui_thread",
+        "run": 1,
+        "seconds": 0.4432173960012733,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_actual_tab_selection_return_worker_adoption_and_undo_preserve_pixels",
+        "run": 1,
+        "seconds": 0.5340809840054135,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_escape_from_each_control_and_late_key_release_cancel_without_editing",
+        "run": 1,
+        "seconds": 0.5147580060001928,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_keyboard_apply_retains_stop_and_source_identity_at_real_result_boundary",
+        "run": 1,
+        "seconds": 0.486421761001111,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_keyboard_dimension_limit_disables_apply_and_recovers_without_hidden_job",
+        "run": 1,
+        "seconds": 0.40992132899555145,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_widget_timers.NativeButtonTimerTests.test_actual_click_then_child_disposal_leaves_only_live_owners",
+        "run": 1,
+        "seconds": 1.1320830269978615,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_button_canvas_and_late_text_image_labels_keep_pointer_to_key_activation",
+        "run": 1,
+        "seconds": 0.13395272100024158,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_real_switch_row_canvas_text_and_background_preserve_state_and_trace_lifetime",
+        "run": 1,
+        "seconds": 0.1517432260006899,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_selector_decorations_keep_logical_focus_without_stealing_native_popup_or_entry",
+        "run": 1,
+        "seconds": 1.135536163004872,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch27_mobile_discovery.NativeMobileDiscoveryTests.test_actual_buttons_heartbeat_stop_reopen_and_app_close_while_dns_stays_blocked",
+        "run": 1,
+        "seconds": 0.3555629839975154,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch27_mobile_discovery.NativeMobileDiscoveryTests.test_actual_panel_close_late_refresh_stop_and_new_session_keep_displayed_identity",
+        "run": 1,
+        "seconds": 0.5085464369985857,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch18_mobile_dialog.NativeMobileDialogLifecycleTests.test_first_scaling_poll_survives_when_mobile_is_the_first_widget_window",
+        "run": 1,
+        "seconds": 0.7577266410007724,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch18_mobile_dialog.NativeMobileDialogLifecycleTests.test_real_panel_refresh_close_restart_has_one_owner_and_releases_tcl_resources",
+        "run": 1,
+        "seconds": 0.6386874079980771,
+        "skipped": 0,
+        "success": true
+      }
+    ],
+    "diagnostics": [],
+    "exit_code": 0,
+    "full_source_files": 943,
+    "full_source_hash_manifest_after_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+    "full_source_hash_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+    "full_source_manifest_after_file": "v148-batch30-native-source-hashes-after.json",
+    "full_source_manifest_file": "v148-batch30-source-hashes.json",
+    "full_sources_unchanged": true,
+    "head_after": "4b90b715a9128a022774f411e14e8a1b45676339",
+    "log_sha256": "79c1e39373ec7b1ab1707b0cec6547950012a55a025bd7c8826c7cf49335dc44",
+    "platform": "Linux/Xorg/Tk 9.0.4",
+    "runner_failures": [],
+    "runner_seconds": 7.546666698006447,
+    "scope": "Real native Tk widgets, timers, PhotoImage/QR, local HTTP bind, worker/Stop/Close/reopen event delivery on Linux. Each method uses its own interpreter. Only the older Mobile18 class display gate is enabled for these portable Tk cases; no sys.platform replacement and no repository skip changes. Windows and packaged behavior require exact-commit CI.",
+    "skipped": 0,
+    "source_hash_manifest_sha256": "0da8de7641efb47fea77c62ece22629b27f9425c137e9d8ccd8d7e9933ae5845",
+    "sources_unchanged": true,
+    "tests": 14,
+    "wall_seconds": 12.178185696997389,
+    "source_map_reference": {
+      "artifact": "v148-batch30-completion-evidence.json",
+      "source_manifest": "0da8de7641efb47fea77c62ece22629b27f9425c137e9d8ccd8d7e9933ae5845"
+    }
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "initial_source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1359,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1361,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "final_gates": {
+    "base_commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+    "head_after": "4b90b715a9128a022774f411e14e8a1b45676339",
+    "exit_code": 0,
+    "passed": true,
+    "jobs": [
+      {
+        "name": "source-gate",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch30/.venv/bin/python",
+          "-B",
+          "ReleaseCandidateHardening.py",
+          "--source-gate",
+          "--soak-cycles",
+          "5000"
+        ],
+        "log_file": "v148-batch30-final-source-gate.log",
+        "exit_code": 0,
+        "wall_seconds": 0.11408821999793872,
+        "log_sha256": "bc07056ea2a6181147997413164e1cdf7dfa7b4d3775a1431f774aea6c934741",
+        "source_hash_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+        "sources_match_full_suite": true,
+        "passed": true
+      },
+      {
+        "name": "engine-gate",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch30/.venv/bin/python",
+          "-B",
+          "benchmark_v148_existing_rasters.py",
+          "--output",
+          "/workspace/scratch/97bfc35400fb/batch30-engine-gate-17f9konn/engine.json"
+        ],
+        "log_file": "v148-batch30-final-engine-gate.log",
+        "exit_code": 0,
+        "wall_seconds": 4.979595422002603,
+        "log_sha256": "b26afd1bd369b0c5c859fa918ee60e44ab1e0e1902dc6e7323ff7ac53009cc69",
+        "source_hash_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+        "sources_match_full_suite": true,
+        "artifact": "docs/v148-batch30-engine-benchmarks.json",
+        "artifact_sha256": "b71efaec90c4300367837b0ad9375f7a267e669302e56654a813da940f921ce7",
+        "passed": true
+      },
+      {
+        "name": "source-hygiene",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch30/.venv/bin/python",
+          "-B",
+          "ReleasePackage.py",
+          "--check"
+        ],
+        "log_file": "v148-batch30-final-source-hygiene.log",
+        "exit_code": 0,
+        "wall_seconds": 0.1646346959969378,
+        "log_sha256": "037a0c2518462c0437ff5986a8766b488c0db5f441dbfc34f924e0d0918673dd",
+        "source_hash_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+        "sources_match_full_suite": true,
+        "passed": true
+      }
+    ],
+    "runner_failure": null,
+    "source_files": 943,
+    "source_manifest_file": "v148-batch30-source-hashes.json",
+    "source_manifest_after_file": "v148-batch30-final-source-hashes-after.json",
+    "source_hash_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+    "source_hash_manifest_after_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+    "source_changed": []
+  },
+  "post_metadata_package_hygiene_pending": false,
+  "independent_reviews": {
+    "all_closed": true,
+    "root_python_files": 893,
+    "source_hash_manifest_sha256": "0da8de7641efb47fea77c62ece22629b27f9425c137e9d8ccd8d7e9933ae5845",
+    "source_reviews": {
+      "background_mask": {
+        "closed": true,
+        "scope": "Actual worker/adoption/PNG evidence, unchanged flood, safe mask intersection and old controls."
+      },
+      "palette_growth": {
+        "closed": true,
+        "scope": "Strict ties, transformed-prefix fallback, full historical linkage and paired benchmark method."
+      },
+      "portrait_ownership": {
+        "closed": true,
+        "scope": "Private blur/PixelAccess lifetime, borrowed gray, retained native diagnostic and complete output parity."
+      },
+      "stop_copy_handoff": {
+        "closed": true,
+        "scope": "Preserve a fresh Stop during private copy and handoff; ownership and status remain correct."
+      },
+      "fixture_ownership": {
+        "closed": true,
+        "scope": "Actual old calibration methods, retained native errors and original finalizers before worker GC."
+      },
+      "count_decision": {
+        "closed": true,
+        "scope": "Root and independent reviewers accepted R3001 as one morphology-classification correction and R3002 as one incremental palette-assignment optimization. Neither duplicates a previously counted fix. All related strengths, modes, cases and controls remain grouped. Portrait image ownership completes IW08, Stop-copy handoff completes A1501, and calibration fixture disposal plus tests, diagnostics and metadata add zero IDs. Exact final local gates and independent raw-data review are closed; publication and new-head CI remain separate."
+      },
+      "raw_provenance": {
+        "closed": true,
+        "scope": "Independent palette medians/work/allocations, preserved negative diagnostics and lossless evidence expansion.",
+        "review_receipt": {
+          "original_file": "batch30-completion-evidence-independent-review.json",
+          "original_sha256": "7c1c8a94fdbe04d8002c318012263439ed1339c3ad8886364e6dac7ff19aa7ac",
+          "report": {
+            "artifact": "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch30/docs/v148-batch30-completion-evidence.json",
+            "artifact_bytes": 4245339,
+            "artifact_sha256": "78d2728a5e298d3926f6c64e90975dc0fa0a2d2b8a66615ad519ce04186ec919",
+            "artifacts": 389,
+            "encodings": {
+              "base64": 184,
+              "gzip-base64-json-with-source-manifest-references": 1,
+              "gzip-base64-utf-8": 6,
+              "json-with-source-manifest-references": 137,
+              "utf-8": 61
+            },
+            "evidence_root_python_files": 892,
+            "exact_text_and_binary_payloads_verified": 251,
+            "final_root_python_digest": "0da8de7641efb47fea77c62ece22629b27f9425c137e9d8ccd8d7e9933ae5845",
+            "final_root_python_files": 893,
+            "final_source_config_digest": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+            "final_source_config_files": 943,
+            "fixture_only_delta": [
+              "test_v148_ui_batch25_calibration_lifetime.py",
+              "test_v148_ui_batch30_fixture_ownership.py"
+            ],
+            "json_semantics_and_canonical_hashes_verified": 138,
+            "local_gate": {
+              "passed": 4478,
+              "runner_seconds": 231.751,
+              "skipped": 73,
+              "tests": 4551
+            },
+            "metadata_references_verified": 29,
+            "native_tests": 14,
+            "original_hashes_and_lengths_verified": 389,
+            "parent_ci_separately_scoped": true,
+            "passed": true,
+            "required_negative_attempts": {
+              "actual_sigill_attempt2": {
+                "exit_code": -4,
+                "passed": false,
+                "status": null,
+                "tests": null
+              },
+              "incomplete_attempt1": {
+                "exit_code": null,
+                "passed": false,
+                "status": "incomplete",
+                "tests": null
+              },
+              "incomplete_attempt3": {
+                "exit_code": null,
+                "passed": false,
+                "status": "incomplete",
+                "tests": null
+              }
+            },
+            "scope": "Independent JSON/gzip/base64 decoding and file/source hash review only. No product imports, tests or benchmark runs. JSON preserves exact parsed data; original JSON byte hashes are checked against retained original files. Text and binary reconstructed bytes match every original byte. No earlier failure or focused source checkpoint is relabeled.",
+            "source_manifests": 11
+          }
+        }
+      },
+      "final_metadata": {
+        "closed": true,
+        "scope": "Independent final count, unchanged registry prefix, preserved old raw reports, exact source transition, corrected claims and completed post-metadata package hygiene reviewed without blockers. The receipt hashes the pre-closure metadata bytes; this write records the review result only.",
+        "review_receipt": {
+          "original_file": "batch30-final-metadata-completion-review.json",
+          "original_sha256": "49a770d4b20a092ac38c139afaef1be6d35538c46855f0b7406a73e9b2cd9bd2",
+          "report": {
+            "balanced_pairs": 36,
+            "baseline_commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "claim_limits": [
+              "No universal foreground preservation below proxy resolution or without feather softening",
+              "No whole-application, GPU, physical Paint, peak-memory or RSS speed claim",
+              "Unchanged-work timing controls are noise, allocations and slower pairs preserved",
+              "Original checkpoint maps are not rewritten"
+            ],
+            "closed": true,
+            "common_artifacts": 389,
+            "common_manifests": 11,
+            "common_raw_sha256": "78d2728a5e298d3926f6c64e90975dc0fa0a2d2b8a66615ad519ce04186ec919",
+            "detached_launch_preserved": true,
+            "exact_raster_cases": 8,
+            "failed_or_incomplete_attempts_preserved": 3,
+            "final_root_digest": "0da8de7641efb47fea77c62ece22629b27f9425c137e9d8ccd8d7e9933ae5845",
+            "final_root_python_files": 893,
+            "final_source_config_digest": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+            "final_source_config_files": 943,
+            "full_suite": {
+              "passed": 4478,
+              "seconds": 231.751,
+              "skipped": 73,
+              "total": 4551
+            },
+            "implemented": 842,
+            "initial_hygiene_files": 1359,
+            "measured_root_digest": "ce9691bce3bdb6b6e992ab3383b323e803f85e8df95c6a99ff6f409a9d345abd",
+            "measured_root_files": 892,
+            "native_cases": 14,
+            "new_groups": {
+              "R3001": 841,
+              "R3002": 842
+            },
+            "only_later_source_changes": {
+              "test_v148_ui_batch25_calibration_lifetime.py": {
+                "after": "122a8c3e0094db8abda5714bae99175a7edbe4cab686ddc0a4cc34772990d866",
+                "before": "969d2ef41723cba30986a8ea575509365870c28ff2f0536217b5ffef69dbfaac"
+              },
+              "test_v148_ui_batch30_fixture_ownership.py": {
+                "after": "97f7284528af1452b71d4a67059f131dce8fee49c56679e1e00c7d10b9344858",
+                "before": null
+              }
+            },
+            "palette_raw_sha256": "349e15e385ceb3e3e3c128486eeb9763ad491412d7aa563a1fdfc9f05d2ec644",
+            "palette_workloads": 6,
+            "parent_ci_scope": "Published4b90 only; first failed Windows attempt and one unchanged successful rerun preserved. New-head CI remains separate.",
+            "passed": true,
+            "post_metadata_hygiene_files": 1361,
+            "post_metadata_hygiene_sha256": "cc8afc459058ac71ad147f1fee1eb85592b509ff23c1c151006659bdb20b74b7",
+            "preserved_old_benchmark_bytes": 78,
+            "preserved_prefix_objects": 840,
+            "preserved_prior_negative_tuple_byte_reports": true,
+            "remaining": 158,
+            "remaining_root_actions": [
+              "Record this review closure in validation; the previously pending final_metadata/all_closed flags are intentionally not evidence of a missing product gate",
+              "Publish only through root and record exact new-head CI; release_published remains false"
+            ],
+            "resolved_text_findings": [
+              "BG provisional wording updated to final one-group decision",
+              "892-map sentence narrowed to final BG/Portrait historical comparisons and palette measurement",
+              "Third incomplete attempt documented separately; successful supervised4551 run distinct",
+              "Initial1359 and final1361 package counts separately labelled"
+            ],
+            "reviewed_at_utc": "2026-11-08T01:26:19.787033+00:00",
+            "reviewed_metadata_sha256": {
+              "RELEASE-NOTES-v1.0.148.md": "fc55264eb19077586a4058b01db444609498bd5df87976ea35d93df9f4391d46",
+              "docs/IMPROVEMENTS-v1.0.148.md": "e4dcdd22eb1c8bfc5061b0f99c55f995c6a4d437809aac14f0ae06194e5c7281",
+              "docs/v148-batch30-background-details.md": "ad4ff6ad62439f28b2655b90ddb78768cbff5a76094a5fa3a88394cbb75eece3",
+              "docs/v148-batch30-fixture-ownership.md": "61ceb26f7713133481c8667e17619fd2731495b721290ee9d68ed199ae826c8c",
+              "docs/v148-batch30-palette-growth.md": "47d29b883498a3d02861dd0ab5072d2d484ae0fe4616d6559ac1a5949a21dcfd",
+              "docs/v148-batch30-portrait-stroke-ownership.md": "2bbb2552b5417e4eb7579b2401aadf6ce8f6993882dd4e7473cfb5cc36511b12",
+              "docs/v148-batch30-stop-copy-completion.md": "2fa2743bc1c66f5ac97beaa15481ca5c198fbf9f5c508ac503853a2a9482c076",
+              "docs/v148-batch30-validation.json": "469c840da219c5d0eb02b73d74bd2b1cc991cf1bc6f8cc596b7340e4895f6dd9",
+              "docs/v148-improvement-progress.md": "30b284b7f05078ccaa8689479055f13d95456fd8062cc92f18e43a8e78783fab",
+              "docs/v148-improvements.json": "e9754c89d2342334a51baab43d3c1554f9f38a20f68844c3755e444527620ef6"
+            },
+            "reviewer": "completion_audit",
+            "schema": 1,
+            "scope": "Independent read-only review of generated batch30 registry/index/progress/release notes/validation and five ledgers; manual claim review plus separate recomputation from existing gate/raw/git evidence. No product, test, timing, source or metadata edit.",
+            "source_soak_cycles": 5000,
+            "zero_id_completions": [
+              "Portrait stroke buffer ownership",
+              "Stop across private image-copy handoff",
+              "Tcl calibration test-fixture owner cleanup"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "source_binding": {
+    "root_python_files": 893,
+    "source_hash_manifest_sha256": "0da8de7641efb47fea77c62ece22629b27f9425c137e9d8ccd8d7e9933ae5845",
+    "source_config_files": 943,
+    "source_config_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+    "manifest_artifact": "v148-batch30-completion-evidence.json",
+    "evidence_root_python_files": 892,
+    "evidence_source_hash_manifest_sha256": "ce9691bce3bdb6b6e992ab3383b323e803f85e8df95c6a99ff6f409a9d345abd",
+    "evidence_source_config_files": 942,
+    "evidence_source_config_manifest_sha256": "d9c61fbb5e914dcd37682fc08b5b19c20a7eec2bb4ab806b0cbe3806d9fea156",
+    "note": "Final integrated gates share one map; earlier image/measurement maps remain separate. Only the explicit two-fixture transition is allowed."
+  },
+  "fixture_only_source_transition": {
+    "artifact": "v148-batch30-fixture-only-source-transition.json",
+    "sha256": "2ef0fbb961debed123a98469a98d9d4fdda77ea8867322b7e4a19243d58be8db",
+    "receipt": {
+      "classification": "Zero-ID test-fixture cleanup; all product and benchmark/test proof sources unchanged",
+      "measurement_root_count": 892,
+      "measurement_root_digest": "ce9691bce3bdb6b6e992ab3383b323e803f85e8df95c6a99ff6f409a9d345abd",
+      "measurement_full_count": 942,
+      "measurement_full_digest": "d9c61fbb5e914dcd37682fc08b5b19c20a7eec2bb4ab806b0cbe3806d9fea156",
+      "final_root_count": 893,
+      "final_root_digest": "0da8de7641efb47fea77c62ece22629b27f9425c137e9d8ccd8d7e9933ae5845",
+      "final_full_count": 943,
+      "final_full_digest": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+      "changes": {
+        "test_v148_ui_batch25_calibration_lifetime.py": {
+          "before": "969d2ef41723cba30986a8ea575509365870c28ff2f0536217b5ffef69dbfaac",
+          "after": "122a8c3e0094db8abda5714bae99175a7edbe4cab686ddc0a4cc34772990d866"
+        },
+        "test_v148_ui_batch30_fixture_ownership.py": {
+          "before": null,
+          "after": "97f7284528af1452b71d4a67059f131dce8fee49c56679e1e00c7d10b9344858"
+        }
+      },
+      "published_parent_root_unchanged": true,
+      "published_parent_root_count": 887,
+      "published_parent_root_digest": "48245acbd0a159956f998b1009f022a5d7b0245f977f741eef84016c9ffbb4bc"
+    },
+    "import_boundary": {
+      "method": "Read-only source-graph audit: neither changed fixture module name occurs in any other current root Python source or the explicit image/palette probe entrypoints. Those entrypoints do not discover tests. This is an explicit import-boundary source audit, not a recorded runtime-import trace.",
+      "other_root_sources_checked": 891,
+      "matching_references": 0,
+      "probe_entrypoints": {
+        "pending-batch30-portrait-strokes/parity.py": "9ad92869be88bdd3e8dc24e470aa8d48cf7599c7315aaa8ee36a5334e05033a3",
+        "pending-batch30-portrait-strokes/observe.py": "26c09a8981018a3ee40e08c585059402b58c34dbe1395aa8e399fe44cb7d44d9",
+        "pending-batch30-background-audit/background_before.py": "aa6465bd2408be32d915321da36041e6fe9dd2949a9cd7dd0f2fb57bb2fc12d3",
+        "pending-batch30-background-audit/background_after.py": "d4c8ece98940140508fdd9fba9349ba7c982402fcc854ea84a5af119dc732557",
+        "pending-batch30-background-audit/background_historical.py": "a5b80a58ec5394cdf805f10e513301ae4e101001dde76bac995e9d834b257be0",
+        "pending-batch30-palette-audit/observe_before.py": "c1ae353c68a9eb1af4a44630366906d939faa3ffef48eb7b011f99c686f3cfbd"
+      }
+    },
+    "product_and_measurement_sources_unchanged": true
+  },
+  "completion_evidence": {
+    "artifact": "v148-batch30-completion-evidence.json",
+    "sha256": "78d2728a5e298d3926f6c64e90975dc0fa0a2d2b8a66615ad519ce04186ec919",
+    "artifacts": 389,
+    "unique_source_manifests": 11,
+    "packaging_new_improvement_ids": 0,
+    "counting_scope": "Evidence packaging itself adds zero IDs. Behavior accounting belongs to the root registry/finalizer: Portrait and Stop complete existing contracts; Background is reviewed as R3001 and palette growth as R3002. This zero is not a claim that every covered behavior is an uncounted completion."
+  },
+  "background_evidence": {
+    "before": {
+      "artifact": "pending-batch30-background-audit/before/summary.json",
+      "sha256": "7fb72caab814f24adb29f58f1a7fbe94a101a2615b11a76d1f66dd713088efd1"
+    },
+    "after": {
+      "artifact": "pending-batch30-background-audit/after-initial/summary.json",
+      "sha256": "e51fad63d832d31069c0feda664dac2850f4a01830843498202be1ed136f9c03"
+    },
+    "historical": {
+      "artifact": "pending-batch30-background-audit/historical-initial/summary.json",
+      "sha256": "fb361aa7dc8a916e24b98d17125c05c34f7fd8946a4d9195dedf2d0af7a33500"
+    },
+    "exact_control_pairs": 20,
+    "intended_correction_pairs": 24,
+    "actual_ui_png_pairs": 3,
+    "before_cases": [
+      {
+        "actual_background_thread": true,
+        "actual_png_thread": true,
+        "actual_ui_adoption": true,
+        "cleanup_removed_connected_feature": 20,
+        "cleanup_removed_known_foreground": 20,
+        "export_exact": true,
+        "export_sha256": "7fb12f97c0add6baa1ea3fecb4c657d91ea5d7057a5e3c51455d8d0585541bb7",
+        "final_alpha_less_than_255_connected_feature": 20,
+        "final_alpha_zero_connected_feature": 20,
+        "final_alpha_zero_known_foreground": 20,
+        "grow_removed_known_foreground": 0,
+        "line_width": 1,
+        "metadata": {
+          "ai_used": false,
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "definite_background_percent": 88.75,
+          "definite_foreground_percent": 11.25,
+          "drawable_after_percent": 11.25,
+          "edge_limit": 27.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "estimated_work_reduction_percent": 88.75,
+          "foreground_bbox": [
+            35,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_bbox_proxy": [
+            35,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_component_percent": 11.25,
+          "method": "classical edge-aware multi-colour border segmentation",
+          "mode": "Auto",
+          "no_op_reason": null,
+          "proxy_size": [
+            100,
+            80
+          ],
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "region_pixels_processed": 7080,
+          "removed_percent": 88.75,
+          "removed_pixels": 7100,
+          "strength": "Balanced",
+          "threshold": null,
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed",
+          "uncertain_percent": 0.0
+        },
+        "result_pixels_sha256": "9c83833a48fe37db9fb7efa8eaeda4ecd0cb708b056b14f581184197105efb2d",
+        "source_connected_feature": 20,
+        "source_known_foreground": 920,
+        "source_pixels_sha256": "ac3896d383af2bbdfde9a76b54b7538d8bd2b6bf2c743ad26ae087bf0ce22096",
+        "source_size": [
+          100,
+          80
+        ],
+        "source_unchanged": true
+      },
+      {
+        "actual_background_thread": true,
+        "actual_png_thread": true,
+        "actual_ui_adoption": true,
+        "cleanup_removed_connected_feature": 40,
+        "cleanup_removed_known_foreground": 40,
+        "export_exact": true,
+        "export_sha256": "b823d944dc4dbd2af87e13df6440d8d3c5307d28a0b005c4fdc28a1b7c345fac",
+        "final_alpha_less_than_255_connected_feature": 40,
+        "final_alpha_zero_connected_feature": 40,
+        "final_alpha_zero_known_foreground": 40,
+        "grow_removed_known_foreground": 0,
+        "line_width": 2,
+        "metadata": {
+          "ai_used": false,
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "definite_background_percent": 88.75,
+          "definite_foreground_percent": 11.25,
+          "drawable_after_percent": 11.25,
+          "edge_limit": 27.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "estimated_work_reduction_percent": 88.75,
+          "foreground_bbox": [
+            35,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_bbox_proxy": [
+            35,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_component_percent": 11.25,
+          "method": "classical edge-aware multi-colour border segmentation",
+          "mode": "Auto",
+          "no_op_reason": null,
+          "proxy_size": [
+            100,
+            80
+          ],
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "region_pixels_processed": 7060,
+          "removed_percent": 88.75,
+          "removed_pixels": 7100,
+          "strength": "Balanced",
+          "threshold": null,
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed",
+          "uncertain_percent": 0.0
+        },
+        "result_pixels_sha256": "ccb90fb1059ef7efbe679fd0bbb06dc6d0b5d1cdbffe3d39e93a5f8efe12d6c1",
+        "source_connected_feature": 40,
+        "source_known_foreground": 940,
+        "source_pixels_sha256": "03f88bb79641b624b452036cfa8c108bf0961d7d64b81e813051923530a18547",
+        "source_size": [
+          100,
+          80
+        ],
+        "source_unchanged": true
+      },
+      {
+        "actual_background_thread": true,
+        "actual_png_thread": true,
+        "actual_ui_adoption": true,
+        "cleanup_removed_connected_feature": 0,
+        "cleanup_removed_known_foreground": 0,
+        "export_exact": true,
+        "export_sha256": "2a012da76bd53ca0c79daa39d8837f79cfe433fb9eaf765f65c33149bd95c15f",
+        "final_alpha_less_than_255_connected_feature": 2,
+        "final_alpha_zero_connected_feature": 0,
+        "final_alpha_zero_known_foreground": 0,
+        "grow_removed_known_foreground": 0,
+        "line_width": 3,
+        "metadata": {
+          "ai_used": false,
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "definite_background_percent": 88.0,
+          "definite_foreground_percent": 12.0,
+          "drawable_after_percent": 12.03,
+          "edge_limit": 27.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "estimated_work_reduction_percent": 87.97,
+          "foreground_bbox": [
+            15,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_bbox_proxy": [
+            15,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_component_percent": 12.0,
+          "method": "classical edge-aware multi-colour border segmentation",
+          "mode": "Auto",
+          "no_op_reason": null,
+          "proxy_size": [
+            100,
+            80
+          ],
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "region_pixels_processed": 7040,
+          "removed_percent": 87.97,
+          "removed_pixels": 7038,
+          "strength": "Balanced",
+          "threshold": null,
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed",
+          "uncertain_percent": 0.0
+        },
+        "result_pixels_sha256": "fa03ed071e8e6d53167ad08df0c555bd3d2274f66e5fbdd02b73177420cf114b",
+        "source_connected_feature": 60,
+        "source_known_foreground": 960,
+        "source_pixels_sha256": "8c3b4d5eb5729980ba3169f48a18f1920d2dde2619779b4e736c111e29eacbd9",
+        "source_size": [
+          100,
+          80
+        ],
+        "source_unchanged": true
+      }
+    ],
+    "after_cases": [
+      {
+        "actual_background_thread": true,
+        "actual_png_thread": true,
+        "actual_ui_adoption": true,
+        "cleanup_removed_connected_feature": 0,
+        "cleanup_removed_known_foreground": 0,
+        "export_exact": true,
+        "export_sha256": "0a924d3398dd6e2f77c8bda0afcb2225d1ce6b1f847668be5aa376c4431f21bc",
+        "final_alpha_less_than_255_connected_feature": 20,
+        "final_alpha_zero_connected_feature": 0,
+        "final_alpha_zero_known_foreground": 0,
+        "grow_removed_known_foreground": 0,
+        "line_width": 1,
+        "metadata": {
+          "ai_used": false,
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "definite_background_percent": 88.5,
+          "definite_foreground_percent": 11.5,
+          "drawable_after_percent": 11.53,
+          "edge_limit": 27.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "estimated_work_reduction_percent": 88.47,
+          "foreground_bbox": [
+            15,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_bbox_proxy": [
+            15,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_component_percent": 11.5,
+          "method": "classical edge-aware multi-colour border segmentation",
+          "mode": "Auto",
+          "no_op_reason": null,
+          "proxy_size": [
+            100,
+            80
+          ],
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "region_pixels_processed": 7080,
+          "removed_percent": 88.47,
+          "removed_pixels": 7078,
+          "strength": "Balanced",
+          "threshold": null,
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed",
+          "uncertain_percent": 0.0
+        },
+        "result_pixels_sha256": "56648c21ee3f0dcbf438693d6cb7e5ca561233c5546e99dd5a98190185cc9b30",
+        "source_connected_feature": 20,
+        "source_known_foreground": 920,
+        "source_pixels_sha256": "ac3896d383af2bbdfde9a76b54b7538d8bd2b6bf2c743ad26ae087bf0ce22096",
+        "source_size": [
+          100,
+          80
+        ],
+        "source_unchanged": true
+      },
+      {
+        "actual_background_thread": true,
+        "actual_png_thread": true,
+        "actual_ui_adoption": true,
+        "cleanup_removed_connected_feature": 0,
+        "cleanup_removed_known_foreground": 0,
+        "export_exact": true,
+        "export_sha256": "5b711ffc6b5f9ab9bb27bb8069e48241c855a491a60edf25636276cc4bf85bab",
+        "final_alpha_less_than_255_connected_feature": 2,
+        "final_alpha_zero_connected_feature": 0,
+        "final_alpha_zero_known_foreground": 0,
+        "grow_removed_known_foreground": 0,
+        "line_width": 2,
+        "metadata": {
+          "ai_used": false,
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "definite_background_percent": 88.25,
+          "definite_foreground_percent": 11.75,
+          "drawable_after_percent": 11.78,
+          "edge_limit": 27.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "estimated_work_reduction_percent": 88.22,
+          "foreground_bbox": [
+            15,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_bbox_proxy": [
+            15,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_component_percent": 11.75,
+          "method": "classical edge-aware multi-colour border segmentation",
+          "mode": "Auto",
+          "no_op_reason": null,
+          "proxy_size": [
+            100,
+            80
+          ],
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "region_pixels_processed": 7060,
+          "removed_percent": 88.22,
+          "removed_pixels": 7058,
+          "strength": "Balanced",
+          "threshold": null,
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed",
+          "uncertain_percent": 0.0
+        },
+        "result_pixels_sha256": "4ff9dffc668bb093ed87029afed7e041550864aa1e141eee8a3d033c664b63f8",
+        "source_connected_feature": 40,
+        "source_known_foreground": 940,
+        "source_pixels_sha256": "03f88bb79641b624b452036cfa8c108bf0961d7d64b81e813051923530a18547",
+        "source_size": [
+          100,
+          80
+        ],
+        "source_unchanged": true
+      },
+      {
+        "actual_background_thread": true,
+        "actual_png_thread": true,
+        "actual_ui_adoption": true,
+        "cleanup_removed_connected_feature": 0,
+        "cleanup_removed_known_foreground": 0,
+        "export_exact": true,
+        "export_sha256": "2a012da76bd53ca0c79daa39d8837f79cfe433fb9eaf765f65c33149bd95c15f",
+        "final_alpha_less_than_255_connected_feature": 2,
+        "final_alpha_zero_connected_feature": 0,
+        "final_alpha_zero_known_foreground": 0,
+        "grow_removed_known_foreground": 0,
+        "line_width": 3,
+        "metadata": {
+          "ai_used": false,
+          "background_cluster_spreads": [
+            5.0
+          ],
+          "background_cluster_weights": [
+            1.0
+          ],
+          "background_clusters": [
+            [
+              255.0,
+              255.0,
+              255.0
+            ]
+          ],
+          "definite_background_percent": 88.0,
+          "definite_foreground_percent": 12.0,
+          "drawable_after_percent": 12.03,
+          "edge_limit": 27.0,
+          "edge_policy": "chromatic contour barrier with local-gradient continuation",
+          "estimated_work_reduction_percent": 87.97,
+          "foreground_bbox": [
+            15,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_bbox_proxy": [
+            15,
+            25,
+            65,
+            55
+          ],
+          "largest_foreground_component_percent": 12.0,
+          "method": "classical edge-aware multi-colour border segmentation",
+          "mode": "Auto",
+          "no_op_reason": null,
+          "proxy_size": [
+            100,
+            80
+          ],
+          "reference_rgb": [
+            255.0,
+            255.0,
+            255.0
+          ],
+          "region_pixels_processed": 7040,
+          "removed_percent": 87.97,
+          "removed_pixels": 7038,
+          "strength": "Balanced",
+          "threshold": null,
+          "trimap_policy": "uncertain pixels remain foreground; only verified border-connected background is removed",
+          "uncertain_percent": 0.0
+        },
+        "result_pixels_sha256": "fa03ed071e8e6d53167ad08df0c555bd3d2274f66e5fbdd02b73177420cf114b",
+        "source_connected_feature": 60,
+        "source_known_foreground": 960,
+        "source_pixels_sha256": "8c3b4d5eb5729980ba3169f48a18f1920d2dde2619779b4e736c111e29eacbd9",
+        "source_size": [
+          100,
+          80
+        ],
+        "source_unchanged": true
+      }
+    ],
+    "boundary": "Only cleanup promotions outside the original proxy flood mask are prevented; proxy resolution and feather behavior are unchanged."
+  },
+  "palette_comparison": {
+    "artifact": "v148-batch30-palette-benchmarks.json",
+    "sha256": "349e15e385ceb3e3e3c128486eeb9763ad491412d7aa563a1fdfc9f05d2ec644",
+    "historical_commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+    "complete_historical_pairs": 32,
+    "workloads": 6,
+    "balanced_pairs_per_workload": 6,
+    "source_hash_manifest_sha256": "ce9691bce3bdb6b6e992ab3383b323e803f85e8df95c6a99ff6f409a9d345abd",
+    "historical_module_sha256": "3f28cd7c69d5e09dc53c74ff72ef5f470a40538dede08827990e025365454aa5",
+    "current_module_sha256": "9fa64a4d111ea4d7c81f57a5d84e456f0f863195d6b09dc6bccbfaaee745c4d3",
+    "method": {
+      "historical_graph": "Whole PicturePaletteRefinement at baseline; all other current dependencies shared.",
+      "limits": "No native Paint, GPU, total process memory/RSS or universal performance claim.",
+      "pair_order": "Six balanced AB/BA pairs by default; no sample rejection.",
+      "real_cache": "Actual private cache; cold removal or warm priming happens outside timers/tracing.",
+      "separate_observers": "Work counts and Python peak/retained probes run separately from elapsed pairs.",
+      "timed_scope": "Whole public cold/warm build_picture_palette or explicit direct refinement, with the same local module-binding context overhead on both sides. Public make_plan parity is untimed."
+    },
+    "rows": {
+      "cold-grey-24": {
+        "before_median_ms": 38.544598,
+        "after_median_ms": 38.045353,
+        "after_change_percent": -1.295239867334974,
+        "after_faster_pairs": 5,
+        "after_slower_pairs": 1,
+        "pairs": [
+          {
+            "after_ns": 38721169,
+            "before_ns": 37719546,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 37605617,
+            "before_ns": 39507003,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 37872792,
+            "before_ns": 38676253,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 38217914,
+            "before_ns": 38412943,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 37475375,
+            "before_ns": 38241819,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 38418751,
+            "before_ns": 39094572,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_bytes": 5038433,
+            "retained_bytes": 739782,
+            "side": "before"
+          },
+          {
+            "peak_bytes": 5038641,
+            "retained_bytes": 740068,
+            "side": "after"
+          }
+        ],
+        "work_before": {
+          "assignments": [
+            {
+              "centers": 4,
+              "points": 45
+            },
+            {
+              "centers": 5,
+              "points": 45
+            },
+            {
+              "centers": 6,
+              "points": 45
+            },
+            {
+              "centers": 7,
+              "points": 45
+            },
+            {
+              "centers": 8,
+              "points": 45
+            },
+            {
+              "centers": 9,
+              "points": 45
+            },
+            {
+              "centers": 10,
+              "points": 45
+            },
+            {
+              "centers": 11,
+              "points": 45
+            },
+            {
+              "centers": 12,
+              "points": 45
+            },
+            {
+              "centers": 13,
+              "points": 45
+            },
+            {
+              "centers": 14,
+              "points": 45
+            },
+            {
+              "centers": 15,
+              "points": 45
+            },
+            {
+              "centers": 16,
+              "points": 45
+            },
+            {
+              "centers": 17,
+              "points": 45
+            },
+            {
+              "centers": 18,
+              "points": 45
+            },
+            {
+              "centers": 19,
+              "points": 45
+            },
+            {
+              "centers": 20,
+              "points": 45
+            },
+            {
+              "centers": 21,
+              "points": 45
+            },
+            {
+              "centers": 22,
+              "points": 45
+            },
+            {
+              "centers": 23,
+              "points": 45
+            },
+            {
+              "centers": 24,
+              "points": 45
+            },
+            {
+              "centers": 24,
+              "points": 45
+            }
+          ],
+          "point_center_pairs": 14310
+        },
+        "work_after": {
+          "assignments": [
+            {
+              "centers": 4,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 1,
+              "points": 45
+            },
+            {
+              "centers": 24,
+              "points": 45
+            }
+          ],
+          "point_center_pairs": 2160
+        },
+        "output_digest": "8f59cb3ba4258d90ad52da892b519215e2379584ebf38341b2b62fe2a6bdfa90"
+      },
+      "cold-red-24": {
+        "before_median_ms": 246.6405105,
+        "after_median_ms": 178.9191865,
+        "after_change_percent": -27.457502363546237,
+        "after_faster_pairs": 6,
+        "after_slower_pairs": 0,
+        "pairs": [
+          {
+            "after_ns": 173816489,
+            "before_ns": 265789625,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 188966044,
+            "before_ns": 267749141,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 220766043,
+            "before_ns": 238556567,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 164797895,
+            "before_ns": 250266879,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 184021884,
+            "before_ns": 238642365,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 167662342,
+            "before_ns": 243014142,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_bytes": 5106450,
+            "retained_bytes": 790426,
+            "side": "before"
+          },
+          {
+            "peak_bytes": 5106498,
+            "retained_bytes": 790453,
+            "side": "after"
+          }
+        ],
+        "work_before": {
+          "assignments": [
+            {
+              "centers": 8,
+              "points": 10885
+            },
+            {
+              "centers": 9,
+              "points": 10885
+            },
+            {
+              "centers": 10,
+              "points": 10885
+            },
+            {
+              "centers": 11,
+              "points": 10885
+            },
+            {
+              "centers": 12,
+              "points": 10885
+            },
+            {
+              "centers": 13,
+              "points": 10885
+            },
+            {
+              "centers": 14,
+              "points": 10885
+            },
+            {
+              "centers": 15,
+              "points": 10885
+            },
+            {
+              "centers": 16,
+              "points": 10885
+            },
+            {
+              "centers": 17,
+              "points": 10885
+            },
+            {
+              "centers": 18,
+              "points": 10885
+            },
+            {
+              "centers": 19,
+              "points": 10885
+            },
+            {
+              "centers": 20,
+              "points": 10885
+            },
+            {
+              "centers": 21,
+              "points": 10885
+            },
+            {
+              "centers": 22,
+              "points": 10885
+            },
+            {
+              "centers": 23,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            }
+          ],
+          "point_center_pairs": 4528160
+        },
+        "work_after": {
+          "assignments": [
+            {
+              "centers": 8,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            }
+          ],
+          "point_center_pairs": 1828680
+        },
+        "output_digest": "9ee81376e79ae75e2661224ff034e94fba9f856fa39386494f2b41e5bb8d8191"
+      },
+      "cold-full-palette-control": {
+        "before_median_ms": 542.1936785,
+        "after_median_ms": 524.7915375,
+        "after_change_percent": -3.2095802090765235,
+        "after_faster_pairs": 4,
+        "after_slower_pairs": 2,
+        "pairs": [
+          {
+            "after_ns": 548337061,
+            "before_ns": 541005068,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 520901957,
+            "before_ns": 554648008,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 524013726,
+            "before_ns": 535835602,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 557107023,
+            "before_ns": 543382289,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 525569349,
+            "before_ns": 544780219,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 519742080,
+            "before_ns": 533001028,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_bytes": 5120986,
+            "retained_bytes": 782756,
+            "side": "before"
+          },
+          {
+            "peak_bytes": 5121150,
+            "retained_bytes": 783095,
+            "side": "after"
+          }
+        ],
+        "work_before": {
+          "assignments": [
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            }
+          ],
+          "point_center_pairs": 2654208
+        },
+        "work_after": {
+          "assignments": [
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            },
+            {
+              "centers": 24,
+              "points": 12288
+            }
+          ],
+          "point_center_pairs": 2654208
+        },
+        "output_digest": "7e339642bfda15e64205fe7f2723615e7638ecbebfd963da5d0a010928e4dff7"
+      },
+      "cold-region-control": {
+        "before_median_ms": 771.390379,
+        "after_median_ms": 760.932283,
+        "after_change_percent": -1.3557462323496305,
+        "after_faster_pairs": 4,
+        "after_slower_pairs": 2,
+        "pairs": [
+          {
+            "after_ns": 740960926,
+            "before_ns": 734679506,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 762770556,
+            "before_ns": 771522411,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 768107369,
+            "before_ns": 771258347,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 759094010,
+            "before_ns": 760263752,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 756403358,
+            "before_ns": 792106015,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 782999501,
+            "before_ns": 773609980,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_bytes": 5126530,
+            "retained_bytes": 751073,
+            "side": "before"
+          },
+          {
+            "peak_bytes": 5126898,
+            "retained_bytes": 751441,
+            "side": "after"
+          }
+        ],
+        "work_before": {
+          "assignments": [
+            {
+              "centers": 24,
+              "points": 65
+            },
+            {
+              "centers": 24,
+              "points": 65
+            }
+          ],
+          "point_center_pairs": 3120
+        },
+        "work_after": {
+          "assignments": [
+            {
+              "centers": 24,
+              "points": 65
+            },
+            {
+              "centers": 24,
+              "points": 65
+            }
+          ],
+          "point_center_pairs": 3120
+        },
+        "output_digest": "f57edf14ddda5382df261a533cf464546482f19a748c515eb94103be0bf8d203"
+      },
+      "warm-cache-control": {
+        "before_median_ms": 0.5460865,
+        "after_median_ms": 0.516418,
+        "after_change_percent": -5.432930497274702,
+        "after_faster_pairs": 4,
+        "after_slower_pairs": 2,
+        "pairs": [
+          {
+            "after_ns": 548751,
+            "before_ns": 538736,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 451727,
+            "before_ns": 544344,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 530494,
+            "before_ns": 561580,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 548210,
+            "before_ns": 524575,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 502342,
+            "before_ns": 559547,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 423195,
+            "before_ns": 547829,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_bytes": 1070273,
+            "retained_bytes": 27910,
+            "side": "before"
+          },
+          {
+            "peak_bytes": 1070273,
+            "retained_bytes": 27910,
+            "side": "after"
+          }
+        ],
+        "work_before": {
+          "assignments": [],
+          "point_center_pairs": 0
+        },
+        "work_after": {
+          "assignments": [],
+          "point_center_pairs": 0
+        },
+        "output_digest": "99f1215cc97136c85846973b47a0b7584dd4f8610fad4f8a8bb54e18d5901f36"
+      },
+      "direct-red-refinement": {
+        "before_median_ms": 154.558541,
+        "after_median_ms": 68.454575,
+        "after_change_percent": -55.709613614947365,
+        "after_faster_pairs": 6,
+        "after_slower_pairs": 0,
+        "pairs": [
+          {
+            "after_ns": 77375422,
+            "before_ns": 161277122,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 75548693,
+            "before_ns": 157705170,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 69804679,
+            "before_ns": 159781808,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 67104471,
+            "before_ns": 151411912,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 59515274,
+            "before_ns": 149286305,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 66911370,
+            "before_ns": 139812448,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_bytes": 2180528,
+            "retained_bytes": 44311,
+            "side": "before"
+          },
+          {
+            "peak_bytes": 2180820,
+            "retained_bytes": 44339,
+            "side": "after"
+          }
+        ],
+        "work_before": {
+          "assignments": [
+            {
+              "centers": 4,
+              "points": 10885
+            },
+            {
+              "centers": 5,
+              "points": 10885
+            },
+            {
+              "centers": 6,
+              "points": 10885
+            },
+            {
+              "centers": 7,
+              "points": 10885
+            },
+            {
+              "centers": 8,
+              "points": 10885
+            },
+            {
+              "centers": 9,
+              "points": 10885
+            },
+            {
+              "centers": 10,
+              "points": 10885
+            },
+            {
+              "centers": 11,
+              "points": 10885
+            },
+            {
+              "centers": 12,
+              "points": 10885
+            },
+            {
+              "centers": 13,
+              "points": 10885
+            },
+            {
+              "centers": 14,
+              "points": 10885
+            },
+            {
+              "centers": 15,
+              "points": 10885
+            },
+            {
+              "centers": 16,
+              "points": 10885
+            },
+            {
+              "centers": 17,
+              "points": 10885
+            },
+            {
+              "centers": 18,
+              "points": 10885
+            },
+            {
+              "centers": 19,
+              "points": 10885
+            },
+            {
+              "centers": 20,
+              "points": 10885
+            },
+            {
+              "centers": 21,
+              "points": 10885
+            },
+            {
+              "centers": 22,
+              "points": 10885
+            },
+            {
+              "centers": 23,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            }
+          ],
+          "point_center_pairs": 4245150
+        },
+        "work_after": {
+          "assignments": [
+            {
+              "centers": 4,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 1,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            },
+            {
+              "centers": 24,
+              "points": 10885
+            }
+          ],
+          "point_center_pairs": 1306200
+        },
+        "output_digest": "99c1ad68d914a68c3bda892c66be78eebb925b3d570bcfe412037437c6b66594"
+      }
+    },
+    "limits": "Whole public make_plan comparisons are untimed. Unchanged-work controls, allocation increases and Python-only memory scope remain explicit."
+  },
+  "unsuccessful_integration_attempts": [
+    {
+      "artifact": "v148-batch30-local-interrupted-attempt1.json",
+      "sha256": "b4c9b33aa0b764826bc72fc85d43599ed1b281484fda1dbdd72c196b8f59618d",
+      "classification": "incomplete; no passing test count",
+      "report": {
+        "status": "incomplete",
+        "passed": false,
+        "observed_utc": "2026-11-08T00:47:16.041295+00:00",
+        "parent": "4b90b715a9128a022774f411e14e8a1b45676339",
+        "reason": "The exec process handle became unavailable and no runner or unittest process remained. The output has no final unittest summary and no runner after-manifest/report. Cause is not established.",
+        "last_log_line": "test_exact_saved_limit_round_trips_through_startup_reader (test_v148_ui_batch26_word_storage.ImportedWordStorageTests.test_exact_saved_limit_round_trips_through_startup_reader) ... ",
+        "log_sha256": "1a6961d54400a1b87c4f50d0480d54c495f5f4893a687b58183bc200c87ff2ea",
+        "initial_manifest_sha256": "47ec787c920af41d249a9a6ea5616c6d475209d5145385da365962b9df4091c6",
+        "source_files": 942,
+        "source_unchanged_on_inspection": true,
+        "root_source_digest": "ce9691bce3bdb6b6e992ab3383b323e803f85e8df95c6a99ff6f409a9d345abd",
+        "full_source_digest": "d9c61fbb5e914dcd37682fc08b5b19c20a7eec2bb4ab806b0cbe3806d9fea156",
+        "followup": "Repeat the same frozen source and unchanged runner/test timeout in a separately supervised process; preserve this incomplete attempt and do not count it as passing."
+      },
+      "log": {
+        "artifact": "v148-batch30-fullsuite-interrupted-attempt1.log",
+        "sha256": "1a6961d54400a1b87c4f50d0480d54c495f5f4893a687b58183bc200c87ff2ea"
+      }
+    },
+    {
+      "artifact": "v148-batch30-local-interrupted-attempt3.json",
+      "sha256": "7447b97205a1cff6458394f382f563e62a8c3c73a647ab5383cc9a188d417b19",
+      "classification": "incomplete; no passing test count",
+      "report": {
+        "status": "incomplete",
+        "passed": false,
+        "final_test_count": null,
+        "runner_report_exists": false,
+        "source_after_report_exists": false,
+        "cause": "Not established. functions.wait returned exec cell 31 not found; functions store no longer contained its process session or final result.",
+        "log_sha256": "8739b65b9fe610403e9f6463240d45494d4493502585d5ed85a00a4df2a7a0ef",
+        "source_hash_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+        "current_source_map_matches_start": true,
+        "last_line": "test_same_size_translation_is_exact_but_resize_and_dpi_changes_never_expand_region (test_v148_ui_batch20_browser_region.BrowserRegionFlowTests.test_same_size_translation_is_exact_but_resize_and_dpi_changes_never_expand_region) ... ",
+        "recorded_utc": "2026-11-08T01:13:20.905683+00:00",
+        "scope": "No final unittest summary; not a passing run. A separate exec PID namespace cannot establish whether the original process remained alive elsewhere.",
+        "next_runner_change": "Same unchanged full-discovery runner and timeout, invoked by an outer supervisor emitting periodic visible progress. No product, test, skip, or timeout changes."
+      },
+      "log": {
+        "artifact": "v148-batch30-fullsuite-interrupted-attempt3.log",
+        "sha256": "8739b65b9fe610403e9f6463240d45494d4493502585d5ed85a00a4df2a7a0ef"
+      }
+    },
+    {
+      "artifact": "v148-batch30-local-regressions-failed-attempt2.json",
+      "sha256": "1707dba8703ae1f6b3f53dbfd352fa3adc5752f2f1fe9f56c84bdd2dec5cb75e",
+      "classification": "native Tcl abort; no final unittest count",
+      "report": {
+        "base_commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+        "command": ".venv/bin/python -B -m unittest discover -v",
+        "exit_code": -4,
+        "tests": null,
+        "runner_seconds": null,
+        "wall_seconds": 225.816,
+        "status": null,
+        "skipped": 0,
+        "source_files": 942,
+        "source_changed": [],
+        "source_hash_manifest_sha256": "d9c61fbb5e914dcd37682fc08b5b19c20a7eec2bb4ab806b0cbe3806d9fea156",
+        "source_hash_manifest_after_sha256": "d9c61fbb5e914dcd37682fc08b5b19c20a7eec2bb4ab806b0cbe3806d9fea156",
+        "source_manifest_file": "v148-batch30-source-hashes.json",
+        "source_manifest_after_file": "v148-batch30-source-hashes-after.json",
+        "head_after": "4b90b715a9128a022774f411e14e8a1b45676339",
+        "log_file": "v148-batch30-fullsuite.log",
+        "log_sha256": "dcf95b38eb8d77dde3e86847b0ec178ccffe796f8ea1f32c3b23d09e98fc424e",
+        "runner_failure": null,
+        "passed": false
+      },
+      "log": {
+        "artifact": "v148-batch30-fullsuite-failed-attempt2.log",
+        "sha256": "dcf95b38eb8d77dde3e86847b0ec178ccffe796f8ea1f32c3b23d09e98fc424e"
+      },
+      "preservation": {
+        "artifact": "v148-batch30-failed-attempt2-preservation.json",
+        "sha256": "83b812763dff1bd2ff10e3da20ed472ad5fd9337b7ff72c8376d599d8ec624b4"
+      }
+    }
+  ],
+  "runner_observations": {
+    "artifact": "v148-batch30-runner-observations.json",
+    "sha256": "094e489e00021c8f5ab04a5ffb4f82a4f99bb08d09464e3fb8c2ee9464a820d3",
+    "report": {
+      "observed_utc": "2026-11-08T00:48:57.824896+00:00",
+      "detached_launch": "The attempted detached child produced no source manifest, no suite log and no output in its launcher log; no tests are counted for this launch.",
+      "process_observation_limit": "The prior /proc inspection describes only its own execution namespace. It is not proof of global process absence. The original exec handle was unavailable and its retained test log stopped changing without a final report.",
+      "next_method": "Keep the supported exec session actively supervised through a single long-lived tool cell, polling its process handle while retaining the same test command and runner timeout."
+    }
+  },
+  "focused_fixture_correction": {
+    "artifact": "v148-batch30-fixture-regression-after.json",
+    "sha256": "c0f87dbfbfd79c52ced813fd262711c2046cfd48d1482c538d16825a61e2e7a9",
+    "report": {
+      "command": [
+        "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch30/.venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "test_v148_ui_batch30_fixture_ownership",
+        "-v"
+      ],
+      "exit_code": 0,
+      "seconds": 1.5468396930009476,
+      "log_sha256": "9e4bfe3542690bd9e86e3508e2ae8a56229f0b7308485b73e118ccd84c8448a7"
+    },
+    "new_improvement_ids": 0
+  },
+  "exact_raster_results": {
+    "artifact": "v148-batch30-engine-benchmarks.json",
+    "sha256": "b71efaec90c4300367837b0ad9375f7a267e669302e56654a813da940f921ce7",
+    "fixtures": 8,
+    "all_exact_palette_geometry": true,
+    "mismatched_plan_pixels": {
+      "red-bananas": 0,
+      "yellow-banana": 0,
+      "small-details": 0,
+      "dominant-hues": 0,
+      "icon-crop": 0,
+      "paint-reference": 0,
+      "application-webp": 0,
+      "application-png-crop": 0
+    },
+    "existing_tracked_assets": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "preserved_old_benchmark_reports": {
+    "count": 78,
+    "byte_identical_to_parent": true,
+    "sha256": {
+      "docs/v148-batch01-benchmarks.json": "2ff838f783800d2c9cfd561cbde06704cff11e657aeed0e352bbb556347a422a",
+      "docs/v148-batch02-calibration-benchmarks.json": "2920c7a79f60df29563b20352bd1c1189afa70abeda871d60ab1f56019216d7e",
+      "docs/v148-batch02-delivery-benchmarks.json": "f2cb3b2c436bd4407d4ead03f5d6021d98dfed11890bd9101d37d0bb8cb2e89e",
+      "docs/v148-batch02-engine-benchmarks.json": "f365afaa12a7974fd682a671fee8cb2fbb6368ec37507d8803b2afdb23b78cd1",
+      "docs/v148-batch02-runtime-benchmarks.json": "bb2597bed0e8c5f21cb5670d29a0b30fef849549916068f24b9e8bf6aa750cf8",
+      "docs/v148-batch02-storage-benchmarks.json": "75574b2aad6888377de345d213693365b767a37962506c4956ef622ce0ff4a5b",
+      "docs/v148-batch03-colour-benchmarks.json": "d523c7c3efe0fa3e16ba0255ba4e6249672f7173e27cdb6fb7e3ff3d0f1a4073",
+      "docs/v148-batch03-engine-benchmarks.json": "04b391abfc9bd36af905db6655177a4ab09b18bb49c1fda83c71e9335b247757",
+      "docs/v148-batch03-gpu-platform-benchmarks.json": "3731fa654f5ebe504d113ac708637d563a418c226cd7f0a0452f45069ece3b03",
+      "docs/v148-batch03-image-benchmarks.json": "6f14204b4dc0f4e6588d2c69f8e714dde190a721c17d2a6c2529af4b05b0d254",
+      "docs/v148-batch03-rendering-benchmarks.json": "c1cb43f3cde8a585a7ab322ba15025a4d885e3d9b1adb6754de2b14c6325ef1c",
+      "docs/v148-batch04-application-benchmarks.json": "b76f63ba3aeb1191c194909096d7728e052e7bd5b1c566522c9c33a9beb4db00",
+      "docs/v148-batch04-engine-benchmarks.json": "9d23ca7ec7cca75fbed92e7626e48bd4606bb8fd9641ff94eab123095f936925",
+      "docs/v148-batch04-planner-benchmarks.json": "a20857041bfc844ad97cfc9c6c48242f937268d4be8acfbc81bd188ac85add59",
+      "docs/v148-batch04-ui-profiles-benchmarks.json": "f1bbb3b29dd7a130e1f9bd5058f658122675714234c69d7d926d5efac533c685",
+      "docs/v148-batch05-colour-planning-benchmarks.json": "92abe805510eefbfbe5092102304d95e88e0a125a85cf025662cf4078b7071ab",
+      "docs/v148-batch05-engine-benchmarks.json": "1958647992f511d796a45b38cf67d7385b2537137f8ec94e3ed6cfefd1597bbe",
+      "docs/v148-batch05-platform-benchmarks.json": "ab8fc69d47488373130fa0a7ff0768eac51b76921990e439c3ee225e492b4edc",
+      "docs/v148-batch05-runtime-benchmarks.json": "69d4998916ec97c996966dfb907e799c63ad9024c9ccb6b102e2c6825937ab3f",
+      "docs/v148-batch05-ui-workflow-benchmarks.json": "190c3a2c459526a349d918e6f6e4cf8afcb342c5f3be9b13dfe27042dce2ec50",
+      "docs/v148-batch06-engine-benchmarks.json": "f6140c279d7193a8d3854438cca0610e6b5c33c2713cb127fc47385d9ec99ff4",
+      "docs/v148-batch06-platform-benchmarks.json": "f47dac4c26e042f1aa5e15f49f9c8f4cf1d99c32fe6dfec2987bdea2f75b6113",
+      "docs/v148-batch06-probe-benchmarks.json": "4972fa0fc0c47f40a30bc24953a5de7c7cebffcb41f81502e6ecdf5a144681de",
+      "docs/v148-batch06-rendering-benchmarks.json": "8f4836d4ac4afda9bedd8a11968a05872f2facbc3f2bad1bfa93b24b8070c10d",
+      "docs/v148-batch06-ui-calibration-benchmarks.json": "e922669eb5b7e48cbdf351bd6fdf385a321200d041c0750e11c54c6b0461abf8",
+      "docs/v148-batch07-engine-benchmarks.json": "daebbe55eacee370b66757ac4140ba1cd4b92efba9420a21cbe66d7e235d0c1d",
+      "docs/v148-batch07-mobile-benchmarks.json": "1a19b4310e4132cacc65c226df0f129bc5042770c1eddf71dd5046a8ce49b6c5",
+      "docs/v148-batch07-recording-benchmarks.json": "32d62a69462d68d944b6f22c19a9b3b99e8ec90a270677eef601e7fb29848e52",
+      "docs/v148-batch07-rendering-benchmarks.json": "7e619500b42713dbb6a6bdb367b7ba11951081025c45fdd66b3020e148199e2f",
+      "docs/v148-batch08-background-benchmarks.json": "8254e5d736be6ec43328dd607b95ac819d9a37c2a427547be6b8a35f5983da00",
+      "docs/v148-batch08-engine-benchmarks.json": "17d945ea1b36772ad38b4a4b6f25b20675c9e10dc6008e19d18f186e06da6e92",
+      "docs/v148-batch08-rendering-benchmarks.json": "f8b72754303cdd5606e46c37f83457309020fae107397fbd92ca483ac03a9cbb",
+      "docs/v148-batch09-engine-benchmarks.json": "941d955c4f0f3290bd3744ef7884e20bece4b880ef7421c3d3dc6e67683cf2f1",
+      "docs/v148-batch10-engine-benchmarks.json": "042a3c8117e5c2f06643ff24da04a27e2393433badccb78a7bac26783bc3c239",
+      "docs/v148-batch10-recovery-benchmarks.json": "75eec7117591171476b62a2cf55dac52c2b7efe65ba376603348d77eb07cb04a",
+      "docs/v148-batch10-rendering-benchmarks.json": "e47a6d15491c019768707ce1cf234234223f0bba2911934088f6933951ff2002",
+      "docs/v148-batch11-engine-benchmarks.json": "45d7409ca26d3cec6e462893f7982ff448eeaa975bbbaf6af72830610d965134",
+      "docs/v148-batch11-rendering-benchmarks.json": "c5fd9e32b63c4c1ccf3d9b02e292645e99b338920b7c5d1d421def6166b1866d",
+      "docs/v148-batch12-engine-benchmarks.json": "2a798ba606358e414961038d626ceccc0fdc39491bc49fd424154797f4078f9d",
+      "docs/v148-batch12-rendering-benchmarks.json": "1d18c9268cebacfa34817d5a0c9d8cb7c37cda3d6533fa52258b0eef9e5cd03d",
+      "docs/v148-batch14-engine-benchmarks.json": "4d43f147977f50f2d66938e1a323c76ef7b90aa3708069990698798d17ff8ac6",
+      "docs/v148-batch14-rendering-benchmarks.json": "bc196c430321afd7b60943574a3e182b54494b301e9447ee100485dff6b03c5c",
+      "docs/v148-batch15-engine-benchmarks.json": "884f228913bd6f6c818a0ba9f7db3995af157a01fa1ecf0ccd93bedbaea8abd9",
+      "docs/v148-batch15-platform-benchmarks.json": "b9b6b24ae82645100748434825afc2951bcf33181dca9643a3f551c09bcabcf2",
+      "docs/v148-batch15-prepare-benchmarks.json": "13c4ac5aad161f9f05450fac32bd4e97c31d8e6a31948586192b544a88f45422",
+      "docs/v148-batch15-rendering-benchmarks.json": "901b71484a56bbd3d9218d0ae8bd3fa10501abd44b69fe1b0056f10e3a77ea14",
+      "docs/v148-batch16-detail-benchmarks.json": "07d5b8298608429ab6878f4dfc177242cd05058735aeda231ec436080813cdf5",
+      "docs/v148-batch16-engine-benchmarks.json": "c00ae5ac87760df6d36c51aace85d2343a8ee22a9cd335b5c52ae1a799c26625",
+      "docs/v148-batch17-engine-benchmarks.json": "d5baddeef507f46de51c5de7b0dd1d2aede252cf30db3836ea138b95e8fbabbf",
+      "docs/v148-batch18-engine-benchmarks.json": "24475debb3c96d67578526c180eebb3a7e0f30ef718b609a408c1ff6b6b72133",
+      "docs/v148-batch18-rendering-benchmarks.json": "5f41ce551b7dd29168e66ed94523a876b0867728543c8e8c3ed55f6e493e4e00",
+      "docs/v148-batch19-colour-benchmarks.json": "a34705ec47ee54f219df981b47890288f55fafbce39d9c96c752a8d87bc503f2",
+      "docs/v148-batch19-engine-benchmarks.json": "43e48272683c41c551b01b394d4b37b96914654664f8ebd6cb605a7a3e5efea1",
+      "docs/v148-batch19-platform-profile-benchmarks.json": "04e3a0638ec591f1e685cc5b76b49c6a544991af5cdb303d25f54d564e295836",
+      "docs/v148-batch19-rendering-benchmarks.json": "d5a1d7c16702bfab4595641dc3fdff895b244f86daa8de3e5a8683de5f438799",
+      "docs/v148-batch20-colour-benchmarks.json": "fd99453a0e329b206f98c21db9fed35c0a308b9ed3c7dc3ac4e0655ef6caa028",
+      "docs/v148-batch20-engine-benchmarks.json": "bb774c674ed79058c74c185a6ae4c1e0ebd46668981d476e30d0a56ac0e29699",
+      "docs/v148-batch20-ui-estimate-benchmarks.json": "610b6bdd9c96752dd2da59790d0b8da2ed2b843a1348536a48130185fc38dbe5",
+      "docs/v148-batch21-calibration-benchmarks.json": "6e591e870a65d41f67da2847ddc9b0f27e2d9f8bf1691539387a3cde43f17835",
+      "docs/v148-batch21-clipping-benchmarks.json": "0394f303031c0d99b118e1f380d019b25f14f8ce275231a74b94bf3cbcdd1164",
+      "docs/v148-batch21-engine-benchmarks.json": "d16964e994eb6275624b83d247718fbf4d42b9e24b812c929fc7e787ffd2328f",
+      "docs/v148-batch22-engine-benchmarks.json": "3cf997dc21da28297e11085e6e17d18d65bec5033cd24b6bdd98fd809ce276a8",
+      "docs/v148-batch22-spectrum-benchmarks.json": "e5bbeee96a81ae16743e80e813e17b881939d4bc96a430c5d2b5d72592ae4e78",
+      "docs/v148-batch23-colour-mixed-benchmarks.json": "070e810ac5462a2b71bccb97b918f097ee5a1ceba3cfa77e73d27cbfe8650dab",
+      "docs/v148-batch23-engine-benchmarks.json": "a63186dc6dc7c4af37db56b1b00d3ce2683c136125ab74dbe7a3b672480290d9",
+      "docs/v148-batch23-json-reader-benchmarks.json": "d112a988335bc2f79009d08ef6de6bf3e8e86708b78edda85956d85e467d1385",
+      "docs/v148-batch24-component-queue-benchmarks.json": "ea40ba06ae9b68d924bdb9d9015ac3a41219001b84dfb18d8ae121e07fc62ef5",
+      "docs/v148-batch24-engine-benchmarks.json": "69c63bf94c79f2ac5cc98aceb05ae5a5768bec8777eaeaf6407487bf9097450a",
+      "docs/v148-batch25-engine-benchmarks.json": "13712d784951b126e156dd7adfd9d6b67528823ca50970a07087ba3e0c82fd9f",
+      "docs/v148-batch26-engine-benchmarks.json": "08cf002e48fe65de0ac07422b5b4fcaa7d5c63ed1f678162c6be24cc5d50cc07",
+      "docs/v148-batch26-opencl-host-benchmarks.json": "16d81bbd15e274653b49a5ed7741db9061c6c9ca5223111383cf903a52a19c49",
+      "docs/v148-batch26-topology-benchmarks.json": "22694492a512805267a3b01e54c14c102d95296a9092b1dc94868aa558440018",
+      "docs/v148-batch27-engine-benchmarks.json": "b84e69b1de6b19aed1c800adcd847333d50198cd5626709f32cbe031280dd57b",
+      "docs/v148-batch27-sketch-finalization-benchmarks.json": "b906d364edbbcfc4a36fa0d9da1877e15c418350325b482f4b8f8fcc3141e689",
+      "docs/v148-batch28-engine-benchmarks.json": "4f0fea787371e6a6741293412cc255bc4b13a4d82b306523bb7f4ab7130b6fb2",
+      "docs/v148-batch29-engine-benchmarks.json": "8b57b0698a22c2f85a9fa096a55069f5bdf325849beb304a253b3e6d204b8ac3",
+      "docs/v148-batch29-estimate-benchmarks.json": "0a55a290f801f9ece2c96481b0a23f777b3f09304ee713002d8d7c0ae8f77a12",
+      "docs/v148-maintenance-stroke-benchmarks.json": "6556fa5cb163462be7e9a4984ee6074a8ea44fff214dfaf418c55e22f0241782"
+    }
+  },
+  "prior_checkpoint_validation": {
+    "parent_commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+    "root_receipt": {
+      "artifact": "v148-batch30-parent-ci-root.json",
+      "sha256": "8328f45e9714c028144e6aed8619929dcbea11d984c7848511f50db50a1cc730"
+    },
+    "agent_receipt": {
+      "artifact": "v148-batch30-parent-ci-agent.json",
+      "sha256": "12b6dc34ef517b156b02e79a67e36572b96205c7add029dc7f82343c93aba1eb"
+    },
+    "failed_first_receipt": {
+      "artifact": "v148-batch30-parent-ci-agent-attempt1.json",
+      "sha256": "d0e563a75273dc2fa53c761209b90284bc7d6c868e24a344ad65fbf3fa74afd9"
+    },
+    "root": {
+      "parent": "4b90b715a9128a022774f411e14e8a1b45676339",
+      "ci_run": 42429074401,
+      "windows_job": 128576201162,
+      "windows_attempt": 2,
+      "all_seven_green": true,
+      "checks": [
+        {
+          "name": "dependencies-ubuntu-latest-py3.11",
+          "id": 128576239490,
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "dependencies-windows-latest-py3.12",
+          "id": 128576202707,
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "core-ubuntu-latest-py312",
+          "id": 128576202211,
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "core-windows-latest-py312",
+          "id": 128576201162,
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "CodeQL",
+          "id": 128573816714,
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Analyze (python)",
+          "id": 128573678339,
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Analyze (actions)",
+          "id": 128573678169,
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "windows_steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Checkout",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Set up Python",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Install application and test dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Validate source package hygiene",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Run exact raster and portable planner regressions",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Run Extra Fast benchmark smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Run complete regressions",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Run Image Draw Bot Windows self-test",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Build and validate the Windows bundle",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Verify packaged GUI and native drag and drop",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Post Set up Python",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21
+        },
+        {
+          "name": "Post Checkout",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 22
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 23
+        }
+      ],
+      "windows_tests": {
+        "total": 4522,
+        "passed": 4519,
+        "skipped": 3,
+        "seconds": 522.663
+      },
+      "windows_log_chars": 1057253,
+      "windows_zip_sha256": "e7e76ed68495bdd4d88d3ebd8525fe11eb85057b2cfd6f4b8758ae606d0eed99",
+      "diagnostics": {
+        "invalid_command": 0,
+        "tcl_async_delete": 0,
+        "actions_errors": 0
+      },
+      "initial_attempt": {
+        "windows_job": 128573693324,
+        "total": 4522,
+        "passed": 4518,
+        "errors": 1,
+        "skipped": 3,
+        "seconds": 525.375,
+        "error": "Existing MobileBrowser test Node subprocess timeout after five seconds; no assertion failure. Exact phase not established.",
+        "skipped_after_failure": [
+          "Windows self-test",
+          "bundle",
+          "packaged GUI/native drag-and-drop"
+        ]
+      },
+      "rerun": "Exactly one unchanged-source Windows job rerun; no test, timeout or product modifications.",
+      "root_verified": true
+    },
+    "agent": {
+      "schema": 1,
+      "repository": "Vxiey/Image-Draw-Bot",
+      "commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+      "context": "Published batch29 parent for batch30. Exact unchanged commit succeeded on one failed-job rerun; initial failed attempt remains preserved.",
+      "retrieved_at_utc": "2026-11-08 00:40:13 UTC",
+      "provenance": {
+        "checks": {
+          "tool": "github_fetch",
+          "url": "https://api.github.com/repos/Vxiey/Image-Draw-Bot/commits/4b90b715a9128a022774f411e14e8a1b45676339/check-runs?per_page=100"
+        },
+        "workflows": {
+          "tool": "github_fetch",
+          "url": "https://api.github.com/repos/Vxiey/Image-Draw-Bot/actions/runs?head_sha=4b90b715a9128a022774f411e14e8a1b45676339&per_page=30"
+        },
+        "windows_steps": {
+          "tool": "github_fetch_workflow_job_steps",
+          "repository": "Vxiey/Image-Draw-Bot",
+          "job_id": 128576201162
+        },
+        "windows_log": {
+          "tool": "github_fetch_workflow_job_logs",
+          "repository": "Vxiey/Image-Draw-Bot",
+          "job_id": 128576201162,
+          "decoded_complete_log": true,
+          "utf8_bytes": 1057255,
+          "sha256": "13f49dc205e13b0a6883c8bdddc9d9489253e8bcaa30c2402ad21f2576947d40",
+          "local_path": "/workspace/scratch/97bfc35400fb/v148-batch30-parent-ci-windows-attempt2.log"
+        },
+        "first_attempt_report": {
+          "path": "/workspace/scratch/97bfc35400fb/v148-batch30-parent-ci-agent-attempt1.json",
+          "sha256": "d0e563a75273dc2fa53c761209b90284bc7d6c868e24a344ad65fbf3fa74afd9"
+        },
+        "first_attempt_log": {
+          "tool": "github_fetch_workflow_job_logs",
+          "job_id": 128573693324,
+          "decoded_complete_log": true,
+          "utf8_bytes": 1045986,
+          "sha256": "d3432068423abf7a728f836b3ab83cb4240d0fe5596c799b73f9aefe61331c0a",
+          "local_path": "/workspace/scratch/97bfc35400fb/v148-batch30-parent-ci-windows-attempt1.log"
+        }
+      },
+      "status": "completed",
+      "conclusion": "success",
+      "checks": [
+        {
+          "id": 128576239490,
+          "name": "dependencies-ubuntu-latest-py3.11",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576239490",
+          "started_at": "2026-11-08T00:17:27Z",
+          "completed_at": "2026-11-08T00:17:47Z"
+        },
+        {
+          "id": 128576202707,
+          "name": "dependencies-windows-latest-py3.12",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576202707",
+          "started_at": "2026-11-08T00:17:27Z",
+          "completed_at": "2026-11-08T00:18:19Z"
+        },
+        {
+          "id": 128576202211,
+          "name": "core-ubuntu-latest-py312",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576202211",
+          "started_at": "2026-11-08T00:17:26Z",
+          "completed_at": "2026-11-08T00:24:17Z"
+        },
+        {
+          "id": 128576201162,
+          "name": "core-windows-latest-py312",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576201162",
+          "started_at": "2026-11-08T00:28:12Z",
+          "completed_at": "2026-11-08T00:39:24Z"
+        },
+        {
+          "id": 128573816714,
+          "name": "CodeQL",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "details_url": "https://github.com/Vxiey/Image-Draw-Bot/runs/128573816714",
+          "started_at": "2026-11-08T00:17:56Z",
+          "completed_at": "2026-11-08T00:18:00Z"
+        },
+        {
+          "id": 128573678339,
+          "name": "Analyze (python)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429068852/job/128573678339",
+          "started_at": "2026-11-08T00:17:23Z",
+          "completed_at": "2026-11-08T00:20:01Z"
+        },
+        {
+          "id": 128573678169,
+          "name": "Analyze (actions)",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429068852/job/128573678169",
+          "started_at": "2026-11-08T00:17:23Z",
+          "completed_at": "2026-11-08T00:18:06Z"
+        }
+      ],
+      "workflows": [
+        {
+          "id": 42429074401,
+          "name": "Image Draw Bot CI",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "event": "pull_request",
+          "run_attempt": 2,
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401",
+          "updated_at": "2026-11-08T00:39:25Z"
+        },
+        {
+          "id": 42429068852,
+          "name": "PR #46",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+          "event": "dynamic",
+          "run_attempt": 1,
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429068852",
+          "updated_at": "2026-11-08T00:20:02Z"
+        }
+      ],
+      "first_attempt": {
+        "run_id": 42429074401,
+        "run_attempt": 1,
+        "windows_job_id": 128573693324,
+        "status": "completed",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Checkout",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Set up Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Install application and test dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Validate source package hygiene",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Run exact raster and portable planner regressions",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Run Extra Fast benchmark smoke",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7
+          },
+          {
+            "name": "Run complete regressions",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 8
+          },
+          {
+            "name": "Run Image Draw Bot Windows self-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 9
+          },
+          {
+            "name": "Build and validate the Windows bundle",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 10
+          },
+          {
+            "name": "Verify packaged GUI and native drag and drop",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 11
+          },
+          {
+            "name": "Post Set up Python",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 21
+          },
+          {
+            "name": "Post Checkout",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 22
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 23
+          }
+        ],
+        "tests": {
+          "total": 4522,
+          "passed": 4518,
+          "errors": 1,
+          "failures": 0,
+          "skipped": 3,
+          "seconds": 525.375
+        },
+        "error": {
+          "test": "test_mobile_maintenance_rc4.MobileBrowserTests.test_available_view_is_accessible_and_loads_its_own_image",
+          "type": "subprocess.TimeoutExpired",
+          "boundary": "run_browser: subprocess.run(Node -e JavaScript harness, timeout=5)",
+          "source_file": "test_mobile_maintenance_rc4.py",
+          "line": 182,
+          "excerpt": [
+            "2026-11-08T00:19:18.8153144Z test_available_view_is_accessible_and_loads_its_own_image (test_mobile_maintenance_rc4.MobileBrowserTests.test_available_view_is_accessible_and_loads_its_own_image) ... ERROR",
+            "2026-11-08T00:19:19.1159151Z test_empty_preview_shows_waiting_without_requesting_missing_images (test_mobile_maintenance_rc4.MobileBrowserTests.test_empty_preview_shows_waiting_without_requesting_missing_images) ... ok",
+            "2026-11-08T00:19:19.1833231Z test_failed_image_retries_when_server_revision_has_not_changed (test_mobile_maintenance_rc4.MobileBrowserTests.test_failed_image_retries_when_server_revision_has_not_changed) ... ok",
+            "2026-11-08T00:19:19.3078002Z test_http_error_and_stalled_request_both_schedule_reconnect (test_mobile_maintenance_rc4.MobileBrowserTests.test_http_error_and_stalled_request_both_schedule_reconnect) ... ok",
+            "2026-11-08T00:26:56.8770283Z ERROR: test_available_view_is_accessible_and_loads_its_own_image (test_mobile_maintenance_rc4.MobileBrowserTests.test_available_view_is_accessible_and_loads_its_own_image)",
+            "2026-11-08T00:26:56.8817882Z Ran 4522 tests in 525.375s",
+            "2026-11-08T00:26:56.8818243Z FAILED (errors=1, skipped=3)"
+          ]
+        },
+        "invalid_command_count": 0,
+        "tcl_async_delete_count": 0,
+        "package_sha256": null,
+        "package_reason": "Windows self-test, bundle build/validation and packaged GUI/native DnD were skipped after the regression error."
+      },
+      "windows": {
+        "run_id": 42429074401,
+        "run_attempt": 2,
+        "job_id": 128576201162,
+        "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576201162",
+        "status": "completed",
+        "conclusion": "success",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Checkout",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Set up Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Install application and test dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Validate source package hygiene",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Run exact raster and portable planner regressions",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Run Extra Fast benchmark smoke",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7
+          },
+          {
+            "name": "Run complete regressions",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 8
+          },
+          {
+            "name": "Run Image Draw Bot Windows self-test",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9
+          },
+          {
+            "name": "Build and validate the Windows bundle",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10
+          },
+          {
+            "name": "Verify packaged GUI and native drag and drop",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11
+          },
+          {
+            "name": "Post Set up Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 21
+          },
+          {
+            "name": "Post Checkout",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 22
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 23
+          }
+        ],
+        "tests": {
+          "total": 4522,
+          "passed": 4519,
+          "errors": 0,
+          "failures": 0,
+          "skipped": 3,
+          "seconds": 522.663
+        },
+        "python_version": "3.12.10",
+        "source_self_test": "success",
+        "windows_bundle": "success",
+        "packaged_gui_native_drag_drop": "success",
+        "invalid_command_count": 0,
+        "tcl_async_delete_count": 0,
+        "package": {
+          "name": "ImageDrawBot-1.0.148-Windows-x64.zip",
+          "sha256": "e7e76ed68495bdd4d88d3ebd8525fe11eb85057b2cfd6f4b8758ae606d0eed99",
+          "verification": "Actual Windows bundle log plus successful bundle validation and packaged smoke-test steps.",
+          "log_line": "2026-11-08T00:39:12.5859595Z   e7e76ed68495bdd4d88d3ebd8525fe11eb85057b2cfd6f4b8758ae606d0eed99  ImageDrawBot-1.0.148-Windows-x64.zip"
+        },
+        "evidence": [
+          "2026-11-08T00:30:27.1066196Z test_available_view_is_accessible_and_loads_its_own_image (test_mobile_maintenance_rc4.MobileBrowserTests.test_available_view_is_accessible_and_loads_its_own_image) ... ok",
+          "2026-11-08T00:37:55.4037577Z Ran 4522 tests in 522.663s",
+          "2026-11-08T00:37:55.4037971Z OK (skipped=3)",
+          "2026-11-08T00:37:55.7948153Z ##[group]Run python DrawBot.py --self-test",
+          "2026-11-08T00:39:12.5858338Z + D:\\a\\Image-Draw-Bot\\Image-Draw-Bot\\dist\\ImageDrawBot\\ImageDrawBot.exe --self-test",
+          "2026-11-08T00:39:12.5858825Z RC Windows artifact gate: PASS",
+          "2026-11-08T00:39:12.7078678Z ##[group]Run python -c \"import subprocess; subprocess.run( ['dist/ImageDrawBot/ImageDrawBot.exe', '--smoke-test'], check=True, timeout=90)\""
+        ]
+      },
+      "rerun": {
+        "unchanged_commit": true,
+        "failed_job_reruns": 1,
+        "requested_by": "root",
+        "test_timeout_skip_or_product_changes": false,
+        "initial_error_retained": true
+      },
+      "assessment": "Attempt 1 had one five-second Node subprocess timeout in the first Mobile browser-harness case; later independent Node cases passed. One unchanged failed-job rerun passed that case and the full Windows suite. Transient startup/runner latency remains plausible, not proven by the existing harness. No timeout or assertion was weakened, no test skipped and no product changed to obtain this result.",
+      "boundary": "This evidence establishes checks, native Windows tests and packaged application behavior for exact published parent 4b90 only. It does not establish Windows success for uncommitted batch30 changes or a future batch30 head. No PR, ref, issue or workflow mutation was performed by this reviewing agent."
+    },
+    "first_attempt": {
+      "schema": 1,
+      "repository": "Vxiey/Image-Draw-Bot",
+      "commit": "4b90b715a9128a022774f411e14e8a1b45676339",
+      "context": "Published batch29 parent for batch30; first failed Windows attempt preserved. Unchanged rerun attempt2 pending.",
+      "retrieved_at_utc": "2026-11-08 00:30:27 UTC",
+      "provenance": {
+        "checks": {
+          "tool": "github_fetch",
+          "url": "https://api.github.com/repos/Vxiey/Image-Draw-Bot/commits/4b90b715a9128a022774f411e14e8a1b45676339/check-runs?per_page=100"
+        },
+        "workflows": {
+          "tool": "github_fetch",
+          "url": "https://api.github.com/repos/Vxiey/Image-Draw-Bot/actions/runs?head_sha=4b90b715a9128a022774f411e14e8a1b45676339&per_page=30"
+        },
+        "first_attempt_jobs": {
+          "tool": "github_fetch",
+          "url": "https://api.github.com/repos/Vxiey/Image-Draw-Bot/actions/runs/42429074401/attempts/1/jobs?per_page=100"
+        },
+        "windows_log": {
+          "tool": "github_fetch_workflow_job_logs",
+          "job_id": 128573693324,
+          "decoded_complete_log": true,
+          "utf8_bytes": 1045986,
+          "sha256": "d3432068423abf7a728f836b3ab83cb4240d0fe5596c799b73f9aefe61331c0a",
+          "local_path": "/workspace/scratch/97bfc35400fb/v148-batch30-parent-ci-windows-attempt1.log"
+        }
+      },
+      "first_attempt": {
+        "run_id": 42429074401,
+        "run_attempt": 1,
+        "windows_job_id": 128573693324,
+        "status": "completed",
+        "conclusion": "failure",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Checkout",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Set up Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Install application and test dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Validate source package hygiene",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Run exact raster and portable planner regressions",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Run Extra Fast benchmark smoke",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7
+          },
+          {
+            "name": "Run complete regressions",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 8
+          },
+          {
+            "name": "Run Image Draw Bot Windows self-test",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 9
+          },
+          {
+            "name": "Build and validate the Windows bundle",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 10
+          },
+          {
+            "name": "Verify packaged GUI and native drag and drop",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 11
+          },
+          {
+            "name": "Post Set up Python",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 21
+          },
+          {
+            "name": "Post Checkout",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 22
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 23
+          }
+        ],
+        "tests": {
+          "total": 4522,
+          "passed": 4518,
+          "errors": 1,
+          "failures": 0,
+          "skipped": 3,
+          "seconds": 525.375
+        },
+        "error": {
+          "test": "test_mobile_maintenance_rc4.MobileBrowserTests.test_available_view_is_accessible_and_loads_its_own_image",
+          "type": "subprocess.TimeoutExpired",
+          "boundary": "run_browser: subprocess.run(Node -e JavaScript harness, timeout=5)",
+          "source_file": "test_mobile_maintenance_rc4.py",
+          "line": 182,
+          "excerpt": [
+            "2026-11-08T00:19:18.8153144Z test_available_view_is_accessible_and_loads_its_own_image (test_mobile_maintenance_rc4.MobileBrowserTests.test_available_view_is_accessible_and_loads_its_own_image) ... ERROR",
+            "2026-11-08T00:19:19.1159151Z test_empty_preview_shows_waiting_without_requesting_missing_images (test_mobile_maintenance_rc4.MobileBrowserTests.test_empty_preview_shows_waiting_without_requesting_missing_images) ... ok",
+            "2026-11-08T00:19:19.1833231Z test_failed_image_retries_when_server_revision_has_not_changed (test_mobile_maintenance_rc4.MobileBrowserTests.test_failed_image_retries_when_server_revision_has_not_changed) ... ok",
+            "2026-11-08T00:19:19.3078002Z test_http_error_and_stalled_request_both_schedule_reconnect (test_mobile_maintenance_rc4.MobileBrowserTests.test_http_error_and_stalled_request_both_schedule_reconnect) ... ok",
+            "2026-11-08T00:26:56.8770283Z ERROR: test_available_view_is_accessible_and_loads_its_own_image (test_mobile_maintenance_rc4.MobileBrowserTests.test_available_view_is_accessible_and_loads_its_own_image)",
+            "2026-11-08T00:26:56.8817882Z Ran 4522 tests in 525.375s",
+            "2026-11-08T00:26:56.8818243Z FAILED (errors=1, skipped=3)"
+          ]
+        },
+        "invalid_command_count": 0,
+        "tcl_async_delete_count": 0,
+        "package_sha256": null,
+        "package_reason": "Windows self-test, bundle build/validation and packaged GUI/native DnD were skipped after the regression error."
+      },
+      "latest_observation": {
+        "checks": [
+          {
+            "id": 128576239490,
+            "name": "dependencies-ubuntu-latest-py3.11",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576239490",
+            "started_at": "2026-11-08T00:17:27Z",
+            "completed_at": "2026-11-08T00:17:47Z"
+          },
+          {
+            "id": 128576202707,
+            "name": "dependencies-windows-latest-py3.12",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576202707",
+            "started_at": "2026-11-08T00:17:27Z",
+            "completed_at": "2026-11-08T00:18:19Z"
+          },
+          {
+            "id": 128576202211,
+            "name": "core-ubuntu-latest-py312",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576202211",
+            "started_at": "2026-11-08T00:17:26Z",
+            "completed_at": "2026-11-08T00:24:17Z"
+          },
+          {
+            "id": 128576201162,
+            "name": "core-windows-latest-py312",
+            "status": "in_progress",
+            "conclusion": null,
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401/job/128576201162",
+            "started_at": "2026-11-08T00:28:12Z",
+            "completed_at": null
+          },
+          {
+            "id": 128573816714,
+            "name": "CodeQL",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "details_url": "https://github.com/Vxiey/Image-Draw-Bot/runs/128573816714",
+            "started_at": "2026-11-08T00:17:56Z",
+            "completed_at": "2026-11-08T00:18:00Z"
+          },
+          {
+            "id": 128573678339,
+            "name": "Analyze (python)",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429068852/job/128573678339",
+            "started_at": "2026-11-08T00:17:23Z",
+            "completed_at": "2026-11-08T00:20:01Z"
+          },
+          {
+            "id": 128573678169,
+            "name": "Analyze (actions)",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "details_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429068852/job/128573678169",
+            "started_at": "2026-11-08T00:17:23Z",
+            "completed_at": "2026-11-08T00:18:06Z"
+          }
+        ],
+        "workflows": [
+          {
+            "id": 42429074401,
+            "name": "Image Draw Bot CI",
+            "status": "in_progress",
+            "conclusion": null,
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "event": "pull_request",
+            "run_attempt": 2,
+            "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429074401"
+          },
+          {
+            "id": 42429068852,
+            "name": "PR #46",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "4b90b715a9128a022774f411e14e8a1b45676339",
+            "event": "dynamic",
+            "run_attempt": 1,
+            "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42429068852"
+          }
+        ]
+      },
+      "assessment": "Only observed failure is the five-second complete Node process deadline. The first browser harness invocation timed out; the following fresh Node invocations passed in roughly 0.301/0.067/0.124s. Source review found no real network or active timer handles in this finite original-view harness. Transient first-process/runner latency is plausible, not proven: no child startup marker identifies its phase. Root requested one unchanged rerun; no timeout, skip, product or fixture change by this agent.",
+      "boundary": "This report applies only to published exact4b90, not batch30 WIP. Portable Linux tests do not establish Windows native/package behavior. No PR, ref, issue or workflow mutation by this agent."
+    },
+    "boundary": "Only the published parent; not CI certification of the new batch30 head."
+  },
+  "uncounted_completions": [
+    "IW08/PL37: retire private Portrait blur/PixelAccess/score-closure owners while preserving output and the original native error diagnostic.",
+    "A1501: preserve Stop during private background/PNG copy through worker handoff and clean all owned snapshots.",
+    "Test fixture correction: real calibration-dialog teardown precedes release of borrowed Tcl references on the creator thread; no product GC change.",
+    "Tests, diagnostics, evidence packing, metadata and benchmark maintenance add no IDs."
+  ],
+  "remote_validation": "The new published head still requires its own Windows/Linux, dependency, CodeQL and packaged GUI/native-drop checks.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46",
+  "post_metadata_package_hygiene": {
+    "command": [
+      "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch30/.venv/bin/python",
+      "-B",
+      "ReleasePackage.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "passed": true,
+    "wall_seconds": 0.19633885200164514,
+    "hygiene": {
+      "app_name": "Image Draw Bot",
+      "app_version": "1.0.148",
+      "build_channel": "stable",
+      "files": 1361,
+      "forbidden_paths": [],
+      "missing_required": [],
+      "ok": true,
+      "warnings": []
+    },
+    "sources_unchanged": true,
+    "source_config_manifest_sha256": "5f6b89f5b52c9ae6f0335345f744fb887936afdab1e847eb5c22d73f3c155b41",
+    "log_file": "v148-batch30-post-metadata-source-hygiene.log",
+    "log_sha256": "f10a6036b74a5ddac9c12a75b8cc87bd6245e1a0333a3c011cb4216834019955",
+    "scope": "After all batch30 artifacts and metadata files exist; final review/status fields are recorded separately.",
+    "report_file": "v148-batch30-post-metadata-source-hygiene.json",
+    "report_sha256": "cc8afc459058ac71ad147f1fee1eb85592b509ff23c1c151006659bdb20b74b7"
+  }
+}

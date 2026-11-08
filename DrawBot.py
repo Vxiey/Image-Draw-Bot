@@ -8147,6 +8147,7 @@ class DrawBotApp:
         if self.original is None:
             self.status.set('Load an image before removing its background.')
             return False
+        self.stop.clear()
         source=self.original.copy()
         self.status.set('Removing border-connected background…')
         log_event(f'Background removal requested: size={source.size}.')
@@ -8160,7 +8161,10 @@ class DrawBotApp:
             self.events.put(('background_removed',result))
         started=False
         try:
-            started=bool(self.begin_worker('background-remove',work,cleanup=source.close))
+            started=bool(self.begin_worker('background-remove',work,reset_stop=False,cleanup=source.close))
+            if not started and self.stop.is_set() and not self.closing and not self.activity:
+                try:self.status.set('Stopped.')
+                except (tk.TclError,RuntimeError,AttributeError):pass
             return started
         finally:
             if not started:source.close()
@@ -8196,6 +8200,7 @@ class DrawBotApp:
             filetypes=[('PNG image','*.png')])
         if not path:return False
         if self.closing or self.activity or self.original is not source:return False
+        self.stop.clear()
         snapshot=source.copy();self.status.set('Saving PNG…')
         def work():
             from BackgroundRemoval import png_export_ready
@@ -8208,7 +8213,10 @@ class DrawBotApp:
             self.events.put(('png_saved',path))
         started=False
         try:
-            started=bool(self.begin_worker('png-export',work,cleanup=snapshot.close))
+            started=bool(self.begin_worker('png-export',work,reset_stop=False,cleanup=snapshot.close))
+            if not started and self.stop.is_set() and not self.closing and not self.activity:
+                try:self.status.set('Stopped.')
+                except (tk.TclError,RuntimeError,AttributeError):pass
             return started
         finally:
             if not started:snapshot.close()

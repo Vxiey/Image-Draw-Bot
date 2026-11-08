@@ -30,6 +30,20 @@ def _assign(points, centers, cancelled):
     return indices, errors
 
 
+def _extend_assignment(points, centers, previous_centers, labels, errors, cancelled):
+    """An appended center can only improve the previous nearest-center result."""
+    # Preserve the full transform's exact numeric behavior even if a NumPy
+    # implementation rounds a different-length vector differently.
+    if not np.array_equal(previous_centers, centers[:-1]):
+        return _assign(points, centers, cancelled)
+    _unused, added_error = _assign(points, centers[-1:], cancelled)
+    better = added_error < errors
+    # Strict comparison preserves argmin's first-center choice on exact ties.
+    labels[better] = len(centers) - 1
+    errors[better] = added_error[better]
+    return labels, errors
+
+
 def _weighted_tail_error(errors, weights):
     """Linear p95 of repeated errors without expanding every repeated pixel."""
     if not len(errors):
@@ -83,13 +97,16 @@ def refine_picture_palette(image, colors, max_colors, *, cancelled=lambda: False
         return tuple(tuple(map(int, c)) for c in rgb)
     points = _to_oklab(rgb)
     palette = np.asarray(seeds, dtype=np.uint8)
-    labels, error = _assign(points, _to_oklab(palette), cancelled)
+    centers = _to_oklab(palette)
+    labels, error = _assign(points, centers, cancelled)
     # A near-color merge must not leave slots unused while gradients still
     # have measurable error. Weighted error favors repeated tones over noise.
     while len(palette) < limit and float(error.max()) > 1e-8:
         index = int(np.argmax(error * weights))
         palette = np.vstack((palette, rgb[index]))
-        labels, error = _assign(points, _to_oklab(palette), cancelled)
+        grown_centers = _to_oklab(palette)
+        labels, error = _extend_assignment(points, grown_centers, centers, labels, error, cancelled)
+        centers = grown_centers
 
     def quality(errors):
         return float(np.dot(errors, weights)), _weighted_tail_error(errors, weights)

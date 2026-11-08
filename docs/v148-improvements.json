@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 840,
+  "implemented": 842,
   "release_published": false,
-  "validation": "Batch 29 records 840 distinct improvements, 160 remaining. One independently assessed preview-worker cost-handoff group is registered as R2901. Accuracy input borrowing and Portrait preparation/ownership complete existing contracts with zero IDs. All 839 preceding entries and 76 prior raw benchmark reports are preserved. Frozen discovery completed 4,522 tests in 240.202 seconds: 4,449 passed and 73 platform/hardware cases skipped, with all 937 source/configuration hashes unchanged. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and package hygiene passed on 887 root Python sources. Complete historical comparisons retain all four Accuracy public plans and metrics/heatmaps, and 47 Portrait helper pairs plus five public plans including actual finite-time fitting. Their recorded replay maps and any explicitly permitted standalone benchmark-only difference remain separate from the final gate map. The final ETA experiment compares seven workloads with six balanced pairs and separate allocations. Both actual worker estimate calls are measured together, including the first snapshot; whole-pipeline observations remain separate. Every fallback/control cost, slower pair, rejected tuple experiment and intermediate compact-byte diagnostic remains visible. Copy counters are not peak/RSS measurements, and no general application-speed or physical input/GPU claim is made. Parent bfa43deb has seven green exact-commit GitHub checks; the newly published head requires its own Windows/package checks in PR46. Version 1.0.148 remains unreleased.",
+  "validation": "Batch 30 records 842 distinct improvements, 158 remaining. 2 new behavior groups are registered: R3001, R3002. Background cleanup preserves detail already protected by the border flood; picture-palette growth avoids retesting unchanged centers. Portrait stroke ownership, Stop across image-copy handoff and test-fixture Tcl disposal complete existing contracts with zero IDs. All 840 prior registry entries and 78 earlier benchmark JSON reports are preserved. Completed frozen discovery ran 4,551 tests in 231.751 seconds: 4,478 passed and 73 skipped; all 943 source/configuration hashes were unchanged. Fourteen Linux/Xorg native cases, the 5,000-cycle source gate, eight exact raster fixtures and initial package hygiene (1,359 files) passed. The package check after final metadata passed with 1,361 files and no warnings. The incomplete process attempts and the Tcl-aborted attempt remain negative evidence. A proved old calibration fixture released borrowed Tcl aliases after real cleanup; no product GC policy, skip, assertion or timeout was weakened. The final background and Portrait historical comparisons and the six-workload/six-pair palette measurement retain their original 892-file map; the final 893-file map differs only in the two explicitly recorded fixture files. Historical checks retain 20 exact background controls and 24 intended corrections, 14 Portrait helper and seven public pairs, and 32 palette comparisons including four public plans. The cold red picture-palette helper and direct refinement improve in all six pairs; unchanged-work controls are not treated as algorithm gains. No universal speed, peak-memory, process-RSS, physical Paint or GPU improvement is claimed. Parent 4b90 has seven green checks after one unchanged Windows-job rerun; the new head requires its own exact-commit CI. Version 1.0.148 remains unreleased.",
   "improvements": [
     {
       "id": 1,
@@ -6539,6 +6539,22 @@
       "id": 840,
       "ledger": "v148-batch29-estimate.md",
       "description": "Reuse the finalized sequence's exact full-precision cost breakdown for the second estimate in the same actual preview worker, after checking typed geometry and cost inputs. Recompute fresh late target/projection, full-detail, calibration, setup and real-speed conditions; changed or unsupported inputs fall back to a fresh calculation. Keep the observation local to the worker/thread, preserve standalone estimation and publish no private cache in plans or options. Complete historical caller and numerical parity, actual work counts and balanced paired observations bound this one improvement; slower controls and allocation costs remain explicit. The rejected tuple-snapshot experiment is preserved separately, with no universal speed or RSS claim."
+    },
+    {
+      "local_id": "R3001",
+      "area": "batch30-rendering",
+      "batch": 30,
+      "id": 841,
+      "ledger": "v148-batch30-background-details.md",
+      "description": "Keep background-mask morphology inside the original verified border-flood mask. Closing and aggressive median cleanup may retract a classification but cannot newly erase foreground or unresolved detail protected by the flood. Actual Remove BG worker, UI adoption, PNG export and Undo preserve the reproduced thin features; all strengths, alpha, holes, metadata and safety controls belong to this one correction. Flood, feather and source sampling are unchanged; this is not a universal promise for sub-proxy-scale detail."
+    },
+    {
+      "local_id": "R3002",
+      "area": "batch30-colour",
+      "batch": 30,
+      "id": 842,
+      "ledger": "v148-batch30-palette-growth.md",
+      "description": "Reuse existing nearest-center assignments while the picture palette grows by one unchanged center prefix. Compare only the appended center, preserving strict first-center ties and exact labels/errors; fall back to full assignment if transformed prefix values differ, and retain the original full medoid reassignment loop. Complete historical palette and public-plan parity, actual work counts and balanced paired observations verify this single reduction. Controls with unchanged algorithm work, traced allocation costs and the absence of a whole-application speed or RSS claim remain explicit."
     }
   ]
 }

@@ -62,9 +62,20 @@ class CalibrationLifetimeTests(WorkerHandoffFixture):
         app = self.app(); app.game.set(profile); app._active_profile_name = profile
         setattr(app, method, MethodType(getattr(DrawBot.DrawBotApp, method), app))
         window = scoped_window_class(NativeDialogBoundary)(self.tcl)
-        self.addCleanup(window.destroy)
         helper_type = getattr(module, name)
         helpers = []
+        def release_dialog():
+            try:
+                window.destroy()
+            finally:
+                # A retained error, reentrant callback or mock call history can
+                # outlive this test. Retire the fixture's borrowed Tcl aliases
+                # on its creator thread after real native command cleanup.
+                for helper in helpers:
+                    vars(helper).clear()
+                helpers.clear()
+                vars(window).clear()
+        self.addCleanup(release_dialog)
         def constructor(root, *_args, on_close):
             # The GUI's content construction is a native boundary here. Its
             # actual close method, controller callback and scoped window run.
