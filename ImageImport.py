@@ -275,7 +275,18 @@ def read_image(source,cancelled=lambda:False,*,max_download_bytes=20*1024*1024,
         elif '://' in raw:
             raise ValueError('The image URL must start with https:// or http://.')
         else:
-            _write_chunks(snapshot,_local_chunks(Path(raw),max_source_bytes,cancelled),max_source_bytes,cancelled)
+            chunks=_local_chunks(Path(raw),max_source_bytes,cancelled)
+            try:
+                _write_chunks(snapshot,chunks,max_source_bytes,cancelled)
+            except BaseException as error:
+                # The local generator owns an open file while suspended at
+                # yield. A retained consumer failure must not retain that file.
+                try:chunks.close()
+                except Exception as cleanup_error:
+                    error.add_note(f'Local image stream cleanup also failed: {type(cleanup_error).__name__}.')
+                raise
+            else:
+                chunks.close()
         _check(cancelled)
         snapshot.seek(0)
         result=None

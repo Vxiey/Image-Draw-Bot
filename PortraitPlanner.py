@@ -498,7 +498,8 @@ def _select_tone_candidates(candidates, wanted, saliency, pixels, width, height,
 def _edge_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool],
                   draw_quality: str = "Balanced", subject_focus: bool = True,
                   gpu_mode: str = "Auto", acceleration_meta: dict | None = None,
-                  gpu_vram: str = "Auto", gpu_performance: str = "Balanced") -> list[tuple[int,int,int,int]]:
+                  gpu_vram: str = "Auto", gpu_performance: str = "Balanced", *,
+                  max_strokes: int | None = None) -> list[tuple[int,int,int,int]]:
     """Create contour strokes, strongest and most useful edges first."""
     px = None
     try:
@@ -540,7 +541,14 @@ def _edge_strokes(gray: Image.Image, detail: int, cancelled: Callable[[], bool],
                 key=(x//cell,y//cell); stroke=(x1,y1,x2,y2)
                 previous=occupied.get(key)
                 if previous is None or score>previous[0]:occupied[key]=(score,stroke)
-        candidates=list(occupied.values());candidates.sort(key=lambda item:item[0],reverse=True)
+        if max_strokes is not None and max_strokes < max(1, len(occupied) // 32):
+            # nlargest preserves the input order of equal keys. Dictionary
+            # replacement keeps each cell's original insertion position, just
+            # as the full stable sort does. Restrict the heap to small prefixes.
+            candidates=heapq.nlargest(max_strokes,occupied.values(),key=lambda item:item[0])
+        else:
+            candidates=list(occupied.values());candidates.sort(key=lambda item:item[0],reverse=True)
+            if max_strokes is not None:del candidates[max_strokes:]
         return [stroke for _,stroke in candidates]
     finally:
         px = None
@@ -662,7 +670,8 @@ def _portrait_strokes_impl(gray: Image.Image, detail: int = 8, lines: bool = Tru
 
         edges=[]
         if include_edges and edge_budget:
-            edges=_edge_strokes(gray,detail,cancelled,draw_quality,subject_focus,gpu_mode,acceleration_meta,gpu_vram,gpu_performance)[:edge_budget]
+            edges=_edge_strokes(gray,detail,cancelled,draw_quality,subject_focus,gpu_mode,acceleration_meta,gpu_vram,gpu_performance,
+                                max_strokes=edge_budget)
 
         strokes=edges+tone
         meta=acceleration_meta or {}

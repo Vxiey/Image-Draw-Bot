@@ -56,7 +56,8 @@ from QuickSketchFillContour import (QUICK_SKETCH_RENDER_STYLE, QUICK_SKETCH_STYL
 from HybridRenderer3 import (HYBRID_RENDER_STYLE, HYBRID_MODES, apply_hybrid_policy,
                              is_hybrid_renderer, validate_hybrid_mode)
 from SketchFillRenderer import (SKETCH_FILL_RENDER_STYLE, build_sketch_fill_plan, is_sketch_fill,
-                                _PlanImageOwner, _current_plan_image_owner, _own_color_plan_image)
+                                _PlanImageOwner, _current_plan_image_owner, _own_color_plan_image,
+                                _plan_images, _color_plan_image_scope)
 from VisualVerification import (VISUAL_VERIFICATION_MODES, resolve_visual_verification,
                                 validate_visual_verification, planned_batch_points,
                                 planned_batch_boxes, compare_batch_snapshot, summarize_result)
@@ -698,6 +699,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
     from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageOps
     from AutoDrawing import resolve_drawing
     if cancelled():raise InterruptedError('Planning cancelled.')
+    _provided_plan_images=tuple(_plan_images({'image':original,'options':options}))
     options=dict(options,_planning_canvas_size=tuple(area))
     # v1.0.131: Sketch + Auto Fill owns an explicit Paint-only phase order.
     # Route it before AutoDrawing so Auto cannot replace the user's selected
@@ -829,10 +831,16 @@ def _make_plan(original, area, options, cancelled=lambda: False):
         _prof_pre = profiler_start(options, 'preprocessing')
         preview_detail_meta={}
         preview_detail_mode=options.get('preview_detail_level','Detailed') if is_preview_plan(options) and not options.get('_full_detail_preview') else None
-        gray, fitted = prepare_portrait_image(original, area, options['detail'], options['contrast'], options.get('portrait_focus',True), draw_quality,
-                                               gpu_mode=gpu_mode, acceleration_meta=acceleration_meta, gpu_vram=gpu_vram, gpu_performance=gpu_performance,
-                                               preview_detail_mode=preview_detail_mode,preview_detail_meta=preview_detail_meta,cancelled=cancelled)
+        _portrait_parent_owner=_current_plan_image_owner()
+        _portrait_owner=_PlanImageOwner(_provided_plan_images)
+        _portrait_scope=ExitStack()
+        gray=_portrait_result=_portrait_failure=None
         try:
+            _portrait_scope.enter_context(_color_plan_image_scope(_portrait_owner))
+            _portrait_owner.capture({'options':options})
+            gray, fitted = prepare_portrait_image(original, area, options['detail'], options['contrast'], options.get('portrait_focus',True), draw_quality,
+                                                   gpu_mode=gpu_mode, acceleration_meta=acceleration_meta, gpu_vram=gpu_vram, gpu_performance=gpu_performance,
+                                                   preview_detail_mode=preview_detail_mode,preview_detail_meta=preview_detail_meta,cancelled=cancelled)
             if preview_detail_meta:options['preview_detail_meta']=preview_detail_meta
             profiler_stop(options, 'preprocessing', _prof_pre)
             # Fit portrait complexity to the configured time limit.  This avoids the
@@ -894,9 +902,21 @@ def _make_plan(original, area, options, cancelled=lambda: False):
                     priority_strokes=min(int(plan_options['portrait_stats'].get('priority_strokes', 0)), len(tones)),
                     time_fitted=True)
                 plan = finish_plan(gray.convert('RGBA'), fitted, [edges + tones], plan_options, cancelled)
-            return _finalize_auto_tuned_plan(plan,original,area,cancelled)
+            _portrait_result=_finalize_auto_tuned_plan(plan,original,area,cancelled)
+            _portrait_owner.capture(_portrait_result)
+            if _portrait_parent_owner is not None:_portrait_parent_owner.capture(_portrait_result)
+            return _portrait_result
+        except BaseException as error:
+            _portrait_failure=error
+            raise
         finally:
-            gray.close()
+            try:
+                if gray is not None:gray.close()
+            finally:
+                try:_portrait_owner.close(_portrait_result,_portrait_failure)
+                finally:
+                    _portrait_scope.close()
+                    _portrait_owner=_portrait_parent_owner=_portrait_result=_portrait_failure=None
 
     if options.get('outline'):
         if options.get('erase_mode'):raise ValueError('Black sketch requires Pencil or Brush, not Eraser.')

@@ -1,0 +1,4549 @@
+{
+  "schema": 1,
+  "batch": 31,
+  "generated_at_utc": "2026-11-08T02:22:25.740481+00:00",
+  "baseline_commit": "e49e2535c5f8edea80e47824fe56cae58781b971",
+  "implemented": 843,
+  "target": 1000,
+  "remaining": 157,
+  "added_behavior_groups": [
+    "R3101"
+  ],
+  "preserved_registry_entries": 842,
+  "preserved_registry_prefix_sha256": "6d751797d25140837ba0cd8933ca771e50702953d5dd42ec75b43d46f1efd95d",
+  "release_published": false,
+  "count_decision": {
+    "new_groups": 1,
+    "note": "One distinct R3101/global843 contour-prefix selection reduction: the real caller avoids sorting and returning the unused suffix at budgets6/65, complete historical output remains exact, helper traced peaks fall457292/450540bytes, and all final integrated gates pass. Existing GP14 tonal ranking and PB08 generic path capping are distinct stages. Retained allocation increases, unchanged public3s and slower controls remain explicit; Portrait/import ownership add zero IDs."
+  },
+  "local_regressions": {
+    "base_commit": "e49e2535c5f8edea80e47824fe56cae58781b971",
+    "command": ".venv/bin/python -B -m unittest discover -v",
+    "exit_code": 0,
+    "tests": 4569,
+    "runner_seconds": 244.002,
+    "wall_seconds": 246.337,
+    "status": "OK (skipped=73)",
+    "skipped": 73,
+    "source_files": 947,
+    "source_changed": [],
+    "source_hash_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+    "source_hash_manifest_after_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+    "source_manifest_file": "v148-batch31-source-hashes.json",
+    "source_manifest_after_file": "v148-batch31-source-hashes-after.json",
+    "head_after": "e49e2535c5f8edea80e47824fe56cae58781b971",
+    "log_file": "v148-batch31-fullsuite.log",
+    "log_sha256": "cc40ec5b8e6758a20531794120e0e64cb88ac023fb5fab5318e3dd4c72a02b90",
+    "runner_failure": null,
+    "passed": true
+  },
+  "native_validation": {
+    "base_commit": "e49e2535c5f8edea80e47824fe56cae58781b971",
+    "cases": [
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_palette_scan.NativePaletteScanTests.test_native_cancel_closes_dialog_while_analysis_owns_only_private_pixels",
+        "run": 1,
+        "seconds": 0.34595733400055906,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_palette_scan.NativePaletteScanTests.test_native_heartbeat_and_preview_adoption_stay_on_gui_thread",
+        "run": 1,
+        "seconds": 0.3876450039970223,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_actual_tab_selection_return_worker_adoption_and_undo_preserve_pixels",
+        "run": 1,
+        "seconds": 0.5223173519989359,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_escape_from_each_control_and_late_key_release_cancel_without_editing",
+        "run": 1,
+        "seconds": 0.5657577059973846,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_keyboard_apply_retains_stop_and_source_identity_at_real_result_boundary",
+        "run": 1,
+        "seconds": 0.45872207899810746,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_upscale_keyboard.NativeUpscaleKeyboardTests.test_keyboard_dimension_limit_disables_apply_and_recovers_without_hidden_job",
+        "run": 1,
+        "seconds": 0.4174663900048472,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch24_widget_timers.NativeButtonTimerTests.test_actual_click_then_child_disposal_leaves_only_live_owners",
+        "run": 1,
+        "seconds": 1.1097499149982468,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_button_canvas_and_late_text_image_labels_keep_pointer_to_key_activation",
+        "run": 1,
+        "seconds": 0.13479192199883983,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_real_switch_row_canvas_text_and_background_preserve_state_and_trace_lifetime",
+        "run": 1,
+        "seconds": 0.13622163900436135,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch16_pointer_focus.NativeCompositePointerFocusTests.test_selector_decorations_keep_logical_focus_without_stealing_native_popup_or_entry",
+        "run": 1,
+        "seconds": 1.1087533589961822,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch27_mobile_discovery.NativeMobileDiscoveryTests.test_actual_buttons_heartbeat_stop_reopen_and_app_close_while_dns_stays_blocked",
+        "run": 1,
+        "seconds": 0.3140224720045808,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch27_mobile_discovery.NativeMobileDiscoveryTests.test_actual_panel_close_late_refresh_stop_and_new_session_keep_displayed_identity",
+        "run": 1,
+        "seconds": 0.5079710600039107,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch18_mobile_dialog.NativeMobileDialogLifecycleTests.test_first_scaling_poll_survives_when_mobile_is_the_first_widget_window",
+        "run": 1,
+        "seconds": 0.771987235006236,
+        "skipped": 0,
+        "success": true
+      },
+      {
+        "errors": 0,
+        "exit_code": 0,
+        "failures": 0,
+        "name": "test_v148_ui_batch18_mobile_dialog.NativeMobileDialogLifecycleTests.test_real_panel_refresh_close_restart_has_one_owner_and_releases_tcl_resources",
+        "run": 1,
+        "seconds": 0.6363762609980768,
+        "skipped": 0,
+        "success": true
+      }
+    ],
+    "diagnostics": [],
+    "exit_code": 0,
+    "full_source_files": 947,
+    "full_source_hash_manifest_after_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+    "full_source_hash_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+    "full_source_manifest_after_file": "v148-batch31-native-source-hashes-after.json",
+    "full_source_manifest_file": "v148-batch31-source-hashes.json",
+    "full_sources_unchanged": true,
+    "head_after": "e49e2535c5f8edea80e47824fe56cae58781b971",
+    "log_sha256": "43b3430253cbbae74e58c8f7f7f4e41bb1cbae021cab43064befddfbdddc403d",
+    "platform": "Linux/Xorg/Tk 9.0.4",
+    "runner_failures": [],
+    "runner_seconds": 7.417739728007291,
+    "scope": "Real native Tk widgets, timers, PhotoImage/QR, local HTTP bind, worker/Stop/Close/reopen event delivery on Linux. Each method uses its own interpreter. Only the older Mobile18 class display gate is enabled for these portable Tk cases; no sys.platform replacement and no repository skip changes. Windows and packaged behavior require exact-commit CI.",
+    "skipped": 0,
+    "source_hash_manifest_sha256": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f",
+    "sources_unchanged": true,
+    "tests": 14,
+    "wall_seconds": 11.92336413799785,
+    "source_map_reference": {
+      "artifact": "v148-batch31-completion-evidence.json",
+      "source_manifest": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f"
+    }
+  },
+  "source_gate": {
+    "channel": "stable",
+    "checks": [
+      "version-metadata",
+      "installer-metadata",
+      "update-repository",
+      "workflow-gates",
+      "source-one-shot-hygiene",
+      "lifecycle-soak",
+      "profile-isolation-soak"
+    ],
+    "file_version": "1.0.148",
+    "passed": true,
+    "repository": "Vxiey/Image-Draw-Bot",
+    "schema": 1,
+    "soak_cycles": 5000,
+    "version": "1.0.148"
+  },
+  "initial_source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1370,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "source_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1372,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  },
+  "final_gates": {
+    "base_commit": "e49e2535c5f8edea80e47824fe56cae58781b971",
+    "head_after": "e49e2535c5f8edea80e47824fe56cae58781b971",
+    "exit_code": 0,
+    "passed": true,
+    "jobs": [
+      {
+        "name": "source-gate",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch31/.venv/bin/python",
+          "-B",
+          "ReleaseCandidateHardening.py",
+          "--source-gate",
+          "--soak-cycles",
+          "5000"
+        ],
+        "log_file": "v148-batch31-final-source-gate.log",
+        "exit_code": 0,
+        "wall_seconds": 0.11442282299685758,
+        "log_sha256": "bc07056ea2a6181147997413164e1cdf7dfa7b4d3775a1431f774aea6c934741",
+        "source_hash_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+        "sources_match_full_suite": true,
+        "passed": true
+      },
+      {
+        "name": "engine-gate",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch31/.venv/bin/python",
+          "-B",
+          "benchmark_v148_existing_rasters.py",
+          "--output",
+          "/workspace/scratch/97bfc35400fb/batch31-engine-gate-4g7en3c4/engine.json"
+        ],
+        "log_file": "v148-batch31-final-engine-gate.log",
+        "exit_code": 0,
+        "wall_seconds": 4.834816256996419,
+        "log_sha256": "b26afd1bd369b0c5c859fa918ee60e44ab1e0e1902dc6e7323ff7ac53009cc69",
+        "source_hash_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+        "sources_match_full_suite": true,
+        "artifact": "docs/v148-batch31-engine-benchmarks.json",
+        "artifact_sha256": "bf0a4ef20f1f256add6f317bdf0b0bf0c946c1be70aafb6f77f8e519c3bf078a",
+        "passed": true
+      },
+      {
+        "name": "source-hygiene",
+        "command": [
+          "/workspace/scratch/97bfc35400fb/Image-Draw-Bot-batch31/.venv/bin/python",
+          "-B",
+          "ReleasePackage.py",
+          "--check"
+        ],
+        "log_file": "v148-batch31-final-source-hygiene.log",
+        "exit_code": 0,
+        "wall_seconds": 0.16435080200608354,
+        "log_sha256": "0fd872dac99450861c748de97d1825738c76fb7823b3e04f97628bc0b24cccc3",
+        "source_hash_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+        "sources_match_full_suite": true,
+        "passed": true
+      }
+    ],
+    "runner_failure": null,
+    "source_files": 947,
+    "source_manifest_file": "v148-batch31-source-hashes.json",
+    "source_manifest_after_file": "v148-batch31-final-source-hashes-after.json",
+    "source_hash_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+    "source_hash_manifest_after_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+    "source_changed": []
+  },
+  "post_metadata_package_hygiene_pending": false,
+  "independent_reviews": {
+    "all_closed": true,
+    "root_python_files": 897,
+    "source_hash_manifest_sha256": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f",
+    "source_reviews": {
+      "edge_selection": {
+        "closed": true,
+        "scope": "Stable cell-winner prefix, actual public work, historical linkage and paired method."
+      },
+      "portrait_outer_ownership": {
+        "closed": true,
+        "scope": "Private finisher/time-fit/rescue lifetimes, original failures and borrowed/returned images."
+      },
+      "local_import_stream": {
+        "closed": true,
+        "scope": "Owned local generator, real descriptors, primary failure and borrowed generic consumer."
+      },
+      "count_decision": {
+        "closed": true,
+        "scope": "One distinct R3101/global843 contour-prefix selection reduction: the real caller avoids sorting and returning the unused suffix at budgets6/65, complete historical output remains exact, helper traced peaks fall457292/450540bytes, and all final integrated gates pass. Existing GP14 tonal ranking and PB08 generic path capping are distinct stages. Retained allocation increases, unchanged public3s and slower controls remain explicit; Portrait/import ownership add zero IDs."
+      },
+      "raw_provenance": {
+        "closed": true,
+        "scope": "Lossless common evidence, exact original hashes, historical graphs, all samples and negative diagnostics.",
+        "report_file": "batch31-completion-evidence-independent-review.json",
+        "report_sha256": "60bf7e3b4bb4030865ce3f4e831f2624b9967bf7f58ef0770e904e01102c8434",
+        "report": {
+          "schema": 1,
+          "closed": true,
+          "reviewed_at_utc": "2026-11-08T02:21:28.388231+00:00",
+          "review": "Independent complete evidence expansion, original-file equality, provenance and source/count scope",
+          "artifact": "docs/v148-batch31-completion-evidence.json",
+          "sha256": "ac7c534a6d7a93d7ba048c46868a007e94ccaa5793f6c11c596265951856a62e",
+          "bytes": 1818046,
+          "review_script_sha256": "5bb46b1e38720187192345ba87743e6d92ef880d7afd9d48822632f350f45717",
+          "artifacts": 81,
+          "encodings": {
+            "utf-8": 34,
+            "json-with-source-manifest-references": 23,
+            "base64": 23,
+            "gzip-base64-utf-8": 1
+          },
+          "manifest_count": 5,
+          "manifests": [
+            {
+              "digest": "c845b2b6025e917fd8f054c34ec953a6a019986e8ffb22dfa8f2efab7b9e91e0",
+              "files": 895,
+              "referenced_by": [
+                "pending-batch31-import-stream/after-initial/summary.json",
+                "pending-batch31-portrait-plan/tests-after-complete.json",
+                "source_binding"
+              ]
+            },
+            {
+              "digest": "0da8de7641efb47fea77c62ece22629b27f9425c137e9d8ccd8d7e9933ae5845",
+              "files": 893,
+              "referenced_by": [
+                "pending-batch31-import-stream/before-scoped/summary.json",
+                "pending-batch31-import-stream/before/summary.json",
+                "pending-batch31-portrait-edge-budget/before/summary.json",
+                "pending-batch31-portrait-edge-budget/tests-before/summary.json",
+                "pending-batch31-portrait-plan/before-complete/summary.json",
+                "pending-batch31-portrait-plan/before/summary.json",
+                "pending-batch31-portrait-plan/tests-before-complete.json",
+                "pending-batch31-portrait-plan/tests-before.json",
+                "source_binding"
+              ]
+            },
+            {
+              "digest": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f",
+              "files": 897,
+              "referenced_by": [
+                "pending-batch31-portrait-edge-budget/verify-final.json",
+                "pending-batch31-portrait-plan/historical-final/summary.json",
+                "source_binding",
+                "v148-batch31-final-source-freeze.json"
+              ]
+            },
+            {
+              "digest": "d50a9ff66889741ebb7360b1da425a5e6ea41d66fcf6820336c0e5714f567d2c",
+              "files": 895,
+              "referenced_by": [
+                "pending-batch31-portrait-plan/tests-after-initial.json"
+              ]
+            },
+            {
+              "digest": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+              "files": 947,
+              "referenced_by": [
+                "source_binding",
+                "v148-batch31-final-source-freeze.json"
+              ]
+            }
+          ],
+          "inventory_exact": true,
+          "original_byte_hashes_verified": 81,
+          "json_semantics_canonical_and_structural_exact": true,
+          "text_and_binary_bytes_exact": true,
+          "source_binding": {
+            "final_root_files": 897,
+            "final_root_digest": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f",
+            "final_config_files": 947,
+            "final_config_digest": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+            "baseline_root_files": 893,
+            "focused_root_files": 895,
+            "focused_to_final_changes": {
+              "PortraitPlanner.py": {
+                "focused_sha256": "8bbc6958fa212532c70b16eff6ac1cfb761bbdcf0cbbe13a9773e1e2630a4903",
+                "final_sha256": "092d187f1bb85bec3ffa31034ca71ebae7efebb095a1d8c8ce6fe463baa704ad"
+              },
+              "benchmark_v148_rendering_batch31_portrait_edges.py": {
+                "focused_sha256": null,
+                "final_sha256": "2b9dd055bbd0e5432e52b3d80be07f9bb957d95e05fb085fd032b7504e08c59a"
+              },
+              "test_v148_rendering_batch31_portrait_edges.py": {
+                "focused_sha256": null,
+                "final_sha256": "db1b90d50414690e46d72c5d4cb5ed673ccbaff6e3f069d998ac71857b60ad83"
+              }
+            },
+            "current_source_map_exact": true
+          },
+          "final_gates": {
+            "tests": 4569,
+            "passed": 4496,
+            "skipped": 73,
+            "seconds": 244.002,
+            "full_log_sha256": "cc40ec5b8e6758a20531794120e0e64cb88ac023fb5fab5318e3dd4c72a02b90",
+            "native_cases": 14,
+            "native_skips": 0,
+            "native_diagnostics": [],
+            "source_soak": 5000,
+            "exact_existing_rasters": 8,
+            "initial_package_files": 1370,
+            "completed_first_full_attempt": true
+          },
+          "negative_provenance": [
+            "Initial owner Pillow-observer failure retained; accepted five-case before proof remains separate.",
+            "Initial owner test setup error retained; corrected seven-method red and expanded eight-method green retain exact fixture hashes.",
+            "Initial importer audit failure retained; scoped seven-method red/green evidence remains separate.",
+            "Exact-parent pending CI snapshot retained separately from final green parent CI.",
+            "No failed or interrupted batch31 fullsuite attempt was found or invented."
+          ],
+          "count_scope": "Packaging, import-stream ownership and outer Portrait ownership add zero IDs. Root separately approved at most one R3101/global843 after final evidence; registration was not performed by the packer.",
+          "private_path_scope": "Every within-invocation before/after comparison is exact. Independent verify-only and measured runs keep their real private calibration paths; no cross-run public-output hash equality is asserted.",
+          "platform_scope": "Fourteen current Linux/Xorg native cases and exact e49 parent Windows CI are separate. No new-head Windows, release, physical-GPU, RSS or universal speed claim.",
+          "new_tests_benchmarks_or_metadata_finalizer_executed": false,
+          "final_metadata_approval": false,
+          "rows": [
+            {
+              "artifact": "assemble_batch31_completion_evidence.py",
+              "encoding": "utf-8",
+              "bytes": 31046,
+              "original_sha256": "87ffffa3d2129f21cc56d5f4092f59b7e05ee52e559812d884854fbbff54787c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "batch31-edge-raw-review.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 46162,
+              "original_sha256": "fbc83ae8d6c6da60029714fada9623ff8a843ed14eeedba39353e9610cfa9e26",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "batch31-portrait-edge-independent-raw-review.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 31208,
+              "original_sha256": "50f56d7d3fd18e69b532320d729812e184a0bd0f0eb117aa9552fa41173249cf",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/after-focused.log",
+              "encoding": "utf-8",
+              "bytes": 1686,
+              "original_sha256": "e00b3311b0777618dd45e02b8ee80147b52ebade45e2d181af3c46f34928607b",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/after-initial/summary.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 201279,
+              "original_sha256": "03a1a0f1fe8f29be77f5d9fd279ae87cfae8daee806d6d9b6e096c0ccefa1939",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/after-initial/tests.log",
+              "encoding": "utf-8",
+              "bytes": 1504,
+              "original_sha256": "247e2c25dc94bf6a3a4f9c7734a43241162604c11c809c69241408dbe8bbd3f4",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/after-initial.log",
+              "encoding": "utf-8",
+              "bytes": 2634,
+              "original_sha256": "5bb725b4133cbfc3420bfc3b665ba04dfdf2aafc6b5231e11bc220449bf7fbe9",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/before/state-nh6m66eb/logs/ImageDrawBot-debug-errors.log",
+              "encoding": "utf-8",
+              "bytes": 450,
+              "original_sha256": "8815340e54683b369e19d4e8f32b29aa4ed95f6c783dc11877ff500d704955d3",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/before/summary.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 200936,
+              "original_sha256": "d03e75b9c90302be81439f264e9402de8853d1cef9acd46a0e87d1270e1ea5e8",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/before/tests.log",
+              "encoding": "utf-8",
+              "bytes": 7107,
+              "original_sha256": "5e4348a73f99078d4c6a21ecd5b21c955167842c74fcc3a438b5a84c1591be31",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/before-scoped/summary.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 200872,
+              "original_sha256": "c6219bee6a85708898d4046b12e405f29f78a4333b4cac0dcfd2e0daadbc2db4",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/before-scoped/tests.log",
+              "encoding": "utf-8",
+              "bytes": 7107,
+              "original_sha256": "f68f556274351ee87ac25887cbff8dae177092c75aca6a8202ede95250072ebd",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/before-scoped.log",
+              "encoding": "utf-8",
+              "bytes": 2636,
+              "original_sha256": "ab75c9964c542322202f349e688249b37d05bbf924da8eed0cfba0da47b80e07",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/before.log",
+              "encoding": "utf-8",
+              "bytes": 3083,
+              "original_sha256": "0917095f3d562d629a5016d7d4dbf5e957ec5ddd0ad1a9947648b758dc45206b",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/probe_import_stream.py",
+              "encoding": "utf-8",
+              "bytes": 11270,
+              "original_sha256": "7ab6c8c92e2faf469384a458404e6e0415392a34e9df549bc97bb6f81e82fe9c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-import-stream/related.log",
+              "encoding": "utf-8",
+              "bytes": 11777,
+              "original_sha256": "a3292631e36d8a5dd9785677767fe17e2d0572ffe162927bc058597203aaa1c0",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/before/summary.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 199203,
+              "original_sha256": "b39b7b7566041fc1877dc2feaafeff670710e3b204d9c029dd0ccef39a5e101e",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/count-decision-final.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 2615,
+              "original_sha256": "5d35c5651e14806b839dba3f4188e7757dd98100a444e9c13f48fd9fe37e57b2",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/measurement-final-exit.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 4664,
+              "original_sha256": "9f90677de16184a8940db28bdf107036742b4b9d7a04d7742e8c92a39ac3bb5e",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/measurement-final.log",
+              "encoding": "utf-8",
+              "bytes": 2752,
+              "original_sha256": "231fdf6780c23431b8ab465d3ef28764e79097d0c28a2ffe0c613ebc55826f46",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/observe_before.py",
+              "encoding": "utf-8",
+              "bytes": 6595,
+              "original_sha256": "6092226dcff9b276274bff220764250061f1fbe34a329c515c6be13a80f38595",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/run_before_test.py",
+              "encoding": "utf-8",
+              "bytes": 3208,
+              "original_sha256": "25952860a512dfb9112dd2644c5201f86e87dfa4fdd1a678b33591bd60563bc5",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/targeted-initial.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 503,
+              "original_sha256": "993895d9af745c300198e3e8c58cd82b64b8a892cc4782150cc975899a9fd53f",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/tests-before/summary.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 190692,
+              "original_sha256": "253f8295c96510b7dbb2d16d051f88de1cba8e4ebcb52e01a1a34b53b816b5c7",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/tests-before/tests.log",
+              "encoding": "utf-8",
+              "bytes": 1024,
+              "original_sha256": "d1396e7d1d14cc8244b4c11a67f538f78973fc49099f3841346de227b6f2b1b8",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/verify-final-exit.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 9238,
+              "original_sha256": "5aaa416e0fecda2f71df24eb87a073276ce82ee449afcba54d0912b06fa9c18b",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/verify-final.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 491381,
+              "original_sha256": "64ca947f93fef7aca30b3970067429903e74a792917b6bdc7ee3e63cb6d73e04",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-edge-budget/verify-final.log",
+              "encoding": "utf-8",
+              "bytes": 786,
+              "original_sha256": "d8ec78e43eadd013cd43e97b7f715a10da28ff0bbf72dd9108a23302ae9ad90a",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/PLAN.md",
+              "encoding": "utf-8",
+              "bytes": 1698,
+              "original_sha256": "edf99b164392ee00bbf7c940498e8fd6be072f90014fb736960a85a21e83fbb3",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before/second-finish-pillow-error/finish-1-preview.png",
+              "encoding": "base64",
+              "bytes": 29891,
+              "original_sha256": "a9318c437b80d988c09801ada01614e069af0af47fc77f2bcfb360e77bc24846",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before/second-finish-stop/finish-1-preview.png",
+              "encoding": "base64",
+              "bytes": 29891,
+              "original_sha256": "a9318c437b80d988c09801ada01614e069af0af47fc77f2bcfb360e77bc24846",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before/success-two-pass/finish-1-preview.png",
+              "encoding": "base64",
+              "bytes": 29891,
+              "original_sha256": "a9318c437b80d988c09801ada01614e069af0af47fc77f2bcfb360e77bc24846",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before/success-two-pass/finish-2-preview.png",
+              "encoding": "base64",
+              "bytes": 26315,
+              "original_sha256": "7204dbcebb8a10fa07f4f58b11041bcbedbb4160ac884c782eee66742054a78c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before/summary.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 213968,
+              "original_sha256": "f12c0c2809876399999436c99ee970047f7abddbca929df88657b7223bc08af5",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before-complete/second-finish-pillow-error/finish-1-preview.png",
+              "encoding": "base64",
+              "bytes": 29891,
+              "original_sha256": "a9318c437b80d988c09801ada01614e069af0af47fc77f2bcfb360e77bc24846",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before-complete/second-finish-stop/finish-1-preview.png",
+              "encoding": "base64",
+              "bytes": 29891,
+              "original_sha256": "a9318c437b80d988c09801ada01614e069af0af47fc77f2bcfb360e77bc24846",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before-complete/second-finish-stop-borrowed-options/finish-1-preview.png",
+              "encoding": "base64",
+              "bytes": 29891,
+              "original_sha256": "a9318c437b80d988c09801ada01614e069af0af47fc77f2bcfb360e77bc24846",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before-complete/success-two-pass/finish-1-preview.png",
+              "encoding": "base64",
+              "bytes": 29891,
+              "original_sha256": "a9318c437b80d988c09801ada01614e069af0af47fc77f2bcfb360e77bc24846",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before-complete/success-two-pass/finish-2-preview.png",
+              "encoding": "base64",
+              "bytes": 26315,
+              "original_sha256": "7204dbcebb8a10fa07f4f58b11041bcbedbb4160ac884c782eee66742054a78c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before-complete/summary.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 236250,
+              "original_sha256": "cdc59bb8559c9eb4498d284b2201bf8e7b426d9fdccfbc70c7df99a1c87d72e1",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before-complete.log",
+              "encoding": "utf-8",
+              "bytes": 3457,
+              "original_sha256": "d2c5839dfb39d0bfefb14a45f86e42d3ae1b9b51e6e3b2c82bd41f26ef276c78",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/before.log",
+              "encoding": "utf-8",
+              "bytes": 1781,
+              "original_sha256": "960eda1ece7b68fd7b4ca6845475263312b3e9e4643f08f5cbc2b2c9de37cddd",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/actual-quality-rescue-after.png",
+              "encoding": "base64",
+              "bytes": 1479,
+              "original_sha256": "58e01a40876cdac3c330a6a74332518058dced164d30280a9634d11422426c44",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/actual-quality-rescue-before.png",
+              "encoding": "base64",
+              "bytes": 1479,
+              "original_sha256": "58e01a40876cdac3c330a6a74332518058dced164d30280a9634d11422426c44",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/actual-time-fit-after.png",
+              "encoding": "base64",
+              "bytes": 26315,
+              "original_sha256": "7204dbcebb8a10fa07f4f58b11041bcbedbb4160ac884c782eee66742054a78c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/actual-time-fit-before.png",
+              "encoding": "base64",
+              "bytes": 26315,
+              "original_sha256": "7204dbcebb8a10fa07f4f58b11041bcbedbb4160ac884c782eee66742054a78c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/auto-opaque-after.png",
+              "encoding": "base64",
+              "bytes": 1458,
+              "original_sha256": "36f7706991dda063cb981b680dbdc0ac8ee38ca240fd50f3ef08a93afb5f039c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/auto-opaque-before.png",
+              "encoding": "base64",
+              "bytes": 1458,
+              "original_sha256": "36f7706991dda063cb981b680dbdc0ac8ee38ca240fd50f3ef08a93afb5f039c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/borrowed-time-fit-after.png",
+              "encoding": "base64",
+              "bytes": 26315,
+              "original_sha256": "7204dbcebb8a10fa07f4f58b11041bcbedbb4160ac884c782eee66742054a78c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/borrowed-time-fit-before.png",
+              "encoding": "base64",
+              "bytes": 26315,
+              "original_sha256": "7204dbcebb8a10fa07f4f58b11041bcbedbb4160ac884c782eee66742054a78c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/dots-after.png",
+              "encoding": "base64",
+              "bytes": 1127,
+              "original_sha256": "729c5fa4720b8c90a31b485edd605bd43ea5e9a11cea82a78fe4722c804c9c95",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/dots-before.png",
+              "encoding": "base64",
+              "bytes": 1127,
+              "original_sha256": "729c5fa4720b8c90a31b485edd605bd43ea5e9a11cea82a78fe4722c804c9c95",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/manual-3s-after.png",
+              "encoding": "base64",
+              "bytes": 635,
+              "original_sha256": "07844ee625c2a4edbc316c130017071fd6e1baaeb84f0c47833ad66e2e8d45ef",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/manual-3s-before.png",
+              "encoding": "base64",
+              "bytes": 635,
+              "original_sha256": "07844ee625c2a4edbc316c130017071fd6e1baaeb84f0c47833ad66e2e8d45ef",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/portrait-alpha-after.png",
+              "encoding": "base64",
+              "bytes": 2026,
+              "original_sha256": "414f4c66da9b0c6aeb4f3919a2d46b578504a94b749e67943e42a9efdf85eba4",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/portrait-alpha-before.png",
+              "encoding": "base64",
+              "bytes": 2026,
+              "original_sha256": "414f4c66da9b0c6aeb4f3919a2d46b578504a94b749e67943e42a9efdf85eba4",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final/summary.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 196637,
+              "original_sha256": "c9fe43cbad4482eda3f134c7cd0796db98ba8b8ff7af82c96643f4e9300891a0",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical-final.log",
+              "encoding": "utf-8",
+              "bytes": 2534,
+              "original_sha256": "b5aaff846dcaa7a58d85dcb03a020cb23e6d2a551934bd74da35f77a637c8b5f",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/historical.py",
+              "encoding": "utf-8",
+              "bytes": 11280,
+              "original_sha256": "00989448d80cb7191279a91659c63c21007f624be2e12f1d7d84c55b49081114",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/observe-initial.py",
+              "encoding": "utf-8",
+              "bytes": 14921,
+              "original_sha256": "e54bbdc7a3ec63541fb29737ee11bda7dffd1d85ee8d50add8a7eb1f069db7f2",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/observe.py",
+              "encoding": "utf-8",
+              "bytes": 15028,
+              "original_sha256": "21f5048511fa63160fec4e7827a0e09fb4b48cdd94beb7e8ad7adb62f1ea7e24",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/run_regressions.py",
+              "encoding": "utf-8",
+              "bytes": 3497,
+              "original_sha256": "c91d44cf0507d657b40ce926c633dcaa9be0a10a0977b4b755825b8c54c9e398",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/test-initial.py",
+              "encoding": "utf-8",
+              "bytes": 13599,
+              "original_sha256": "8500458f17491cc59d03bb81df6018df31a5ebf1e763543200791d2699533947",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/test-seven-before.py",
+              "encoding": "utf-8",
+              "bytes": 13675,
+              "original_sha256": "a95393c2f1a99ea0384214690e83dbb0a3913945037c05d395ac2f44b0a9e90c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/tests-after-complete.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 191105,
+              "original_sha256": "b62faf9fc397a07c6ca475015127eb5c513a39e84ba5d746c9ec251304301ac1",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/tests-after-complete.log",
+              "encoding": "utf-8",
+              "bytes": 1758,
+              "original_sha256": "6319c4d410b97829c85eea42f4eb2b04633a851318ec91058ba873034cf45304",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/tests-after-initial.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 191105,
+              "original_sha256": "cf9ab1c23c9921bcb8a31308e6b96ca37e72d30218546df49de587ae3aaff175",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/tests-after-initial.log",
+              "encoding": "utf-8",
+              "bytes": 1550,
+              "original_sha256": "eb90450965c04ee1bb7c21478cf1e03c7c992b01e84c49a8876af8c0b87a8382",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/tests-before-complete.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 196857,
+              "original_sha256": "01bb4cbb37deabab54357cdd4322f3be8aac33377e2673d0f07ddc7e9217424d",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/tests-before-complete.log",
+              "encoding": "utf-8",
+              "bytes": 8323,
+              "original_sha256": "adcd5457a40d908b6165784ad7a59c2c9d24b375516386a89b2038b2c9c7537f",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/tests-before.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 196906,
+              "original_sha256": "5bc5025a3d6430b5690f94c57c761d0cbdf66cf040d3f11088e0352639a0def4",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "pending-batch31-portrait-plan/tests-before.log",
+              "encoding": "utf-8",
+              "bytes": 8382,
+              "original_sha256": "77579125659ea2a188ad3d167af536069e3fd4f3cc92c3223afde912b13ddb9c",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "run_batch31_final_gates.py",
+              "encoding": "utf-8",
+              "bytes": 7259,
+              "original_sha256": "a3fa68ee8330e4ba700d80ee55e2002f80ac45d98b909eee281a8a555ec91ee8",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "run_batch31_native_validation.py",
+              "encoding": "utf-8",
+              "bytes": 10021,
+              "original_sha256": "44bd39bc003dd45b3e2b53f6afd4e7b8b042ad0dc977c9017b5a36b753c5b777",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "run_batch31_validation.py",
+              "encoding": "utf-8",
+              "bytes": 4259,
+              "original_sha256": "560a28f060d5142326868df0879805b25eb33f3cb3caf2b11f075033682d1be2",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "supervise_batch31_validation.py",
+              "encoding": "utf-8",
+              "bytes": 1110,
+              "original_sha256": "48a341778c716a2c2543bfbf9b4c2b601b0e55ce8806d38c4c42d1bbdcefe173",
+              "proof": "exact original bytes recovered"
+            },
+            {
+              "artifact": "v148-batch31-final-source-freeze.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 197162,
+              "original_sha256": "fa5feb24c6008e50bbc877cb1fca0b23ca362d8a38fa83b52ef201f845677f42",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "v148-batch31-parent-ci-agent.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 12369,
+              "original_sha256": "99bbb6b7ed06852b5406e5cc3584d38f5d67a5dbffafbf0a00aac52388f312bc",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "v148-batch31-parent-ci-e49-pending.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 3856,
+              "original_sha256": "ae856a777ce6ca03e3899bd80077e3ed67f1cbac23722c888a51af53533984a7",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "v148-batch31-parent-ci-root.json",
+              "encoding": "json-with-source-manifest-references",
+              "bytes": 4369,
+              "original_sha256": "f20dcda453bf7e78740ed9bc21c84635f9eb3aca3713719c6c9dd6d420d00bcc",
+              "proof": "all parsed JSON values and canonical semantic bytes exact; original formatting hash verified"
+            },
+            {
+              "artifact": "v148-batch31-parent-ci-windows-attempt1.log",
+              "encoding": "gzip-base64-utf-8",
+              "bytes": 1064309,
+              "original_sha256": "9a986e66a2dff0f78d92465144752f8b788ca5c99d4c99ae1f68df87dc1d8c77",
+              "proof": "exact original bytes recovered"
+            }
+          ]
+        }
+      },
+      "final_metadata": {
+        "closed": true,
+        "scope": "Independent review closed without blockers: exact registry prefix and preserved benchmark bytes, source maps, every completed gate, bounded claims and post-metadata package hygiene.",
+        "report_file": "batch31-final-metadata-independent-review.json",
+        "report_sha256": "05ed28b105ad19501879b3ccadc935fee03cd3703178fc17ca1a4ce5157717b9",
+        "report": {
+          "schema": 1,
+          "batch": 31,
+          "reviewer": "preview_fix",
+          "reviewed_at_utc": "2026-11-08T02:30:04.183431+00:00",
+          "passed": true,
+          "closed": true,
+          "blockers": [],
+          "scope": "Independent final metadata and preservation review; read-only Git/JSON/hash arithmetic and prior source/raw review. No tests, benchmark reruns, product edits or repository metadata edits.",
+          "baseline_commit": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "reviewed_files_sha256": {
+            "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a",
+            "docs/IMPROVEMENTS-v1.0.148.md": "4e7ecb050ea1b7072a4d12e3607b6e66357df07f6be168ae0f0968e11c68c385",
+            "docs/v148-improvement-progress.md": "496a13e8b9b6494477f3975104b1000d85ea794ca08bda705d776d712ec24216",
+            "RELEASE-NOTES-v1.0.148.md": "417ca1526922476504844e6fd3cc7cb2b8d55a9f2398456882d1602008659f5b",
+            "docs/v148-batch31-validation.json": "d03308d9d6f1756349af0cd0e14d79966c8e70d14caab0a5b55ddf23f5a273c8",
+            "docs/v148-batch31-import-stream-ownership.md": "974ce2f00753a41b57938b63d2cbace06c836977bbda18f79fce8843e9ded651",
+            "docs/v148-batch31-portrait-plan-ownership.md": "185dde84c2d044fccd45029cca9206dc0dd916ec9c56626c917337d88c3ce9da",
+            "docs/v148-batch31-portrait-edge-budget.md": "1647867d9db93ad842d39cccba1145251f26b579eb590fa8ceb391af48648916"
+          },
+          "registry": {
+            "implemented": 843,
+            "remaining": 157,
+            "prior_objects_preserved": 842,
+            "prefix_semantic_sha256": "6d751797d25140837ba0cd8933ca771e50702953d5dd42ec75b43d46f1efd95d",
+            "new_ids": [
+              "R3101"
+            ],
+            "new_global_ids": [
+              843
+            ],
+            "dedup": "One contour-prefix ranking reduction; GP14 tonal ranking and PB08 generic path capping remain distinct. Portrait/import ownership and evidence packaging add zero IDs."
+          },
+          "preservation": {
+            "old_benchmark_reports": 80,
+            "comparison": "Actual current bytes equal each published parent Git blob; validation SHA map matches independently computed hashes.",
+            "sha256": {
+              "docs/v148-batch01-benchmarks.json": "2ff838f783800d2c9cfd561cbde06704cff11e657aeed0e352bbb556347a422a",
+              "docs/v148-batch02-calibration-benchmarks.json": "2920c7a79f60df29563b20352bd1c1189afa70abeda871d60ab1f56019216d7e",
+              "docs/v148-batch02-delivery-benchmarks.json": "f2cb3b2c436bd4407d4ead03f5d6021d98dfed11890bd9101d37d0bb8cb2e89e",
+              "docs/v148-batch02-engine-benchmarks.json": "f365afaa12a7974fd682a671fee8cb2fbb6368ec37507d8803b2afdb23b78cd1",
+              "docs/v148-batch02-runtime-benchmarks.json": "bb2597bed0e8c5f21cb5670d29a0b30fef849549916068f24b9e8bf6aa750cf8",
+              "docs/v148-batch02-storage-benchmarks.json": "75574b2aad6888377de345d213693365b767a37962506c4956ef622ce0ff4a5b",
+              "docs/v148-batch03-colour-benchmarks.json": "d523c7c3efe0fa3e16ba0255ba4e6249672f7173e27cdb6fb7e3ff3d0f1a4073",
+              "docs/v148-batch03-engine-benchmarks.json": "04b391abfc9bd36af905db6655177a4ab09b18bb49c1fda83c71e9335b247757",
+              "docs/v148-batch03-gpu-platform-benchmarks.json": "3731fa654f5ebe504d113ac708637d563a418c226cd7f0a0452f45069ece3b03",
+              "docs/v148-batch03-image-benchmarks.json": "6f14204b4dc0f4e6588d2c69f8e714dde190a721c17d2a6c2529af4b05b0d254",
+              "docs/v148-batch03-rendering-benchmarks.json": "c1cb43f3cde8a585a7ab322ba15025a4d885e3d9b1adb6754de2b14c6325ef1c",
+              "docs/v148-batch04-application-benchmarks.json": "b76f63ba3aeb1191c194909096d7728e052e7bd5b1c566522c9c33a9beb4db00",
+              "docs/v148-batch04-engine-benchmarks.json": "9d23ca7ec7cca75fbed92e7626e48bd4606bb8fd9641ff94eab123095f936925",
+              "docs/v148-batch04-planner-benchmarks.json": "a20857041bfc844ad97cfc9c6c48242f937268d4be8acfbc81bd188ac85add59",
+              "docs/v148-batch04-ui-profiles-benchmarks.json": "f1bbb3b29dd7a130e1f9bd5058f658122675714234c69d7d926d5efac533c685",
+              "docs/v148-batch05-colour-planning-benchmarks.json": "92abe805510eefbfbe5092102304d95e88e0a125a85cf025662cf4078b7071ab",
+              "docs/v148-batch05-engine-benchmarks.json": "1958647992f511d796a45b38cf67d7385b2537137f8ec94e3ed6cfefd1597bbe",
+              "docs/v148-batch05-platform-benchmarks.json": "ab8fc69d47488373130fa0a7ff0768eac51b76921990e439c3ee225e492b4edc",
+              "docs/v148-batch05-runtime-benchmarks.json": "69d4998916ec97c996966dfb907e799c63ad9024c9ccb6b102e2c6825937ab3f",
+              "docs/v148-batch05-ui-workflow-benchmarks.json": "190c3a2c459526a349d918e6f6e4cf8afcb342c5f3be9b13dfe27042dce2ec50",
+              "docs/v148-batch06-engine-benchmarks.json": "f6140c279d7193a8d3854438cca0610e6b5c33c2713cb127fc47385d9ec99ff4",
+              "docs/v148-batch06-platform-benchmarks.json": "f47dac4c26e042f1aa5e15f49f9c8f4cf1d99c32fe6dfec2987bdea2f75b6113",
+              "docs/v148-batch06-probe-benchmarks.json": "4972fa0fc0c47f40a30bc24953a5de7c7cebffcb41f81502e6ecdf5a144681de",
+              "docs/v148-batch06-rendering-benchmarks.json": "8f4836d4ac4afda9bedd8a11968a05872f2facbc3f2bad1bfa93b24b8070c10d",
+              "docs/v148-batch06-ui-calibration-benchmarks.json": "e922669eb5b7e48cbdf351bd6fdf385a321200d041c0750e11c54c6b0461abf8",
+              "docs/v148-batch07-engine-benchmarks.json": "daebbe55eacee370b66757ac4140ba1cd4b92efba9420a21cbe66d7e235d0c1d",
+              "docs/v148-batch07-mobile-benchmarks.json": "1a19b4310e4132cacc65c226df0f129bc5042770c1eddf71dd5046a8ce49b6c5",
+              "docs/v148-batch07-recording-benchmarks.json": "32d62a69462d68d944b6f22c19a9b3b99e8ec90a270677eef601e7fb29848e52",
+              "docs/v148-batch07-rendering-benchmarks.json": "7e619500b42713dbb6a6bdb367b7ba11951081025c45fdd66b3020e148199e2f",
+              "docs/v148-batch08-background-benchmarks.json": "8254e5d736be6ec43328dd607b95ac819d9a37c2a427547be6b8a35f5983da00",
+              "docs/v148-batch08-engine-benchmarks.json": "17d945ea1b36772ad38b4a4b6f25b20675c9e10dc6008e19d18f186e06da6e92",
+              "docs/v148-batch08-rendering-benchmarks.json": "f8b72754303cdd5606e46c37f83457309020fae107397fbd92ca483ac03a9cbb",
+              "docs/v148-batch09-engine-benchmarks.json": "941d955c4f0f3290bd3744ef7884e20bece4b880ef7421c3d3dc6e67683cf2f1",
+              "docs/v148-batch10-engine-benchmarks.json": "042a3c8117e5c2f06643ff24da04a27e2393433badccb78a7bac26783bc3c239",
+              "docs/v148-batch10-recovery-benchmarks.json": "75eec7117591171476b62a2cf55dac52c2b7efe65ba376603348d77eb07cb04a",
+              "docs/v148-batch10-rendering-benchmarks.json": "e47a6d15491c019768707ce1cf234234223f0bba2911934088f6933951ff2002",
+              "docs/v148-batch11-engine-benchmarks.json": "45d7409ca26d3cec6e462893f7982ff448eeaa975bbbaf6af72830610d965134",
+              "docs/v148-batch11-rendering-benchmarks.json": "c5fd9e32b63c4c1ccf3d9b02e292645e99b338920b7c5d1d421def6166b1866d",
+              "docs/v148-batch12-engine-benchmarks.json": "2a798ba606358e414961038d626ceccc0fdc39491bc49fd424154797f4078f9d",
+              "docs/v148-batch12-rendering-benchmarks.json": "1d18c9268cebacfa34817d5a0c9d8cb7c37cda3d6533fa52258b0eef9e5cd03d",
+              "docs/v148-batch14-engine-benchmarks.json": "4d43f147977f50f2d66938e1a323c76ef7b90aa3708069990698798d17ff8ac6",
+              "docs/v148-batch14-rendering-benchmarks.json": "bc196c430321afd7b60943574a3e182b54494b301e9447ee100485dff6b03c5c",
+              "docs/v148-batch15-engine-benchmarks.json": "884f228913bd6f6c818a0ba9f7db3995af157a01fa1ecf0ccd93bedbaea8abd9",
+              "docs/v148-batch15-platform-benchmarks.json": "b9b6b24ae82645100748434825afc2951bcf33181dca9643a3f551c09bcabcf2",
+              "docs/v148-batch15-prepare-benchmarks.json": "13c4ac5aad161f9f05450fac32bd4e97c31d8e6a31948586192b544a88f45422",
+              "docs/v148-batch15-rendering-benchmarks.json": "901b71484a56bbd3d9218d0ae8bd3fa10501abd44b69fe1b0056f10e3a77ea14",
+              "docs/v148-batch16-detail-benchmarks.json": "07d5b8298608429ab6878f4dfc177242cd05058735aeda231ec436080813cdf5",
+              "docs/v148-batch16-engine-benchmarks.json": "c00ae5ac87760df6d36c51aace85d2343a8ee22a9cd335b5c52ae1a799c26625",
+              "docs/v148-batch17-engine-benchmarks.json": "d5baddeef507f46de51c5de7b0dd1d2aede252cf30db3836ea138b95e8fbabbf",
+              "docs/v148-batch18-engine-benchmarks.json": "24475debb3c96d67578526c180eebb3a7e0f30ef718b609a408c1ff6b6b72133",
+              "docs/v148-batch18-rendering-benchmarks.json": "5f41ce551b7dd29168e66ed94523a876b0867728543c8e8c3ed55f6e493e4e00",
+              "docs/v148-batch19-colour-benchmarks.json": "a34705ec47ee54f219df981b47890288f55fafbce39d9c96c752a8d87bc503f2",
+              "docs/v148-batch19-engine-benchmarks.json": "43e48272683c41c551b01b394d4b37b96914654664f8ebd6cb605a7a3e5efea1",
+              "docs/v148-batch19-platform-profile-benchmarks.json": "04e3a0638ec591f1e685cc5b76b49c6a544991af5cdb303d25f54d564e295836",
+              "docs/v148-batch19-rendering-benchmarks.json": "d5a1d7c16702bfab4595641dc3fdff895b244f86daa8de3e5a8683de5f438799",
+              "docs/v148-batch20-colour-benchmarks.json": "fd99453a0e329b206f98c21db9fed35c0a308b9ed3c7dc3ac4e0655ef6caa028",
+              "docs/v148-batch20-engine-benchmarks.json": "bb774c674ed79058c74c185a6ae4c1e0ebd46668981d476e30d0a56ac0e29699",
+              "docs/v148-batch20-ui-estimate-benchmarks.json": "610b6bdd9c96752dd2da59790d0b8da2ed2b843a1348536a48130185fc38dbe5",
+              "docs/v148-batch21-calibration-benchmarks.json": "6e591e870a65d41f67da2847ddc9b0f27e2d9f8bf1691539387a3cde43f17835",
+              "docs/v148-batch21-clipping-benchmarks.json": "0394f303031c0d99b118e1f380d019b25f14f8ce275231a74b94bf3cbcdd1164",
+              "docs/v148-batch21-engine-benchmarks.json": "d16964e994eb6275624b83d247718fbf4d42b9e24b812c929fc7e787ffd2328f",
+              "docs/v148-batch22-engine-benchmarks.json": "3cf997dc21da28297e11085e6e17d18d65bec5033cd24b6bdd98fd809ce276a8",
+              "docs/v148-batch22-spectrum-benchmarks.json": "e5bbeee96a81ae16743e80e813e17b881939d4bc96a430c5d2b5d72592ae4e78",
+              "docs/v148-batch23-colour-mixed-benchmarks.json": "070e810ac5462a2b71bccb97b918f097ee5a1ceba3cfa77e73d27cbfe8650dab",
+              "docs/v148-batch23-engine-benchmarks.json": "a63186dc6dc7c4af37db56b1b00d3ce2683c136125ab74dbe7a3b672480290d9",
+              "docs/v148-batch23-json-reader-benchmarks.json": "d112a988335bc2f79009d08ef6de6bf3e8e86708b78edda85956d85e467d1385",
+              "docs/v148-batch24-component-queue-benchmarks.json": "ea40ba06ae9b68d924bdb9d9015ac3a41219001b84dfb18d8ae121e07fc62ef5",
+              "docs/v148-batch24-engine-benchmarks.json": "69c63bf94c79f2ac5cc98aceb05ae5a5768bec8777eaeaf6407487bf9097450a",
+              "docs/v148-batch25-engine-benchmarks.json": "13712d784951b126e156dd7adfd9d6b67528823ca50970a07087ba3e0c82fd9f",
+              "docs/v148-batch26-engine-benchmarks.json": "08cf002e48fe65de0ac07422b5b4fcaa7d5c63ed1f678162c6be24cc5d50cc07",
+              "docs/v148-batch26-opencl-host-benchmarks.json": "16d81bbd15e274653b49a5ed7741db9061c6c9ca5223111383cf903a52a19c49",
+              "docs/v148-batch26-topology-benchmarks.json": "22694492a512805267a3b01e54c14c102d95296a9092b1dc94868aa558440018",
+              "docs/v148-batch27-engine-benchmarks.json": "b84e69b1de6b19aed1c800adcd847333d50198cd5626709f32cbe031280dd57b",
+              "docs/v148-batch27-sketch-finalization-benchmarks.json": "b906d364edbbcfc4a36fa0d9da1877e15c418350325b482f4b8f8fcc3141e689",
+              "docs/v148-batch28-engine-benchmarks.json": "4f0fea787371e6a6741293412cc255bc4b13a4d82b306523bb7f4ab7130b6fb2",
+              "docs/v148-batch29-engine-benchmarks.json": "8b57b0698a22c2f85a9fa096a55069f5bdf325849beb304a253b3e6d204b8ac3",
+              "docs/v148-batch29-estimate-benchmarks.json": "0a55a290f801f9ece2c96481b0a23f777b3f09304ee713002d8d7c0ae8f77a12",
+              "docs/v148-batch30-engine-benchmarks.json": "b71efaec90c4300367837b0ad9375f7a267e669302e56654a813da940f921ce7",
+              "docs/v148-batch30-palette-benchmarks.json": "349e15e385ceb3e3e3c128486eeb9763ad491412d7aa563a1fdfc9f05d2ec644",
+              "docs/v148-maintenance-stroke-benchmarks.json": "6556fa5cb163462be7e9a4984ee6074a8ea44fff214dfaf418c55e22f0241782"
+            }
+          },
+          "source_binding": {
+            "root_python_files": 897,
+            "root_python_manifest_sha256": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f",
+            "source_config_files": 947,
+            "source_config_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+            "all_current_source_bytes_match": true,
+            "earlier_scopes": "893 baseline and 895 focused checkpoints remain explicit, separate from final897. Owner history uses full old DrawBot+Portrait; edge comparison uses full old Portrait with shared current DrawBot/dependencies."
+          },
+          "gates": {
+            "fullsuite": {
+              "tests": 4569,
+              "passed": 4496,
+              "skipped": 73,
+              "seconds": 244.002,
+              "log_sha256": "cc40ec5b8e6758a20531794120e0e64cb88ac023fb5fab5318e3dd4c72a02b90"
+            },
+            "native": {
+              "tests": 14,
+              "skipped": 0,
+              "seconds": 7.417739728007291,
+              "platform": "Linux/Xorg/Tk 9.0.4",
+              "diagnostics": []
+            },
+            "source_soak_cycles": 5000,
+            "exact_rasters": 8,
+            "initial_package_files": 1370,
+            "post_metadata_package_files": 1372,
+            "post_report_sha256": "7a3f42a0b68471486857de5c8f54c3ca7f5b57dc12bdc098e56ca7fa0f39f11c",
+            "post_log_sha256": "ec8298cfe865e33ce695d7210d6ad3c6ada46ebe95d947a3c4753bd0c9cb8340",
+            "post_warnings": []
+          },
+          "raw_evidence": {
+            "edge_sha256": "f0d36d2fd7c3ebbf431cf9f8d23fdba5b1b7a93876dca3a738d22c71d0045a07",
+            "common_sha256": "ac7c534a6d7a93d7ba048c46868a007e94ccaa5793f6c11c596265951856a62e",
+            "common_artifacts": 81,
+            "common_source_maps": 5,
+            "owner_final_history_sha256": "c9fe43cbad4482eda3f134c7cd0796db98ba8b8ff7af82c96643f4e9300891a0",
+            "edge_review": "All 9x6 pairs and18 allocations,3preparations+39 exact comparisons already independently reviewed in batch31-edge-raw-review.json; metadata preserves negative/slower/noisy and higher-memory controls."
+          },
+          "claims_review": {
+            "all_three_ledgers_and_summary_documents_read": true,
+            "historical_and_current_scopes_separate": true,
+            "retained_scan_dictionary_and_costs_disclosed": true,
+            "no_general_application_speed_or_gpu_rss_claim": true,
+            "parent_ci_only": "e49e2535c5f8edea80e47824fe56cae58781b971",
+            "new_head_ci": "Pending; no new-head Windows, bundle or packaged-input certification is claimed.",
+            "release_published": false
+          },
+          "pending_flags": {
+            "observed_all_closed": false,
+            "observed_final_metadata_closed": false,
+            "classification": "Expected pending this independent receipt, not a blocker. Root may now register this receipt and close only these review/status fields; current reviewed file hashes identify the pre-closure metadata."
+          }
+        }
+      }
+    },
+    "closure_hash_scope": {
+      "validation_before_closure_sha256": "d03308d9d6f1756349af0cd0e14d79966c8e70d14caab0a5b55ddf23f5a273c8",
+      "scope": "The independent metadata hashes bind the reviewed files immediately before these review receipts and closure flags were appended. Product sources and substantive results/claims are unchanged by closure."
+    }
+  },
+  "source_binding": {
+    "root_python_files": 897,
+    "source_hash_manifest_sha256": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f",
+    "source_config_files": 947,
+    "source_config_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+    "manifest_artifact": "v148-batch31-completion-evidence.json",
+    "note": "Final full/native/source/raster, owner history and edge measurements bind the same complete map. Earlier focused maps remain explicit checkpoints."
+  },
+  "completion_evidence": {
+    "artifact": "v148-batch31-completion-evidence.json",
+    "sha256": "ac7c534a6d7a93d7ba048c46868a007e94ccaa5793f6c11c596265951856a62e",
+    "artifacts": 81,
+    "unique_source_manifests": 5,
+    "packaging_new_improvement_ids": 0,
+    "counting_scope": "Evidence packaging itself adds zero IDs. Portrait plan ownership and import-stream ownership complete existing contracts. Contour-prefix selection is proposed as at most one R3101 group; only the root registry/finalizer can register it after complete evidence review. This zero does not imply that every covered behavior is an uncounted completion."
+  },
+  "completion_proofs": {
+    "import_stream": {
+      "new_improvement_ids": 0,
+      "before": {
+        "artifact": "pending-batch31-import-stream/before-scoped/summary.json",
+        "sha256": "c6219bee6a85708898d4046b12e405f29f78a4333b4cac0dcfd2e0daadbc2db4"
+      },
+      "after_checkpoint": {
+        "artifact": "pending-batch31-import-stream/after-initial/summary.json",
+        "sha256": "03a1a0f1fe8f29be77f5d9fd279ae87cfae8daee806d6d9b6e096c0ccefa1939"
+      },
+      "before_expected_subcase_failures": 5,
+      "before_methods": 7,
+      "after_methods": 7,
+      "boundary": "Real Linux descriptor/spool ownership; no Windows sharing-lock or timing claim."
+    },
+    "portrait_outer_owner": {
+      "new_improvement_ids": 0,
+      "before": {
+        "artifact": "pending-batch31-portrait-plan/tests-before-complete.json",
+        "sha256": "01bb4cbb37deabab54357cdd4322f3be8aac33377e2673d0f07ddc7e9217424d"
+      },
+      "after_checkpoint": {
+        "artifact": "pending-batch31-portrait-plan/tests-after-complete.json",
+        "sha256": "b62faf9fc397a07c6ca475015127eb5c513a39e84ba5d746c9ec251304301ac1"
+      },
+      "before_methods": 7,
+      "before_expected_failures": 5,
+      "after_methods": 8,
+      "boundary": "Retained Stop/error closes private unpublished plans; borrowed inputs and returned rescue/fallback plans survive."
+    },
+    "historical": {
+      "artifact": "pending-batch31-portrait-plan/historical-final/summary.json",
+      "sha256": "c9fe43cbad4482eda3f134c7cd0796db98ba8b8ff7af82c96643f4e9300891a0",
+      "cases": 7,
+      "historical_sources": {
+        "DrawBot.py": "beafb20be39d1725df0c1cdb4a058ce6509e31837a647e1795b7606cf8960b80",
+        "PortraitPlanner.py": "8bbc6958fa212532c70b16eff6ac1cfb761bbdcf0cbbe13a9773e1e2630a4903"
+      },
+      "source_hash_manifest_sha256": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f",
+      "scope": "Complete historical DrawBot and PortraitPlanner linked together; identical current shared dependencies and private runtime state. No timing measurement.",
+      "cases_summary": [
+        {
+          "borrowed_unchanged": true,
+          "exact": true,
+          "finishes": [
+            {
+              "count": 582,
+              "estimate": 30.862800000000004,
+              "fitted": [
+                127.41818181818181,
+                96.0
+              ],
+              "rescue": 0,
+              "source_count": 686,
+              "time_fitted": false
+            }
+          ],
+          "full_plan_sha256": "e42f37f29726cf3f4fd297b648f6e7116f01ef07476d07d6f0a91f8ce6fd6c66",
+          "name": "auto-opaque"
+        },
+        {
+          "borrowed_unchanged": true,
+          "exact": true,
+          "finishes": [
+            {
+              "count": 1267,
+              "estimate": 49.1728,
+              "fitted": [
+                127.41818181818181,
+                96.0
+              ],
+              "rescue": 0,
+              "source_count": 2039,
+              "time_fitted": false
+            }
+          ],
+          "full_plan_sha256": "cf5942877099308782c65626d4f3de5a68f370a35893cd60c69e11a00fa13ae0",
+          "name": "portrait-alpha"
+        },
+        {
+          "borrowed_unchanged": true,
+          "exact": true,
+          "finishes": [
+            {
+              "count": 1792,
+              "estimate": 66.469,
+              "fitted": [
+                127.41818181818181,
+                96.0
+              ],
+              "rescue": 0,
+              "source_count": 1792,
+              "time_fitted": false
+            }
+          ],
+          "full_plan_sha256": "7c04469048dd43f418787550f3e9fbafb792bd8e2c4989c6b1a62df1d99160cf",
+          "name": "dots"
+        },
+        {
+          "borrowed_unchanged": true,
+          "exact": true,
+          "finishes": [
+            {
+              "count": 19,
+              "estimate": 3.6628000000000003,
+              "fitted": [
+                127.41818181818181,
+                96.0
+              ],
+              "rescue": 0,
+              "source_count": 20,
+              "time_fitted": false
+            }
+          ],
+          "full_plan_sha256": "945f4b090b1fd3e6745a2418b3f696ddbf7e94c67c62bb85c9aef93d7983909e",
+          "name": "manual-3s"
+        },
+        {
+          "borrowed_unchanged": true,
+          "exact": true,
+          "finishes": [
+            {
+              "count": 777,
+              "estimate": 198.86624999999998,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "rescue": 0,
+              "source_count": 952,
+              "time_fitted": false
+            },
+            {
+              "count": 611,
+              "estimate": 153.80375000000004,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "rescue": 0,
+              "source_count": 728,
+              "time_fitted": true
+            }
+          ],
+          "full_plan_sha256": "b8a761c626dd7b2da6d25d9f171c45237e750033dcacd69daeffbe305b4ab04b",
+          "name": "actual-time-fit"
+        },
+        {
+          "borrowed_unchanged": true,
+          "exact": true,
+          "finishes": [
+            {
+              "count": 777,
+              "estimate": 198.86624999999998,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "rescue": 0,
+              "source_count": 952,
+              "time_fitted": false
+            },
+            {
+              "count": 611,
+              "estimate": 153.80375000000004,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "rescue": 0,
+              "source_count": 728,
+              "time_fitted": true
+            }
+          ],
+          "full_plan_sha256": "02882829247179ec359e5e73ddd35feef04a67f3406e655126679b63fb1f2d75",
+          "name": "borrowed-time-fit"
+        },
+        {
+          "borrowed_unchanged": true,
+          "exact": true,
+          "finishes": [
+            {
+              "count": 3816,
+              "estimate": 154.5096,
+              "fitted": [
+                127.41818181818181,
+                96.0
+              ],
+              "rescue": 0,
+              "source_count": 6546,
+              "time_fitted": false
+            },
+            {
+              "count": 3816,
+              "estimate": 154.5096,
+              "fitted": [
+                127.41818181818181,
+                96.0
+              ],
+              "rescue": 1,
+              "source_count": 6546,
+              "time_fitted": false
+            }
+          ],
+          "full_plan_sha256": "42059faf313d436491287fe238fd65c095a5fb9075fb8853e088f96c8cdaafae",
+          "name": "actual-quality-rescue"
+        }
+      ]
+    },
+    "preliminary_diagnostics": [
+      {
+        "artifact": "pending-batch31-import-stream/before/summary.json",
+        "sha256": "d03e75b9c90302be81439f264e9402de8853d1cef9acd46a0e87d1270e1ea5e8",
+        "classification": "Initial audit rejected /dev/null; diagnostic only."
+      },
+      {
+        "artifact": "pending-batch31-portrait-plan/before/summary.json",
+        "sha256": "f12c0c2809876399999436c99ee970047f7abddbca929df88657b7223bc08af5",
+        "classification": "Initial observer could not inspect a partially constructed Pillow image; incomplete diagnostic."
+      },
+      {
+        "artifact": "pending-batch31-portrait-plan/tests-before.json",
+        "sha256": "5bc5025a3d6430b5690f94c57c761d0cbdf66cf040d3f11088e0352639a0def4",
+        "classification": "Initial test setup included an Auto/current-ink fixture error; not the accepted red proof."
+      }
+    ]
+  },
+  "edge_selection_comparison": {
+    "artifact": "v148-batch31-portrait-edge-benchmarks.json",
+    "sha256": "f0d36d2fd7c3ebbf431cf9f8d23fdba5b1b7a93876dca3a738d22c71d0045a07",
+    "historical_commit": "e49e2535c5f8edea80e47824fe56cae58781b971",
+    "preparations": 3,
+    "complete_historical_pairs": 39,
+    "workloads": 9,
+    "balanced_pairs_per_workload": 6,
+    "source_hash_manifest_sha256": "325d536b457d8b384a0738efab531ae0f6d773db5fb30fa569e56dbc0d7e329f",
+    "historical_module_sha256": "8bbc6958fa212532c70b16eff6ac1cfb761bbdcf0cbbe13a9773e1e2630a4903",
+    "current_module_sha256": "092d187f1bb85bec3ffa31034ca71ebae7efebb095a1d8c8ce6fe463baa704ad",
+    "method": {
+      "allocation_scope": "Separate same-call tracemalloc peak and retained-with-result; prepared borrowed sources and setup are excluded. Native Pillow buffers are not necessarily traced. This is not RSS or hardware/GPU performance.",
+      "helper_scope": "Whole actual _edge_strokes; before additionally takes the exact prefix discarded by its historical caller. Unbounded control omits the new max_strokes keyword on both sides. Preparation uses the real UI-derived options, including High throughput even in CPU mode, and is compared byte-for-byte outside helper clocks; actual public prepare arguments/gray/fitted/metadata must match that input. Initial edge budgets6/65/3690 are not final post-time-fit counts or delivered physical strokes.",
+      "historical_linkage": "Whole published PortraitPlanner at e49 is compared with current PortraitPlanner. Both real DrawBot imports and sys.modules are rebound outside clocks. Current DrawBot (including Portrait plan ownership) and all other recorded dependencies are shared; this is not a replay of the whole old application.",
+      "limits": "CPU-only synthetic image fixtures through actual public planners. Flat, near-full, full-budget, unbounded and Dots controls are retained. Helper improvements do not imply a whole-application speedup; every slower/noisy timing and higher allocation is retained.",
+      "public_scope": "Whole real make_plan, including preparation, tone selection, contour selection, actual budget/time-fit, diagnostics and internal cleanup. Inputs/options, module binding, GC, output comparison and caller-owned result cleanup are outside each clock.",
+      "samples": "One warm before/after pair per workload, then 6 balanced AB/BA elapsed pairs without sample removal, then separate before/after tracemalloc probes.",
+      "work_scope": "Separate sys.setprofile observations of real helper returns, list.sort inputs, heapq.nlargest input/return and its final sort, plus actual finish_plan returns. No numerical function, sort, heap or clock is replaced."
+    },
+    "rows": {
+      "edge-prepared-cap6": {
+        "kind": "edge_helper_and_used_prefix",
+        "before_median_ms": 191.6842745,
+        "after_median_ms": 186.522784,
+        "after_change_percent": -2.692704194678208,
+        "after_faster_pairs": 5,
+        "after_slower_pairs": 1,
+        "pairs": [
+          {
+            "after_ns": 190027589,
+            "before_ns": 191961205,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 198931267,
+            "before_ns": 190175268,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 185513548,
+            "before_ns": 189313330,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 187517028,
+            "before_ns": 194091834,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 184580224,
+            "before_ns": 205288843,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 185528540,
+            "before_ns": 191407344,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 5264592,
+            "retained_with_result_bytes": 259784,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 4807300,
+            "retained_with_result_bytes": 260184,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [
+                {
+                  "final_sort_inputs": [
+                    6
+                  ],
+                  "input": 19107,
+                  "requested": 6,
+                  "returned": 6
+                }
+              ],
+              "occupied": 19107,
+              "requested_limit": 6,
+              "returned": 6
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 0,
+            "heap_calls": 1,
+            "heap_final_sort_input": 6,
+            "heap_input": 19107,
+            "heap_returned": 6,
+            "occupied": 19107,
+            "returned": 6
+          }
+        },
+        "output_sha256": "a83d8014624ab16a0462583db006ac36157aff1f123e993f1db974400f264a2c",
+        "source": {
+          "image": {
+            "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+            "info": {},
+            "mode": "L",
+            "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+            "size": [
+              321,
+              241
+            ]
+          }
+        },
+        "limit": 6
+      },
+      "edge-prepared-cap65": {
+        "kind": "edge_helper_and_used_prefix",
+        "before_median_ms": 187.247165,
+        "after_median_ms": 184.346838,
+        "after_change_percent": -1.5489297261189527,
+        "after_faster_pairs": 5,
+        "after_slower_pairs": 1,
+        "pairs": [
+          {
+            "after_ns": 189046007,
+            "before_ns": 189745828,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 188013951,
+            "before_ns": 183168834,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 181693768,
+            "before_ns": 185537653,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 180567379,
+            "before_ns": 186465117,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 182683120,
+            "before_ns": 188029213,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 186010556,
+            "before_ns": 188716220,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 5264592,
+            "retained_with_result_bytes": 264504,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 4814052,
+            "retained_with_result_bytes": 268752,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [
+                {
+                  "final_sort_inputs": [
+                    65
+                  ],
+                  "input": 19107,
+                  "requested": 65,
+                  "returned": 65
+                }
+              ],
+              "occupied": 19107,
+              "requested_limit": 65,
+              "returned": 65
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 0,
+            "heap_calls": 1,
+            "heap_final_sort_input": 65,
+            "heap_input": 19107,
+            "heap_returned": 65,
+            "occupied": 19107,
+            "returned": 65
+          }
+        },
+        "output_sha256": "b3d95b27205386095cb4aa9d6236c1460bbaba282f05b41968f9190c40a1c075",
+        "source": {
+          "image": {
+            "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+            "info": {},
+            "mode": "L",
+            "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+            "size": [
+              321,
+              241
+            ]
+          }
+        },
+        "limit": 65
+      },
+      "edge-prepared-cap3690": {
+        "kind": "edge_helper_and_used_prefix",
+        "before_median_ms": 205.8547405,
+        "after_median_ms": 198.7667205,
+        "after_change_percent": -3.4432143669773763,
+        "after_faster_pairs": 6,
+        "after_slower_pairs": 0,
+        "pairs": [
+          {
+            "after_ns": 187496500,
+            "before_ns": 193878068,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 190007483,
+            "before_ns": 208011141,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 198397622,
+            "before_ns": 201601508,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 208292998,
+            "before_ns": 214680929,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 199135819,
+            "before_ns": 203698340,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 217092016,
+            "before_ns": 250620661,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 5264592,
+            "retained_with_result_bytes": 598344,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 5264592,
+            "retained_with_result_bytes": 601816,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": 3690,
+              "returned": 3690
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 3690
+          }
+        },
+        "output_sha256": "415e670afcc88273497992778d2d6fb97584c37df0d7226eb8afa516efcaef42",
+        "source": {
+          "image": {
+            "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+            "info": {},
+            "mode": "L",
+            "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+            "size": [
+              321,
+              241
+            ]
+          }
+        },
+        "limit": 3690
+      },
+      "edge-near-full-control": {
+        "kind": "edge_helper_and_used_prefix",
+        "before_median_ms": 192.5335145,
+        "after_median_ms": 190.466958,
+        "after_change_percent": -1.0733489727057344,
+        "after_faster_pairs": 4,
+        "after_slower_pairs": 2,
+        "pairs": [
+          {
+            "after_ns": 188495008,
+            "before_ns": 195832272,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 190063080,
+            "before_ns": 190243145,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 198794529,
+            "before_ns": 199225376,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 201193661,
+            "before_ns": 194806147,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 188662645,
+            "before_ns": 190260882,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 190870836,
+            "before_ns": 189163397,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 5264592,
+            "retained_with_result_bytes": 1883264,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 5264592,
+            "retained_with_result_bytes": 1884112,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": 19106,
+              "returned": 19106
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19106
+          }
+        },
+        "output_sha256": "59c51e2bae7f648f1b3fc045f3dadf113e390d77e94d45440543ce6587bf6c2c",
+        "source": {
+          "image": {
+            "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+            "info": {},
+            "mode": "L",
+            "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+            "size": [
+              321,
+              241
+            ]
+          }
+        },
+        "limit": 19106
+      },
+      "edge-unbounded-control": {
+        "kind": "edge_helper_and_used_prefix",
+        "before_median_ms": 189.8848085,
+        "after_median_ms": 191.295113,
+        "after_change_percent": 0.7427158134137857,
+        "after_faster_pairs": 1,
+        "after_slower_pairs": 5,
+        "pairs": [
+          {
+            "after_ns": 189791069,
+            "before_ns": 186559368,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 188158013,
+            "before_ns": 189149700,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 191776640,
+            "before_ns": 190619917,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 191413611,
+            "before_ns": 190915200,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 191176615,
+            "before_ns": 188734932,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 201055483,
+            "before_ns": 198737292,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 5264592,
+            "retained_with_result_bytes": 1884112,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 5264592,
+            "retained_with_result_bytes": 1884112,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "output_sha256": "eaa569634597d14a74d01e62bada589a0520f0e021d9bbad55c3318aed94a267",
+        "source": {
+          "image": {
+            "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+            "info": {},
+            "mode": "L",
+            "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+            "size": [
+              321,
+              241
+            ]
+          }
+        },
+        "limit": null
+      },
+      "edge-flat-control": {
+        "kind": "edge_helper_and_used_prefix",
+        "before_median_ms": 50.237956,
+        "after_median_ms": 50.817959,
+        "after_change_percent": 1.1545115410348306,
+        "after_faster_pairs": 3,
+        "after_slower_pairs": 3,
+        "pairs": [
+          {
+            "after_ns": 48454887,
+            "before_ns": 48336832,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 55209123,
+            "before_ns": 49950300,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 51019382,
+            "before_ns": 52489578,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 49277394,
+            "before_ns": 49841799,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 50616536,
+            "before_ns": 50525612,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 51086672,
+            "before_ns": 53350863,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 3456,
+            "retained_with_result_bytes": 1128,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 3456,
+            "retained_with_result_bytes": 1128,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 0,
+              "full_sort_inputs": [
+                0
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 0,
+              "requested_limit": null,
+              "returned": 0
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 0,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 0,
+            "returned": 0
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": null,
+              "duplicate_score_winners": 0,
+              "full_sort_inputs": [
+                0
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 0,
+              "requested_limit": 65,
+              "returned": 0
+            }
+          ],
+          "finishes": [],
+          "preparations": [],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 0,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 0,
+            "returned": 0
+          }
+        },
+        "output_sha256": "6d651e17ddad0acb5e7150722072e3e73e23d68f6af53bda2f65eb7b6a17cebf",
+        "source": {
+          "image": {
+            "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+            "info": {},
+            "mode": "L",
+            "sha256": "615accc9d750c16c73e95f9c12022e28993a37693728ff728e04207b39d01fcc",
+            "size": [
+              321,
+              241
+            ]
+          }
+        },
+        "limit": 65
+      },
+      "public-3s": {
+        "kind": "public_make_plan",
+        "before_median_ms": 1205.7563515,
+        "after_median_ms": 1205.33086,
+        "after_change_percent": -0.035288348219830734,
+        "after_faster_pairs": 2,
+        "after_slower_pairs": 4,
+        "pairs": [
+          {
+            "after_ns": 1212131862,
+            "before_ns": 1210622990,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 1189691654,
+            "before_ns": 1248799224,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 1202042198,
+            "before_ns": 1224593094,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 1229052361,
+            "before_ns": 1200889713,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 1208619522,
+            "before_ns": 1160361547,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 1170576914,
+            "before_ns": 1168887986,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 87591679,
+            "plan_summary": {
+              "count": 9,
+              "estimate": 4.9312499999999995,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 3,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 6,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 6,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            "retained_with_result_bytes": 1219700,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 87598150,
+            "plan_summary": {
+              "count": 9,
+              "estimate": 4.9312499999999995,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 3,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 6,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 6,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            "retained_with_result_bytes": 1226223,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": 6,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [
+            {
+              "count": 15,
+              "estimate": 5.8687499999999995,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 6,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 8,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "tone_strokes": 9,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            {
+              "count": 11,
+              "estimate": 5.2437499999999995,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 4,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 7,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 7,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            {
+              "count": 9,
+              "estimate": 4.9312499999999995,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 3,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 6,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 6,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            }
+          ],
+          "preparations": [
+            {
+              "arguments": {
+                "area": [
+                  1200,
+                  900
+                ],
+                "contrast": 1.0,
+                "detail": 10,
+                "draw_quality": "High likeness",
+                "gpu_mode": "CPU",
+                "gpu_performance": "High throughput",
+                "gpu_vram": "Auto",
+                "preview_detail_mode": null,
+                "subject_focus": true
+              },
+              "output": {
+                "acceleration_meta": {
+                  "accelerated": false,
+                  "allocation_mode": "Adaptive",
+                  "backend": "CPU",
+                  "compute_capability": "",
+                  "cuda_execution": "",
+                  "device": "CPU",
+                  "driver_version": "",
+                  "free_vram_mb": null,
+                  "hardware_detected": false,
+                  "hardware_device": "",
+                  "hardware_source": "",
+                  "multiprocessors": null,
+                  "performance_mode": "High throughput",
+                  "pool_cached_mb": null,
+                  "pool_used_mb": null,
+                  "reason": "CPU mode selected.",
+                  "requested": "CPU",
+                  "scaler": "CPU Lanczos",
+                  "tile_rows": null,
+                  "total_vram_mb": null,
+                  "vram_budget_mb": null,
+                  "workspace_estimate_mb": null
+                },
+                "fitted": [
+                  1200.0,
+                  900.0
+                ],
+                "gray": {
+                  "image": {
+                    "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+                    "info": {},
+                    "mode": "L",
+                    "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+                    "size": [
+                      321,
+                      241
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": 6,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [
+                {
+                  "final_sort_inputs": [
+                    6
+                  ],
+                  "input": 19107,
+                  "requested": 6,
+                  "returned": 6
+                }
+              ],
+              "occupied": 19107,
+              "requested_limit": 6,
+              "returned": 6
+            }
+          ],
+          "finishes": [
+            {
+              "count": 15,
+              "estimate": 5.8687499999999995,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 6,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 8,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "tone_strokes": 9,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            {
+              "count": 11,
+              "estimate": 5.2437499999999995,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 4,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 7,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 7,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            {
+              "count": 9,
+              "estimate": 4.9312499999999995,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 3,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 6,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 6,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            }
+          ],
+          "preparations": [
+            {
+              "arguments": {
+                "area": [
+                  1200,
+                  900
+                ],
+                "contrast": 1.0,
+                "detail": 10,
+                "draw_quality": "High likeness",
+                "gpu_mode": "CPU",
+                "gpu_performance": "High throughput",
+                "gpu_vram": "Auto",
+                "preview_detail_mode": null,
+                "subject_focus": true
+              },
+              "output": {
+                "acceleration_meta": {
+                  "accelerated": false,
+                  "allocation_mode": "Adaptive",
+                  "backend": "CPU",
+                  "compute_capability": "",
+                  "cuda_execution": "",
+                  "device": "CPU",
+                  "driver_version": "",
+                  "free_vram_mb": null,
+                  "hardware_detected": false,
+                  "hardware_device": "",
+                  "hardware_source": "",
+                  "multiprocessors": null,
+                  "performance_mode": "High throughput",
+                  "pool_cached_mb": null,
+                  "pool_used_mb": null,
+                  "reason": "CPU mode selected.",
+                  "requested": "CPU",
+                  "scaler": "CPU Lanczos",
+                  "tile_rows": null,
+                  "total_vram_mb": null,
+                  "vram_budget_mb": null,
+                  "workspace_estimate_mb": null
+                },
+                "fitted": [
+                  1200.0,
+                  900.0
+                ],
+                "gray": {
+                  "image": {
+                    "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+                    "info": {},
+                    "mode": "L",
+                    "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+                    "size": [
+                      321,
+                      241
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 0,
+            "heap_calls": 1,
+            "heap_final_sort_input": 6,
+            "heap_input": 19107,
+            "heap_returned": 6,
+            "occupied": 19107,
+            "returned": 6
+          }
+        },
+        "output_sha256": "e3639c94bfb34c1c095bac9d9279370ea768c90b53ff3b1d1ab83882abd68945",
+        "source": {
+          "image": {
+            "exif_sha256": "b70d335ca4cb06923cd40824524603b1eb96690a5133c7724e5e0ebf0b1251c6",
+            "info": {
+              "exif": {
+                "bytes": 60,
+                "sha256": "b70d335ca4cb06923cd40824524603b1eb96690a5133c7724e5e0ebf0b1251c6"
+              },
+              "fixture_marker": "borrowed portrait source"
+            },
+            "mode": "RGBA",
+            "sha256": "0df9739df4603b76d62e9e914cb9371dc78b5584229f63e5242afc3f4ede3c22",
+            "size": [
+              320,
+              240
+            ]
+          }
+        },
+        "limit": null
+      },
+      "public-30s": {
+        "kind": "public_make_plan",
+        "before_median_ms": 983.612455,
+        "after_median_ms": 958.4814855,
+        "after_change_percent": -2.5549665797999666,
+        "after_faster_pairs": 6,
+        "after_slower_pairs": 0,
+        "pairs": [
+          {
+            "after_ns": 1002504551,
+            "before_ns": 1103527987,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 966415346,
+            "before_ns": 989068749,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 998767606,
+            "before_ns": 999045632,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 934386079,
+            "before_ns": 970234078,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 950547625,
+            "before_ns": 952257287,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 949164924,
+            "before_ns": 978156161,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 87804198,
+            "plan_summary": {
+              "count": 89,
+              "estimate": 25.84625,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 37,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 53,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 53,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            "retained_with_result_bytes": 1333436,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 87804065,
+            "plan_summary": {
+              "count": 89,
+              "estimate": 25.84625,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 37,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 53,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 53,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            "retained_with_result_bytes": 1333162,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": 65,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [
+            {
+              "count": 154,
+              "estimate": 44.3725,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 65,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 62,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "tone_strokes": 93,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            {
+              "count": 89,
+              "estimate": 25.84625,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 37,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 53,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 53,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            }
+          ],
+          "preparations": [
+            {
+              "arguments": {
+                "area": [
+                  1200,
+                  900
+                ],
+                "contrast": 1.0,
+                "detail": 10,
+                "draw_quality": "High likeness",
+                "gpu_mode": "CPU",
+                "gpu_performance": "High throughput",
+                "gpu_vram": "Auto",
+                "preview_detail_mode": null,
+                "subject_focus": true
+              },
+              "output": {
+                "acceleration_meta": {
+                  "accelerated": false,
+                  "allocation_mode": "Adaptive",
+                  "backend": "CPU",
+                  "compute_capability": "",
+                  "cuda_execution": "",
+                  "device": "CPU",
+                  "driver_version": "",
+                  "free_vram_mb": null,
+                  "hardware_detected": false,
+                  "hardware_device": "",
+                  "hardware_source": "",
+                  "multiprocessors": null,
+                  "performance_mode": "High throughput",
+                  "pool_cached_mb": null,
+                  "pool_used_mb": null,
+                  "reason": "CPU mode selected.",
+                  "requested": "CPU",
+                  "scaler": "CPU Lanczos",
+                  "tile_rows": null,
+                  "total_vram_mb": null,
+                  "vram_budget_mb": null,
+                  "workspace_estimate_mb": null
+                },
+                "fitted": [
+                  1200.0,
+                  900.0
+                ],
+                "gray": {
+                  "image": {
+                    "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+                    "info": {},
+                    "mode": "L",
+                    "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+                    "size": [
+                      321,
+                      241
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": 65,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [
+                {
+                  "final_sort_inputs": [
+                    65
+                  ],
+                  "input": 19107,
+                  "requested": 65,
+                  "returned": 65
+                }
+              ],
+              "occupied": 19107,
+              "requested_limit": 65,
+              "returned": 65
+            }
+          ],
+          "finishes": [
+            {
+              "count": 154,
+              "estimate": 44.3725,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 65,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 62,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "tone_strokes": 93,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            {
+              "count": 89,
+              "estimate": 25.84625,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 37,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 53,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "time_fitted": true,
+                "tone_strokes": 53,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            }
+          ],
+          "preparations": [
+            {
+              "arguments": {
+                "area": [
+                  1200,
+                  900
+                ],
+                "contrast": 1.0,
+                "detail": 10,
+                "draw_quality": "High likeness",
+                "gpu_mode": "CPU",
+                "gpu_performance": "High throughput",
+                "gpu_vram": "Auto",
+                "preview_detail_mode": null,
+                "subject_focus": true
+              },
+              "output": {
+                "acceleration_meta": {
+                  "accelerated": false,
+                  "allocation_mode": "Adaptive",
+                  "backend": "CPU",
+                  "compute_capability": "",
+                  "cuda_execution": "",
+                  "device": "CPU",
+                  "driver_version": "",
+                  "free_vram_mb": null,
+                  "hardware_detected": false,
+                  "hardware_device": "",
+                  "hardware_source": "",
+                  "multiprocessors": null,
+                  "performance_mode": "High throughput",
+                  "pool_cached_mb": null,
+                  "pool_used_mb": null,
+                  "reason": "CPU mode selected.",
+                  "requested": "CPU",
+                  "scaler": "CPU Lanczos",
+                  "tile_rows": null,
+                  "total_vram_mb": null,
+                  "vram_budget_mb": null,
+                  "workspace_estimate_mb": null
+                },
+                "fitted": [
+                  1200.0,
+                  900.0
+                ],
+                "gray": {
+                  "image": {
+                    "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+                    "info": {},
+                    "mode": "L",
+                    "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+                    "size": [
+                      321,
+                      241
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 0,
+            "heap_calls": 1,
+            "heap_final_sort_input": 65,
+            "heap_input": 19107,
+            "heap_returned": 65,
+            "occupied": 19107,
+            "returned": 65
+          }
+        },
+        "output_sha256": "30df41727e163390108e12f62c8e4a52419fa53ea8946902e1436852399fec74",
+        "source": {
+          "image": {
+            "exif_sha256": "b70d335ca4cb06923cd40824524603b1eb96690a5133c7724e5e0ebf0b1251c6",
+            "info": {
+              "exif": {
+                "bytes": 60,
+                "sha256": "b70d335ca4cb06923cd40824524603b1eb96690a5133c7724e5e0ebf0b1251c6"
+              },
+              "fixture_marker": "borrowed portrait source"
+            },
+            "mode": "RGBA",
+            "sha256": "0df9739df4603b76d62e9e914cb9371dc78b5584229f63e5242afc3f4ede3c22",
+            "size": [
+              320,
+              240
+            ]
+          }
+        },
+        "limit": null
+      },
+      "public-unlimited": {
+        "kind": "public_make_plan",
+        "before_median_ms": 1510.872068,
+        "after_median_ms": 1484.966455,
+        "after_change_percent": -1.714613271942489,
+        "after_faster_pairs": 5,
+        "after_slower_pairs": 1,
+        "pairs": [
+          {
+            "after_ns": 1506812669,
+            "before_ns": 1486056620,
+            "index": 0,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 1486162487,
+            "before_ns": 1519351204,
+            "index": 1,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 1479544261,
+            "before_ns": 1502392932,
+            "index": 2,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 1483770423,
+            "before_ns": 1522569358,
+            "index": 3,
+            "order": [
+              "after",
+              "before"
+            ]
+          },
+          {
+            "after_ns": 1471092328,
+            "before_ns": 1483196394,
+            "index": 4,
+            "order": [
+              "before",
+              "after"
+            ]
+          },
+          {
+            "after_ns": 1513557806,
+            "before_ns": 1560982371,
+            "index": 5,
+            "order": [
+              "after",
+              "before"
+            ]
+          }
+        ],
+        "allocations": [
+          {
+            "peak_python_bytes": 92149259,
+            "plan_summary": {
+              "count": 7867,
+              "estimate": 2686.6487499999994,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 3690,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 3558,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "tone_strokes": 5310,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            "retained_with_result_bytes": 5970284,
+            "side": "before"
+          },
+          {
+            "peak_python_bytes": 92149521,
+            "plan_summary": {
+              "count": 7867,
+              "estimate": 2686.6487499999994,
+              "fitted": [
+                1200.0,
+                900.0
+              ],
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 3690,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 3558,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "tone_strokes": 5310,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            },
+            "retained_with_result_bytes": 5970615,
+            "side": "after"
+          }
+        ],
+        "before_work": {
+          "calls": [
+            {
+              "caller_edge_budget": 3690,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": null,
+              "returned": 19107
+            }
+          ],
+          "finishes": [
+            {
+              "count": 7867,
+              "estimate": 2686.6487499999994,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 3690,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 3558,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "tone_strokes": 5310,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            }
+          ],
+          "preparations": [
+            {
+              "arguments": {
+                "area": [
+                  1200,
+                  900
+                ],
+                "contrast": 1.0,
+                "detail": 10,
+                "draw_quality": "High likeness",
+                "gpu_mode": "CPU",
+                "gpu_performance": "High throughput",
+                "gpu_vram": "Auto",
+                "preview_detail_mode": null,
+                "subject_focus": true
+              },
+              "output": {
+                "acceleration_meta": {
+                  "accelerated": false,
+                  "allocation_mode": "Adaptive",
+                  "backend": "CPU",
+                  "compute_capability": "",
+                  "cuda_execution": "",
+                  "device": "CPU",
+                  "driver_version": "",
+                  "free_vram_mb": null,
+                  "hardware_detected": false,
+                  "hardware_device": "",
+                  "hardware_source": "",
+                  "multiprocessors": null,
+                  "performance_mode": "High throughput",
+                  "pool_cached_mb": null,
+                  "pool_used_mb": null,
+                  "reason": "CPU mode selected.",
+                  "requested": "CPU",
+                  "scaler": "CPU Lanczos",
+                  "tile_rows": null,
+                  "total_vram_mb": null,
+                  "vram_budget_mb": null,
+                  "workspace_estimate_mb": null
+                },
+                "fitted": [
+                  1200.0,
+                  900.0
+                ],
+                "gray": {
+                  "image": {
+                    "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+                    "info": {},
+                    "mode": "L",
+                    "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+                    "size": [
+                      321,
+                      241
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 19107
+          }
+        },
+        "after_work": {
+          "calls": [
+            {
+              "caller_edge_budget": 3690,
+              "duplicate_score_winners": 29,
+              "full_sort_inputs": [
+                19107
+              ],
+              "gpu_performance": "High throughput",
+              "gpu_vram": "Auto",
+              "gray_size": [
+                321,
+                241
+              ],
+              "heap_calls": [],
+              "occupied": 19107,
+              "requested_limit": 3690,
+              "returned": 3690
+            }
+          ],
+          "finishes": [
+            {
+              "count": 7867,
+              "estimate": 2686.6487499999994,
+              "portrait_stats": {
+                "acceleration_backend": "CPU",
+                "acceleration_device": "CPU",
+                "acceleration_reason": "CPU mode selected.",
+                "allocation_mode": "Adaptive",
+                "compute_capability": "",
+                "cuda_execution": "",
+                "draw_quality": "High likeness",
+                "edge_strokes": 3690,
+                "gpu_accelerated": false,
+                "gpu_performance": "High throughput",
+                "gpu_requested": "CPU",
+                "gpu_vram": "Auto",
+                "levels": 6,
+                "multiprocessors": null,
+                "pool_cached_mb": null,
+                "pool_used_mb": null,
+                "priority_strokes": 3558,
+                "sample_size": [
+                  321,
+                  241
+                ],
+                "scaler": "CPU Lanczos",
+                "tile_rows": null,
+                "tone_strokes": 5310,
+                "vram_budget_mb": null,
+                "workspace_estimate_mb": null
+              }
+            }
+          ],
+          "preparations": [
+            {
+              "arguments": {
+                "area": [
+                  1200,
+                  900
+                ],
+                "contrast": 1.0,
+                "detail": 10,
+                "draw_quality": "High likeness",
+                "gpu_mode": "CPU",
+                "gpu_performance": "High throughput",
+                "gpu_vram": "Auto",
+                "preview_detail_mode": null,
+                "subject_focus": true
+              },
+              "output": {
+                "acceleration_meta": {
+                  "accelerated": false,
+                  "allocation_mode": "Adaptive",
+                  "backend": "CPU",
+                  "compute_capability": "",
+                  "cuda_execution": "",
+                  "device": "CPU",
+                  "driver_version": "",
+                  "free_vram_mb": null,
+                  "hardware_detected": false,
+                  "hardware_device": "",
+                  "hardware_source": "",
+                  "multiprocessors": null,
+                  "performance_mode": "High throughput",
+                  "pool_cached_mb": null,
+                  "pool_used_mb": null,
+                  "reason": "CPU mode selected.",
+                  "requested": "CPU",
+                  "scaler": "CPU Lanczos",
+                  "tile_rows": null,
+                  "total_vram_mb": null,
+                  "vram_budget_mb": null,
+                  "workspace_estimate_mb": null
+                },
+                "fitted": [
+                  1200.0,
+                  900.0
+                ],
+                "gray": {
+                  "image": {
+                    "exif_sha256": "313c5e16c487b7cd7c24f4eb61f6d97184c25da11e7d69f63203dbf9b824df52",
+                    "info": {},
+                    "mode": "L",
+                    "sha256": "c1393de2f7eb5e7da9c94fdb7e9edcb9ec88c37163916eefb4f3273f81d8e7fa",
+                    "size": [
+                      321,
+                      241
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "totals": {
+            "edge_calls": 1,
+            "full_sort_input": 19107,
+            "heap_calls": 0,
+            "heap_final_sort_input": 0,
+            "heap_input": 0,
+            "heap_returned": 0,
+            "occupied": 19107,
+            "returned": 3690
+          }
+        },
+        "output_sha256": "6ece762437e8afc32aa71444d6925763a1c8ac423719092d95cc9311fa2c1bed",
+        "source": {
+          "image": {
+            "exif_sha256": "b70d335ca4cb06923cd40824524603b1eb96690a5133c7724e5e0ebf0b1251c6",
+            "info": {
+              "exif": {
+                "bytes": 60,
+                "sha256": "b70d335ca4cb06923cd40824524603b1eb96690a5133c7724e5e0ebf0b1251c6"
+              },
+              "fixture_marker": "borrowed portrait source"
+            },
+            "mode": "RGBA",
+            "sha256": "0df9739df4603b76d62e9e914cb9371dc78b5584229f63e5242afc3f4ede3c22",
+            "size": [
+              320,
+              240
+            ]
+          }
+        },
+        "limit": null
+      }
+    },
+    "before_actual_work": {
+      "artifact": "pending-batch31-portrait-edge-budget/before/summary.json",
+      "sha256": "b39b7b7566041fc1877dc2feaafeff670710e3b204d9c029dd0ccef39a5e101e"
+    },
+    "before_contract_test": {
+      "artifact": "pending-batch31-portrait-edge-budget/tests-before/summary.json",
+      "sha256": "253f8295c96510b7dbb2d16d051f88de1cba8e4ebcb52e01a1a34b53b816b5c7"
+    },
+    "limits": "Current DrawBot ownership and other dependencies are shared for the contour comparison. The separate completion replay compares the complete historical DrawBot and PortraitPlanner together, with other current dependencies shared. It does not replay the whole old application; no universal speed/RSS/GPU claim."
+  },
+  "unsuccessful_integration_attempts": [],
+  "exact_raster_results": {
+    "artifact": "v148-batch31-engine-benchmarks.json",
+    "sha256": "bf0a4ef20f1f256add6f317bdf0b0bf0c946c1be70aafb6f77f8e519c3bf078a",
+    "fixtures": 8,
+    "all_exact_palette_geometry": true,
+    "mismatched_plan_pixels": {
+      "red-bananas": 0,
+      "yellow-banana": 0,
+      "small-details": 0,
+      "dominant-hues": 0,
+      "icon-crop": 0,
+      "paint-reference": 0,
+      "application-webp": 0,
+      "application-png-crop": 0
+    },
+    "existing_tracked_assets": true,
+    "real_windows_input_verified": false,
+    "physical_gpu_verified": false
+  },
+  "preserved_old_benchmark_reports": {
+    "count": 80,
+    "byte_identical_to_parent": true,
+    "sha256": {
+      "docs/v148-batch01-benchmarks.json": "2ff838f783800d2c9cfd561cbde06704cff11e657aeed0e352bbb556347a422a",
+      "docs/v148-batch02-calibration-benchmarks.json": "2920c7a79f60df29563b20352bd1c1189afa70abeda871d60ab1f56019216d7e",
+      "docs/v148-batch02-delivery-benchmarks.json": "f2cb3b2c436bd4407d4ead03f5d6021d98dfed11890bd9101d37d0bb8cb2e89e",
+      "docs/v148-batch02-engine-benchmarks.json": "f365afaa12a7974fd682a671fee8cb2fbb6368ec37507d8803b2afdb23b78cd1",
+      "docs/v148-batch02-runtime-benchmarks.json": "bb2597bed0e8c5f21cb5670d29a0b30fef849549916068f24b9e8bf6aa750cf8",
+      "docs/v148-batch02-storage-benchmarks.json": "75574b2aad6888377de345d213693365b767a37962506c4956ef622ce0ff4a5b",
+      "docs/v148-batch03-colour-benchmarks.json": "d523c7c3efe0fa3e16ba0255ba4e6249672f7173e27cdb6fb7e3ff3d0f1a4073",
+      "docs/v148-batch03-engine-benchmarks.json": "04b391abfc9bd36af905db6655177a4ab09b18bb49c1fda83c71e9335b247757",
+      "docs/v148-batch03-gpu-platform-benchmarks.json": "3731fa654f5ebe504d113ac708637d563a418c226cd7f0a0452f45069ece3b03",
+      "docs/v148-batch03-image-benchmarks.json": "6f14204b4dc0f4e6588d2c69f8e714dde190a721c17d2a6c2529af4b05b0d254",
+      "docs/v148-batch03-rendering-benchmarks.json": "c1cb43f3cde8a585a7ab322ba15025a4d885e3d9b1adb6754de2b14c6325ef1c",
+      "docs/v148-batch04-application-benchmarks.json": "b76f63ba3aeb1191c194909096d7728e052e7bd5b1c566522c9c33a9beb4db00",
+      "docs/v148-batch04-engine-benchmarks.json": "9d23ca7ec7cca75fbed92e7626e48bd4606bb8fd9641ff94eab123095f936925",
+      "docs/v148-batch04-planner-benchmarks.json": "a20857041bfc844ad97cfc9c6c48242f937268d4be8acfbc81bd188ac85add59",
+      "docs/v148-batch04-ui-profiles-benchmarks.json": "f1bbb3b29dd7a130e1f9bd5058f658122675714234c69d7d926d5efac533c685",
+      "docs/v148-batch05-colour-planning-benchmarks.json": "92abe805510eefbfbe5092102304d95e88e0a125a85cf025662cf4078b7071ab",
+      "docs/v148-batch05-engine-benchmarks.json": "1958647992f511d796a45b38cf67d7385b2537137f8ec94e3ed6cfefd1597bbe",
+      "docs/v148-batch05-platform-benchmarks.json": "ab8fc69d47488373130fa0a7ff0768eac51b76921990e439c3ee225e492b4edc",
+      "docs/v148-batch05-runtime-benchmarks.json": "69d4998916ec97c996966dfb907e799c63ad9024c9ccb6b102e2c6825937ab3f",
+      "docs/v148-batch05-ui-workflow-benchmarks.json": "190c3a2c459526a349d918e6f6e4cf8afcb342c5f3be9b13dfe27042dce2ec50",
+      "docs/v148-batch06-engine-benchmarks.json": "f6140c279d7193a8d3854438cca0610e6b5c33c2713cb127fc47385d9ec99ff4",
+      "docs/v148-batch06-platform-benchmarks.json": "f47dac4c26e042f1aa5e15f49f9c8f4cf1d99c32fe6dfec2987bdea2f75b6113",
+      "docs/v148-batch06-probe-benchmarks.json": "4972fa0fc0c47f40a30bc24953a5de7c7cebffcb41f81502e6ecdf5a144681de",
+      "docs/v148-batch06-rendering-benchmarks.json": "8f4836d4ac4afda9bedd8a11968a05872f2facbc3f2bad1bfa93b24b8070c10d",
+      "docs/v148-batch06-ui-calibration-benchmarks.json": "e922669eb5b7e48cbdf351bd6fdf385a321200d041c0750e11c54c6b0461abf8",
+      "docs/v148-batch07-engine-benchmarks.json": "daebbe55eacee370b66757ac4140ba1cd4b92efba9420a21cbe66d7e235d0c1d",
+      "docs/v148-batch07-mobile-benchmarks.json": "1a19b4310e4132cacc65c226df0f129bc5042770c1eddf71dd5046a8ce49b6c5",
+      "docs/v148-batch07-recording-benchmarks.json": "32d62a69462d68d944b6f22c19a9b3b99e8ec90a270677eef601e7fb29848e52",
+      "docs/v148-batch07-rendering-benchmarks.json": "7e619500b42713dbb6a6bdb367b7ba11951081025c45fdd66b3020e148199e2f",
+      "docs/v148-batch08-background-benchmarks.json": "8254e5d736be6ec43328dd607b95ac819d9a37c2a427547be6b8a35f5983da00",
+      "docs/v148-batch08-engine-benchmarks.json": "17d945ea1b36772ad38b4a4b6f25b20675c9e10dc6008e19d18f186e06da6e92",
+      "docs/v148-batch08-rendering-benchmarks.json": "f8b72754303cdd5606e46c37f83457309020fae107397fbd92ca483ac03a9cbb",
+      "docs/v148-batch09-engine-benchmarks.json": "941d955c4f0f3290bd3744ef7884e20bece4b880ef7421c3d3dc6e67683cf2f1",
+      "docs/v148-batch10-engine-benchmarks.json": "042a3c8117e5c2f06643ff24da04a27e2393433badccb78a7bac26783bc3c239",
+      "docs/v148-batch10-recovery-benchmarks.json": "75eec7117591171476b62a2cf55dac52c2b7efe65ba376603348d77eb07cb04a",
+      "docs/v148-batch10-rendering-benchmarks.json": "e47a6d15491c019768707ce1cf234234223f0bba2911934088f6933951ff2002",
+      "docs/v148-batch11-engine-benchmarks.json": "45d7409ca26d3cec6e462893f7982ff448eeaa975bbbaf6af72830610d965134",
+      "docs/v148-batch11-rendering-benchmarks.json": "c5fd9e32b63c4c1ccf3d9b02e292645e99b338920b7c5d1d421def6166b1866d",
+      "docs/v148-batch12-engine-benchmarks.json": "2a798ba606358e414961038d626ceccc0fdc39491bc49fd424154797f4078f9d",
+      "docs/v148-batch12-rendering-benchmarks.json": "1d18c9268cebacfa34817d5a0c9d8cb7c37cda3d6533fa52258b0eef9e5cd03d",
+      "docs/v148-batch14-engine-benchmarks.json": "4d43f147977f50f2d66938e1a323c76ef7b90aa3708069990698798d17ff8ac6",
+      "docs/v148-batch14-rendering-benchmarks.json": "bc196c430321afd7b60943574a3e182b54494b301e9447ee100485dff6b03c5c",
+      "docs/v148-batch15-engine-benchmarks.json": "884f228913bd6f6c818a0ba9f7db3995af157a01fa1ecf0ccd93bedbaea8abd9",
+      "docs/v148-batch15-platform-benchmarks.json": "b9b6b24ae82645100748434825afc2951bcf33181dca9643a3f551c09bcabcf2",
+      "docs/v148-batch15-prepare-benchmarks.json": "13c4ac5aad161f9f05450fac32bd4e97c31d8e6a31948586192b544a88f45422",
+      "docs/v148-batch15-rendering-benchmarks.json": "901b71484a56bbd3d9218d0ae8bd3fa10501abd44b69fe1b0056f10e3a77ea14",
+      "docs/v148-batch16-detail-benchmarks.json": "07d5b8298608429ab6878f4dfc177242cd05058735aeda231ec436080813cdf5",
+      "docs/v148-batch16-engine-benchmarks.json": "c00ae5ac87760df6d36c51aace85d2343a8ee22a9cd335b5c52ae1a799c26625",
+      "docs/v148-batch17-engine-benchmarks.json": "d5baddeef507f46de51c5de7b0dd1d2aede252cf30db3836ea138b95e8fbabbf",
+      "docs/v148-batch18-engine-benchmarks.json": "24475debb3c96d67578526c180eebb3a7e0f30ef718b609a408c1ff6b6b72133",
+      "docs/v148-batch18-rendering-benchmarks.json": "5f41ce551b7dd29168e66ed94523a876b0867728543c8e8c3ed55f6e493e4e00",
+      "docs/v148-batch19-colour-benchmarks.json": "a34705ec47ee54f219df981b47890288f55fafbce39d9c96c752a8d87bc503f2",
+      "docs/v148-batch19-engine-benchmarks.json": "43e48272683c41c551b01b394d4b37b96914654664f8ebd6cb605a7a3e5efea1",
+      "docs/v148-batch19-platform-profile-benchmarks.json": "04e3a0638ec591f1e685cc5b76b49c6a544991af5cdb303d25f54d564e295836",
+      "docs/v148-batch19-rendering-benchmarks.json": "d5a1d7c16702bfab4595641dc3fdff895b244f86daa8de3e5a8683de5f438799",
+      "docs/v148-batch20-colour-benchmarks.json": "fd99453a0e329b206f98c21db9fed35c0a308b9ed3c7dc3ac4e0655ef6caa028",
+      "docs/v148-batch20-engine-benchmarks.json": "bb774c674ed79058c74c185a6ae4c1e0ebd46668981d476e30d0a56ac0e29699",
+      "docs/v148-batch20-ui-estimate-benchmarks.json": "610b6bdd9c96752dd2da59790d0b8da2ed2b843a1348536a48130185fc38dbe5",
+      "docs/v148-batch21-calibration-benchmarks.json": "6e591e870a65d41f67da2847ddc9b0f27e2d9f8bf1691539387a3cde43f17835",
+      "docs/v148-batch21-clipping-benchmarks.json": "0394f303031c0d99b118e1f380d019b25f14f8ce275231a74b94bf3cbcdd1164",
+      "docs/v148-batch21-engine-benchmarks.json": "d16964e994eb6275624b83d247718fbf4d42b9e24b812c929fc7e787ffd2328f",
+      "docs/v148-batch22-engine-benchmarks.json": "3cf997dc21da28297e11085e6e17d18d65bec5033cd24b6bdd98fd809ce276a8",
+      "docs/v148-batch22-spectrum-benchmarks.json": "e5bbeee96a81ae16743e80e813e17b881939d4bc96a430c5d2b5d72592ae4e78",
+      "docs/v148-batch23-colour-mixed-benchmarks.json": "070e810ac5462a2b71bccb97b918f097ee5a1ceba3cfa77e73d27cbfe8650dab",
+      "docs/v148-batch23-engine-benchmarks.json": "a63186dc6dc7c4af37db56b1b00d3ce2683c136125ab74dbe7a3b672480290d9",
+      "docs/v148-batch23-json-reader-benchmarks.json": "d112a988335bc2f79009d08ef6de6bf3e8e86708b78edda85956d85e467d1385",
+      "docs/v148-batch24-component-queue-benchmarks.json": "ea40ba06ae9b68d924bdb9d9015ac3a41219001b84dfb18d8ae121e07fc62ef5",
+      "docs/v148-batch24-engine-benchmarks.json": "69c63bf94c79f2ac5cc98aceb05ae5a5768bec8777eaeaf6407487bf9097450a",
+      "docs/v148-batch25-engine-benchmarks.json": "13712d784951b126e156dd7adfd9d6b67528823ca50970a07087ba3e0c82fd9f",
+      "docs/v148-batch26-engine-benchmarks.json": "08cf002e48fe65de0ac07422b5b4fcaa7d5c63ed1f678162c6be24cc5d50cc07",
+      "docs/v148-batch26-opencl-host-benchmarks.json": "16d81bbd15e274653b49a5ed7741db9061c6c9ca5223111383cf903a52a19c49",
+      "docs/v148-batch26-topology-benchmarks.json": "22694492a512805267a3b01e54c14c102d95296a9092b1dc94868aa558440018",
+      "docs/v148-batch27-engine-benchmarks.json": "b84e69b1de6b19aed1c800adcd847333d50198cd5626709f32cbe031280dd57b",
+      "docs/v148-batch27-sketch-finalization-benchmarks.json": "b906d364edbbcfc4a36fa0d9da1877e15c418350325b482f4b8f8fcc3141e689",
+      "docs/v148-batch28-engine-benchmarks.json": "4f0fea787371e6a6741293412cc255bc4b13a4d82b306523bb7f4ab7130b6fb2",
+      "docs/v148-batch29-engine-benchmarks.json": "8b57b0698a22c2f85a9fa096a55069f5bdf325849beb304a253b3e6d204b8ac3",
+      "docs/v148-batch29-estimate-benchmarks.json": "0a55a290f801f9ece2c96481b0a23f777b3f09304ee713002d8d7c0ae8f77a12",
+      "docs/v148-batch30-engine-benchmarks.json": "b71efaec90c4300367837b0ad9375f7a267e669302e56654a813da940f921ce7",
+      "docs/v148-batch30-palette-benchmarks.json": "349e15e385ceb3e3e3c128486eeb9763ad491412d7aa563a1fdfc9f05d2ec644",
+      "docs/v148-maintenance-stroke-benchmarks.json": "6556fa5cb163462be7e9a4984ee6074a8ea44fff214dfaf418c55e22f0241782"
+    }
+  },
+  "prior_checkpoint_validation": {
+    "parent_commit": "e49e2535c5f8edea80e47824fe56cae58781b971",
+    "root_receipt": {
+      "artifact": "v148-batch31-parent-ci-root.json",
+      "sha256": "f20dcda453bf7e78740ed9bc21c84635f9eb3aca3713719c6c9dd6d420d00bcc"
+    },
+    "agent_receipt": {
+      "artifact": "v148-batch31-parent-ci-agent.json",
+      "sha256": "99bbb6b7ed06852b5406e5cc3584d38f5d67a5dbffafbf0a00aac52388f312bc"
+    },
+    "root": {
+      "parent": "e49e2535c5f8edea80e47824fe56cae58781b971",
+      "root_verified": true,
+      "ci_run": 42434481898,
+      "codeql_run": 42434478970,
+      "windows_job": 128590299263,
+      "windows_attempt": 1,
+      "all_seven_green": true,
+      "checks": [
+        {
+          "name": "CodeQL",
+          "id": 128590416457,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "dependencies-ubuntu-latest-py3.11",
+          "id": 128590299548,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "dependencies-windows-latest-py3.12",
+          "id": 128590299506,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "core-ubuntu-latest-py312",
+          "id": 128590299461,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "core-windows-latest-py312",
+          "id": 128590299263,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Analyze (actions)",
+          "id": 128590292497,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Analyze (python)",
+          "id": 128590292473,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "workflows": [
+        {
+          "id": 42434481898,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 42434478970,
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "windows_steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Checkout",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Set up Python",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Install application and test dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Validate source package hygiene",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Run exact raster and portable planner regressions",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Run Extra Fast benchmark smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Run complete regressions",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Run Image Draw Bot Windows self-test",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Build and validate the Windows bundle",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Verify packaged GUI and native drag and drop",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        },
+        {
+          "name": "Post Set up Python",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21
+        },
+        {
+          "name": "Post Checkout",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 22
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 23
+        }
+      ],
+      "windows_tests": {
+        "total": 4551,
+        "passed": 4548,
+        "skipped": 3,
+        "seconds": 404.561
+      },
+      "windows_log_chars": 1064307,
+      "windows_zip_sha256": "fabdf821929f671888c2cfa3dc643d46fa15ee539f80ad6fe060663d85aa305f",
+      "diagnostics": {
+        "invalid_command": 0,
+        "tcl_async_delete": 0,
+        "actions_errors": 0
+      },
+      "reruns": 0,
+      "release_published": false,
+      "pr_number": 46,
+      "pr_body_chars": 51571
+    },
+    "agent": {
+      "schema": 1,
+      "repository": "Vxiey/Image-Draw-Bot",
+      "pull_request": 46,
+      "commit": "e49e2535c5f8edea80e47824fe56cae58781b971",
+      "tree": "6c81e9f17bf8bb46f10af8b846646e20002f163b",
+      "retrieval": {
+        "first_snapshot_utc": "2026-11-08 01:30:09 UTC",
+        "final_checks_utc": "2026-11-08 01:39:21 UTC",
+        "final_workflows_and_log_utc": "2026-11-08 01:39:51 UTC",
+        "tools": [
+          "mcp__codex_apps__github_fetch",
+          "mcp__codex_apps__github_fetch_workflow_job_steps",
+          "mcp__codex_apps__github_fetch_workflow_job_logs"
+        ],
+        "endpoints": [
+          "https://api.github.com/repos/Vxiey/Image-Draw-Bot/commits/e49e2535c5f8edea80e47824fe56cae58781b971/check-runs?per_page=100",
+          "https://api.github.com/repos/Vxiey/Image-Draw-Bot/actions/runs?head_sha=e49e2535c5f8edea80e47824fe56cae58781b971&per_page=30",
+          "https://api.github.com/repos/Vxiey/Image-Draw-Bot/actions/jobs/128590299263",
+          "https://api.github.com/repos/Vxiey/Image-Draw-Bot/actions/jobs/128590299263/logs"
+        ]
+      },
+      "passed": true,
+      "checks": [
+        {
+          "id": 128590416457,
+          "name": "CodeQL",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-08T01:30:18Z",
+          "completed_at": "2026-11-08T01:30:21Z",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/runs/128590416457",
+          "output_title": "No new alerts in code changed by this pull request"
+        },
+        {
+          "id": 128590299548,
+          "name": "dependencies-ubuntu-latest-py3.11",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-08T01:29:47Z",
+          "completed_at": "2026-11-08T01:30:15Z",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434481898/job/128590299548",
+          "output_title": null
+        },
+        {
+          "id": 128590299506,
+          "name": "dependencies-windows-latest-py3.12",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-08T01:29:47Z",
+          "completed_at": "2026-11-08T01:30:45Z",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434481898/job/128590299506",
+          "output_title": null
+        },
+        {
+          "id": 128590299461,
+          "name": "core-ubuntu-latest-py312",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-08T01:29:48Z",
+          "completed_at": "2026-11-08T01:36:28Z",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434481898/job/128590299461",
+          "output_title": null
+        },
+        {
+          "id": 128590299263,
+          "name": "core-windows-latest-py312",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-08T01:29:48Z",
+          "completed_at": "2026-11-08T01:38:15Z",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434481898/job/128590299263",
+          "output_title": null
+        },
+        {
+          "id": 128590292497,
+          "name": "Analyze (actions)",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-08T01:29:46Z",
+          "completed_at": "2026-11-08T01:30:29Z",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434478970/job/128590292497",
+          "output_title": null
+        },
+        {
+          "id": 128590292473,
+          "name": "Analyze (python)",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-08T01:29:46Z",
+          "completed_at": "2026-11-08T01:32:43Z",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434478970/job/128590292473",
+          "output_title": null
+        }
+      ],
+      "workflows": [
+        {
+          "id": 42434481898,
+          "name": "Image Draw Bot CI",
+          "event": "pull_request",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434481898",
+          "created_at": "2026-11-08T01:29:45Z",
+          "updated_at": "2026-11-08T01:38:15Z"
+        },
+        {
+          "id": 42434478970,
+          "name": "PR #46",
+          "event": "dynamic",
+          "head_sha": "e49e2535c5f8edea80e47824fe56cae58781b971",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434478970",
+          "created_at": "2026-11-08T01:29:43Z",
+          "updated_at": "2026-11-08T01:32:43Z"
+        }
+      ],
+      "windows": {
+        "run_id": 42434481898,
+        "job_id": 128590299263,
+        "run_attempt": 1,
+        "html_url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42434481898/job/128590299263",
+        "all_14_steps_success": true,
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1
+          },
+          {
+            "name": "Checkout",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2
+          },
+          {
+            "name": "Set up Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3
+          },
+          {
+            "name": "Install application and test dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4
+          },
+          {
+            "name": "Validate source package hygiene",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5
+          },
+          {
+            "name": "Run exact raster and portable planner regressions",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6
+          },
+          {
+            "name": "Run Extra Fast benchmark smoke",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7
+          },
+          {
+            "name": "Run complete regressions",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 8
+          },
+          {
+            "name": "Run Image Draw Bot Windows self-test",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9
+          },
+          {
+            "name": "Build and validate the Windows bundle",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10
+          },
+          {
+            "name": "Verify packaged GUI and native drag and drop",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 11
+          },
+          {
+            "name": "Post Set up Python",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 21
+          },
+          {
+            "name": "Post Checkout",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 22
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 23
+          }
+        ],
+        "complete_regressions": {
+          "total": 4551,
+          "passed": 4548,
+          "skipped": 3,
+          "errors": 0,
+          "failures": 0,
+          "seconds": 404.561,
+          "summary_lines": [
+            "2026-11-08T01:37:13.5157160Z Ran 4551 tests in 404.561s",
+            "2026-11-08T01:37:13.5157350Z OK (skipped=3)"
+          ],
+          "skip_lines": [
+            "2026-11-08T01:31:10.0654738Z test_cuda_device_matches_reference (test_gpu_pipeline_optimization.ScalarKernelTests.test_cuda_device_matches_reference) ... skipped 'CuPy unavailable'",
+            "2026-11-08T01:31:10.0657328Z test_opencl_device_palette_tiles_and_edge_borders (test_gpu_pipeline_optimization.ScalarKernelTests.test_opencl_device_palette_tiles_and_edge_borders) ... skipped \"OpenCL GPU unavailable: No module named 'pyopencl'\"",
+            "2026-11-08T01:32:19.8972901Z test_opencl_kernel_matches_scalar_when_a_device_is_available (test_v148_colour_batch05_matching.PaletteParityTests.test_opencl_kernel_matches_scalar_when_a_device_is_available) ... skipped \"OpenCL device unavailable: No module named 'pyopencl'\""
+          ]
+        },
+        "portable_and_exact_raster_tests": {
+          "total": 56,
+          "seconds": 7.735,
+          "step_success": true
+        },
+        "source_gate": {
+          "passed": true,
+          "soak_cycles": 5000,
+          "line": "2026-11-08T01:38:06.5722303Z RC source gate: PASS {'schema': 1, 'version': '1.0.148', 'file_version': '1.0.148', 'channel': 'stable', 'repository': 'Vxiey/Image-Draw-Bot', 'soak_cycles': 5000, 'checks': ['version-metadata', 'installer-metadata', 'update-repository', 'workflow-gates', 'source-one-shot-hygiene', 'lifecycle-soak', 'profile-isolation-soak'], 'passed': True}"
+        },
+        "self_test": {
+          "step_success": true,
+          "source_command": "python DrawBot.py --self-test",
+          "packaged_self_test_seen": true
+        },
+        "build": {
+          "step_success": true,
+          "artifact_gate_pass": true,
+          "artifact_gate_line": "2026-11-08T01:38:06.5728398Z RC Windows artifact gate: PASS",
+          "zip_name": "ImageDrawBot-1.0.148-Windows-x64.zip",
+          "zip_sha256": "fabdf821929f671888c2cfa3dc643d46fa15ee539f80ad6fe060663d85aa305f",
+          "sha_provenance": "SHA256 emitted by the successful Windows artifact gate; the ZIP was not separately downloaded or hashed by this observer.",
+          "sha_line": "2026-11-08T01:38:06.5728949Z   fabdf821929f671888c2cfa3dc643d46fa15ee539f80ad6fe060663d85aa305f  ImageDrawBot-1.0.148-Windows-x64.zip"
+        },
+        "packaged_gui_native_drag_drop": {
+          "step_success": true,
+          "command": "python -c \"import subprocess; subprocess.run(['dist/ImageDrawBot/ImageDrawBot.exe', '--smoke-test'], check=True, timeout=90)\""
+        },
+        "new_fixture_ownership_result_lines": [
+          "2026-11-08T01:37:11.5530576Z test_retained_native_errors_and_callbacks_cannot_keep_fixture_tcl_alive (test_v148_ui_batch30_fixture_ownership.CalibrationFixtureOwnershipTests.test_retained_native_errors_and_callbacks_cannot_keep_fixture_tcl_alive) ... ok",
+          "2026-11-08T01:37:12.4922759Z test_six_actual_calibration_workflows_retire_tcl_before_worker_collection (test_v148_ui_batch30_fixture_ownership.CalibrationFixtureOwnershipTests.test_six_actual_calibration_workflows_retire_tcl_before_worker_collection) ... ok"
+        ],
+        "environment": {
+          "python": "3.12.10",
+          "platform": "Windows-2025Server-10.0.26100-SP0",
+          "Pillow": "13.0.0",
+          "numpy": "2.5.4",
+          "customtkinter": "6.0.0",
+          "tkinterdnd2": "0.7.0",
+          "PyInstaller": "6.22.3",
+          "version_provenance": "Installed package/build version lines in the complete fetched log; no native GPU availability is inferred."
+        },
+        "diagnostics": {
+          "invalid_command_name_lines": 0,
+          "Tcl_AsyncDelete_lines": 0,
+          "actions_error_lines": 0,
+          "test_failure_or_error_lines": 0
+        },
+        "full_log": {
+          "path": "/workspace/scratch/97bfc35400fb/v148-batch31-parent-ci-windows-attempt1.log",
+          "bytes": 1064309,
+          "sha256": "9a986e66a2dff0f78d92465144752f8b788ca5c99d4c99ae1f68df87dc1d8c77",
+          "decoded_characters": 1064307,
+          "encoding": "UTF-8",
+          "content": "Complete unfiltered string returned by GitHub job-log connector, encoded as UTF-8."
+        }
+      },
+      "intermediate_observations": {
+        "first_pending_snapshot": {
+          "path": "/workspace/scratch/97bfc35400fb/v148-batch31-parent-ci-e49-pending.json",
+          "sha256": "ae856a777ce6ca03e3899bd80077e3ed67f1cbac23722c888a51af53533984a7"
+        },
+        "codeql_aggregate": "An intermediate aggregate observation was neutral while the Python analysis configuration was still pending; the final exact-head aggregate is success. No rerun or code change was made.",
+        "observed_failures": [],
+        "workflow_retries_performed_by_observer": 0
+      },
+      "scope": {
+        "applies_to": "Published e49e2535c5f8edea80e47824fe56cae58781b971 only.",
+        "does_not_verify": "Any subsequent batch31 worktree changes, a published v1.0.148 release, or native GPU throughput.",
+        "windows_evidence": "Actual GitHub-hosted Windows job and successful packaged executable smoke step.",
+        "independent_root_verification_required_before_pr_claims": true,
+        "remote_mutations_by_observer": false
+      }
+    },
+    "boundary": "Published e49 only. This is not Windows/package certification of the new batch31 head."
+  },
+  "uncounted_completions": [
+    "IW08/IW35/IW38: close the importer-owned suspended local stream on consumer Stop/error, preserving borrowed resources and primary failures.",
+    "IW08/RP26: complete outer Portrait finisher, time-fit and actual tuner-rescue image ownership.",
+    "Tests, diagnostics, evidence packing, metadata, CI observation and benchmark maintenance add no IDs."
+  ],
+  "remote_validation": "The new published head requires its own Windows/Linux, dependency, CodeQL, bundle and native GUI/drop checks.",
+  "pr_url": "https://github.com/Vxiey/Image-Draw-Bot/pull/46",
+  "post_metadata_package_hygiene": {
+    "passed": true,
+    "sources_unchanged": true,
+    "source_config_manifest_sha256": "1ae580174ddabeb86dc289c6fdfbc17eddcea9085b9c4671ce71ae6b3182501e",
+    "hygiene": {
+      "app_name": "Image Draw Bot",
+      "app_version": "1.0.148",
+      "build_channel": "stable",
+      "files": 1372,
+      "forbidden_paths": [],
+      "missing_required": [],
+      "ok": true,
+      "warnings": []
+    },
+    "report_file": "v148-batch31-post-metadata-source-hygiene.json",
+    "report_sha256": "7a3f42a0b68471486857de5c8f54c3ca7f5b57dc12bdc098e56ca7fa0f39f11c",
+    "log_file": "v148-batch31-post-metadata-source-hygiene.log",
+    "log_sha256": "ec8298cfe865e33ce695d7210d6ad3c6ada46ebe95d947a3c4753bd0c9cb8340",
+    "scope": "After all batch31 artifacts and metadata files exist; final review/status fields are recorded separately."
+  }
+}
