@@ -182,9 +182,17 @@ def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], deta
         raise InterruptedError()
 
     own = _images.own
-    transposed = own(ImageOps.exif_transpose(image))
-    source = own(transposed.convert("RGBA"))
-    if transposed is not image:transposed.close()
+    # Imported sources are normally already oriented RGBA. Neither the no-op
+    # transpose copy nor a same-mode conversion is needed by these readers.
+    image.load()
+    transposed = (image if image.getexif().get(274, 1) in (None, 1)
+                  else own(ImageOps.exif_transpose(image)))
+    if cancelled():
+        raise InterruptedError()
+    source = transposed if transposed.mode == "RGBA" else own(transposed.convert("RGBA"))
+    if transposed is not image and transposed is not source:transposed.close()
+    if cancelled():
+        raise InterruptedError()
     scale = min(width / source.width, height / source.height)
     fitted = (source.width * scale, source.height * scale)
     limit = portrait_sample_limit(int(detail), draw_quality)
@@ -216,7 +224,7 @@ def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], deta
 
     flat = own(Image.new("RGBA", source.size, "white"))
     flat.alpha_composite(source)
-    source.close()
+    if source is not image:source.close()
     source_gray = own(flat.convert("L"))
     flat.close()
     if cancelled():
@@ -269,19 +277,24 @@ def _prepare_portrait_image_impl(image: Image.Image, area: tuple[int, int], deta
         gray = own(gray.point(lambda v: max(0, min(255, round(255 * ((v / 255) ** gamma))))))
         if subject_focus and gray.width >= 24 and gray.height >= 24:
             px = gray.load(); w, h = gray.size
-            cx, cy = (w - 1) / 2, (h - 1) / 2
-            sx, sy = max(1.0, w * .62), max(1.0, h * .72)
-            lift = profile["background_lift"]
-            for y in range(h):
-                if cancelled():
-                    raise InterruptedError()
-                dy = (y - cy) / sy
-                for x in range(w):
-                    dx = (x - cx) / sx
-                    radial = math.hypot(dx, dy)
-                    amount = max(0.0, min(1.0, (radial - .42) / .62))
-                    if amount:
-                        px[x, y] = min(255, round(px[x, y] + lift * amount))
+            try:
+                cx, cy = (w - 1) / 2, (h - 1) / 2
+                sx, sy = max(1.0, w * .62), max(1.0, h * .72)
+                lift = profile["background_lift"]
+                for y in range(h):
+                    if cancelled():
+                        raise InterruptedError()
+                    dy = (y - cy) / sy
+                    for x in range(w):
+                        dx = (x - cx) / sx
+                        radial = math.hypot(dx, dy)
+                        amount = max(0.0, min(1.0, (radial - .42) / .62))
+                        if amount:
+                            px[x, y] = min(255, round(px[x, y] + lift * amount))
+            finally:
+                # PixelAccess owns the imaging core independently of its Image
+                # wrapper, including when a Stop traceback retains this frame.
+                px = None
     if cancelled():
         raise InterruptedError()
     return gray, fitted

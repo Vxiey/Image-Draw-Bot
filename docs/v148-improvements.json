@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 839,
+  "implemented": 840,
   "release_published": false,
-  "validation": "Batch 28 completes existing Sketch physical-preview and private PNG-snapshot contracts with zero new IDs: 839 total improvements, 161 remaining. All 839 registry entries and 75 preceding raw benchmark reports are preserved. Frozen discovery completed 4,498 tests in 224.479 seconds: 4,425 passed and 73 platform/hardware cases skipped. All 933 source/configuration hashes remained unchanged. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and package hygiene passed on the same 883 root Python sources. Five actual public/controller-to-executor Sketch comparisons now have exact physical-model previews, including the prior 32-versus-15-pixel axis failure and both scaled Balanced fixtures. Native actions and delivered pixels are unchanged in those fixed controls. Corrected Accuracy/delta-E may legitimately change an active tuner rescue decision. PNG export removes one unnecessary identity copy for unrotated private snapshots while preserving decoded pixels, ICC, borrowed inputs, Stop and atomic publication. Historical batch27 replay is pinned to its published caller graphs and adds no timing samples. This is no physical Paint, general speed, peak-memory or GPU claim. Parent f800 has seven green exact-commit GitHub checks; the new published head requires its own Windows/package checks in PR46. Version 1.0.148 remains unreleased.",
+  "validation": "Batch 29 records 840 distinct improvements, 160 remaining. One independently assessed preview-worker cost-handoff group is registered as R2901. Accuracy input borrowing and Portrait preparation/ownership complete existing contracts with zero IDs. All 839 preceding entries and 76 prior raw benchmark reports are preserved. Frozen discovery completed 4,522 tests in 240.202 seconds: 4,449 passed and 73 platform/hardware cases skipped, with all 937 source/configuration hashes unchanged. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and package hygiene passed on 887 root Python sources. Complete historical comparisons retain all four Accuracy public plans and metrics/heatmaps, and 47 Portrait helper pairs plus five public plans including actual finite-time fitting. Their recorded replay maps and any explicitly permitted standalone benchmark-only difference remain separate from the final gate map. The final ETA experiment compares seven workloads with six balanced pairs and separate allocations. Both actual worker estimate calls are measured together, including the first snapshot; whole-pipeline observations remain separate. Every fallback/control cost, slower pair, rejected tuple experiment and intermediate compact-byte diagnostic remains visible. Copy counters are not peak/RSS measurements, and no general application-speed or physical input/GPU claim is made. Parent bfa43deb has seven green exact-commit GitHub checks; the newly published head requires its own Windows/package checks in PR46. Version 1.0.148 remains unreleased.",
   "improvements": [
     {
       "id": 1,
@@ -6531,6 +6531,14 @@
       "description": "Omit unused late target, auxiliary, source-accuracy, ETA and diagnostic presentation in the private color sub-plan of ordinary Sketch Fill. Preserve its complete geometry, correction choices, active cap/deadline, optimizer, physical base preview and safety; the final composite remains fully presented. Active tuner/rescue, nested Adaptive Hybrid and standalone consumers retain full presentation. Complete historical public plans and delivered native-emulator rasters remain equal; counters establish the distinct removed work. Paired elapsed/allocation observations include the separately uncounted DrawBot/Sketch image-ownership completion, hold current PixelData constant, and retain slower individual pairs and control allocation costs. Existing scaled Sketch preview/native-model differences are disclosed and are not claimed fixed by this group.",
       "batch": 27,
       "id": 839
+    },
+    {
+      "local_id": "R2901",
+      "area": "batch29-rendering",
+      "batch": 29,
+      "id": 840,
+      "ledger": "v148-batch29-estimate.md",
+      "description": "Reuse the finalized sequence's exact full-precision cost breakdown for the second estimate in the same actual preview worker, after checking typed geometry and cost inputs. Recompute fresh late target/projection, full-detail, calibration, setup and real-speed conditions; changed or unsupported inputs fall back to a fresh calculation. Keep the observation local to the worker/thread, preserve standalone estimation and publish no private cache in plans or options. Complete historical caller and numerical parity, actual work counts and balanced paired observations bound this one improvement; slower controls and allocation costs remain explicit. The rejected tuple-snapshot experiment is preserved separately, with no universal speed or RSS claim."
     }
   ]
 }

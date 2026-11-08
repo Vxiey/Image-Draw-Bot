@@ -216,7 +216,9 @@ class PreviewWorkingSetTests(unittest.TestCase):
                     else:
                         closed_before_metrics.append(False)
                 return pixel_channel_error(*args, **kwargs)
-            with self.subTest(fail_second=fail_second), closing(Image.new('RGB', (12, 9), 'red')) as source, \
+            # RGBA still requires real normalization. Already prepared RGB is
+            # borrowed by the evaluator and has separate caller-ownership tests.
+            with self.subTest(fail_second=fail_second), closing(Image.new('RGBA', (12, 9), 'red')) as source, \
                  patch.object(accuracy, 'normalize_source', side_effect=normalized), \
                  patch('UniversalGpuAcceleration.pixel_channel_error', side_effect=channel_error) as metric:
                 if fail_second:
@@ -231,7 +233,7 @@ class PreviewWorkingSetTests(unittest.TestCase):
                 for owned in created:
                     with self.assertRaises(ValueError):
                         owned.getpixel((0, 0))
-                self.assertEqual(source.getpixel((0, 0)), (255, 0, 0))
+                self.assertEqual(source.getpixel((0, 0)), (255, 0, 0, 255))
 
     def test_resized_importance_owns_no_live_pillow_buffer(self):
         raw = np.array([[0.0, 1.0], [1.0, 0.0]], np.float32)

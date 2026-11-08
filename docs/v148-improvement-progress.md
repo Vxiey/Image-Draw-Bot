@@ -6,11 +6,23 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 29 records **840 total distinct improvements, with 160 remaining**.
+
+Batch 29 records **840 distinct improvements, 160 remaining**. One independently assessed preview-worker cost-handoff group is registered as R2901. Accuracy input borrowing and Portrait preparation/ownership complete existing contracts with zero IDs. All 839 preceding entries and 76 prior raw benchmark reports are preserved. Frozen discovery completed **4,522 tests in 240.202 seconds: 4,449 passed and 73 platform/hardware cases skipped**, with all 937 source/configuration hashes unchanged. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and package hygiene passed on 887 root Python sources. Complete historical comparisons retain all four Accuracy public plans and metrics/heatmaps, and 47 Portrait helper pairs plus five public plans including actual finite-time fitting. Their recorded replay maps and any explicitly permitted standalone benchmark-only difference remain separate from the final gate map. The final ETA experiment compares seven workloads with six balanced pairs and separate allocations. Both actual worker estimate calls are measured together, including the first snapshot; whole-pipeline observations remain separate. Every fallback/control cost, slower pair, rejected tuple experiment and intermediate compact-byte diagnostic remains visible. Copy counters are not peak/RSS measurements, and no general application-speed or physical input/GPU claim is made. Parent bfa43deb has seven green exact-commit GitHub checks; the newly published head requires its own Windows/package checks in PR46. Version 1.0.148 remains unreleased.
+
+[Final local evidence](v148-batch29-validation.json) binds the completed gates. [Preview-worker ETA](v148-batch29-estimate.md) records the count decision and all measured controls. [Accuracy inputs](v148-batch29-accuracy-inputs.md) and [Portrait preparation](v148-batch29-portrait-preparation.md) complete existing contracts with zero IDs. [Raw image completion evidence](v148-batch29-completion-evidence.json) retains before/after/historical artifacts and their exact source provenance.
+
+<details>
+<summary>Previous batch28 checkpoint</summary>
+
 Batch 28 retains **839 total distinct improvements, with 161 remaining**.
 
 Batch 28 completes existing Sketch physical-preview and private PNG-snapshot contracts with zero new IDs: **839 total improvements, 161 remaining**. All 839 registry entries and 75 preceding raw benchmark reports are preserved. Frozen discovery completed **4,498 tests in 224.479 seconds: 4,425 passed and 73 platform/hardware cases skipped**. All 933 source/configuration hashes remained unchanged. Fourteen real Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and package hygiene passed on the same 883 root Python sources. Five actual public/controller-to-executor Sketch comparisons now have exact physical-model previews, including the prior 32-versus-15-pixel axis failure and both scaled Balanced fixtures. Native actions and delivered pixels are unchanged in those fixed controls. Corrected Accuracy/delta-E may legitimately change an active tuner rescue decision. PNG export removes one unnecessary identity copy for unrotated private snapshots while preserving decoded pixels, ICC, borrowed inputs, Stop and atomic publication. Historical batch27 replay is pinned to its published caller graphs and adds no timing samples. This is no physical Paint, general speed, peak-memory or GPU claim. Parent f800 has seven green exact-commit GitHub checks; the new published head requires its own Windows/package checks in PR46. Version 1.0.148 remains unreleased.
 
 [Final local evidence](v148-batch28-validation.json) binds the frozen source. [Sketch physical previews](v148-batch28-sketch-preview.md) and [PNG snapshot reuse](v148-batch28-png-snapshot.md) complete existing contracts with zero IDs. [Raw completion evidence](v148-batch28-completion-evidence.json) preserves the actual before/after controls and all diagnostic provenance. [Pinned historical replay](v148-batch28-historical-replay.json) keeps the prior experiment reproducible.
+
+
+</details>
 
 <details>
 <summary>Previous batch27 checkpoint</summary>

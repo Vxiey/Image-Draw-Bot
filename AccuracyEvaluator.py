@@ -199,9 +199,16 @@ def _evaluate_preview(source, preview, importance, *, normalized_source,
     if min(size) < 1:
         raise ValueError('preview must have positive dimensions')
     source_buffer = normalized_source if isinstance(normalized_source, Image.Image) and normalized_source.size == size else source
-    with closing(normalize_source(source_buffer, size)) as src_img, closing(normalize_source(preview, size)) as dst_img:
-        src = np.asarray(src_img, dtype=np.float32) / 255.0
-        dst = np.asarray(dst_img, dtype=np.float32) / 255.0
+    with ExitStack() as owned:
+        def normalized_for_read(image):
+            # Final previews and the caller's prepared source are usually
+            # already opaque RGB at this exact size. NumPy only reads them;
+            # retain ownership with the caller instead of copying both rasters.
+            if image.mode == 'RGB' and 'transparency' not in image.info and image.size == size:
+                return image
+            return owned.enter_context(closing(normalize_source(image, size)))
+        src = np.asarray(normalized_for_read(source_buffer), dtype=np.float32) / 255.0
+        dst = np.asarray(normalized_for_read(preview), dtype=np.float32) / 255.0
     if src.shape != dst.shape:
         raise ValueError('normalized source and preview must have identical dimensions')
 

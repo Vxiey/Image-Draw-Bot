@@ -8,11 +8,139 @@ is used.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 import math
+import pickle
+from threading import current_thread
 from typing import Any
 
 from CompletedDrawLearning import completed_fill_actions, timing_sample_gate
+
+
+_preview_sequence_cost = ContextVar('preview_sequence_cost', default=None)
+
+
+class _PreviewSequenceCost:
+    """One private final-sequence observation, owned by its preview worker."""
+    def __init__(self):
+        self.thread = current_thread()
+        self.plan = self.signature = self.breakdown = None
+        self.consuming = False
+
+    def clear(self):
+        self.plan = self.signature = self.breakdown = None
+
+    def close(self):
+        self.clear()
+        self.thread = None
+
+    def take(self, plan, signature):
+        previous_plan, previous_signature, result = self.plan, self.signature, self.breakdown
+        self.clear()
+        try:
+            return (result if signature is not None and previous_plan is plan
+                    and previous_signature == signature else None)
+        finally:
+            self = plan = signature = previous_plan = previous_signature = result = None
+
+
+def _preview_cost_owner():
+    owner = _preview_sequence_cost.get()
+    return owner if owner is not None and owner.thread is current_thread() else None
+
+
+@contextmanager
+def preview_estimate_scope():
+    """Keep cold sequence work local to one actual preview operation.
+
+    This does not extend the planner's calibration scope. Nested public plans
+    replace the single observation; only their exact returned plan can use it.
+    """
+    owner = _PreviewSequenceCost()
+    token = _preview_sequence_cost.set(owner)
+    try:
+        yield
+    finally:
+        try:
+            owner.close()
+        finally:
+            _preview_sequence_cost.reset(token)
+            owner = token = None
+
+
+def _validate_cost_input(value, depth=0):
+    """Allow only exact builtin types before byte serialization, never reducers."""
+    if depth > 12:
+        raise TypeError('Cost input nesting exceeds the local transfer boundary.')
+    if value is None or type(value) in (str, bool, int):
+        return
+    if type(value) is float and math.isfinite(value):
+        return
+    if type(value) in (tuple, list):
+        for item in value:
+            _validate_cost_input(item, depth + 1)
+        return
+    if type(value) is dict and all(type(key) is str for key in value):
+        for item in value.values():
+            _validate_cost_input(item, depth + 1)
+        return
+    raise TypeError('Cost input is not a plain immutable-value snapshot.')
+
+
+def _sequence_cost_signature(model, sequence, initial_brush):
+    options = model.options
+    if any(type(row) is not dict for row in sequence):
+        return None
+    rows = []
+    for row in sequence:
+        # Preserve absent versus explicit None without five presence/value
+        # pair objects per row. Their original typed values are serialized.
+        present = (('operation_type' in row) | (('path' in row) << 1)
+                   | (('color_index' in row) << 2) | (('brush_px' in row) << 3)
+                   | (('phase' in row) << 4))
+        rows.append((present, row.get('operation_type'), row.get('path'),
+                     row.get('color_index'), row.get('brush_px'), row.get('phase')))
+    inputs = (
+        model.model_version, model.source_size, model.fitted_size, model.sx, model.sy,
+        vars(model.delivery), model.precision, model.speed, model.delay,
+        model.path_wait, model.travel_wait, model.boundary_wait, model.multiplier,
+        model.source, model.runtime, tuple(sorted(model._color_reset_brushes)), initial_brush,
+        tuple((key, options.get(key)) for key in
+              ('brush_px', 'pixel_accurate', 'paint_current_color', 'exact_color_available',
+               'color_selectors', 'adaptive_color_verification')), rows)
+    _validate_cost_input(inputs)
+    # This local byte snapshot preserves scalar/container types and the exact
+    # IEEE float bits (including signed zero). No pickle data is ever loaded.
+    # Validation above excludes subclasses/custom reducers before dumps runs.
+    return pickle.dumps(inputs, protocol=5)
+
+
+def _cost_final_sequence(plan, model, sequence, initial_brush):
+    owner = _preview_cost_owner()
+    signature = result = None
+    try:
+        if owner is not None:
+            try:
+                signature = _sequence_cost_signature(model, sequence, initial_brush)
+            except (TypeError, ValueError, RecursionError, MemoryError):
+                # An unsupported/expensive seal must not prevent the original
+                # calculator from handling an otherwise valid public plan.
+                signature = None
+            if owner.consuming:
+                result = owner.take(plan, signature)
+                if result is not None:
+                    return result
+        result = model.sequence_cost(sequence, initial_brush=initial_brush,
+                                     include_color_verification=True)
+        if owner is not None and not owner.consuming:
+            owner.clear()
+            if signature is not None:
+                owner.plan, owner.signature, owner.breakdown = plan, signature, result
+        return result
+    finally:
+        owner = signature = result = plan = model = sequence = None
 
 
 @dataclass(frozen=True)
@@ -166,8 +294,7 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
 
     try:initial_brush=max(1,int(options.get("brush_px",1) or 1))
     except Exception:initial_brush=1
-    breakdown=model.sequence_cost(sequence,initial_brush=initial_brush,
-                                  include_color_verification=True)
+    breakdown=_cost_final_sequence(plan,model,sequence,initial_brush)
     sequence_seconds=max(0.0,float(breakdown.total_seconds or 0.0))
     total=sequence_seconds
 
@@ -479,6 +606,24 @@ def attach_draw_time_estimate(plan: dict[str, Any]) -> dict[str, Any]:
     meta = estimate_from_plan(plan)
     plan["draw_time_estimate"] = meta
     return meta
+
+
+def attach_preview_draw_time_estimate(plan: dict[str, Any]) -> dict[str, Any]:
+    """Reprice late preview conditions, consuming only unchanged cold geometry.
+
+    Fill, fixed overhead, area projection, throughput and local calibration are
+    still calculated here. The reused frozen CostBreakdown has full precision;
+    no rounded display metadata or already corrected estimate is reused.
+    """
+    owner = _preview_cost_owner()
+    if owner is not None:
+        owner.consuming = True
+    try:
+        return attach_draw_time_estimate(plan)
+    finally:
+        if owner is not None:
+            owner.close()
+        owner = plan = None
 
 
 def record_completed_draw(plan: dict[str, Any], actual_seconds: float, *, completed_paths: int = 0) -> dict[str, Any]:

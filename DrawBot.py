@@ -832,68 +832,71 @@ def _make_plan(original, area, options, cancelled=lambda: False):
         gray, fitted = prepare_portrait_image(original, area, options['detail'], options['contrast'], options.get('portrait_focus',True), draw_quality,
                                                gpu_mode=gpu_mode, acceleration_meta=acceleration_meta, gpu_vram=gpu_vram, gpu_performance=gpu_performance,
                                                preview_detail_mode=preview_detail_mode,preview_detail_meta=preview_detail_meta,cancelled=cancelled)
-        if preview_detail_meta:options['preview_detail_meta']=preview_detail_meta
-        profiler_stop(options, 'preprocessing', _prof_pre)
-        # Fit portrait complexity to the configured time limit.  This avoids the
-        # previous situation where High/Balanced previews looked good but Start
-        # drawing immediately rejected them for exceeding the default 180 s.
-        speed_name = normalize_speed(options.get('speed', 'Balanced'))
-        seconds_per_stroke = {'Safe': .18, 'Balanced': .12, 'Fast': .08}[speed_name] + options['delay'] * 2.0
-        unlimited=bool(options.get('unlimited_time'))
-        time_budget = None if unlimited else max(1, int(options.get('max_seconds', 180) / seconds_per_stroke * .90))
-        _prof_color = profiler_start(options, 'color_planning')
-        groups, stats = portrait_strokes(gray, options['detail'], options['lines'], cancelled,
-                                         include_edges=True, max_strokes=time_budget,
-                                         draw_quality=draw_quality, subject_focus=options.get('portrait_focus', True),
-                                         gpu_mode=gpu_mode, acceleration_meta=acceleration_meta, gpu_vram=gpu_vram, gpu_performance=gpu_performance)
-        profiler_stop(options, 'color_planning', _prof_color)
-        plan_options = dict(options)
-        # Paint produces continuous brush lines between cursor positions; a
-        # slightly larger interpolation step makes shaded portraits practical
-        # without changing the generated stroke geometry.
-        plan_options['stroke_step_px'] = 12
-        plan_options['portrait_stats'] = {
-            'tone_strokes': stats.tone_strokes, 'edge_strokes': stats.edge_strokes,
-            'levels': stats.levels, 'sample_size': stats.sample_size,
-            'priority_strokes': stats.priority_strokes, 'draw_quality': stats.draw_quality,
-            'acceleration_backend': stats.acceleration_backend, 'acceleration_device': stats.acceleration_device,
-            'gpu_accelerated': stats.gpu_accelerated, 'gpu_requested': gpu_mode,
-            'gpu_vram': gpu_vram, 'gpu_performance': gpu_performance,
-            'vram_budget_mb': acceleration_meta.get('vram_budget_mb'),
-            'pool_used_mb': acceleration_meta.get('pool_used_mb'), 'pool_cached_mb': acceleration_meta.get('pool_cached_mb'),
-            'compute_capability': acceleration_meta.get('compute_capability',''), 'multiprocessors': acceleration_meta.get('multiprocessors'),
-            'allocation_mode': acceleration_meta.get('allocation_mode','Adaptive'), 'tile_rows': acceleration_meta.get('tile_rows'),
-            'workspace_estimate_mb': acceleration_meta.get('workspace_estimate_mb'), 'cuda_execution': acceleration_meta.get('cuda_execution',''),
-            'scaler': acceleration_meta.get('scaler','CPU Lanczos'),
-            'acceleration_reason': str(acceleration_meta.get('reason',''))[:240]}
-        plan = finish_plan(gray.convert('RGBA'), fitted, groups, plan_options, cancelled)
-        # The estimator also accounts for physical line length, so a count-only
-        # budget can still be too slow on a large Paint canvas.  Thin the edge
-        # and tone sets evenly (never just truncate the top of the image) until
-        # the planned run fits with a small safety margin.
-        target_seconds = max(5.0, options.get('max_seconds', 180) * .92)
-        for _ in range(0 if unlimited else 3):
-            if plan['estimate'] <= target_seconds or plan['count'] <= 1:
-                break
-            ratio = max(.12, min(.95, target_seconds / max(plan['estimate'], .001) * .92))
-            strokes = plan['groups'][0]
-            edge_count = int(plan_options['portrait_stats']['edge_strokes'])
-            edges, tones = strokes[:edge_count], strokes[edge_count:]
-            def evenly_sample(items, wanted):
-                if wanted >= len(items): return list(items)
-                if wanted <= 0: return []
-                return [items[min(len(items)-1, int((i + .5) * len(items) / wanted))] for i in range(wanted)]
-            edge_keep = min(len(edges), max(1, int(len(edges) * ratio))) if edges else 0
-            tone_keep = min(len(tones), max(1, int(len(tones) * ratio))) if tones else 0
-            edges = evenly_sample(edges, edge_keep)
-            tones = evenly_sample(tones, tone_keep)
-            plan_options = dict(plan_options)
-            plan_options['portrait_stats'] = dict(plan_options['portrait_stats'],
-                edge_strokes=len(edges), tone_strokes=len(tones),
-                priority_strokes=min(int(plan_options['portrait_stats'].get('priority_strokes', 0)), len(tones)),
-                time_fitted=True)
-            plan = finish_plan(gray.convert('RGBA'), fitted, [edges + tones], plan_options, cancelled)
-        return _finalize_auto_tuned_plan(plan,original,area,cancelled)
+        try:
+            if preview_detail_meta:options['preview_detail_meta']=preview_detail_meta
+            profiler_stop(options, 'preprocessing', _prof_pre)
+            # Fit portrait complexity to the configured time limit.  This avoids the
+            # previous situation where High/Balanced previews looked good but Start
+            # drawing immediately rejected them for exceeding the default 180 s.
+            speed_name = normalize_speed(options.get('speed', 'Balanced'))
+            seconds_per_stroke = {'Safe': .18, 'Balanced': .12, 'Fast': .08}[speed_name] + options['delay'] * 2.0
+            unlimited=bool(options.get('unlimited_time'))
+            time_budget = None if unlimited else max(1, int(options.get('max_seconds', 180) / seconds_per_stroke * .90))
+            _prof_color = profiler_start(options, 'color_planning')
+            groups, stats = portrait_strokes(gray, options['detail'], options['lines'], cancelled,
+                                             include_edges=True, max_strokes=time_budget,
+                                             draw_quality=draw_quality, subject_focus=options.get('portrait_focus', True),
+                                             gpu_mode=gpu_mode, acceleration_meta=acceleration_meta, gpu_vram=gpu_vram, gpu_performance=gpu_performance)
+            profiler_stop(options, 'color_planning', _prof_color)
+            plan_options = dict(options)
+            # Paint produces continuous brush lines between cursor positions; a
+            # slightly larger interpolation step makes shaded portraits practical
+            # without changing the generated stroke geometry.
+            plan_options['stroke_step_px'] = 12
+            plan_options['portrait_stats'] = {
+                'tone_strokes': stats.tone_strokes, 'edge_strokes': stats.edge_strokes,
+                'levels': stats.levels, 'sample_size': stats.sample_size,
+                'priority_strokes': stats.priority_strokes, 'draw_quality': stats.draw_quality,
+                'acceleration_backend': stats.acceleration_backend, 'acceleration_device': stats.acceleration_device,
+                'gpu_accelerated': stats.gpu_accelerated, 'gpu_requested': gpu_mode,
+                'gpu_vram': gpu_vram, 'gpu_performance': gpu_performance,
+                'vram_budget_mb': acceleration_meta.get('vram_budget_mb'),
+                'pool_used_mb': acceleration_meta.get('pool_used_mb'), 'pool_cached_mb': acceleration_meta.get('pool_cached_mb'),
+                'compute_capability': acceleration_meta.get('compute_capability',''), 'multiprocessors': acceleration_meta.get('multiprocessors'),
+                'allocation_mode': acceleration_meta.get('allocation_mode','Adaptive'), 'tile_rows': acceleration_meta.get('tile_rows'),
+                'workspace_estimate_mb': acceleration_meta.get('workspace_estimate_mb'), 'cuda_execution': acceleration_meta.get('cuda_execution',''),
+                'scaler': acceleration_meta.get('scaler','CPU Lanczos'),
+                'acceleration_reason': str(acceleration_meta.get('reason',''))[:240]}
+            plan = finish_plan(gray.convert('RGBA'), fitted, groups, plan_options, cancelled)
+            # The estimator also accounts for physical line length, so a count-only
+            # budget can still be too slow on a large Paint canvas.  Thin the edge
+            # and tone sets evenly (never just truncate the top of the image) until
+            # the planned run fits with a small safety margin.
+            target_seconds = max(5.0, options.get('max_seconds', 180) * .92)
+            for _ in range(0 if unlimited else 3):
+                if plan['estimate'] <= target_seconds or plan['count'] <= 1:
+                    break
+                ratio = max(.12, min(.95, target_seconds / max(plan['estimate'], .001) * .92))
+                strokes = plan['groups'][0]
+                edge_count = int(plan_options['portrait_stats']['edge_strokes'])
+                edges, tones = strokes[:edge_count], strokes[edge_count:]
+                def evenly_sample(items, wanted):
+                    if wanted >= len(items): return list(items)
+                    if wanted <= 0: return []
+                    return [items[min(len(items)-1, int((i + .5) * len(items) / wanted))] for i in range(wanted)]
+                edge_keep = min(len(edges), max(1, int(len(edges) * ratio))) if edges else 0
+                tone_keep = min(len(tones), max(1, int(len(tones) * ratio))) if tones else 0
+                edges = evenly_sample(edges, edge_keep)
+                tones = evenly_sample(tones, tone_keep)
+                plan_options = dict(plan_options)
+                plan_options['portrait_stats'] = dict(plan_options['portrait_stats'],
+                    edge_strokes=len(edges), tone_strokes=len(tones),
+                    priority_strokes=min(int(plan_options['portrait_stats'].get('priority_strokes', 0)), len(tones)),
+                    time_fitted=True)
+                plan = finish_plan(gray.convert('RGBA'), fitted, [edges + tones], plan_options, cancelled)
+            return _finalize_auto_tuned_plan(plan,original,area,cancelled)
+        finally:
+            gray.close()
 
     if options.get('outline'):
         if options.get('erase_mode'):raise ValueError('Black sketch requires Pencil or Brush, not Eraser.')
@@ -8837,7 +8840,7 @@ class DrawBotApp:
         try:original=self.original.copy()
         except MemoryError:
             self.status.set('Not enough memory to build preview. Close other images or use a smaller source.');return
-        def work():
+        def prepare_preview():
             started=time.monotonic()
             requested=(preview_options.get('_preview_requested_planning_resolution'),
                        preview_options.get('_preview_requested_color_rendering'),
@@ -8893,16 +8896,20 @@ class DrawBotApp:
             plan['preview_fallback_used']=bool(used_fallback)
             plan['preview_generation']=generation
             try:
-                from DrawTimeEstimate import attach_draw_time_estimate
+                from DrawTimeEstimate import attach_preview_draw_time_estimate
                 # This worker exclusively owns the completed plan until the
                 # queued result is adopted. Transfer this exact final estimate
                 # once; Tk need not rescan every path and reload calibration.
-                plan['_preview_time_estimate_ready']=attach_draw_time_estimate(plan)
+                plan['_preview_time_estimate_ready']=attach_preview_draw_time_estimate(plan)
             except Exception as error:
                 log_event(f'Preview draw time projection skipped: {error!r}')
             plan['preview_elapsed_seconds']=round(time.monotonic()-started,3)
             log_event(f'Preview planning finished in {plan["preview_elapsed_seconds"]:.3f} s fallback={used_fallback}: {_plan_log_text(plan)}.')
             self.events.put(('planned',plan))
+        def work():
+            from DrawTimeEstimate import preview_estimate_scope
+            with preview_estimate_scope():
+                prepare_preview()
         # Historic v1.0.10 status string kept for release-test visibility: Planning optimized preview.
         self.status.set('Building preview…' if user_initiated else 'Planning lightweight auto preview…')
         started=False
