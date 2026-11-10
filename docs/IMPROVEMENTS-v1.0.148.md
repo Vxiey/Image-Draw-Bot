@@ -4,6 +4,11 @@
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
+**Scoped continuation after batch 31:** profile export now rechecks its captured
+profile and application lifecycle after the native save chooser. This completes
+**AW15/global629**, with **zero new IDs**; the total remains **843/1,000**.
+See the [patch and focused regression evidence](v148-batch32-profile-export.md).
+
 | Global IDs | Local IDs | Area | Count | Evidence |
 | --- | --- | --- | ---: | --- |
 | 001–100 | 001–100 | Original reliability/security baseline | 100 | [Original ledger](100-IMPROVEMENTS-v1.0.148.md); merged PR44 passed Windows/Linux CI. |

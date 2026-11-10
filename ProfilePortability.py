@@ -810,11 +810,19 @@ def export_profile_dialog(app):
         )
         if not selected:
             return None
+        # The native chooser runs a nested event loop. Revalidate its owner
+        # before publishing the captured snapshot or touching a closing Tk app.
+        _require_idle_profile(app)
+        identity = _profile_identity(str(app.game.get()))
+        if identity != (package["profile"]["name"], package["profile"]["key"]):
+            raise ProfilePortabilityError('The selected profile changed. Open Export again.')
         path = write_profile_file(Path(selected), package)
-        messagebox.showinfo("Profile exported", f"Profile saved to:\n{path}", parent=getattr(app, "root", None))
+        if not getattr(app, 'closing', False):
+            messagebox.showinfo("Profile exported", f"Profile saved to:\n{path}", parent=getattr(app, "root", None))
         return path
     except (ProfilePortabilityError, OSError) as error:
-        messagebox.showerror("Could not export profile", str(error), parent=getattr(app, "root", None))
+        if not getattr(app, 'closing', False):
+            messagebox.showerror("Could not export profile", str(error), parent=getattr(app, "root", None))
         return None
 
 

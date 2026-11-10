@@ -1,0 +1,185 @@
+{
+  "schema": 1,
+  "scope": "AW15/global629 profile-export modal lifecycle completion",
+  "baseline_commit": "71a87ed659676ea5c4e72e40fbae5f72b7f354b3",
+  "implemented": 843,
+  "remaining": 157,
+  "new_improvement_ids": 0,
+  "release_published": false,
+  "environment": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "python": "3.12.14",
+    "packages": {
+      "customtkinter": "6.0.0",
+      "Pillow": "13.0.0",
+      "numpy": "2.3.5",
+      "requests": "2.34.2",
+      "keyboard": "0.13.5",
+      "tkinterdnd2": "0.7.0",
+      "qrcode": "8.2",
+      "hypothesis": "6.170.15"
+    }
+  },
+  "runs": [
+    {
+      "phase": "baseline",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_ui_batch32_profile_export"
+      ],
+      "exit_code": 1,
+      "tests_run": 12,
+      "passed_methods": 4,
+      "failing_subcases": 22,
+      "failed_methods": [
+        "test_completed_profile_switch_rejects_the_old_snapshot",
+        "test_failed_initial_save_never_opens_chooser_and_shutdown_has_no_feedback",
+        "test_preexisting_busy_or_closing_state_blocks_capture_and_chooser",
+        "test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot",
+        "test_shutdown_during_failed_publication_preserves_file_without_feedback",
+        "test_shutdown_during_successful_publication_suppresses_feedback",
+        "test_shutdown_in_chooser_preserves_destination_without_reading_destroyed_state",
+        "test_work_or_pending_state_started_in_chooser_blocks_publication"
+      ],
+      "errors": 0,
+      "skipped": 0,
+      "unittest_duration_seconds": 0.057,
+      "subprocess_duration_seconds": 0.27,
+      "observed_source_hashes_sha256": {
+        "ProfilePortability.py": "920431181cbcc71fa670e7272f91d2129a8d2585c7bb7f88cfe8a251b8c24cad",
+        "test_v148_ui_batch32_profile_export.py": "c50082244b91755db6ed8f6d2bd9753beb58a52131ca4cdc09fb2de99e23de9c",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "observed_files_unchanged_during_run": true,
+      "failure_identities": [
+        "FAIL: test_completed_profile_switch_rejects_the_old_snapshot (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_completed_profile_switch_rejects_the_old_snapshot)",
+        "FAIL: test_failed_initial_save_never_opens_chooser_and_shutdown_has_no_feedback (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_failed_initial_save_never_opens_chooser_and_shutdown_has_no_feedback) (closing=True)",
+        "FAIL: test_preexisting_busy_or_closing_state_blocks_capture_and_chooser (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_preexisting_busy_or_closing_state_blocks_capture_and_chooser) (attribute='closing')",
+        "FAIL: test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot) (change='rename')",
+        "FAIL: test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot) (change='case-only rename')",
+        "FAIL: test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot) (change='remove')",
+        "FAIL: test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_renamed_removed_or_rebound_profile_cannot_publish_a_stale_snapshot) (change='rebind')",
+        "FAIL: test_shutdown_during_failed_publication_preserves_file_without_feedback (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_shutdown_during_failed_publication_preserves_file_without_feedback)",
+        "FAIL: test_shutdown_during_successful_publication_suppresses_feedback (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_shutdown_during_successful_publication_suppresses_feedback)",
+        "FAIL: test_shutdown_in_chooser_preserves_destination_without_reading_destroyed_state (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_shutdown_in_chooser_preserves_destination_without_reading_destroyed_state)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='activity', value='preview', existing=False)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='activity', value='preview', existing=True)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='pending_clear_drawing', value=<pending token>, existing=False)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='pending_clear_drawing', value=<pending token>, existing=True)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='pending_clear_drawing', value=False, existing=False)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='pending_clear_drawing', value=False, existing=True)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='profile_change_after', value='after#pending', existing=False)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='profile_change_after', value='after#pending', existing=True)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='profile_change_after', value=False, existing=False)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='profile_change_after', value=False, existing=True)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='profile_change_in_progress', value=True, existing=False)",
+        "FAIL: test_work_or_pending_state_started_in_chooser_blocks_publication (test_v148_ui_batch32_profile_export.ProfileExportLifecycleTests.test_work_or_pending_state_started_in_chooser_blocks_publication) (attribute='profile_change_in_progress', value=True, existing=True)"
+      ],
+      "raw_log_sha256": "7f1665ac0e8fd9dfd0375781ace7db6dc720309d09e8db435a7df9bfda273ed0"
+    },
+    {
+      "phase": "focused-after",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_ui_batch32_profile_export"
+      ],
+      "exit_code": 0,
+      "tests_run": 12,
+      "passed_methods": 12,
+      "failing_subcases": 0,
+      "failed_methods": [],
+      "errors": 0,
+      "skipped": 0,
+      "unittest_duration_seconds": 0.042,
+      "subprocess_duration_seconds": 0.258,
+      "observed_source_hashes_sha256": {
+        "ProfilePortability.py": "ccd24c86d93fac102a211b5cbebd37941e6c6438a945fe72697cdc8156b969bd",
+        "test_v148_ui_batch32_profile_export.py": "c50082244b91755db6ed8f6d2bd9753beb58a52131ca4cdc09fb2de99e23de9c",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "observed_files_unchanged_during_run": true,
+      "failure_identities": [],
+      "raw_log_sha256": "02e010990b3c7f2d242d1f6f492a8a1e04d4715c7cc2f3bc9d5c2d793a8b52ea"
+    },
+    {
+      "phase": "adjacent",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_profile_portability_step27",
+        "test_v148_storage_batch02_profiles",
+        "test_v148_application_batch04_settings",
+        "test_v148_ui_batch08_profiles",
+        "test_v148_ui_batch08_profile_management",
+        "test_v148_ui_batch09_profile_completion",
+        "test_v148_ui_batch10_profile_completion"
+      ],
+      "exit_code": 0,
+      "tests_run": 64,
+      "passed_methods": 64,
+      "failing_subcases": 0,
+      "failed_methods": [],
+      "errors": 0,
+      "skipped": 0,
+      "unittest_duration_seconds": 0.126,
+      "subprocess_duration_seconds": 0.987,
+      "observed_source_hashes_sha256": {
+        "ProfilePortability.py": "ccd24c86d93fac102a211b5cbebd37941e6c6438a945fe72697cdc8156b969bd",
+        "test_v148_ui_batch32_profile_export.py": "c50082244b91755db6ed8f6d2bd9753beb58a52131ca4cdc09fb2de99e23de9c",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "observed_files_unchanged_during_run": true,
+      "failure_identities": [],
+      "raw_log_sha256": "0337bccde6c9486d38bf40e7f778406c4abab8fbe4ed66fbbc315a9569c7115a"
+    }
+  ],
+  "limits": [
+    "Native chooser/message boxes are injected, not exercised on Windows.",
+    "Real package validation and file publication run on Linux.",
+    "No full local discovery, packaged executable, physical drawing or GPU test was run.",
+    "Baseline CI is not validation of this patch."
+  ],
+  "registry": {
+    "sha256": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a",
+    "entries": 843,
+    "changed": false
+  },
+  "independent_review": {
+    "product_and_tests": "No required changes found.",
+    "counting": "Existing AW15/global629 completion, zero additional IDs.",
+    "reviewer_reran_tests": false
+  },
+  "additional_checks": {
+    "source_package_hygiene": {
+      "command": [
+        "python",
+        "ReleasePackage.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "files": 1374,
+      "forbidden_paths": [],
+      "missing_required": [],
+      "warnings": [],
+      "ok": true
+    },
+    "git_diff_check": {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0
+    }
+  },
+  "test_boundary": "Native dialog boundaries and lifecycle/failure transitions are injected; real package validation and atomic file operations run against temporary files."
+}
