@@ -14,6 +14,12 @@ disclosure typography, primary keyboard focus and fitting error actions complete
 existing UI contracts, with **zero new IDs**. The total remains **843/1,000**.
 See the [native before/after tests and UI review](v148-batch33-ui-readability.md).
 
+**Recovery continuation after batch 33:** asynchronous PNG preparation preserves
+the primary encoding/cancellation error when owned RGBA-conversion cleanup also
+fails. This completes **IW08/global582** within **A1001/global766**, with **zero
+new IDs**; the total remains **843/1,000**. See the
+[focused before/after evidence](v148-batch34-recovery-cleanup.md).
+
 | Global IDs | Local IDs | Area | Count | Evidence |
 | --- | --- | --- | ---: | --- |
 | 001–100 | 001–100 | Original reliability/security baseline | 100 | [Original ledger](100-IMPROVEMENTS-v1.0.148.md); merged PR44 passed Windows/Linux CI. |

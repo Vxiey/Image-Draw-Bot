@@ -1,0 +1,209 @@
+{
+  "schema": 1,
+  "scope": "IW08/global582 ownership completion in A1001/global766 asynchronous recovery PNG preparation",
+  "baseline_commit": "b41af0d5e947f451232ec46ee5189dd8f7da0679",
+  "implemented": 843,
+  "remaining": 157,
+  "new_improvement_ids": 0,
+  "release_published": false,
+  "environment": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "python": "3.12.14",
+    "pillow": "13.0.0"
+  },
+  "runs": [
+    {
+      "schema": 1,
+      "phase": "before",
+      "baseline_commit": "b41af0d5e947f451232ec46ee5189dd8f7da0679",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_application_batch34_recovery_cleanup"
+      ],
+      "exit_code": 1,
+      "python": "3.12.14",
+      "pillow": "13.0.0",
+      "tests_run": 7,
+      "failures": 4,
+      "errors": 0,
+      "skipped": 0,
+      "passed_methods": 3,
+      "failed_methods": [
+        "test_actual_png_byte_limit_keeps_validation_error_over_close_failure",
+        "test_real_png_write_failure_keeps_original_error_and_allows_a_clean_retry",
+        "test_real_worker_cancel_notifies_once_and_preserves_interruption_and_snapshot_ownership",
+        "test_stop_during_real_png_write_preserves_interruption_over_close_failure"
+      ],
+      "error_methods": [],
+      "skipped_methods": [],
+      "test_methods": [
+        "test_actual_png_byte_limit_keeps_validation_error_over_close_failure",
+        "test_real_png_write_failure_keeps_original_error_and_allows_a_clean_retry",
+        "test_real_worker_cancel_notifies_once_and_preserves_interruption_and_snapshot_ownership",
+        "test_standalone_close_failure_is_reported_and_discards_the_encoded_png",
+        "test_stop_during_real_png_write_preserves_interruption_over_close_failure",
+        "test_successful_rgb_conversion_preserves_pixels_digest_and_result_ownership",
+        "test_successful_rgba_input_is_borrowed_without_conversion_or_premature_close"
+      ],
+      "unittest_duration_seconds": 0.02,
+      "subprocess_duration_seconds": 0.214277,
+      "source_hashes_before_sha256": {
+        "RecoveryImagePreparation.py": "74c065a36a9bd9cc7a164c401f906c8fd1f338a4eb3bd5973d59d98d31ee527e",
+        "test_v148_application_batch34_recovery_cleanup.py": "b283b55387af12399771b9608c199b5b10c20fca3434c919eeb37e32e283a7a1",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586"
+      },
+      "source_hashes_after_sha256": {
+        "RecoveryImagePreparation.py": "74c065a36a9bd9cc7a164c401f906c8fd1f338a4eb3bd5973d59d98d31ee527e",
+        "test_v148_application_batch34_recovery_cleanup.py": "b283b55387af12399771b9608c199b5b10c20fca3434c919eeb37e32e283a7a1",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586"
+      },
+      "source_unchanged_during_run": true,
+      "raw_log_sha256": "290bce610afa539fbd24bd1106b8507f539cd41462efdce91c3b28f9a6f48d00",
+      "scope": "Seven focused recovery conversion cleanup methods only; no old image-generating suites, GUI, CUDA or release verification."
+    },
+    {
+      "schema": 1,
+      "phase": "focused-after",
+      "baseline_commit": "b41af0d5e947f451232ec46ee5189dd8f7da0679",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_application_batch34_recovery_cleanup"
+      ],
+      "exit_code": 0,
+      "python": "3.12.14",
+      "pillow": "13.0.0",
+      "system": "Linux",
+      "tests_run": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed_methods": 7,
+      "failed_methods": [],
+      "error_methods": [],
+      "skipped_methods": [],
+      "unittest_duration_seconds": 0.022,
+      "subprocess_duration_seconds": 0.224873,
+      "source_hashes_before_sha256": {
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch34_recovery_cleanup.py": "b283b55387af12399771b9608c199b5b10c20fca3434c919eeb37e32e283a7a1",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "ProfilePortability.py": "ccd24c86d93fac102a211b5cbebd37941e6c6438a945fe72697cdc8156b969bd",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "source_hashes_after_sha256": {
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch34_recovery_cleanup.py": "b283b55387af12399771b9608c199b5b10c20fca3434c919eeb37e32e283a7a1",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "ProfilePortability.py": "ccd24c86d93fac102a211b5cbebd37941e6c6438a945fe72697cdc8156b969bd",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "source_unchanged_during_run": true,
+      "raw_log_sha256": "ff03226df97da4f3c9f17bce9012016dbe9bf2666c80bc0116e4ddf4efbbeb44"
+    },
+    {
+      "schema": 1,
+      "phase": "adjacent",
+      "baseline_commit": "b41af0d5e947f451232ec46ee5189dd8f7da0679",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_application_batch10_recovery.RecoveryPreparationTests.test_clear_removes_abandoned_private_png_but_refuses_unexpected_directory_contents",
+        "test_v148_application_batch04_recovery.RecoveryCancellationTests.test_hashing_observes_stop_between_chunks",
+        "test_v148_application_batch04_recovery.RecoveryWorkflowTests.test_explicit_clear_cancels_queued_save_and_forgets_resume_only_on_success",
+        "test_v148_application_batch04_recovery.RecoveryWorkflowTests.test_failed_clear_retains_in_memory_resume",
+        "test_v148_application_batch04_recovery.RecoveryWorkflowTests.test_recovery_failure_disarms_before_loading_or_applying_state",
+        "test_recovery_ui_rc4.RecoveryUiTests.test_checkpoint_reschedules_only_its_own_timer_and_coalesces_image_request",
+        "test_recovery_ui_rc4.RecoveryUiTests.test_snapshot_without_image_never_uses_an_unrelated_cached_file",
+        "test_rc4_session_recovery_integrity.SessionRecoveryIntegrityTests.test_recent_snapshot_settings_survive_and_authorization_does_not",
+        "test_rc4_session_recovery_integrity.SessionRecoveryIntegrityTests.test_clear_render_progress_after_successful_publication",
+        "test_v148_ui_batch32_profile_export"
+      ],
+      "exit_code": 0,
+      "python": "3.12.14",
+      "pillow": "13.0.0",
+      "system": "Linux",
+      "tests_run": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed_methods": 21,
+      "failed_methods": [],
+      "error_methods": [],
+      "skipped_methods": [],
+      "unittest_duration_seconds": 0.076,
+      "subprocess_duration_seconds": 0.791121,
+      "source_hashes_before_sha256": {
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch34_recovery_cleanup.py": "b283b55387af12399771b9608c199b5b10c20fca3434c919eeb37e32e283a7a1",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "ProfilePortability.py": "ccd24c86d93fac102a211b5cbebd37941e6c6438a945fe72697cdc8156b969bd",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "source_hashes_after_sha256": {
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch34_recovery_cleanup.py": "b283b55387af12399771b9608c199b5b10c20fca3434c919eeb37e32e283a7a1",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "ProfilePortability.py": "ccd24c86d93fac102a211b5cbebd37941e6c6438a945fe72697cdc8156b969bd",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "source_unchanged_during_run": true,
+      "raw_log_sha256": "bc66cdcc0c5138c4e67609ddc11bad8bd20dc84d272a2edb78079096a7dda5ad"
+    }
+  ],
+  "frozen_source_hashes_sha256": {
+    "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+    "test_v148_application_batch34_recovery_cleanup.py": "b283b55387af12399771b9608c199b5b10c20fca3434c919eeb37e32e283a7a1",
+    "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+    "ProfilePortability.py": "ccd24c86d93fac102a211b5cbebd37941e6c6438a945fe72697cdc8156b969bd",
+    "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+  },
+  "test_file_identical_before_and_after": true,
+  "fixture": "Existing assets/paint-tools-reference.png; RGB conversion of that raster in memory where needed. No synthetic test motif.",
+  "fault_injection": "Only PNG-write and owned-conversion-close boundaries; real PNG encoder, files, cancellation checks and worker. No replacement prepare_image.",
+  "counting_evidence": [
+    "docs/v148-batch03-image-workflow.md: IW08",
+    "docs/v148-batch10-application.md: owned RGBA closing completion",
+    "docs/v148-improvements.json: global582 and global766"
+  ],
+  "limits": [
+    "Asynchronous preparer only; synchronous SessionRecovery._store_image closing behavior is unchanged.",
+    "No general guarantee against outer stream/directory cleanup failure.",
+    "No full local discovery, native Windows visual/Paint interaction, physical drawing or GPU execution.",
+    "Exact-head GitHub CI results are recorded separately in PR46. Parent CI is not candidate verification."
+  ],
+  "source_package_check": {
+    "command": [
+      "python",
+      "ReleasePackage.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "files": 1381,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "warnings": [],
+    "ok": true
+  },
+  "diff_check": {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  "independent_review": {
+    "status": "passed",
+    "scope": "Production diff, all seven focused tests, baseline/after/adjacent logs, hashes, ownership and Windows portability source review. No additional executions claimed.",
+    "blockers": []
+  }
+}

@@ -6,7 +6,6 @@ The small final state/image publication remains a controller operation.
 """
 from __future__ import annotations
 
-from contextlib import closing
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -73,8 +72,14 @@ def prepare_image(image, *, cancelled=lambda: False):
             if image.mode == 'RGBA':
                 image.save(writer, format='PNG')
             else:
-                with closing(image.convert('RGBA')) as rgba:
+                rgba = image.convert('RGBA')
+                try:
                     rgba.save(writer, format='PNG')
+                except BaseException as failure:
+                    _close_preserving(rgba, failure)
+                    raise
+                else:
+                    rgba.close()
             _check(cancelled)
             stream.flush()
             os.fsync(stream.fileno())
