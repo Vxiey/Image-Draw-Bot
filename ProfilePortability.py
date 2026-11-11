@@ -86,12 +86,14 @@ class ProfilePortabilityError(ValueError):
     pass
 
 
-def _json_guard(value, *, depth=0, counter=None):
+def _json_guard(value, *, depth=0, counter=None, max_items=None):
     """Reject non-JSON/extreme payloads before they reach app settings/files."""
     if counter is None:
         counter = [0]
+    if max_items is None:
+        max_items = MAX_JSON_ITEMS
     counter[0] += 1
-    if counter[0] > MAX_JSON_ITEMS or depth > MAX_JSON_DEPTH:
+    if counter[0] > max_items or depth > MAX_JSON_DEPTH:
         raise ProfilePortabilityError("Profile data is too large or deeply nested.")
     if type(value) is float and not math.isfinite(value):
         raise ProfilePortabilityError("Profile numbers must be finite.")
@@ -101,13 +103,13 @@ def _json_guard(value, *, depth=0, counter=None):
         return
     if isinstance(value, list):
         for item in value:
-            _json_guard(item, depth=depth + 1, counter=counter)
+            _json_guard(item, depth=depth + 1, counter=counter, max_items=max_items)
         return
     if isinstance(value, dict):
         for key, item in value.items():
             if not isinstance(key, str) or len(key) > 200:
                 raise ProfilePortabilityError("Profile contains an invalid JSON key.")
-            _json_guard(item, depth=depth + 1, counter=counter)
+            _json_guard(item, depth=depth + 1, counter=counter, max_items=max_items)
         return
     raise ProfilePortabilityError("Profile contains a value that is not portable JSON.")
 
@@ -164,8 +166,10 @@ def _decode_profile(raw):
         raise ProfilePortabilityError("Profile contains a JSON number outside the supported conversion limit.") from error
 
 
-def _read_json(path: Path):
+def _read_json(path: Path, *, max_bytes=None, max_items=None):
     path = Path(path)
+    if max_bytes is None:
+        max_bytes = MAX_PROFILE_BYTES
     try:
         try:
             mode = path.stat().st_mode
@@ -180,15 +184,15 @@ def _read_json(path: Path):
         if not stat.S_ISREG(mode):
             raise ProfilePortabilityError(f"{path.name} is not a regular JSON file.")
         with path.open('rb') as stream:
-            raw = stream.read(MAX_PROFILE_BYTES + 1)
-        if len(raw) > MAX_PROFILE_BYTES:
+            raw = stream.read(max_bytes + 1)
+        if len(raw) > max_bytes:
             raise ProfilePortabilityError(f"{Path(path).name} is too large to export safely.")
         value = _decode_profile(raw)
     except UnicodeDecodeError as error:
         raise ProfilePortabilityError(f"{Path(path).name} is not UTF-8 JSON.") from error
     except json.JSONDecodeError as error:
         raise ProfilePortabilityError(f"{Path(path).name} contains invalid JSON.") from error
-    _json_guard(value)
+    _json_guard(value, max_items=max_items)
     return value
 
 
@@ -214,6 +218,17 @@ def portable_path_map(profile_key: str, root: Path | None = None):
     result = {"settings": root / ("settings.json" if key == "generic" else f"settings-{key}.json")}
     result.update(_portable_calibration_paths(key, root))
     return result
+
+
+def _legacy_calibration_paths(profile_key: str, root: Path | None = None):
+    """Fallback sources owned by exactly one built-in profile."""
+    key = safe_profile_key(profile_key)
+    root = Path(root) if root is not None else data_dir()
+    if key == 'generic':
+        return (root / 'positions.txt', root / 'palette.json')
+    if key == 'microsoft-paint':
+        return (root / 'paint-tools.json',)
+    return ()
 
 
 def sanitize_settings(data: dict, *, strict: bool = True) -> dict:
@@ -487,6 +502,16 @@ def _capture_calibration(profile_key: str):
     result = {}
     for logical, path in _portable_calibration_paths(profile_key).items():
         payload = _read_json(path)
+        if payload is None and not path.exists():
+            if logical == 'palette' and profile_key == 'generic':
+                from Colors import read_legacy_calibration
+                try:
+                    payload = read_legacy_calibration(*_legacy_calibration_paths(profile_key))
+                except ValueError as error:
+                    raise ProfilePortabilityError(f'Legacy palette could not be exported: {error}') from error
+            elif logical == 'tools' and profile_key == 'microsoft-paint':
+                payload = _read_json(_legacy_calibration_paths(profile_key)[0],
+                                     max_bytes=128 * 1024, max_items=2000)
         if payload is not None:
             result[logical] = payload
     return result
@@ -523,13 +548,32 @@ def _rewrite_calibration_owner(payload, destination_key: str):
     return clean
 
 
+def _profile_document_text(payload, logical: str, destination_key: str):
+    """Serialize within the destination reader's limits before any publication."""
+    # DrawBot reads settings at 256 KiB. AppTools/ExactColorTools/PaintTools
+    # read 128 KiB; Paint also caps its complete document at 2,000 values.
+    limit = (256 * 1024 if logical == 'settings' else
+             128 * 1024 if logical in ('tools', 'exact_colors') else MAX_PROFILE_BYTES)
+    if logical == 'tools' and destination_key == 'microsoft-paint':
+        _json_guard(payload, max_items=2000)
+    try:
+        text = json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
+        byte_count = len(text.encode('utf-8'))
+    except ValueError as error:
+        raise ProfilePortabilityError(f'Profile {logical} cannot be saved as UTF-8 JSON: {error}') from error
+    if byte_count > limit:
+        raise ProfilePortabilityError(
+            f'Profile {logical} exceeds its supported storage limit of {limit // 1024} KiB.')
+    return text
+
+
 def _package_file_changes(package, destination_key, root=None):
     package = validate_package(package)
     destination_key = safe_profile_key(destination_key)
     settings = flatten_settings(package["settings"], package.get("canvas"))
     settings["settings_schema"] = 2
     paths = portable_path_map(destination_key, root)
-    changes = {paths['settings']: json.dumps(settings, ensure_ascii=False, indent=2)}
+    changes = {paths['settings']: _profile_document_text(settings, 'settings', destination_key)}
     calibration = package.get("calibration") or {}
     for logical in ("palette", "tools", "exact_colors"):
         payload = calibration.get(logical)
@@ -552,7 +596,10 @@ def _package_file_changes(package, destination_key, root=None):
                 'tools': {name: value for name, value in paint['tools'].items()
                           if name in ('Fill', 'Eraser')},
             }, destination_key)
-        changes[path] = json.dumps(payload, ensure_ascii=False, indent=2)
+        changes[path] = _profile_document_text(payload, logical, destination_key)
+    # Replace owns the complete imported calibration. Old fallback inputs must
+    # retire in this transaction too, or a later load can resurrect them.
+    changes.update({path: None for path in _legacy_calibration_paths(destination_key, root)})
     return paths, changes
 
 
@@ -594,13 +641,7 @@ def profile_reset_paths(profile_key: str):
         profile_correction_history_file(key), profile_layout_cache_file(key),
         profile_verified_color_file(key),
     ))
-    # Only the generic profile can reload these legacy palette sources when
-    # calibration.json is absent. Retire them in the same reset transaction.
-    if key == "generic":
-        paths.extend((data_dir() / "positions.txt", data_dir() / "palette.json"))
-    # Paint had one legacy tool path. Only delete it while resetting Paint.
-    if key == "microsoft-paint":
-        paths.append(data_dir() / "paint-tools.json")
+    paths.extend(_legacy_calibration_paths(key))
     # De-duplicate without touching another profile's names.
     out = []
     seen = set()

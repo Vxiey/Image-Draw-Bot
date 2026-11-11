@@ -9328,17 +9328,22 @@ class DrawBotApp:
 
     def reuse_area(self):
         if not DrawBotApp._profile_action_ready(self) or not self.saved_area:return False
+        self.stop.clear()
         previous=(self.corners,self.canvas_anchor_detection,self.target_window,
-                  self.target_client_rect,getattr(self,'target_dpi',None))
+                  self.target_client_rect,getattr(self,'target_dpi',None),
+                  getattr(self,'browser_drawing_region',None))
         try:
             self.corners=[tuple(p) for p in self.saved_area]
             if min(self.area()[2:])<10:
                 raise ValueError('The saved area is too small. Select a new one.')
             self.capture_target()
+            if self.stop.is_set() or self.closing or self.shutdown_complete:
+                raise InterruptedError('The target-window check was cancelled.')
         except (OSError,ValueError,AttributeError,InterruptedError) as error:
             (self.corners,self.canvas_anchor_detection,self.target_window,
-             self.target_client_rect,self.target_dpi)=previous
-            self.status.set(str(error));return False
+             self.target_client_rect,self.target_dpi,self.browser_drawing_region)=previous
+            if not self.closing and not self.shutdown_complete:self.status.set(str(error))
+            return False
         self.area_text.set(f'✓ {self.area()[2]} × {self.area()[3]} px. Make sure the target application remains in the same position.')
         self.small_test_passed=False
         self._mark_plan_stale('Drawing area restored. Press Build preview or Safety preflight / Dry run when ready.')
@@ -9817,7 +9822,9 @@ class DrawBotApp:
         # them outside the GUI process so an access violation cannot close it.
         import os
         from TargetCapture import capture_target_metadata_isolated
-        meta=capture_target_metadata_isolated(self.area(),exclude_pid=os.getpid())
+        def cancelled():
+            return self.stop.is_set() or self.closing or self.shutdown_complete
+        meta=capture_target_metadata_isolated(self.area(),exclude_pid=os.getpid(),cancelled=cancelled)
         from BrowserAutoCalibration import SUPPORTED_BROWSER_PROFILES
         from BrowserDrawingRegion import BrowserDrawingRegion
         profile_key=PROFILES.get(self.game.get(),('',))[0]
@@ -9825,6 +9832,7 @@ class DrawBotApp:
         if profile_key in SUPPORTED_BROWSER_PROFILES:
             x,y,w,h=self.area()
             region=BrowserDrawingRegion.capture(profile_key,meta,(x,y,x+w,y+h))
+        if cancelled():raise InterruptedError('The target-window check was cancelled.')
         self.browser_drawing_region=region
         self.target_window=(meta['handle'],meta['rect'])
         self.target_client_rect=meta['client_rect']

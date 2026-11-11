@@ -8,6 +8,7 @@ controls how much VRAM Image Draw Bot may retain. CPU remains a safe fallback.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from contextlib import ExitStack
 from functools import wraps
 import math
 import threading
@@ -19,6 +20,7 @@ from PIL import Image
 
 from GpuHardware import best_nvidia_gpu
 from GpuResourceCache import remember_cuda_device
+from ImageOwnership import closing_image
 
 ACCELERATION_MODES = ("Auto", "CPU", "NVIDIA CUDA")
 VRAM_BUDGETS = ("Auto", "25%", "50%", "75%", "90%", "2 GB", "4 GB", "6 GB", "8 GB", "12 GB", "16 GB", "24 GB")
@@ -465,24 +467,62 @@ def resize_gray_advanced(gray: Image.Image, size: tuple[int,int], mode: str="Aut
     """
     validate_acceleration_mode(mode); validate_vram_budget(vram_budget); validate_gpu_performance(performance)
     target=(max(1,int(size[0])),max(1,int(size[1])))
-    if gray.mode!="L": gray=gray.convert("L")
-    if gray.size==target:
-        return gray.copy(), acceleration_info(mode,vram_budget,performance)
-    info=acceleration_info(mode,vram_budget,performance)
-    if not info.accelerated or mode=="CPU":
-        return gray.resize(target,Image.Resampling.LANCZOS), replace(info,scaler="CPU Lanczos")
-    backend=_resolve_backend(mode)
-    if backend is None:
-        return gray.resize(target,Image.Resampling.LANCZOS), replace(info,scaler="CPU Lanczos")
-    _,module,*_=backend; cp,cnd=module
-    try:
+    with ExitStack() as owned:
+        if gray.mode!="L":
+            gray=owned.enter_context(closing_image(gray.convert("L")))
+            _cancel(cancelled)
+        if gray.size==target:
+            return gray.copy(), acceleration_info(mode,vram_budget,performance)
+        info=acceleration_info(mode,vram_budget,performance)
+        if not info.accelerated or mode=="CPU":
+            return gray.resize(target,Image.Resampling.LANCZOS), replace(info,scaler="CPU Lanczos")
+        backend=_resolve_backend(mode)
+        if backend is None:
+            return gray.resize(target,Image.Resampling.LANCZOS), replace(info,scaler="CPU Lanczos")
+        _,module,*_=backend; cp,cnd=module
+        try:
+            result,info=_resize_gray_cuda(gray,target,info,cp,cnd,performance,cancelled)
+        except BaseException as failure:
+            # The failed native scope must finish before CPU allocation. A
+            # retained driver error (or its cause) must not keep its input,
+            # interpolation scratch or pinned host upload alive during retry.
+            _release_resize_failure(failure)
+            if not isinstance(failure,Exception) or isinstance(failure,InterruptedError):
+                raise
+            info=replace(_fallback_info(mode,f"CUDA scaler fallback: {type(failure).__name__}: {failure}",performance),
+                         scaler="CPU Lanczos fallback")
+        else:
+            if result is not None:
+                return result,info
+        # Both VRAM preflight rejection and native failure discard their own
+        # pre-reduction before resizing the original gray pixels on the CPU.
+        _cancel(cancelled)
+        return gray.resize(target,Image.Resampling.LANCZOS),info
+
+
+def _release_resize_failure(error):
+    """Keep error identity/locations while releasing completed native scopes."""
+    import traceback
+    pending=[error];seen=set()
+    while pending:
+        current=pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        traceback.clear_frames(current.__traceback__)
+        pending.extend((current.__cause__,current.__context__))
+
+
+def _resize_gray_cuda(gray,target,info,cp,cnd,performance,cancelled):
+    """Own only the native resize attempt, so fallback cannot retain its work."""
+    with ExitStack() as owned:
         # Pre-reduce only when the source is far larger than the output.  This is
         # still high quality because the final GPU pass operates near target scale.
         work=gray
         ratio=max(gray.width/target[0],gray.height/target[1])
         if ratio>4.0:
             interim=(max(target[0],min(gray.width,target[0]*4)),max(target[1],min(gray.height,target[1]*4)))
-            work=gray.resize(interim,Image.Resampling.LANCZOS)
+            work=owned.enter_context(closing_image(gray.resize(interim,Image.Resampling.LANCZOS)))
         # Cubic resampling, blur and sharpening also allocate destination-size
         # arrays. Keep the existing conservative plane/headroom estimate, using
         # the larger pixel footprint rather than only the uploaded source.
@@ -490,7 +530,7 @@ def resize_gray_advanced(gray: Image.Image, size: tuple[int,int], mode: str="Aut
         plan=plan_vram_allocation(info,*workspace_size,arrays=5,overlap=4)
         _cancel(cancelled)
         if plan["mode"]!="full":
-            return gray.resize(target,Image.Resampling.LANCZOS), replace(info,
+            return None, replace(info,
                 backend="CPU",accelerated=False,cuda_execution="",
                 reason="CUDA resize workspace exceeds available VRAM.",
                 scaler="CPU Lanczos (GPU resize VRAM fallback)",
@@ -507,20 +547,15 @@ def resize_gray_advanced(gray: Image.Image, size: tuple[int,int], mode: str="Aut
                 if out.shape!=(target[1],target[0]):
                     # Rare shape-rounding mismatch: finish safely on CPU.
                     host=cp.asnumpy(cp.clip(cp.rint(out),0,255).astype(cp.uint8))
-                    tmp=Image.fromarray(host).resize(target,Image.Resampling.LANCZOS)
-                    return tmp,replace(_refresh_info(info,cp),scaler="CUDA cubic + CPU final fit")
+                    info=replace(_refresh_info(info,cp),scaler="CUDA cubic + CPU final fit")
+                    with closing_image(Image.fromarray(host)) as partial:
+                        return partial.resize(target,Image.Resampling.LANCZOS),info
             blur=cnd.gaussian_filter(out,sigma=.62,mode="nearest")
             sharpened=cp.clip(out+(out-blur)*.20,0,255)
             host=cp.asnumpy(cp.rint(sharpened).astype(cp.uint8))
             info=replace(_refresh_info(info,cp),scaler="CUDA cubic + adaptive unsharp",tile_rows=target[1],workspace_estimate_mb=plan["workspace_mb"])
             del arr,out,blur,sharpened
         return Image.fromarray(host),info
-    except InterruptedError:
-        raise
-    except Exception as exc:
-        # Resizing is never allowed to disable the entire drawing workflow.
-        _cancel(cancelled)
-        return gray.resize(target,Image.Resampling.LANCZOS),replace(_fallback_info(mode,f"CUDA scaler fallback: {type(exc).__name__}: {exc}",performance),scaler="CPU Lanczos fallback")
 
 def clear_gpu_cache(mode: str = "Auto", *, cancelled=lambda: False) -> dict:
     """Release unused resources independently of the selected compute policy."""

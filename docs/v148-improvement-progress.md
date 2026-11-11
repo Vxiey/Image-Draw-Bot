@@ -6,24 +6,46 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
-Batch 37 completes four existing profile, recovery and canvas lifecycle
-contracts with **zero new IDs: 843/1,000 implemented, 157 remaining**. The final
-combined local run passed all **26 new regression tests**, including five real
-native UI cases, with no skips and 919 unchanged source/asset/registry hashes.
-The machine registry is unchanged. The
-[patch ledger](v148-batch37-lifecycle-fixes.md) and
-[validation record](v148-batch37-validation.json) preserve the individual
-before/after evidence, adjacent selections and initial diagnostics.
-Exact-head Windows/Linux CI is recorded in
-[draft PR #46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
-Version 1.0.148 remains unreleased; merge and release require explicit approval.
+Batch 38 completes eight profile, image and planner corrections. One opaque
+Auto-count preparation group, **P3801/global844**, is new; the remaining
+completions receive zero IDs. The current total is **844/1,000 implemented,
+156 remaining**. All 843 preceding registry entries and 132 earlier JSON
+reports, including 84 benchmark reports, are preserved exactly.
 
-Batch36's eight corrections and 44-test integration remain documented in its
-[ledger](v148-batch36-profile-image-fixes.md). Its final head `e7c1386` passed
-all seven checks, including 4,647 tests on each Windows/Linux runner; detailed
-counts and the earlier CI adapter failure are preserved in the
-[PR history](pr46-history-through-batch36.md). Those results apply to that
-earlier head, not to this continuation.
+The final eight-module integration passed **63/63 new tests in 3.785 s**, with
+no errors/skips. Full local discovery passed **4,736 tests in 250.327 s:
+4,650 passed and 86 skipped**. Seven existing native profile cases separately
+passed on real Linux/Xorg in 29.465 s. All three runs bind the same 954
+unchanged source/configuration/fixture hashes. The 5,000-cycle source gate
+also passed. The [ledger](v148-batch38-lifecycle-and-planning.md),
+[validation](v148-batch38-validation.json) and
+[raw evidence](v148-batch38-evidence.json) retain before/after results,
+measurements, slower controls and rejected work.
+
+Extra Fast retains its original candidate selection and reuses exact path
+costs within bounded operation-local storage. The broader axis experiment
+was rejected after complete-plan measurements. Auto-count reduces private
+opaque-source preparation while preserving pixel and recommendation parity.
+Observed channel samples and Python-traced allocation are not process-RSS or
+physical GPU measurements. Whole-plan timings are local Linux observations.
+
+Exact published-head Windows/Linux, dependency, CodeQL and packaged-app
+results are reported separately in
+[draft PR #46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
+Version 1.0.148 remains unreleased. Merge and release require explicit approval.
+
+### Previously recorded batch37 checkpoint
+
+Batch37 completed four existing lifecycle contracts with zero new IDs:
+843/1,000 and 157 remaining. Its final combined local pass ran 26/26 new
+regressions, including five real native UI cases, in 23.993 s with 919 stable
+hashes. The [ledger](v148-batch37-lifecycle-fixes.md) and
+[validation](v148-batch37-validation.json) retain that scope. All seven
+checks passed for b8fb914 after one unchanged Windows-job retry; Windows
+reported 4,673 tests, 4,669 passed and four skipped, while Linux reported
+4,587 passed and 86 skipped. The initial Windows timeout, retry and exact
+job links remain in the [PR history](pr46-history-through-batch37.md).
+Those results verify that earlier head, not this continuation.
 
 ### Previously recorded batch31 checkpoint
 

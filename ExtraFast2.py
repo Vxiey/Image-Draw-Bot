@@ -24,6 +24,72 @@ from typing import Any, Sequence
 import math
 
 
+_MAX_PREPARED_PATH_COSTS = 4096
+_MAX_PREPARED_PATH_POINTS = 65536
+
+
+class _PreparedPathCosts:
+    """Bounded, operation-owned view of exact costs for immutable planner paths."""
+
+    def __init__(self, model, cancelled):
+        self._model = model
+        self._cancelled = cancelled
+        self._costs = {}
+        self._points = 0
+        self._enabled = True
+
+    def __getattr__(self, name):
+        return getattr(self._model, name)
+
+    def path_seconds(self, path, *, cursor=None, brush_px=None):
+        if self._cancelled():
+            raise InterruptedError()
+        prepared = None
+        if self._enabled and len(path) <= _MAX_PREPARED_PATH_POINTS:
+            try:
+                # Direction and every intermediate point remain part of the key.
+                # These internal paths already contain immutable coordinate tuples.
+                key = (tuple(path), brush_px)
+                prepared = self._costs.get(key)
+                if prepared is None and (len(self._costs) < _MAX_PREPARED_PATH_COSTS
+                        and self._points + len(path) <= _MAX_PREPARED_PATH_POINTS):
+                    prepared = self._model.prepare_path_cost(
+                        path, brush_px=brush_px, cancelled=self._cancelled)
+                    self._costs[key] = prepared
+                    self._points += len(path)
+            except MemoryError:
+                # This optional cache must not turn a runnable plan into an OOM.
+                self._costs.clear()
+                self._points = 0
+                self._enabled = False
+                prepared = None
+                if self._cancelled():
+                    raise InterruptedError()
+        if prepared is None:
+            seconds = self._model.path_seconds(path, cursor=cursor, brush_px=brush_px)
+        else:
+            seconds = prepared.seconds(cursor=cursor)
+        if self._cancelled():
+            raise InterruptedError()
+        return seconds
+
+    def paths_seconds(self, paths, *, cursor=None, brush_px=None):
+        total = 0.0
+        current = cursor
+        for path in paths or ():
+            if not path:
+                continue
+            total += self.path_seconds(path, cursor=current, brush_px=brush_px)
+            current = tuple(map(int, path[-1]))
+        return total
+
+    def close(self):
+        self._costs.clear()
+        self._points = 0
+        self._enabled = False
+        self._model = self._cancelled = None
+
+
 def path_limits(options: dict[str, Any]) -> tuple[int, int, str]:
     """Return bounded continuous-path limits for Extra Fast 2.0."""
     active = bool(options.get('time_budget_active')) and not (
@@ -232,8 +298,8 @@ def _downstream_plan_cost(groups, options, model, cancelled) -> tuple[float, dic
 
 def build_fast_paths(groups, options, *, portrait_edge_count=None, cancelled=lambda: False):
     """Choose a bounded lossless path plan using downstream-aware cost."""
-    from ContinuousPaths import build_execution_paths, execution_groups_with_portrait_semantics
-    from ExecutionCostModel import build_cost_model, EXECUTION_MODEL_VERSION
+    from ContinuousPaths import build_execution_paths
+    from ExecutionCostModel import build_cost_model
 
     rows, points, policy = path_limits(options)
     limits = _candidate_limits(rows, points, policy)
@@ -249,6 +315,27 @@ def build_fast_paths(groups, options, *, portrait_edge_count=None, cancelled=lam
     # tests/benchmarks intentionally default to source-space 1:1.
     model = build_cost_model(options,(1,1),(1,1))
     travel_aware = _travel_selection_enabled(options)
+    prepared = None
+    if (callable(getattr(model, 'prepare_path_cost', None))
+            and callable(getattr(model, 'paths_seconds', None))):
+        try:
+            prepared = _PreparedPathCosts(model, cancelled)
+        except MemoryError:
+            if cancelled():
+                raise InterruptedError()
+    try:
+        return _choose_fast_paths(groups, options, baseline, prepared or model,
+            rows, points, policy, limits, travel_aware,
+            portrait_edge_count, cancelled)
+    finally:
+        if prepared is not None:
+            prepared.close()
+
+
+def _choose_fast_paths(groups, options, baseline, model, rows, points, policy,
+                       limits, travel_aware, portrait_edge_count, cancelled):
+    from ContinuousPaths import execution_groups_with_portrait_semantics
+    from ExecutionCostModel import EXECUTION_MODEL_VERSION
 
     proposed = []
     duplicate_candidates_skipped = 0

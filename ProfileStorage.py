@@ -62,7 +62,13 @@ def _profile_context_files(profile_key: str | None, palette_path: Path | None = 
     """Files that can change the meaning of a cached color/tool operation."""
     key = safe_profile_key(profile_key)
     root = data_dir()
-    files = [Path(palette_path) if palette_path is not None else profile_palette_file(key)]
+    palette = Path(palette_path) if palette_path is not None else profile_palette_file(key)
+    files = [palette]
+    # Only the ordinary generic path can consume these legacy inputs, and only
+    # while its canonical file is absent. Match Colors.load_calibration so an
+    # unchanged color list cannot hide changed click positions from resume.
+    if key == 'generic' and palette == profile_palette_file(key) and not palette.exists():
+        files.extend((root / 'positions.txt', root / 'palette.json'))
     files.append(root / f"exact-colors-{key}.json")
     if key == "microsoft-paint":
         files.append(root / "paint-tools-microsoft-paint.json")
@@ -104,7 +110,14 @@ def calibration_context_fingerprint(profile_key: str | None, *, workflow: str = 
                         raise ValueError(f'Calibration context is too large: {path.name}')
                     file_digest.update(chunk)
         except FileNotFoundError:
-            digest.update(b"<missing>\n")
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                digest.update(b"<missing>\n")
+            except OSError as error:
+                raise ValueError(f'Calibration context cannot be read: {path.name}') from error
+            else:
+                raise ValueError(f'Calibration context cannot be resolved: {path.name}')
         except OSError as error:
             raise ValueError(f'Calibration context cannot be read: {path.name}') from error
         else:

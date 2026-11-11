@@ -1,4 +1,5 @@
 import re
+import stat
 
 allColors = []
 
@@ -150,13 +151,18 @@ POSITIONS_FILE = DATA_DIR / "positions.txt"
 MAX_CALIBRATION_BYTES = 8 * 1024 * 1024
 
 
+def _read_legacy_positions(path, count):
+    values = [int(line) for line in read_bounded_text(path,max_bytes=MAX_CALIBRATION_BYTES).splitlines()]
+    if len(values) != count * 2:
+        raise ValueError(f"Position file must contain {count * 2} coordinates. Recalibrate colors.")
+    return [values[index * 2:index * 2 + 2] for index in range(count)]
+
+
 def load_positions(path=POSITIONS_FILE):
     """Validate the entire legacy position file before changing any colors."""
-    values = [int(line) for line in read_bounded_text(path,max_bytes=MAX_CALIBRATION_BYTES).splitlines()]
-    if len(values) != len(allColors) * 2:
-        raise ValueError(f"Position file must contain {len(allColors) * 2} coordinates. Recalibrate colors.")
-    for index, color in enumerate(allColors):
-        color.x, color.y = values[index * 2:index * 2 + 2]
+    positions = _read_legacy_positions(path, len(allColors))
+    for color, position in zip(allColors, positions):
+        color.x, color.y = position
 
 
 def save_positions(path=POSITIONS_FILE):
@@ -190,14 +196,18 @@ def save_palette(rgb_values):
     atomic_write_text(PALETTE_FILE, json.dumps(rgb_values))
 
 
+def _read_legacy_palette(path, count):
+    values = read_json(path, max_bytes=MAX_CALIBRATION_BYTES)
+    if not isinstance(values,list) or len(values)!=count:
+        raise ValueError("Invalid palette.json. Recalibrate colors.")
+    try:return [normalize_rgb(rgb) for rgb in values]
+    except ValueError as error:raise ValueError("Invalid palette.json. Recalibrate colors.") from error
+
+
 def load_palette():
     if not PALETTE_FILE.exists():
         return
-    values = read_json(PALETTE_FILE, max_bytes=MAX_CALIBRATION_BYTES)
-    if not isinstance(values,list) or len(values)!=len(allColors):
-        raise ValueError("Invalid palette.json. Recalibrate colors.")
-    try:values=[normalize_rgb(rgb) for rgb in values]
-    except ValueError as error:raise ValueError("Invalid palette.json. Recalibrate colors.") from error
+    values = _read_legacy_palette(PALETTE_FILE, len(allColors))
     for color, rgb in zip(allColors, values):
         color.R, color.G, color.B = rgb
         color.RGB = tuple(rgb)
@@ -243,6 +253,43 @@ def validate_calibration(data, profile_key=None):
         clean=dict(row);clean['rgb']=list(rgb);clean.pop('argb',None);normalized.append(clean)
     if len(set(positions))!=len(positions):raise ValueError('Duplicate color positions.')
     return normalized
+
+
+def read_legacy_calibration(positions_path, palette_path):
+    """Capture the generic fallback without mutating global colors or caches.
+
+    A normal profile reload resets to DEFAULT_COLORS before consuming these
+    sources. A missing RGB file keeps those defaults; positions are required
+    whenever either legacy source exists. Neither source means no calibration.
+    """
+    def regular_source(path):
+        path = Path(path)
+        try:
+            mode = path.stat().st_mode
+        except FileNotFoundError:
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                return False
+            raise ValueError(f'{path.name} could not be resolved to a regular calibration file.')
+        if not stat.S_ISREG(mode):
+            raise ValueError(f'{path.name} is not a regular calibration file.')
+        return True
+
+    has_positions = regular_source(positions_path)
+    has_palette = regular_source(palette_path)
+    if not has_positions:
+        if has_palette:
+            raise ValueError('Legacy palette.json has no positions.txt. Recalibrate colors.')
+        return None
+    positions = _read_legacy_positions(positions_path, len(DEFAULT_COLORS))
+    rgbs = (_read_legacy_palette(palette_path, len(DEFAULT_COLORS)) if has_palette else
+            [rgb for _name, rgb in DEFAULT_COLORS])
+    data = {'version': 1, 'colors': [
+        {'name': name, 'position': position, 'rgb': list(rgb)}
+        for (name, _default_rgb), position, rgb in zip(DEFAULT_COLORS, positions, rgbs)]}
+    validate_calibration(data, profile_key='generic')
+    return data
 
 
 def calibration_metadata(path=CALIBRATION_FILE, *, profile_key=None):

@@ -12,6 +12,7 @@ can share the same recommendation without a noticeable full-resolution cost.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import ExitStack
 from math import log2
 from typing import Sequence
 
@@ -21,6 +22,7 @@ from PIL import Image
 from ColorMatchingEngine import visible_rgb_image
 from ColorFidelity import oklab_metrics, rgb_to_oklab
 from DominantHuePreservation import summarize_hue_families
+from ImageOwnership import close_image, closing_image
 
 RGB = tuple[int, int, int]
 
@@ -64,23 +66,58 @@ class AdaptiveColorCountResult:
         }
 
 
-def _bounded_sample(image: Image.Image, max_side: int = 176) -> Image.Image:
-    src = visible_rgb_image(image)
-    w, h = src.size
-    if max(w, h) <= max_side:
-        return src
-    scale = float(max_side) / float(max(w, h))
-    size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
-    # BOX is deterministic and preserves coverage better than a sharpening
-    # resampler for this statistics-only pass.
-    return src.resize(size, Image.Resampling.BOX)
+def _bounded_sample(image: Image.Image, max_side: int = 176, *, cancelled=lambda: False) -> Image.Image:
+    """Keep opaque-import preparation to one source-size channel at a time.
+
+    Pillow resizes each original channel with its own complete BOX operation;
+    no private filter/pass order is reproduced here. Transparency still uses
+    the original full-resolution composite before any resampling.
+    """
+    if cancelled():raise InterruptedError('Adaptive color count cancelled.')
+    w, h = image.size
+    result = None
+    try:
+        if max(w, h) <= max_side:
+            result = visible_rgb_image(image)
+        else:
+            scale = float(max_side) / float(max(w, h))
+            size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+            # BOX is deterministic and preserves coverage better than a
+            # sharpening resampler for this statistics-only pass.
+            if image.mode == 'RGB' and 'transparency' not in image.info:
+                result = image.resize(size, Image.Resampling.BOX)
+            elif image.mode == 'L' and 'transparency' not in image.info:
+                with closing_image(image.resize(size, Image.Resampling.BOX)) as reduced:
+                    if cancelled():raise InterruptedError('Adaptive color count cancelled.')
+                    result = reduced.convert('RGB')
+            elif image.mode == 'RGBA' and image.getextrema()[3] == (255, 255):
+                with ExitStack() as owned:
+                    channels = []
+                    for name in ('R', 'G', 'B'):
+                        if cancelled():raise InterruptedError('Adaptive color count cancelled.')
+                        with closing_image(image.getchannel(name)) as channel:
+                            if cancelled():raise InterruptedError('Adaptive color count cancelled.')
+                            reduced = owned.enter_context(closing_image(channel.resize(size, Image.Resampling.BOX)))
+                        channels.append(reduced)
+                        if cancelled():raise InterruptedError('Adaptive color count cancelled.')
+                    result = Image.merge('RGB', channels)
+                    result.info.update(image.info)
+            else:
+                with closing_image(visible_rgb_image(image)) as visible:
+                    if cancelled():raise InterruptedError('Adaptive color count cancelled.')
+                    result = visible.resize(size, Image.Resampling.BOX)
+        if cancelled():raise InterruptedError('Adaptive color count cancelled.')
+        return result
+    except BaseException as failure:
+        if result is not None:close_image(result, failure)
+        raise
 
 
 def _quantized_candidates(sample: Image.Image, max_candidates: int) -> tuple[list[RGB], list[float]]:
     colors = max(2, min(64, int(max_candidates)))
-    q = sample.quantize(colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-    counts = q.getcolors() or []
-    pal = q.getpalette() or []
+    with closing_image(sample.quantize(colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)) as q:
+        counts = q.getcolors() or []
+        pal = q.getpalette() or []
     total = max(1, sample.width * sample.height)
     rows: list[tuple[RGB, float]] = []
     for count, index in counts:
@@ -243,21 +280,24 @@ def recommend_adaptive_color_count(image: Image.Image, *, ceiling: int,
     if cancelled():
         raise InterruptedError()
     floor, cap = _quality_bounds(ceiling, fidelity)
-    sample = _bounded_sample(image)
-    if cancelled():
-        raise InterruptedError()
-
     candidate_cap = min(64, max(cap * 2, 16))
-    colors, weights = _quantized_candidates(sample, candidate_cap)
-    if cancelled():
-        raise InterruptedError('Adaptive color count cancelled.')
+    with closing_image(_bounded_sample(image, cancelled=cancelled)) as sample:
+        sample_size = sample.size
+        if cancelled():
+            raise InterruptedError()
+        colors, weights = _quantized_candidates(sample, candidate_cap)
+        if cancelled():
+            raise InterruptedError('Adaptive color count cancelled.')
+        edge = _edge_density(sample) if colors else 0.0
+        if cancelled():
+            raise InterruptedError('Adaptive color count cancelled.')
     if not colors:
         result = AdaptiveColorCountResult(
             recommended=floor, minimum=floor, ceiling=cap, complexity_score=0.0,
             color_entropy=0.0, edge_density=0.0, tone_bins=1,
             dominant_hue_families=(), significant_color_buckets=1,
             candidate_color_buckets=0, weighted_error=0.0, marginal_gain=0.0,
-            stop_reason='empty-or-unmeasurable-source', sample_size=sample.size)
+            stop_reason='empty-or-unmeasurable-source', sample_size=sample_size)
         return floor, result.as_dict()
 
     # Tiny quantizer buckets are treated as texture/noise for complexity scoring,
@@ -272,9 +312,6 @@ def recommend_adaptive_color_count(image: Image.Image, *, ceiling: int,
     sig_weights = [w / sw_total for w in sig_weights]
 
     entropy = _entropy(sig_weights)
-    edge = _edge_density(sample)
-    if cancelled():
-        raise InterruptedError('Adaptive color count cancelled.')
     tones = len({_tone_bin(rgb) for rgb in sig_colors})
     hue_summaries = summarize_hue_families(sig_colors, sig_weights, fidelity=fidelity, max_families=cap)
     hue_names = tuple(s.family for s in hue_summaries)
@@ -340,7 +377,7 @@ def recommend_adaptive_color_count(image: Image.Image, *, ceiling: int,
         color_entropy=entropy, edge_density=edge, tone_bins=tones,
         dominant_hue_families=hue_names, significant_color_buckets=len(sig_colors),
         candidate_color_buckets=len(colors), weighted_error=error, marginal_gain=gain,
-        stop_reason=reason, sample_size=sample.size)
+        stop_reason=reason, sample_size=sample_size)
     if cancelled():
         raise InterruptedError('Adaptive color count cancelled.')
     return chosen, result.as_dict()

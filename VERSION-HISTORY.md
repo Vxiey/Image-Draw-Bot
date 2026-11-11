@@ -1,5 +1,6 @@
 # Image Draw Bot v1.0.148 — Development in progress
 
+- Current batch38 checkpoint: **844 distinct improvements, 156 remaining**. One opaque Auto-count preparation group is new; profile publication/identity, target-probe cancellation, image ownership and Extra Fast cost reuse complete existing contracts. [Implementation and measured evidence](docs/v148-batch38-lifecycle-and-planning.md); [validation](docs/v148-batch38-validation.json). Version 1.0.148 remains unreleased, and merge/release require explicit approval.
 - The saved batch12 checkpoint records 779 behavior improvements: the 100-change merged baseline and 679 further changes on the development branch. The requested target remains 1,000; 1.0.148 has not been published.
 - Resumed maintenance adds faster 2-opt route search and bounded Windows verification: **781 total, 219 remaining**. Preview/brush completions, package exclusions, version updates and documentation add no duplicate IDs.
 - The work covers color/GPU processing, drawing geometry and budgets, target calibration, image import, previews, keyboard controls, persistence, recovery, native input and release packaging. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps the recorded changes to implementation and regression evidence.

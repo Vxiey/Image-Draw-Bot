@@ -1,6 +1,17 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current development checkpoint contains 843 distinct behavior improvements: the original 100-change baseline, 162 changes in batch 01, 236 changes in batch 02, 116 changes in batch 03, 54 changes in batch 04, 31 changes in batch 05, 30 changes in batch 06, 16 changes in batch 07, 14 changes in batch 08, 6 changes in batch 09, 8 changes in batch 10, 4 changes in batch 11, 2 changes in batch 12 and 2 in resumed maintenance, followed by 15 in batch 14, seven in batch 15, four in batch 16, three in batch 17, five in batch 18, three in batch 19, three in batch 20, two in batch 21, three in batch 22, two in batch 23, two in batch 24, seven in batch 25, one in batch 26, one in batch 27, one in batch 29, two in batch 30 and one in batch 31. Work continues toward the requested 1,000-improvement target before release. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps global IDs to implementation and regression evidence. Tests, documentation and version promotion do not increase the count.
+**This version has not been published.** The current checkpoint contains **844 distinct behavior improvements, with 156 remaining** toward the requested 1,000 before release. Batch38 adds one opaque Auto-count preparation group; seven other corrections complete already-counted contracts. Tests, documentation, repeated consumers and version promotion do not increase the count. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps all global IDs to implementation and regression evidence.
+
+## Batch 38: complete profile, image and planner lifetimes
+
+- Keep legacy calibration inside profile import/export and resume identity.
+- Reject imported documents that exceed their actual reader budgets.
+- Cancel and reap saved-area target probes before accepting late metadata.
+- Reduce private opaque Auto-count sampling storage with exact pixel parity.
+- Release failed GPU resize work before CPU fallback and preserve the primary failure through cleanup.
+- Reuse exact Extra Fast costs within one bounded operation, retaining its original candidate selection.
+
+The [batch38 ledger](docs/v148-batch38-lifecycle-and-planning.md) records all eight groups, actual regression results, complete public-plan measurements and rejected experiments. Only P3801/global844 is new; all 843 earlier registry entries and earlier evidence are preserved. Exact-head Windows/Linux and package checks are reported separately for each published commit in [draft PR46](https://github.com/Vxiey/Image-Draw-Bot/pull/46). Merge and release remain subject to explicit approval.
 
 ## Batch 31: budget contour selection and complete resource ownership
 

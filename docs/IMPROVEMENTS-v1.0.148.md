@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 843 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **157 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 844 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **156 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -40,6 +40,14 @@ recovery decisions revalidate their checkpoint/source, and cancelled canvas
 analysis retains the previous setup. These complete existing contracts with
 **zero new IDs**; the total remains **843/1,000**. See the
 [four corrections and 26-test integration](v148-batch37-lifecycle-fixes.md).
+
+**Profile, image and planner continuation after batch 37:** eight corrections
+complete profile publication/identity, saved-area cancellation, private image
+ownership and operation-local cost reuse. Opaque Auto-count preparation is one
+new group, **P3801/global844**; all other completions add zero IDs. The total is
+**844/1,000, with 156 remaining**. See the
+[batch38 ledger](v148-batch38-lifecycle-and-planning.md) and
+[final validation](v148-batch38-validation.json).
 
 | Global IDs | Local IDs | Area | Count | Evidence |
 | --- | --- | --- | ---: | --- |
@@ -142,6 +150,7 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 841 | R3001 | Batch 30 Background cleanup preserves flood-protected detail | 1 | [Evidence](v148-batch30-background-details.md); actual callers and independent review. |
 | 842 | R3002 | Batch 30 Picture-palette append-only assignment reuse | 1 | [Evidence](v148-batch30-palette-growth.md); actual callers and independent review. |
 | 843 | R3101 | Batch 31 budgeted Portrait contour selection | 1 | [Evidence](v148-batch31-portrait-edge-budget.md); actual callers, complete parity and bounded measurement claims. |
+| 844 | P3801 | Batch 38 opaque Auto-count preparation | 1 | [Profile, image and planner ledger](v148-batch38-lifecycle-and-planning.md); independent ownership and counting reviews. |
 
 ## Integration evidence
 

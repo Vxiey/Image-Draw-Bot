@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 843,
+  "implemented": 844,
   "release_published": false,
-  "validation": "Batch 31 records 843 distinct improvements, 157 remaining. One contour-prefix work-reduction group is registered as R3101/global843. Local import-stream and outer Portrait-plan ownership complete existing contracts with zero IDs. All 842 preceding registry entries and 80 prior benchmark JSON reports are preserved. Completed frozen discovery ran 4,569 tests in 244.002 seconds: 4,496 passed and 73 skipped, with all 947 source/configuration hashes unchanged. Fourteen Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and initial package hygiene (1,370 files) passed. The package check after final metadata passed with 1,372 files and no warnings. Seven complete historical Portrait public-plan pairs retain finite time-fitting, actual rescue and borrowed inputs. The contour experiment compares the whole published Portrait module within shared current dependencies: 3 complete preparations, 39 exact helper/public comparisons and 9 workloads with six balanced pairs and separate traced allocations. Scanning and the cell-winner dictionary remain; whole-helper and whole-public-plan observations, slower controls and allocation costs are kept separate. Early source maps, expected red proofs and initial harness diagnostics remain explicit. No universal application speed, RSS, physical drawing or GPU improvement is claimed. Published parent e49 passed seven exact-head checks and all fourteen Windows steps on attempt one; the new head requires its own CI. Version 1.0.148 remains unreleased.",
+  "validation": "Batch 38 records 844 distinct behavior improvements, with 156 remaining. P3801/global844 reduces private preparation for opaque Auto exact-color-count samples while preserving exact pixels and recommendation metadata. Seven additional corrections complete existing profile, cancellation, ownership and prepared-cost contracts with zero new IDs. All 843 preceding registry entries are preserved. Focused baseline comparisons, source hashes, measured controls and rejected experiments are documented in v148-batch38-lifecycle-and-planning.md and its validation record. Whole-project verification and published-commit CI have separate receipts. Version 1.0.148 remains unreleased.",
   "improvements": [
     {
       "id": 1,
@@ -6563,6 +6563,14 @@
       "batch": 31,
       "ledger": "v148-batch31-portrait-edge-budget.md",
       "description": "Limit Portrait contour ranking to the existing caller budget after unchanged Sobel scoring and strongest-per-cell selection. Use stable bounded selection for small prefixes and the original full sort for larger selections, omitting the returned suffix that the caller discarded. Preserve exact ties, cell replacement order, geometry, metadata, cancellation and complete public plans. Actual work counts, complete historical-module parity and balanced CPU/allocation observations verify this one reduction. Scanning and the full cell-winner dictionary remain; slower controls and all allocation costs are retained without a general application, GPU or process-RSS claim."
+    },
+    {
+      "id": 844,
+      "local_id": "P3801",
+      "area": "batch38-platform",
+      "batch": 38,
+      "ledger": "v148-batch38-lifecycle-and-planning.md",
+      "description": "Reduce private source-image preparation for Auto exact-color-count sampling. Large opaque RGB/L inputs use direct Pillow BOX reduction; fully opaque RGBA inputs reduce one original channel at a time and merge only the bounded sample. Preserve exact sample pixels, complete recommendation metadata and the real tuner caller. Mixed alpha and color-key inputs retain full visible compositing before resampling. Independent historical pixel oracles and observed private-image channel counts establish the reduction; balanced whole-recommendation timings retain slower controls. Channel counts are not allocated bytes or process RSS, and no general CPU or whole-application speedup is claimed. Owned-image cleanup, Stop and GPU fallback completions add no further IDs."
     }
   ]
 }
