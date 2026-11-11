@@ -6,17 +6,24 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
-Batch 36 completes eight existing profile, export, recovery, UI and color-import
+Batch 37 completes four existing profile, recovery and canvas lifecycle
 contracts with **zero new IDs: 843/1,000 implemented, 157 remaining**. The final
-combined local run passed all **44 new regression tests**, including three real
-native UI cases, with no skips and 912 unchanged source/fixture/registry hashes.
+combined local run passed all **26 new regression tests**, including five real
+native UI cases, with no skips and 919 unchanged source/asset/registry hashes.
 The machine registry is unchanged. The
-[patch ledger](v148-batch36-profile-image-fixes.md) and
-[validation record](v148-batch36-validation.json) preserve the individual
-before/after evidence, adjacent selections and initial harness diagnostics.
+[patch ledger](v148-batch37-lifecycle-fixes.md) and
+[validation record](v148-batch37-validation.json) preserve the individual
+before/after evidence, adjacent selections and initial diagnostics.
 Exact-head Windows/Linux CI is recorded in
 [draft PR #46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
 Version 1.0.148 remains unreleased; merge and release require explicit approval.
+
+Batch36's eight corrections and 44-test integration remain documented in its
+[ledger](v148-batch36-profile-image-fixes.md). Its final head `e7c1386` passed
+all seven checks, including 4,647 tests on each Windows/Linux runner; detailed
+counts and the earlier CI adapter failure are preserved in the
+[PR history](pr46-history-through-batch36.md). Those results apply to that
+earlier head, not to this continuation.
 
 ### Previously recorded batch31 checkpoint
 

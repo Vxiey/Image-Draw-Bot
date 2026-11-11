@@ -481,6 +481,16 @@ def clear_snapshot() -> None:
             raise OSError('Recovery data could not be completely removed: ' + '; '.join(failures))
 
 
+def clear_snapshot_if_current(expected_snapshot: dict) -> bool:
+    """Compare the offered checkpoint and delete it under one publisher guard."""
+    with _snapshot_guard():
+        current = load_snapshot()
+        if current is None or current != expected_snapshot:
+            return False
+        clear_snapshot()
+        return True
+
+
 def diagnostics_summary() -> dict:
     from LocalSanitization import sanitize_text
     state = load_snapshot()

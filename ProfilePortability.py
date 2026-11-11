@@ -594,6 +594,10 @@ def profile_reset_paths(profile_key: str):
         profile_correction_history_file(key), profile_layout_cache_file(key),
         profile_verified_color_file(key),
     ))
+    # Only the generic profile can reload these legacy palette sources when
+    # calibration.json is absent. Retire them in the same reset transaction.
+    if key == "generic":
+        paths.extend((data_dir() / "positions.txt", data_dir() / "palette.json"))
     # Paint had one legacy tool path. Only delete it while resetting Paint.
     if key == "microsoft-paint":
         paths.append(data_dir() / "paint-tools.json")
@@ -620,6 +624,30 @@ def _reload_profile(app, name: str):
         apply_now(name)
     else:
         app.change_profile()
+
+
+def _settings_reload_error(app):
+    """File publication can succeed before the active settings reload fails."""
+    protected = getattr(app, '_settings_protected_path', None)
+    current = getattr(app, 'settings_path', None)
+    if protected is None or current is None or Path(protected) != Path(current):
+        return None
+    return (getattr(app, '_settings_load_error', None) or
+            'Profile settings could not be loaded. Select this profile again to retry.')
+
+
+def _show_profile_reload_warning(app, title, completed_message):
+    error = _settings_reload_error(app)
+    if error is None:
+        return False
+    if not getattr(app, 'closing', False):
+        from tkinter import messagebox
+        messagebox.showwarning(
+            title,
+            f'{completed_message}\n\nThe profile could not be fully loaded in the app.\n\n{error}',
+            parent=getattr(app, 'root', None),
+        )
+    return True
 
 
 def import_package_into_app(app, package: dict, *, action: str = "replace", copy_name: str | None = None,
@@ -663,7 +691,7 @@ def import_package_into_app(app, package: dict, *, action: str = "replace", copy
     # a completed safety test. _apply_profile_change clears locks, target handles,
     # plan state and small-test state before reading the imported profile files.
     _reload_profile(app, destination_name)
-    if hasattr(app, "status"):
+    if hasattr(app, "status") and _settings_reload_error(app) is None:
         try:
             app.status.set(
                 f"Imported {destination_name}. Re-verify target, palette/canvas and run the normal safety tests before drawing."
@@ -699,7 +727,7 @@ def reset_profile(app, *, expected_name=None, expected_key=None):
     except (OSError, ValueError) as error:
         raise ProfilePortabilityError(str(error)) from error
     _reload_profile(app, name)
-    if hasattr(app, "status"):
+    if hasattr(app, "status") and _settings_reload_error(app) is None:
         try: app.status.set(f"{name} restored to Image Draw Bot defaults. Calibration/setup must be verified again.")
         except Exception: pass
     return name
@@ -793,6 +821,9 @@ def rename_custom_profile_dialog(app):
         if selected is None:
             return None
         result = rename_custom_profile(app, selected, expected_name=name, expected_key=key)
+        if _show_profile_reload_warning(app, 'Profile renamed; reload needed',
+                f"Renamed '{result}'. Saved settings and calibration were kept."):
+            return result
         if hasattr(app, 'status'):
             app.status.set(f'Custom profile renamed to {result}. Saved settings and calibration were kept.')
         return result
@@ -813,6 +844,9 @@ def remove_custom_profile_dialog(app):
             parent=getattr(app, 'root', None), default='no'):
             return None
         result = remove_custom_profile(app, expected_name=name, expected_key=key)
+        if _show_profile_reload_warning(app, 'Profile removed; reload needed',
+                f"Removed '{result}'. Other drawing app is now selected."):
+            return result
         if hasattr(app, 'status'):
             app.status.set(f'Removed custom profile {result}. Other drawing app is now selected; verify its setup before drawing.')
         return result
@@ -891,6 +925,9 @@ def import_profile_dialog(app):
             expected_key=existing[1] if existing is not None else None,
             expected_absent=existing is None)
         if not getattr(app, 'closing', False):
+            if _show_profile_reload_warning(app, 'Profile imported; reload needed',
+                    f"Imported '{destination}' into the saved profile files."):
+                return destination
             messagebox.showinfo(
                 "Profile imported",
                 f"Imported '{destination}'.\n\nFor safety, imported canvas/palette calibration is not trusted as a completed setup. Verify the target and run the normal tests before drawing.",
@@ -916,6 +953,9 @@ def reset_profile_dialog(app):
             return None
         result = reset_profile(app, expected_name=name, expected_key=key)
         if not getattr(app, 'closing', False):
+            if _show_profile_reload_warning(app, 'Profile reset; reload needed',
+                    f"Reset '{result}' to defaults in the saved profile files."):
+                return result
             messagebox.showinfo(
                 "Profile reset",
                 f"'{result}' was restored to defaults. Re-run calibration/setup before drawing.",

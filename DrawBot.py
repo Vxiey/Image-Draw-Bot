@@ -4911,17 +4911,33 @@ class DrawBotApp:
 
     def offer_safe_session_recovery(self):
         if self.closing or self.activity:return
+        source=getattr(self,'original',None)
         try:
-            from SessionRecovery import load_snapshot,clear_snapshot
+            from SessionRecovery import load_snapshot,clear_snapshot_if_current
             state=load_snapshot()
         except Exception as error:
             log_event(f'Recovery snapshot could not be read: {error!r}');state=None
         if state:
             text=('Image Draw Bot did not close normally and a local recovery checkpoint is available.\n\n'
                   'Recover the image/settings from the checkpoint? Drawing will remain completely DISARMED: target lock, small test, preflight, dry run and Start authorization are never restored.')
-            if messagebox.askyesno('Safe session recovery',text,parent=self.root):
-                if self.closing or self.activity:
-                    return
+            recover=messagebox.askyesno('Safe session recovery',text,parent=self.root)
+            if self.closing or self.activity:return
+            changed='The current image or recovery checkpoint changed. Your current work was kept.'
+            if getattr(self,'original',None) is not source:
+                self.status.set(changed);return
+            try:current=load_snapshot()
+            except Exception as error:
+                log_event(f'Recovery checkpoint could not be checked again: {error!r}')
+                self.status.set('The recovery checkpoint could not be checked again. Your current work was kept.')
+                return
+            if current!=state:
+                self.status.set(changed);return
+            if recover:
+                # This accepted restore supersedes preparation for the current
+                # source; it must not publish while the offered image loads.
+                DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
+                self.recovery_image_pending=False
+                DrawBotApp._cancel_recovery_image_job(self)
                 self.status.set('Loading the local recovery image…')
                 def work():
                     from SessionRecovery import load_cached_image
@@ -4933,13 +4949,13 @@ class DrawBotApp:
                 self.begin_worker('recovery-load',work)
                 return
             else:
-                if self.closing or self.activity:return
                 job=DrawBotApp._cancel_recovery_image_job(self)
                 if job is not None and job.is_alive():
-                    DrawBotApp.clear_recovery_snapshot(self)
+                    DrawBotApp.clear_recovery_snapshot(self,expected_snapshot=state)
                     return
                 try:
-                    clear_snapshot()
+                    if not clear_snapshot_if_current(state):
+                        self.status.set(changed);return
                 except Exception as error:
                     log_event(f'Recovery declined; local checkpoint cleanup failed: {error!r}')
                     self.status.set('Recovery declined. Local recovery data could not be fully cleared.')
@@ -5035,10 +5051,16 @@ class DrawBotApp:
                 self.events.put(('browser_auto_calibration_complete',payload))
         self.begin_worker('browser-auto-calibration',work)
 
-    def clear_recovery_snapshot(self):
+    def clear_recovery_snapshot(self, *, expected_snapshot=None):
         if self.closing:return
         if self.activity:
             self.status.set('Stop the current operation before clearing recovery data.');return
+        def clear():
+            from SessionRecovery import clear_snapshot,clear_snapshot_if_current
+            if expected_snapshot is None:
+                clear_snapshot()
+            elif not clear_snapshot_if_current(expected_snapshot):
+                raise RuntimeError('The recovery checkpoint changed. Your current work was kept.')
         DrawBotApp._cancel_after_attr(self,'recovery_checkpoint_after')
         self.recovery_image_pending=False
         job=DrawBotApp._cancel_recovery_image_job(self)
@@ -5053,8 +5075,7 @@ class DrawBotApp:
                     while not job.wait_idle(.05):
                         if self.stop.is_set():raise InterruptedError('Recovery clearing cancelled.')
                     if self.stop.is_set():raise InterruptedError('Recovery clearing cancelled.')
-                    from SessionRecovery import clear_snapshot
-                    clear_snapshot()
+                    clear()
                 except Exception as failure:error=str(failure)
                 self.events.put(('recovery_clear_complete',(error,previous_suppression)))
             try:
@@ -5068,8 +5089,7 @@ class DrawBotApp:
                 self._recovery_clear_previous_suppression=None
             return
         try:
-            from SessionRecovery import clear_snapshot
-            clear_snapshot()
+            clear()
             self._suppress_recovery=True
             self.pending_render_resume=None
             self.status.set('Local safe-recovery checkpoint cleared.')
@@ -9331,6 +9351,10 @@ class DrawBotApp:
         DrawBotApp._cancel_after_attr(self,'capture_job')
         self.stop.clear();self.set_busy('capture')
         log_event('Drawing-area selection started.')
+        def cancelled():
+            return self.closing or self.stop.is_set()
+        def check_cancelled():
+            if cancelled():raise InterruptedError('Selection cancelled.')
         def apply_selected(box,image):
             left,top,right,bottom=map(int,box)
             width,height=right-left,bottom-top
@@ -9339,44 +9363,52 @@ class DrawBotApp:
                 raise ValueError('The drawing area is too small. Select at least 10 × 10 pixels.')
             if width > 20000 or height > 20000:
                 raise ValueError('The drawing area is unexpectedly large. Check Windows display scaling and select it again.')
-            old=self.corners;old_anchor=self.canvas_anchor_detection;old_target=self.target_window;old_client=self.target_client_rect;old_dpi=self.target_dpi
+            previous=(self.corners,self.canvas_anchor_detection,self.target_window,
+                      self.target_client_rect,self.target_dpi,getattr(self,'browser_drawing_region',None))
             self.corners=[(left,top),(right,bottom)]
             try:
-                from CanvasAnchorDetection import detect_canvas_anchors
-                detected=detect_canvas_anchors(image)
-                self.canvas_anchor_detection=detected.as_options()
-                log_event(f'Canvas anchors detected: corners={detected.corner_count}/4 triangles={detected.triangle_count}/{detected.expected_triangles} confidence={detected.confidence:.3f}.')
-            except Exception as anchor_error:
-                self.canvas_anchor_detection=None
-                log_event(f'Canvas anchor detection skipped; rectangle fallback remains active: {anchor_error!r}')
-            try:
-                self.capture_target()
-                log_event(f'Drawing-area target captured safely: {self.target_window!r}')
-            except Exception:
-                self.corners=old;self.canvas_anchor_detection=old_anchor;self.target_window=old_target;self.target_client_rect=old_client;self.target_dpi=old_dpi
-                raise
-            self.saved_area=[tuple(p) for p in self.corners]
-            self.small_test_passed=False;self.color_session_cache.clear()
-            
-            anchor_meta=(self.canvas_anchor_detection or {}).get('canvas_anchor_meta',{}) if isinstance(self.canvas_anchor_detection,dict) else {}
-            tri_count=int(anchor_meta.get('triangle_count',0) or 0) if isinstance(anchor_meta,dict) else 0
-            area_suffix=f'anchors 4/4 corners, {tri_count}/6 triangles'
-            if self.game.get()=='Gartic Phone':
                 try:
-                    from GarticPhoneLayout import assess_canvas_size
-                    from GarticEngineV2 import detect_gartic_canvas
-                    gartic_layout=assess_canvas_size(width,height)
-                    detected_canvas=detect_gartic_canvas(image,cancelled=self.stop.is_set)
-                    if gartic_layout['likely']:
-                        area_suffix += f" · Gartic canvas ✓ {gartic_layout['aspect']:.2f}:1"
-                        log_event(f"Gartic Phone Engine v2 canvas geometry matched reference: aspect={gartic_layout['aspect']:.3f} confidence={gartic_layout['confidence']:.3f} detector={detected_canvas.confidence:.3f}.")
-                    else:
-                        area_suffix += f" · check Gartic canvas ({gartic_layout['aspect']:.2f}:1)"
-                        log_event(f"Gartic Phone Engine v2 canvas geometry warning: selected aspect={gartic_layout['aspect']:.3f}, reference={gartic_layout['reference_aspect']:.3f}, detector={detected_canvas.confidence:.3f}.")
+                    from CanvasAnchorDetection import detect_canvas_anchors
+                    detected=detect_canvas_anchors(image,cancelled=cancelled)
+                    self.canvas_anchor_detection=detected.as_options()
+                    log_event(f'Canvas anchors detected: corners={detected.corner_count}/4 triangles={detected.triangle_count}/{detected.expected_triangles} confidence={detected.confidence:.3f}.')
                 except InterruptedError:
                     raise
-                except Exception as layout_error:
-                    log_event(f'Gartic Phone layout check skipped: {layout_error!r}')
+                except Exception as anchor_error:
+                    self.canvas_anchor_detection=None
+                    log_event(f'Canvas anchor detection skipped; rectangle fallback remains active: {anchor_error!r}')
+                check_cancelled()
+                self.capture_target()
+                check_cancelled()
+                log_event(f'Drawing-area target captured safely: {self.target_window!r}')
+                anchor_meta=(self.canvas_anchor_detection or {}).get('canvas_anchor_meta',{}) if isinstance(self.canvas_anchor_detection,dict) else {}
+                tri_count=int(anchor_meta.get('triangle_count',0) or 0) if isinstance(anchor_meta,dict) else 0
+                area_suffix=f'anchors 4/4 corners, {tri_count}/6 triangles'
+                if self.game.get()=='Gartic Phone':
+                    try:
+                        from GarticPhoneLayout import assess_canvas_size
+                        from GarticEngineV2 import detect_gartic_canvas
+                        gartic_layout=assess_canvas_size(width,height)
+                        detected_canvas=detect_gartic_canvas(image,cancelled=cancelled)
+                        if gartic_layout['likely']:
+                            area_suffix += f" · Gartic canvas ✓ {gartic_layout['aspect']:.2f}:1"
+                            log_event(f"Gartic Phone Engine v2 canvas geometry matched reference: aspect={gartic_layout['aspect']:.3f} confidence={gartic_layout['confidence']:.3f} detector={detected_canvas.confidence:.3f}.")
+                        else:
+                            area_suffix += f" · check Gartic canvas ({gartic_layout['aspect']:.2f}:1)"
+                            log_event(f"Gartic Phone Engine v2 canvas geometry warning: selected aspect={gartic_layout['aspect']:.3f}, reference={gartic_layout['reference_aspect']:.3f}, detector={detected_canvas.confidence:.3f}.")
+                    except InterruptedError:
+                        raise
+                    except Exception as layout_error:
+                        log_event(f'Gartic Phone layout check skipped: {layout_error!r}')
+                check_cancelled()
+            except BaseException:
+                (self.corners,self.canvas_anchor_detection,self.target_window,
+                 self.target_client_rect,self.target_dpi,self.browser_drawing_region)=previous
+                raise
+            # Commit only after the owned crop and native target have completed
+            # analysis. Cancelled adoption must retain the previous plan/setup.
+            self.saved_area=[tuple(p) for p in self.corners]
+            self.small_test_passed=False;self.color_session_cache.clear()
             self.area_text.set(f'✓ {width} × {height} px · {area_suffix}')
             self.save_settings();self._schedule_recovery_checkpoint(delay=100);self.set_busy(None)
             # RegionPicker restores the main window immediately after this callback.
@@ -9406,7 +9438,7 @@ class DrawBotApp:
                 log_event(f'Browser Auto Setup scheduling skipped: {auto_error!r}')
         def selected(box,image):
             try:
-                if self.closing or self.stop.is_set():raise InterruptedError('Selection cancelled.')
+                check_cancelled()
                 apply_selected(box,image)
             finally:
                 # RegionPicker transfers the delivered crop to its consumer.
@@ -9415,7 +9447,7 @@ class DrawBotApp:
         def failed(message):
             log_event(f'Drawing-area selection failed/aborted: {message}')
             if not self.closing:self.set_busy(None);self.status.set(message)
-        select_region(self.root,selected,failed,cancelled=lambda:self.closing or self.stop.is_set())
+        select_region(self.root,selected,failed,cancelled=cancelled)
 
     def refresh_exact_color_status(self):
         try:

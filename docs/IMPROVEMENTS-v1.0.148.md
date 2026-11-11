@@ -34,6 +34,13 @@ monochrome GRAY-ICC input. These complete existing contracts with **zero new
 IDs**; the total remains **843/1,000**. See the
 [eight corrections and 44-test integration](v148-batch36-profile-image-fixes.md).
 
+**Lifecycle continuation after batch 36:** generic Reset retires legacy palette
+sources, profile actions distinguish completed publication from failed reload,
+recovery decisions revalidate their checkpoint/source, and cancelled canvas
+analysis retains the previous setup. These complete existing contracts with
+**zero new IDs**; the total remains **843/1,000**. See the
+[four corrections and 26-test integration](v148-batch37-lifecycle-fixes.md).
+
 | Global IDs | Local IDs | Area | Count | Evidence |
 | --- | --- | --- | ---: | --- |
 | 001–100 | 001–100 | Original reliability/security baseline | 100 | [Original ledger](100-IMPROVEMENTS-v1.0.148.md); merged PR44 passed Windows/Linux CI. |
