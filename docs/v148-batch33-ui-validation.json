@@ -21,7 +21,7 @@
     "StudioUI.py": "42f9458cacae2b9731bcdab7a86e1b2debfcf84621412a3eafc32e7acab38dd3",
     "UICompactLayout.py": "dec9e794c316057c04d62b97b5fd869e4a54df140fc32b4fc4f2e929f12d6a80",
     "test_v148_ui_batch33_settings.py": "3db62f5801c7863689e2081220ea1e050c456dd3aa66b67b2288235d671a9a8e",
-    "test_v148_ui_batch33_workspace.py": "2368678a1ff0f7e673097fc1f9c4d1e86a8da1ea460ab1337c70800c0fe64abd",
+    "test_v148_ui_batch33_workspace.py": "4662a200978b8eecd4cab9eb519384d5815ad0f72c4e944fa5e1c5cc995b4a59",
     "test_v148_ui_layout_batch04.py": "f57de5e6088068bcc34f791dd5249b65b1d2751fcfb88308e8437bbaa95d6373"
   },
   "same_native_test_files_used_before_and_after": true,
@@ -86,6 +86,42 @@
       "success": true,
       "name": "adjacent",
       "log_sha256": "d98423bfacb4bf6ad9c709a4739c8e175903fda6f91a583e77bd72b7efc3dcdb"
+    },
+    {
+      "selection": [
+        "test_v148_ui_batch33_settings",
+        "test_v148_ui_batch33_workspace"
+      ],
+      "timestamp_utc": "2026-11-11T00:54:22.802494+00:00",
+      "python": "3.12.14",
+      "platform": "linux",
+      "display": ":0",
+      "tests_run": 5,
+      "failures": 3,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 18.054,
+      "success": false,
+      "name": "native-before-fixture-fixed",
+      "log_sha256": "6337551d43085970437a911ec5b19af4d332407324d834255e1bcfb4ec671e96"
+    },
+    {
+      "selection": [
+        "test_v148_ui_batch33_settings",
+        "test_v148_ui_batch33_workspace"
+      ],
+      "timestamp_utc": "2026-11-11T00:54:41.302521+00:00",
+      "python": "3.12.14",
+      "platform": "linux",
+      "display": ":0",
+      "tests_run": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 18.421,
+      "success": true,
+      "name": "native-after-fixture-fixed",
+      "log_sha256": "947f3414c30eb23d6887095247bfc4a636a6eb6d510cac2ba1d6a4c903113170"
     }
   ],
   "manual_native_review": {
@@ -137,5 +173,39 @@
     "missing_required": [],
     "ok": true,
     "warnings": []
+  },
+  "initial_validated_source_sha256": {
+    "StudioUI.py": "42f9458cacae2b9731bcdab7a86e1b2debfcf84621412a3eafc32e7acab38dd3",
+    "UICompactLayout.py": "dec9e794c316057c04d62b97b5fd869e4a54df140fc32b4fc4f2e929f12d6a80",
+    "test_v148_ui_batch33_settings.py": "3db62f5801c7863689e2081220ea1e050c456dd3aa66b67b2288235d671a9a8e",
+    "test_v148_ui_batch33_workspace.py": "2368678a1ff0f7e673097fc1f9c4d1e86a8da1ea460ab1337c70800c0fe64abd",
+    "test_v148_ui_layout_batch04.py": "f57de5e6088068bcc34f791dd5249b65b1d2751fcfb88308e8437bbaa95d6373"
+  },
+  "ci_fixture_followup": {
+    "initial_ui_commit": "9d3c6553f4b88cab907c140d2d2e158ba065eef7",
+    "ci_run": 42933226023,
+    "linux": {
+      "job": 130236839567,
+      "tests_run": 4586,
+      "passed": 4508,
+      "skipped": 78,
+      "failures": 0,
+      "unittest_seconds": 231.113
+    },
+    "windows": {
+      "job": 130236839525,
+      "tests_run": 4586,
+      "passed": 4580,
+      "skipped": 3,
+      "failures": 3,
+      "unittest_seconds": 586.783,
+      "cause": "The child attempted temporary-directory removal before releasing its process-lifetime faulthandler crash-log handle. Windows returned WinError32.",
+      "post_regression_build_steps": "skipped after failure"
+    },
+    "fix": "Parent owns the temporary directory across subprocess exit and performs strict removal after all child handles are released.",
+    "previous_assertion_sites_preserved": 44,
+    "ownership_assertions_added": 3,
+    "ui_product_sources_unchanged": true,
+    "windows_verification": "Recorded separately for the follow-up commit in PR46."
   }
 }

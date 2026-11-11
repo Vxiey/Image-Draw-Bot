@@ -3,6 +3,8 @@
 Each native case runs in a fresh process before importing the application, so
 module-level data paths and Tcl owners cannot leak into another test. The UI,
 settings, profile callbacks and layout are production code; no images are made.
+The parent owns temporary data until the child exits, including the crash-log
+descriptor deliberately retained by faulthandler for the process lifetime.
 """
 from contextlib import contextmanager, ExitStack
 import json
@@ -56,16 +58,23 @@ class NativeStudioWorkspaceTests(unittest.TestCase):
         name = f'{Path(__file__).stem}.{type(self).__name__}.{self._testMethodName}'
         if os.environ.get('IDB_UI_WORKSPACE_CASE') == name:
             return False
-        result = subprocess.run(
-            [sys.executable, '-X', 'faulthandler', '-m', 'unittest', '-v', name],
-            cwd=Path(__file__).resolve().parent,
-            env=dict(os.environ, IDB_UI_WORKSPACE_CASE=name),
-            text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=45,
-        )
-        output = result.stdout + result.stderr
-        self.assertEqual(result.returncode, 0, output)
-        for diagnostic in ('invalid command name', 'Tcl_AsyncDelete', 'Exception ignored in'):
-            self.assertNotIn(diagnostic, output)
+        # DrawBot installs a process-lifetime faulthandler stream. Windows must
+        # release that child-owned descriptor before this directory is removed.
+        with tempfile.TemporaryDirectory(prefix='idb-workspace-') as temporary:
+            data = Path(temporary).resolve()
+            result = subprocess.run(
+                [sys.executable, '-X', 'faulthandler', '-m', 'unittest', '-v', name],
+                cwd=Path(__file__).resolve().parent,
+                env=dict(os.environ, IDB_UI_WORKSPACE_CASE=name, IDB_UI_WORKSPACE_DATA_DIR=str(data)),
+                text=True, encoding='utf-8', errors='replace', capture_output=True, timeout=45,
+            )
+            output = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, output)
+            for diagnostic in ('invalid command name', 'Tcl_AsyncDelete', 'Exception ignored in'):
+                self.assertNotIn(diagnostic, output)
+            self.assertTrue((data / 'logs' / 'ImageDrawBot-crash.log').is_file(),
+                            'The real child crash-log lifetime must be covered by cleanup.')
+        self.assertFalse(data.exists(), 'The parent must remove all child-owned runtime files.')
         return True
 
     def wait(self, root, predicate, description):
@@ -82,7 +91,8 @@ class NativeStudioWorkspaceTests(unittest.TestCase):
     @contextmanager
     def workspace(self):
         with ExitStack() as stack:
-            data = Path(stack.enter_context(tempfile.TemporaryDirectory()))
+            data = Path(os.environ['IDB_UI_WORKSPACE_DATA_DIR'])
+            self.assertTrue(data.is_absolute() and data.is_dir(), 'Parent-owned app data is required.')
             import RuntimePaths
             stack.enter_context(patch.object(RuntimePaths, 'data_dir', lambda: data))
             # All application modules must first load after the data boundary.

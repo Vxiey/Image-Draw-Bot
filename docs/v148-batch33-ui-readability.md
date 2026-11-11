@@ -106,8 +106,33 @@ The warning was retained and is outside this focused layout patch.
 
 No native Windows visual/DPI review, packaged executable run, physical drawing,
 GPU test or full local test discovery was performed for this patch. The seven
-successful GitHub checks for parent `61f8d58` belong to that parent. Exact-head
-GitHub validation for this UI patch is reported separately in PR #46.
+successful GitHub checks for parent `61f8d58` belong to that parent. GitHub
+validation for the current UI commit is reported separately in PR #46.
+
+### Windows CI fixture correction
+
+The first UI commit, `9d3c6553f4b88cab907c140d2d2e158ba065eef7`, passed
+[Linux CI](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42933226023/job/130236839567)
+with 4,586 tests (4,508 passed, 78 skipped). Its
+[Windows run](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/42933226023/job/130236839525)
+reported 4,586 tests: 4,580 passed, three failed and three GPU tests skipped.
+All three failures were the new workspace fixture attempting to remove its
+temporary directory while the child still owned an open crash-log descriptor.
+Windows self-test, bundle and packaged-GUI steps were skipped after that failure.
+
+`CrashDiagnostics.install()` intentionally retains the faulthandler stream for
+the process lifetime. The fixture now gives the parent process ownership of the
+temporary directory and lets the child borrow it. Strict cleanup occurs after
+the child exits and Windows releases its descriptors. Production logging is
+unchanged; cleanup errors are not ignored. All 44 existing assertion sites
+remain, with three additional checks for the parent-owned directory, real crash
+log creation and completed directory removal.
+
+The corrected tests were copied unchanged to the baseline again and the native
+before/after comparison was rerun. It retains the same results: three of five
+methods fail on the baseline and all five pass with the UI patch. The local
+record retains both executions and the initial CI failure; the final Windows
+result is reported against the current commit in PR #46.
 
 ## Design references applied
 
