@@ -21,8 +21,11 @@ ALLOCATION = {'logical_cpus': 4, 'cpu_workers': 'Auto', 'cpu_engine': 'Threads',
 
 def observed_process_worker(task):
     result = RESOURCE_WORKER(task)
-    with open(os.environ['DRAWBOT_SCHEDULER_TEST_PIDS'], 'a', encoding='ascii') as stream:
-        stream.write(str(os.getpid()) + '\n')
+    # Different processes must not append records to the same observation file.
+    # Each worker owns its marker until the benchmark joins every executor.
+    pid = str(os.getpid())
+    path = Path(os.environ['DRAWBOT_SCHEDULER_TEST_PIDS']) / (pid + '.pid')
+    path.write_text(pid, encoding='ascii')
     return result
 
 
@@ -66,14 +69,23 @@ class MeasuredSchedulerTests(unittest.TestCase):
             pools.append(pool)
             return pool
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'pids.txt'
+            path = Path(directory)
             with patch.dict(os.environ, {'DRAWBOT_SCHEDULER_TEST_PIDS': str(path)}), \
                  patch.object(allocation, 'ProcessPoolExecutor', new=factory), \
                  patch.object(allocation, '_resource_benchmark_worker', new=observed_process_worker):
                 result = scheduler.benchmark_scheduler(dict(ALLOCATION, cpu_engine='Processes'),
                                                        loops_per_worker=1000, save=False)
             self.assertTrue(pools, 'The Processes recommendation did not run a process executor')
-            pids = {int(value) for value in path.read_text(encoding='ascii').splitlines()}
+            markers = list(path.iterdir())
+            self.assertTrue(markers, 'No completed worker recorded its process identity')
+            pids = set()
+            for marker in markers:
+                value = marker.read_text(encoding='ascii')
+                pid = int(value)
+                self.assertGreater(pid, 0)
+                self.assertEqual(value, str(pid))
+                self.assertEqual(marker.name, str(pid) + '.pid')
+                pids.add(pid)
             self.assertTrue(pids - {os.getpid()})
         self.assertEqual(result['recommended_engine'], 'Processes')
         self.assertTrue(any(score['backend'] == 'processes' for score in result['scores']))

@@ -97,3 +97,37 @@ its exact-head results are recorded in [PR #46](https://github.com/Vxiey/Image-D
 The successful parent checks are historical evidence, not a substitute for the
 new commit's checks. The PR remains a draft; merge and release require explicit
 user approval.
+
+## CI observation fixture correction
+
+The first recovery commit,
+`892ba622c60ad202148c243bae9336898d9718fc`, passed all seven new recovery
+methods on both Windows and Linux in
+[CI run 43019822262](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/43019822262).
+[Linux](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/43019822262/job/130519926129)
+completed 4,593 methods: **4,515 passed, 78 skipped** (336.248 seconds).
+[Windows](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/43019822262/job/130519925718)
+completed 4,593 methods: **4,589 passed, one error, three GPU tests skipped**
+(472.028 seconds). Its self-test, bundle and packaged-GUI steps were skipped.
+
+The error was in the existing scheduler test's observation fixture:
+`test_process_candidate_uses_real_spawn_children_and_joins_them` read an empty
+record from its shared `pids.txt`, causing `int('')` to fail. Multiple real spawn
+workers appended records to that same file without synchronization. The exact
+write interleaving was not recorded; this evidence does not establish a product
+failure in the scheduler or process pool.
+
+Each observed worker now writes its PID to its own `<pid>.pid` file after doing
+the real work. The parent reads only after the benchmark has returned through
+executor shutdown. It requires nonempty observations, positive integer PIDs,
+canonical contents and exact filename/content agreement. Malformed evidence is
+still rejected. The existing assertions for real process pools, a child PID,
+the Processes recommendation, process backend and no remaining children are
+retained. No scheduler product code, workload, timeout or skip rule changed.
+
+The complete **seven-method scheduler module passed locally**, with zero
+failures/errors/skips, using real spawn children. Its command and hashes are
+included in the validation record. The recovery implementation and its seven
+focused regressions are unchanged from the first commit. The new Windows CI
+result is recorded separately against the corrected head in PR #46. This
+fixture correction adds **zero improvement IDs**.

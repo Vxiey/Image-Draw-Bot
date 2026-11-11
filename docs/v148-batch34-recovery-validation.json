@@ -205,5 +205,78 @@
     "status": "passed",
     "scope": "Production diff, all seven focused tests, baseline/after/adjacent logs, hashes, ownership and Windows portability source review. No additional executions claimed.",
     "blockers": []
+  },
+  "initial_ci": {
+    "commit": "892ba622c60ad202148c243bae9336898d9718fc",
+    "run_id": 43019822262,
+    "linux": {
+      "job_id": 130519926129,
+      "conclusion": "success",
+      "tests_run": 4593,
+      "passed_methods": 4515,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 78,
+      "unittest_duration_seconds": 336.248,
+      "new_recovery_methods_passed": 7
+    },
+    "windows": {
+      "job_id": 130519925718,
+      "conclusion": "failure",
+      "tests_run": 4593,
+      "passed_methods": 4589,
+      "failures": 0,
+      "errors": 1,
+      "skipped": 3,
+      "unittest_duration_seconds": 472.028,
+      "new_recovery_methods_passed": 7,
+      "error_method": "test_v148_platform_batch25_scheduler.MeasuredSchedulerTests.test_process_candidate_uses_real_spawn_children_and_joins_them",
+      "error": "ValueError from int('') when parsing the shared PID observation file",
+      "skipped_followup_steps": [
+        "Windows self-test",
+        "Windows bundle build/validation",
+        "Packaged GUI/native drag and drop"
+      ]
+    }
+  },
+  "scheduler_fixture_correction": {
+    "scope": "One PID marker file per observed process replaces concurrent appends to a shared test file. Scheduler product code and existing behavioral assertions remain unchanged; malformed observations still fail.",
+    "new_improvement_ids": 0,
+    "source_hash_before_sha256": "9e883d03170f4b3dfeb380096fd8dd2572da6ed2947be1a6f5c6951111f4526a",
+    "source_hash_after_sha256": "bafdb621a97ff6767dc5c24cc14cb9cb19f72a45facc90758e923e709d950e45",
+    "local_run": {
+      "schema": 1,
+      "phase": "scheduler-fixture-after",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_platform_batch25_scheduler"
+      ],
+      "exit_code": 0,
+      "system": "Linux",
+      "python": "3.12.14",
+      "tests_run": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "unittest_duration_seconds": 0.521,
+      "subprocess_duration_seconds": 0.773698,
+      "source_hashes_before_sha256": {
+        "test_v148_platform_batch25_scheduler.py": "bafdb621a97ff6767dc5c24cc14cb9cb19f72a45facc90758e923e709d950e45"
+      },
+      "source_hashes_after_sha256": {
+        "test_v148_platform_batch25_scheduler.py": "bafdb621a97ff6767dc5c24cc14cb9cb19f72a45facc90758e923e709d950e45"
+      },
+      "source_unchanged_during_run": true,
+      "raw_log_sha256": "7fa8735ee05fb42ab61ce72cc1e0080265f04f1da1066f47e1f666debc452b33"
+    },
+    "limit": "Initial CI observed an empty PID record, not the exact write interleaving or a scheduler product failure. New Windows CI is reported separately in PR46.",
+    "independent_review": {
+      "status": "passed",
+      "existing_behavioral_assertions_preserved": true,
+      "blockers": []
+    }
   }
 }
