@@ -27,6 +27,7 @@ from QuickSketchFillContour import QUICK_SKETCH_RENDER_STYLE, QUICK_SKETCH_STYLE
 from HybridRenderer3 import HYBRID_RENDER_STYLE, HYBRID_MODES
 from SketchFillRenderer import SKETCH_FILL_RENDER_STYLE
 from DrawingStyleProfiles import DRAWING_STYLES
+from ResponsiveWorkspace import fit_label
 
 BG = '#0b0f14'
 SIDEBAR = '#101722'
@@ -108,6 +109,7 @@ def button(parent, text, command, primary=False, danger=False, **kwargs):
         fg_color=ACCENT if primary else ('#40242e' if danger else FIELD),
         hover_color='#a3efd8' if primary else ('#5b2e3a' if danger else FIELD_HOVER),
         text_color='#102d25' if primary else ('#ffd2da' if danger else TEXT),
+        focus_color='#102d25' if primary else ACCENT,
         text_color_disabled='#64748b', font=('Segoe UI', 12, 'bold'))
     defaults.update(kwargs)
     return KeyboardButton(parent, text=text, command=command, **defaults)
@@ -145,7 +147,9 @@ def _configure_presentation(widget, **values):
 def build_ui(a, quality, speed):
     root = a.root
     ctk.set_appearance_mode('dark')
-    root.configure(bg=BG)
+    # Transparent CTk frames inherit fg_color, not Tk's background option.
+    # Replace the launcher's light surface before constructing the dark UI.
+    root.configure(**({'fg_color': BG} if isinstance(root, ctk.CTk) else {'bg': BG}))
     from WorkspaceLayout import fit_window
     width,height=fit_window(root,preferred=(1560,960),minimum=(1080,700),margin=(70,90))
 
@@ -192,7 +196,7 @@ def build_ui(a, quality, speed):
             height=39, corner_radius=9, fg_color=FIELD, button_color=FIELD,
             button_hover_color=FIELD_HOVER, dropdown_fg_color=PANEL,
             dropdown_hover_color=FIELD_HOVER, text_color=TEXT,
-            font=('Segoe UI', 11)))
+            font=('Segoe UI', 12), dropdown_font=('Segoe UI', 12)))
 
     def separator(parent, pady=10):
         item = frame(parent, LINE, radius=0, height=1)
@@ -201,26 +205,31 @@ def build_ui(a, quality, speed):
 
     def setting_row(parent, title, var, values, help_text='', width=178):
         row = frame(parent)
-        row.pack(fill='x', pady=5)
+        row.pack(fill='x', pady=(4, 10))
         text = frame(row)
-        text.pack(side='left', fill='x', expand=True)
+        text.pack(fill='x')
         from GettingStarted import explain
         from tkinter import messagebox
         explanation = explain(title, help_text)
         heading = frame(text)
         heading.pack(fill='x')
-        title_label = label(heading, title, bold=True, size=11, wraplength=145)
-        title_label.pack(side='left')
+        title_label = label(heading, title, bold=True, size=12, wraplength=270)
         tooltip(title_label, explanation)
         help_button = KeyboardButton(heading, text='?', width=24, height=24,
             fg_color=FIELD, hover_color=LINE,
             command=lambda: messagebox.showinfo(title, explanation, parent=root))
-        help_button.pack(side='left', padx=5)
+        help_button.pack(side='right', padx=(8, 0))
+        title_label.pack(side='left', fill='x', expand=True)
+        fit_label(title_label, 720)
         tooltip(help_button, 'Click for an explanation and practical advice.')
         if help_text:
-            label(text, help_text, muted=True, size=10, wraplength=185).pack(anchor='w', pady=(2, 0))
+            hint = label(text, help_text, muted=True, size=11, wraplength=270)
+            hint.pack(fill='x', pady=(2, 0))
+            fit_label(hint, 720)
         widget = menu(row, var, values, width=width)
-        widget.pack(side='right', padx=(8, 0))
+        # A selector gets the full row width; long labels and hints must not
+        # take space away from its selected value in the narrow Setup panel.
+        widget.pack(fill='x', pady=(6, 0))
         tooltip(widget, explanation)
         widget._setting_row = row
         return widget
@@ -313,7 +322,6 @@ def build_ui(a, quality, speed):
     a.pause_button.pack(side='right', padx=8)
     footer_status = label(footer_row, var=a.status, muted=True, wraplength=720, size=11)
     footer_status.pack(fill='x',pady=(4,0))
-    from ResponsiveWorkspace import fit_label
     fit_label(footer_status,720)
     from ResponsiveRows import wrap_action_rows
     from ResponsiveActionBar import ResponsiveActionBar
@@ -978,6 +986,7 @@ def build_ui(a, quality, speed):
     button(erow, '📂 Logs', a.open_app_data_folder, width=76, height=30).pack(side='left')
     button(erow, '📦 Diagnostics', a.collect_diagnostics, width=104, height=30).pack(side='left', padx=5)
     button(erow, '❓ Help', lambda: show_error_help(a), width=78, height=30).pack(side='left')
+    wrap_action_rows(erow,recursive=False)
     from ResponsiveWorkspace import ResponsiveWorkspace
     a.workspace_layout=ResponsiveWorkspace(main,{'Setup':sidebar_shell,'Workspace':center_host,'Readiness':right},
         header=header,header_groups=(header_brand,header_info,header_actions),

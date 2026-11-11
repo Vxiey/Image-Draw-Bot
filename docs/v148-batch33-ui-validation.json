@@ -1,0 +1,141 @@
+{
+  "version": "1.0.148",
+  "base_commit": "61f8d5812cfeb85df7ae432e3b5d704028e37aa6",
+  "recorded_utc": "2026-11-11T00:39:21.568311+00:00",
+  "scope": "UI readability and completion of existing focus/responsive layout contracts",
+  "new_improvement_ids": 0,
+  "registry": {
+    "implemented": 843,
+    "target": 1000,
+    "entries": 843,
+    "changed": false,
+    "sha256": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+  },
+  "environment": {
+    "python": "3.12.14",
+    "customtkinter": "6.0.0",
+    "platform": "linux",
+    "native_display": ":0"
+  },
+  "validated_source_sha256": {
+    "StudioUI.py": "42f9458cacae2b9731bcdab7a86e1b2debfcf84621412a3eafc32e7acab38dd3",
+    "UICompactLayout.py": "dec9e794c316057c04d62b97b5fd869e4a54df140fc32b4fc4f2e929f12d6a80",
+    "test_v148_ui_batch33_settings.py": "3db62f5801c7863689e2081220ea1e050c456dd3aa66b67b2288235d671a9a8e",
+    "test_v148_ui_batch33_workspace.py": "2368678a1ff0f7e673097fc1f9c4d1e86a8da1ea460ab1337c70800c0fe64abd",
+    "test_v148_ui_layout_batch04.py": "f57de5e6088068bcc34f791dd5249b65b1d2751fcfb88308e8437bbaa95d6373"
+  },
+  "same_native_test_files_used_before_and_after": true,
+  "executions": [
+    {
+      "selection": [
+        "test_v148_ui_batch33_settings",
+        "test_v148_ui_batch33_workspace"
+      ],
+      "timestamp_utc": "2026-11-11T00:35:12.121998+00:00",
+      "python": "3.12.14",
+      "platform": "linux",
+      "display": ":0",
+      "tests_run": 5,
+      "failures": 3,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 17.916,
+      "success": false,
+      "name": "native-before",
+      "log_sha256": "6284413342866e5ce135f39e1e2e96ebf5d85f27b3f351d244d9cdd4ddc63aec"
+    },
+    {
+      "selection": [
+        "test_v148_ui_batch33_settings",
+        "test_v148_ui_batch33_workspace"
+      ],
+      "timestamp_utc": "2026-11-11T00:35:29.815413+00:00",
+      "python": "3.12.14",
+      "platform": "linux",
+      "display": ":0",
+      "tests_run": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 17.616,
+      "success": true,
+      "name": "native-after",
+      "log_sha256": "b4b302678a9b918b90519a4ac21d15fa9694681771b239d125b5b78db46c85d0"
+    },
+    {
+      "selection": [
+        "test_v148_ui_batch06_workspace.WorkspaceLayoutTests",
+        "test_v148_ui_batch06_workspace.ActionBarTests",
+        "test_v148_ui_batch06_scaling.ScalingReplayTests",
+        "test_v148_ui_layout_batch04.SidebarTests",
+        "test_ui_compact_layout_v10144",
+        "test_profile_isolation_v107",
+        "test_profile_switch_safety",
+        "test_v148_ui_batch06_preview.PresentationTests",
+        "test_v148_ui_batch06_preview.ResponsiveTests"
+      ],
+      "timestamp_utc": "2026-11-11T00:34:04.041841+00:00",
+      "python": "3.12.14",
+      "platform": "linux",
+      "display": null,
+      "tests_run": 35,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 0.326,
+      "success": true,
+      "name": "adjacent",
+      "log_sha256": "d98423bfacb4bf6ad9c709a4739c8e175903fda6f91a583e77bd72b7efc3dcdb"
+    }
+  ],
+  "manual_native_review": {
+    "window_client_pixels": [
+      1280,
+      900
+    ],
+    "widget_scales": [
+      1,
+      2
+    ],
+    "observations": [
+      "Dark header and full-width selected Masterpiece verified in the actual app.",
+      "Existing settings callback executed through the actual dropdown.",
+      "All three error actions visible in the 200 percent compact Readiness panel."
+    ],
+    "measured_at_100_percent": {
+      "setting_row_width": 270,
+      "preset_width_before": 94,
+      "preset_width_after": 270,
+      "preview_detail_label_width_before": 31,
+      "preview_detail_label_width_after": 219,
+      "help_button_width_before": 52,
+      "help_button_width_after": 78
+    },
+    "unchanged_baseline_warning": "AppBranding DropdownMenu.iconphoto warning occurred when opening a native menu on both baseline and patch."
+  },
+  "independent_review": {
+    "result": "No material issue found.",
+    "reviewer_reran_native_tests": false
+  },
+  "limits": [
+    "Native automated and manual execution used Linux; no Windows visual/DPI sign-off.",
+    "Linux desktop font fallback differs from Windows Segoe UI.",
+    "External native input/hotkeys and unrelated hardware/welcome/recovery startup actions were isolated; real UI/settings/profile code executed.",
+    "No full local discovery, packaged executable, physical drawing or GPU test was run.",
+    "Parent CI success is not used as validation for this patch."
+  ],
+  "initial_attempts": {
+    "headless_native": "Two focus methods initially collected and skipped before desktop execution.",
+    "adjacent_before_fixture_update": "35 methods: one failure and one error because an existing Widget fixture lacked bind; final exact rerun passed35."
+  },
+  "source_package_hygiene": {
+    "app_name": "Image Draw Bot",
+    "app_version": "1.0.148",
+    "build_channel": "stable",
+    "files": 1378,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "ok": true,
+    "warnings": []
+  }
+}

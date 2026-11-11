@@ -9,6 +9,7 @@ from __future__ import annotations
 import tkinter as tk
 import customtkinter as ctk
 from UiKeyboardNavigation import KeyboardButton
+from ResponsiveWorkspace import fit_label
 
 from GameProfiles import PROFILES
 
@@ -164,12 +165,13 @@ class CompactGroup:
                 self.shell, text='›  ' + self.title, command=self.toggle_open,
                 height=34, anchor='w', corner_radius=8, border_width=0,
                 fg_color='transparent', hover_color=FIELD,
-                text_color=TEXT, font=('Segoe UI', 10, 'bold'))
-            self.toggle.pack(fill='x', padx=5, pady=(4, 0))
+                text_color=TEXT, font=('Segoe UI', 12, 'bold'))
+            self.toggle.pack(fill='x', padx=6, pady=(6, 0))
             self.caption = ctk.CTkLabel(
                 self.shell, text=self.hint, anchor='w', justify='left',
-                text_color=MUTED, font=('Segoe UI', 9), wraplength=248)
-            self.caption.pack(fill='x', padx=11, pady=(0, 6))
+                text_color=MUTED, font=('Segoe UI', 11), wraplength=248)
+            self.caption.pack(fill='x', padx=12, pady=(0, 8))
+            fit_label(self.caption, 248)
 
             for widget in self.items:
                 if widget.winfo_manager() == 'pack':

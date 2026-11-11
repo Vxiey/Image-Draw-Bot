@@ -9,6 +9,11 @@ profile and application lifecycle after the native save chooser. This completes
 **AW15/global629**, with **zero new IDs**; the total remains **843/1,000**.
 See the [patch and focused regression evidence](v148-batch32-profile-export.md).
 
+**UI continuation after batch 32:** full-width settings, readable window surfaces,
+disclosure typography, primary keyboard focus and fitting error actions complete
+existing UI contracts, with **zero new IDs**. The total remains **843/1,000**.
+See the [native before/after tests and UI review](v148-batch33-ui-readability.md).
+
 | Global IDs | Local IDs | Area | Count | Evidence |
 | --- | --- | --- | ---: | --- |
 | 001–100 | 001–100 | Original reliability/security baseline | 100 | [Original ledger](100-IMPROVEMENTS-v1.0.148.md); merged PR44 passed Windows/Linux CI. |

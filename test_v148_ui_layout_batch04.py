@@ -17,6 +17,7 @@ class Widget:
     def __init__(self,master=None,**options):
         self.master=master;self.children=[];self.order=[];self.manager=''
         self.options=dict(options);self.pack_options={};self.destroyed=False
+        self.bindings={}
         self.fail_pack=0;self.text_reads=0;self.children_reads=0
         if master is not None:master.children.append(self)
     def winfo_children(self):self.children_reads+=1;return list(self.children)
@@ -42,8 +43,12 @@ class Widget:
         self.manager=''
     def cget(self,key):self.text_reads+=1;return self.options.get(key,'')
     def configure(self,**options):self.options.update(options)
+    def bind(self,sequence,callback,add=None):
+        if add not in ('+',True):self.bindings[sequence]=[]
+        self.bindings.setdefault(sequence,[]).append(callback)
     def destroy(self):
         for child in list(self.children):child.destroy()
+        self.bindings.clear()
         self.pack_forget();self.destroyed=True
         if self.master is not None:self.master.children.remove(self)
 
