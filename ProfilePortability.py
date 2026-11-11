@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import stat
 import tempfile
 import threading
 from copy import deepcopy
@@ -155,13 +156,30 @@ def _decode_profile(raw):
         return result
     except RecursionError as error:
         raise ProfilePortabilityError("Profile data is too deeply nested.") from error
+    except (ProfilePortabilityError, json.JSONDecodeError, UnicodeDecodeError):
+        raise
+    except ValueError as error:
+        # CPython's integer conversion budget can reject otherwise valid JSON
+        # before the semantic guard runs. Keep it inside the profile boundary.
+        raise ProfilePortabilityError("Profile contains a JSON number outside the supported conversion limit.") from error
 
 
 def _read_json(path: Path):
+    path = Path(path)
     try:
-        if not Path(path).is_file():
-            return None
-        with Path(path).open('rb') as stream:
+        try:
+            mode = path.stat().st_mode
+        except FileNotFoundError:
+            # Only genuine absence is optional. A dangling symlink is still an
+            # existing source entry and must not silently lose its calibration.
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                return None
+            raise ProfilePortabilityError(f"{path.name} could not be resolved to a regular JSON file.")
+        if not stat.S_ISREG(mode):
+            raise ProfilePortabilityError(f"{path.name} is not a regular JSON file.")
+        with path.open('rb') as stream:
             raw = stream.read(MAX_PROFILE_BYTES + 1)
         if len(raw) > MAX_PROFILE_BYTES:
             raise ProfilePortabilityError(f"{Path(path).name} is too large to export safely.")
@@ -296,6 +314,12 @@ def migrate_package(data: dict) -> dict:
         return deepcopy(data)
 
     # Schema 0 was an internal Step 27 prototype: flat renderer/resource fields.
+    # Missing/null sections retain their historical empty defaults. Validate
+    # present values before alias/default selection can discard falsey types.
+    for section in ("renderer_settings", "settings", "resource_limits", "calibration", "canvas"):
+        value = data.get(section)
+        if value is not None and not isinstance(value, dict):
+            raise ProfilePortabilityError(f"Legacy profile {section} section must be an object or null.")
     name = data.get("name") or data.get("profile_name") or data.get("target")
     key = data.get("profile_key") or data.get("target_key") or "generic"
     renderer = data.get("renderer_settings") or data.get("settings") or {}

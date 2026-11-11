@@ -38,8 +38,12 @@ def srgb_source(image, *, cancelled=lambda: False):
             if image.mode in ('CMYK', 'LAB'):
                 prepared = image
                 alpha = 255
-            elif image.mode in ('L', 'LA') and source_profile.profile.xcolor_space.strip() == 'GRAY':
-                prepared = image if image.mode == 'L' else owned.enter_context(closing(image.getchannel('L')))
+            elif image.mode in ('1', 'L', 'LA') and source_profile.profile.xcolor_space.strip() == 'GRAY':
+                if image.mode == '1':
+                    prepared = owned.enter_context(closing(image.convert('L')))
+                    if cancelled():raise InterruptedError('Image color conversion cancelled.')
+                else:
+                    prepared = image if image.mode == 'L' else owned.enter_context(closing(image.getchannel('L')))
                 if image.mode == 'LA':
                     alpha = owned.enter_context(closing(image.getchannel('A')))
                 elif 'transparency' in image.info:

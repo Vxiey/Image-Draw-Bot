@@ -26,6 +26,14 @@ completes **IW08/global582** and **056/global56**, with **zero new IDs**; the
 total remains **843/1,000**. See the
 [public-API regression evidence](v148-batch35-recovery-storage.md).
 
+**Profile/image continuation after batch 35:** preserve Stop through PNG snapshot
+copying, protect failed profile loads with explicit retry, validate legacy
+sections and integer limits, reject unusable export sources, resume recovery
+after accepted background edits, complete profile-control grouping and normalize
+monochrome GRAY-ICC input. These complete existing contracts with **zero new
+IDs**; the total remains **843/1,000**. See the
+[eight corrections and 44-test integration](v148-batch36-profile-image-fixes.md).
+
 | Global IDs | Local IDs | Area | Count | Evidence |
 | --- | --- | --- | ---: | --- |
 | 001–100 | 001–100 | Original reliability/security baseline | 100 | [Original ledger](100-IMPROVEMENTS-v1.0.148.md); merged PR44 passed Windows/Linux CI. |

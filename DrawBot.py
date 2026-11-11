@@ -7294,7 +7294,10 @@ class DrawBotApp:
                 self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
             return
         selected=self.game.get()
-        if selected==getattr(self,'_active_profile_name',None):
+        active=getattr(self,'_active_profile_name',None)
+        protected=getattr(self,'_settings_protected_path',None)
+        retry_settings=(selected==active and protected is not None and protected==Path(self.settings_path))
+        if selected==active and not retry_settings:
             DrawBotApp._cancel_after_attr(self,'profile_change_after')
             self.profile_change_ticket=None
             return
@@ -7302,10 +7305,13 @@ class DrawBotApp:
             self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
             self.status.set('Unknown drawing application profile.')
             return
-        if self.save_settings() is False:
+        # An explicit re-selection retries a failed load without first writing
+        # the fallback values over the document we could not read.
+        if not retry_settings and self.save_settings() is False:
             self.game.set(getattr(self,'_active_profile_name','Other drawing app'))
             DrawBotApp._cancel_after_attr(self,'profile_change_after')
-            self.status.set('Profile change stopped because the current settings could not be saved.')
+            if getattr(self,'_settings_protected_path',None)!=Path(self.settings_path):
+                self.status.set('Profile change stopped because the current settings could not be saved.')
             return
         DrawBotApp._cancel_browser_one_click(self,'profile changed')
         DrawBotApp._disarm_manual_drop_in(self,'profile changed')
@@ -7363,6 +7369,8 @@ class DrawBotApp:
             try:self.paint_check.configure(state='normal')
             except (tk.TclError,AttributeError):pass
             self.read_settings()
+            settings_error=(getattr(self,'_settings_load_error',None)
+                            if getattr(self,'_settings_protected_path',None)==Path(self.settings_path) else None)
             # Profile-level saved settings from older builds may contain Auto preview.
             # Switching profile is a configuration action, so v1.0.16 forces Manual
             # after settings are loaded and cancels any queued preview worker.
@@ -7379,11 +7387,11 @@ class DrawBotApp:
             profile_tip=ui.get('tip','')
             self.profile_hint.set(hint + (f' {profile_tip}' if profile_tip else '') + (f' Tool model: {tool_note}' if tool_note else ''))
             self.root.title(f'Image Draw Bot · {selected}')
-            self.status.set('Profile changed. Preview stayed Manual and mouse input is locked until you explicitly arm drawing.')
+            self.status.set(settings_error or 'Profile changed. Preview stayed Manual and mouse input is locked until you explicitly arm drawing.')
             self.set_busy(None)
             # Profile changes are never allowed to start preview planning. They only
             # invalidate the old plan and redraw the placeholder/original image.
-            self._mark_plan_stale('Profile changed. Preview was not rebuilt. Press Build preview manually when ready.')
+            self._mark_plan_stale(settings_error or 'Profile changed. Preview was not rebuilt. Press Build preview manually when ready.')
             self.show_previews();self._schedule_recovery_checkpoint(delay=300)
             self._active_profile_name=selected
         finally:
@@ -7393,30 +7401,39 @@ class DrawBotApp:
         from RuntimePaths import read_json
         from SettingsValidation import validated_settings, settings_application
         from StabilityRC import UnsupportedSettingsSchema
-        # A transient read failure must not revoke protection learned from a
-        # newer schema. Only a verified supported document or confirmed removal
-        # of this same path allows it to be replaced by the current writer.
+        # Failed reads/applications leave defaults in the UI, not permission to
+        # replace the saved document. Only a verified supported load or confirmed
+        # removal of this same path permits a later write.
         self._settings_protected_path=getattr(self,'_settings_protected_path',None)
         try:
-            data=validated_settings(read_json(self.settings_path,max_bytes=256*1024,max_depth=16))
+            try:
+                document=read_json(self.settings_path,max_bytes=256*1024,max_depth=16)
+            except FileNotFoundError as error:
+                if self._settings_protected_path==Path(self.settings_path):
+                    self._settings_protected_path=None
+                    self._settings_load_error=None
+                log_event(f'Settings unavailable for {self.settings_path.name}: {error!r}')
+                return False
+            data=validated_settings(document)
             with settings_application(self):
                 DrawBotApp._apply_settings_data(self,data)
             self._loaded_profile_extras=data.get('profile_extras',{})
             if self._settings_protected_path==Path(self.settings_path):
                 self._settings_protected_path=None
+                self._settings_load_error=None
             return True
         except UnsupportedSettingsSchema as error:
-            self._settings_protected_path=Path(self.settings_path)
+            message=('These settings use an unsupported format. The saved file is unchanged. '
+                     'Select this profile again to retry, or reset this profile explicitly to replace it.')
             log_event(f'Settings preserved for {self.settings_path.name}: {error!r}')
-            return False
-        except FileNotFoundError as error:
-            if self._settings_protected_path==Path(self.settings_path):
-                self._settings_protected_path=None
-            log_event(f'Settings unavailable for {self.settings_path.name}: {error!r}')
-            return False
         except (OSError,ValueError,TypeError,AttributeError,OverflowError,RuntimeError,tk.TclError) as error:
-            log_event(f'Settings ignored for {self.settings_path.name}: {error!r}')
-            return False
+            message=('Saved profile settings could not be loaded. The file is unchanged. '
+                     'Select this profile again to retry, or reset this profile explicitly to replace it.')
+            log_event(f'Settings preserved for {self.settings_path.name}: {error!r}')
+        self._settings_protected_path=Path(self.settings_path)
+        self._settings_load_error=message
+        if not self.closing:self.status.set(message)
+        return False
 
     def _apply_settings_data(self,data):
         def _set(name,value):
@@ -7574,7 +7591,8 @@ class DrawBotApp:
         if getattr(self,'profile_change_in_progress',False):return False
         if getattr(self,'_settings_protected_path',None)==Path(self.settings_path):
             if not self.closing:
-                self.status.set('These settings use an unsupported format. Reset this profile explicitly to replace them.')
+                self.status.set(getattr(self,'_settings_load_error',None) or
+                                'These settings use an unsupported format. Reset this profile explicitly to replace them.')
             return False
         try:
             data=DrawBotApp._settings_data(self)
@@ -8198,6 +8216,7 @@ class DrawBotApp:
             return False
         DrawBotApp._cancel_browser_one_click(self,'background removal undone')
         self.original=previous;self.background_removal_original=None;self.background_removal_meta=None
+        self._suppress_recovery=False
         DrawBotApp._clear_source_time_feedback(self)
         self.plan=None;DrawBotApp._clear_render_resume(self,'background removal undone')
         self.file_label.set(image_label(self.original,'Background removal undone'))
@@ -8424,6 +8443,7 @@ class DrawBotApp:
         if not DrawBotApp._profile_action_ready(self):return False
         path=filedialog.asksaveasfilename(defaultextension='.png',filetypes=[('PNG','*.png')])
         if not path or not DrawBotApp._profile_action_ready(self):return False
+        self.stop.clear()
         try:snapshot=image.copy()
         except (ValueError,OSError):
             self.status.set('The captured image is no longer available. Capture the area again.');return False
@@ -8435,7 +8455,10 @@ class DrawBotApp:
             self.events.put(('png_saved',path))
         started=False
         try:
-            started=bool(self.begin_worker('png-export',work,cleanup=snapshot.close))
+            started=bool(self.begin_worker('png-export',work,reset_stop=False,cleanup=snapshot.close))
+            if not started and self.stop.is_set() and not self.closing and not self.activity:
+                try:self.status.set('Stopped.')
+                except (tk.TclError,RuntimeError,AttributeError):pass
             return started
         finally:
             if not started:snapshot.close()
@@ -9265,6 +9288,7 @@ class DrawBotApp:
         except (ValueError,tk.TclError):return False
         if current_name!=name or current_source is not source:
             self.status.set('The preview changed. Select Export again to save the current view.');return False
+        self.stop.clear()
         snapshot=source.copy()
         def work():
             from RuntimePaths import atomic_binary_writer
@@ -9274,7 +9298,10 @@ class DrawBotApp:
             self.events.put(('status',f'{name} saved as PNG.'))
         started=False
         try:
-            started=bool(self.begin_worker('preview-export',work,cleanup=snapshot.close))
+            started=bool(self.begin_worker('preview-export',work,reset_stop=False,cleanup=snapshot.close))
+            if not started and self.stop.is_set() and not self.closing and not self.activity:
+                try:self.status.set('Stopped.')
+                except (tk.TclError,RuntimeError,AttributeError):pass
             return started
         finally:
             if not started:snapshot.close()
@@ -11741,6 +11768,7 @@ class DrawBotApp:
                 if self.background_removal_original is None:
                     self.background_removal_original=self.original.copy()
                 self.original=prepared;self.background_removal_meta=dict(meta);self.plan=None
+                self._suppress_recovery=False
                 DrawBotApp._clear_source_time_feedback(self)
                 self.upscale_original=None
                 DrawBotApp._clear_render_resume(self,'background removed')

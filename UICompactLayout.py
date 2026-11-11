@@ -304,6 +304,7 @@ class CompactLayout:
             self._direct(parent, 'Custom app profile'),
             self._direct(parent, 'Export'),
             self._direct(parent, 'Reset profile to defaults'),
+            self._direct(parent, 'Rename…'),
             _direct_child(getattr(self.app, 'paint_check', None), parent),
             _direct_child(getattr(self.app, 'paint_tool_menu', None), parent),
             _direct_child(getattr(self.app, 'paint_tool_label', None), parent),

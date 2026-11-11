@@ -156,10 +156,11 @@ class ImageExportTests(unittest.TestCase):
             self.assertEqual(app.events.get_nowait(),('png_saved',str(path)))
 
     def test_export_preview_encodes_off_ui_thread_and_uses_a_snapshot(self):
-        app=app_for_edit();work=[];app.begin_worker=lambda kind,task,*,cleanup=None:work.append((kind,task)) or True
+        app=app_for_edit();work=[];app.begin_worker=lambda kind,task,*,reset_stop=True,cleanup=None:work.append((kind,task,reset_stop)) or True
         with TemporaryDirectory() as tmp,patch('DrawBot.filedialog.asksaveasfilename',return_value=str(Path(tmp)/'preview.png')):
             self.assertTrue(DrawBotApp.export_preview(app))
             self.assertEqual(work[0][0],'preview-export')
+            self.assertFalse(work[0][2])
             app.plan['preview'].paste('red',(0,0,5,4))
             work[0][1]()
             with Image.open(Path(tmp)/'preview.png') as image:self.assertEqual(image.getpixel((0,0)),(0,0,255))

@@ -6,6 +6,20 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 36 completes eight existing profile, export, recovery, UI and color-import
+contracts with **zero new IDs: 843/1,000 implemented, 157 remaining**. The final
+combined local run passed all **44 new regression tests**, including three real
+native UI cases, with no skips and 912 unchanged source/fixture/registry hashes.
+The machine registry is unchanged. The
+[patch ledger](v148-batch36-profile-image-fixes.md) and
+[validation record](v148-batch36-validation.json) preserve the individual
+before/after evidence, adjacent selections and initial harness diagnostics.
+Exact-head Windows/Linux CI is recorded in
+[draft PR #46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
+Version 1.0.148 remains unreleased; merge and release require explicit approval.
+
+### Previously recorded batch31 checkpoint
+
 Batch 31 records **843 total distinct improvements, with 157 remaining**.
 
 Batch 31 records **843 distinct improvements, 157 remaining**. One contour-prefix work-reduction group is registered as R3101/global843. Local import-stream and outer Portrait-plan ownership complete existing contracts with zero IDs. All 842 preceding registry entries and 80 prior benchmark JSON reports are preserved. Completed frozen discovery ran **4,569 tests in 244.002 seconds: 4,496 passed and 73 skipped**, with all 947 source/configuration hashes unchanged. Fourteen Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and initial package hygiene (1,370 files) passed. The package check after final metadata passed with 1,372 files and no warnings. Seven complete historical Portrait public-plan pairs retain finite time-fitting, actual rescue and borrowed inputs. The contour experiment compares the whole published Portrait module within shared current dependencies: 3 complete preparations, 39 exact helper/public comparisons and 9 workloads with six balanced pairs and separate traced allocations. Scanning and the cell-winner dictionary remain; whole-helper and whole-public-plan observations, slower controls and allocation costs are kept separate. Early source maps, expected red proofs and initial harness diagnostics remain explicit. No universal application speed, RSS, physical drawing or GPU improvement is claimed. Published parent e49 passed seven exact-head checks and all fourteen Windows steps on attempt one; the new head requires its own CI. Version 1.0.148 remains unreleased.
