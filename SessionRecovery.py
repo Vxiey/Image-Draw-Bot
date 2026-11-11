@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 import warnings
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from pathlib import Path
 
 from RuntimePaths import atomic_write_text, data_dir, file_transaction, read_json
@@ -184,16 +184,33 @@ def _stream_digest(stream, *, cancelled=lambda: False):
     return digest.hexdigest()
 
 
+@contextmanager
+def _closing_preserving(resource):
+    """Close an owned recovery resource without replacing its primary failure."""
+    try:
+        yield resource
+    except BaseException as failure:
+        try:
+            resource.close()
+        except BaseException as cleanup_error:
+            failure.add_note(f'Recovery resource cleanup also failed: {type(cleanup_error).__name__}.')
+        raise
+    else:
+        resource.close()
+
+
 def _file_digest(path):
-    with Path(path).open('rb') as stream:
+    with _closing_preserving(Path(path).open('rb')) as stream:
         return _stream_digest(stream)
 
 
 def _store_image(image=None, *, legacy_path=None):
     temporary = None
+    primary_failure = None
     try:
-        with tempfile.NamedTemporaryFile('wb', prefix='.recovery-image-', suffix='.png.tmp',
-                                         dir=IMAGE_FILE.parent, delete=False) as stream:
+        with _closing_preserving(tempfile.NamedTemporaryFile(
+                'wb', prefix='.recovery-image-', suffix='.png.tmp',
+                dir=IMAGE_FILE.parent, delete=False)) as stream:
             temporary = Path(stream.name)
             if image is not None:
                 if image.width < 1 or image.height < 1 or image.width * image.height > MAX_CACHED_IMAGE_PIXELS:
@@ -201,10 +218,10 @@ def _store_image(image=None, *, legacy_path=None):
                 if image.mode=='RGBA':
                     image.save(stream,format='PNG')
                 else:
-                    with closing(image.convert('RGBA')) as rgba:
+                    with _closing_preserving(image.convert('RGBA')) as rgba:
                         rgba.save(stream, format='PNG')
             else:
-                with Path(legacy_path).open('rb') as source:
+                with _closing_preserving(Path(legacy_path).open('rb')) as source:
                     copied = 0
                     for block in iter(lambda: source.read(65536), b''):
                         copied += len(block)
@@ -216,9 +233,17 @@ def _store_image(image=None, *, legacy_path=None):
         digest = _file_digest(temporary)
         temporary.replace(_image_path(digest))
         return digest
+    except BaseException as failure:
+        primary_failure = failure
+        raise
     finally:
         if temporary is not None:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                if primary_failure is None:
+                    raise
+                primary_failure.add_note(f'Recovery staging cleanup also failed: {type(cleanup_error).__name__}.')
 
 
 def _clean_old_images(keep, *, strict=False):

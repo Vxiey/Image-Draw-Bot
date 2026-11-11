@@ -20,6 +20,12 @@ fails. This completes **IW08/global582** within **A1001/global766**, with **zero
 new IDs**; the total remains **843/1,000**. See the
 [focused before/after evidence](v148-batch34-recovery-cleanup.md).
 
+**Synchronous recovery continuation after batch 34:** preserve the primary
+storage failure through owned-resource close and staging-unlink errors. This
+completes **IW08/global582** and **056/global56**, with **zero new IDs**; the
+total remains **843/1,000**. See the
+[public-API regression evidence](v148-batch35-recovery-storage.md).
+
 | Global IDs | Local IDs | Area | Count | Evidence |
 | --- | --- | --- | ---: | --- |
 | 001–100 | 001–100 | Original reliability/security baseline | 100 | [Original ledger](100-IMPROVEMENTS-v1.0.148.md); merged PR44 passed Windows/Linux CI. |

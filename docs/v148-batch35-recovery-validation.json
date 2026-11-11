@@ -1,0 +1,228 @@
+{
+  "schema": 1,
+  "scope": "Synchronous recovery PNG storage: primary failure preservation through owned close and staging unlink, completing IW08/global582 and 056/global56",
+  "baseline_commit": "66948b321a3d7a17d984c0db2304e59205ea6cc0",
+  "implemented": 843,
+  "remaining": 157,
+  "new_improvement_ids": 0,
+  "release_published": false,
+  "environment": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "python": "3.12.14",
+    "pillow": "13.0.0"
+  },
+  "runs": [
+    {
+      "schema": 1,
+      "phase": "before",
+      "baseline_commit": "66948b321a3d7a17d984c0db2304e59205ea6cc0",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_application_batch35_recovery_storage"
+      ],
+      "started_at_utc": "2026-11-11T13:17:20.898051+00:00",
+      "environment": {
+        "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+        "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+        "pillow": "13.0.0"
+      },
+      "exit_code": 1,
+      "tests_run": 10,
+      "passed_methods": 4,
+      "failures": 6,
+      "errors": 0,
+      "skipped": 0,
+      "test_methods": [
+        "test_actual_digest_byte_limit_survives_a_digest_reader_close_failure",
+        "test_cleanup_chain_keeps_injected_interruption_and_all_secondary_diagnostics",
+        "test_denied_staging_cleanup_keeps_checkpoint_and_retry_prunes_the_orphan",
+        "test_encode_failure_preserves_primary_when_owned_conversion_close_fails",
+        "test_legacy_reader_close_does_not_replace_a_real_copy_read_failure",
+        "test_standalone_resource_close_failures_abort_before_state_publication",
+        "test_standalone_staging_unlink_error_is_reported_before_checkpoint_publication",
+        "test_successful_legacy_migration_copies_existing_png_without_reencoding",
+        "test_successful_rgb_and_rgba_saves_preserve_pixels_digest_and_borrowed_source",
+        "test_writer_close_does_not_replace_a_primary_png_write_failure"
+      ],
+      "failed_methods": [
+        "test_actual_digest_byte_limit_survives_a_digest_reader_close_failure",
+        "test_cleanup_chain_keeps_injected_interruption_and_all_secondary_diagnostics",
+        "test_denied_staging_cleanup_keeps_checkpoint_and_retry_prunes_the_orphan",
+        "test_encode_failure_preserves_primary_when_owned_conversion_close_fails",
+        "test_legacy_reader_close_does_not_replace_a_real_copy_read_failure",
+        "test_writer_close_does_not_replace_a_primary_png_write_failure"
+      ],
+      "error_methods": [],
+      "unittest_duration_seconds": 0.276,
+      "subprocess_duration_seconds": 0.49995014300020557,
+      "source_hashes_before_sha256": {
+        "SessionRecovery.py": "f3fd7287b9b50dadceab9411a49600c458a3cd1a984ae45d344585eb4ce40804",
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch35_recovery_storage.py": "8fa14ab66e402120337a69b712591edaadf7d6a9e7f4c2767c9e1c0e6ea99e3d",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "assets/image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300",
+        "docs/IMPROVEMENTS-v1.0.148.md": "27d23d20837a47d44f4277978bed7fb0afb918ae30d7260beb231ee007e4ede8"
+      },
+      "source_hashes_after_sha256": {
+        "SessionRecovery.py": "f3fd7287b9b50dadceab9411a49600c458a3cd1a984ae45d344585eb4ce40804",
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch35_recovery_storage.py": "8fa14ab66e402120337a69b712591edaadf7d6a9e7f4c2767c9e1c0e6ea99e3d",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "assets/image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300",
+        "docs/IMPROVEMENTS-v1.0.148.md": "27d23d20837a47d44f4277978bed7fb0afb918ae30d7260beb231ee007e4ede8"
+      },
+      "source_unchanged_during_run": true,
+      "session_recovery_matches_baseline": true,
+      "raw_log_sha256": "99c522368666a8bdee1ce79e9e73ce2df245810a87c98083a1d5ca61c905f4de"
+    },
+    {
+      "schema": 1,
+      "phase": "focused-after",
+      "baseline_commit": "66948b321a3d7a17d984c0db2304e59205ea6cc0",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_application_batch35_recovery_storage"
+      ],
+      "exit_code": 0,
+      "python": "3.12.14",
+      "pillow": "13.0.0",
+      "system": "Linux",
+      "tests_run": 10,
+      "passed_methods": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_methods": [],
+      "error_methods": [],
+      "unittest_duration_seconds": 0.276,
+      "subprocess_duration_seconds": 0.479336,
+      "source_hashes_before_sha256": {
+        "SessionRecovery.py": "9f7d304d42e353ee3de7e9a7296def538deff99ce1f6ef05ced23bd4917da2ac",
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch35_recovery_storage.py": "8fa14ab66e402120337a69b712591edaadf7d6a9e7f4c2767c9e1c0e6ea99e3d",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "assets/image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "source_hashes_after_sha256": {
+        "SessionRecovery.py": "9f7d304d42e353ee3de7e9a7296def538deff99ce1f6ef05ced23bd4917da2ac",
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch35_recovery_storage.py": "8fa14ab66e402120337a69b712591edaadf7d6a9e7f4c2767c9e1c0e6ea99e3d",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "assets/image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "source_unchanged_during_run": true,
+      "raw_log_sha256": "7187157058361e3693ff51adf96e38687a9ae6888c02a37c66c304d7e2bc697f"
+    },
+    {
+      "schema": 1,
+      "phase": "adjacent",
+      "baseline_commit": "66948b321a3d7a17d984c0db2304e59205ea6cc0",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_v148_application_batch34_recovery_cleanup",
+        "test_rc4_session_recovery_integrity.SessionRecoveryIntegrityTests.test_recent_snapshot_settings_survive_and_authorization_does_not",
+        "test_rc4_session_recovery_integrity.SessionRecoveryIntegrityTests.test_clear_render_progress_after_successful_publication"
+      ],
+      "exit_code": 0,
+      "python": "3.12.14",
+      "pillow": "13.0.0",
+      "system": "Linux",
+      "tests_run": 9,
+      "passed_methods": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_methods": [],
+      "error_methods": [],
+      "unittest_duration_seconds": 0.02,
+      "subprocess_duration_seconds": 0.219787,
+      "source_hashes_before_sha256": {
+        "SessionRecovery.py": "9f7d304d42e353ee3de7e9a7296def538deff99ce1f6ef05ced23bd4917da2ac",
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch35_recovery_storage.py": "8fa14ab66e402120337a69b712591edaadf7d6a9e7f4c2767c9e1c0e6ea99e3d",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "assets/image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "source_hashes_after_sha256": {
+        "SessionRecovery.py": "9f7d304d42e353ee3de7e9a7296def538deff99ce1f6ef05ced23bd4917da2ac",
+        "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+        "test_v148_application_batch35_recovery_storage.py": "8fa14ab66e402120337a69b712591edaadf7d6a9e7f4c2767c9e1c0e6ea99e3d",
+        "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+        "assets/image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300",
+        "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+      },
+      "source_unchanged_during_run": true,
+      "raw_log_sha256": "e0b75994d94e9909126b9b86e377da08006a771dc009e3c6b607b2da6af586eb"
+    }
+  ],
+  "frozen_source_hashes_sha256": {
+    "SessionRecovery.py": "9f7d304d42e353ee3de7e9a7296def538deff99ce1f6ef05ced23bd4917da2ac",
+    "RecoveryImagePreparation.py": "5b5738fc71c7edeef60197478c29dbffc4f63670149e6eae10d2c833a6f34a97",
+    "test_v148_application_batch35_recovery_storage.py": "8fa14ab66e402120337a69b712591edaadf7d6a9e7f4c2767c9e1c0e6ea99e3d",
+    "assets/paint-tools-reference.png": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586",
+    "assets/image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300",
+    "docs/v148-improvements.json": "c075f46ee7225d0ac5d2fc70e779eb5241181ee8adc26397e550b91ef638eb2a"
+  },
+  "test_file_identical_before_and_after": true,
+  "independent_review": {
+    "status": "passed",
+    "scope": "Actual production diff, ten new methods, ownership/publication boundaries and Windows close semantics.",
+    "blockers": []
+  },
+  "fixtures": {
+    "previous": "assets/image-draw-bot-icon.png",
+    "replacement": "assets/paint-tools-reference.png",
+    "synthetic_motifs_created": false
+  },
+  "limitations": [
+    "Injected I/O/close errors; no physical full-disk or native close failure reproduction.",
+    "An injected InterruptedError tests identity only; synchronous save_snapshot has no cancellation callback.",
+    "Denied unlink may leave staging; successful later retry/pruning is verified.",
+    "No full local discovery, native Windows/Paint interaction, physical drawing, GPU execution or release.",
+    "Exact-head CI is recorded separately in PR46."
+  ],
+  "fixture_check": "An initial fixture expectation was corrected to use persisted normalized RenderResume fields before the frozen before/after pair. It is not counted as product-defect evidence.",
+  "historical_pr_description": "docs/pr46-history-through-batch34.md",
+  "source_package_check": {
+    "command": [
+      "python",
+      "ReleasePackage.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "files": 1385,
+    "forbidden_paths": [],
+    "missing_required": [],
+    "warnings": [],
+    "ok": true
+  },
+  "diff_check": {
+    "command": [
+      "git",
+      "diff",
+      "--cached",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  "history_archive": {
+    "path": "docs/pr46-history-through-batch34.md",
+    "captured_head": "66948b321a3d7a17d984c0db2304e59205ea6cc0",
+    "captured_description_characters": 65366,
+    "verbatim_description_verified": true,
+    "file_sha256": "313d2abe499c2414c3aeb332e8286d43e70ac4852bf93d5392c31242308b2393"
+  }
+}
