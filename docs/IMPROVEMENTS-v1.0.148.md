@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 844 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **156 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 846 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **154 remain; 1.0.148 has not been published.** Current verification is recorded below.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -48,6 +48,18 @@ new group, **P3801/global844**; all other completions add zero IDs. The total is
 **844/1,000, with 156 remaining**. See the
 [batch38 ledger](v148-batch38-lifecycle-and-planning.md) and
 [final validation](v148-batch38-validation.json).
+
+**Recovery, preview and Pixel continuation after batch 38:** reject failed
+required-image recovery before settings adoption and explicitly retire
+unpublished preview results. Those complete existing contracts with zero new
+IDs. Sharing exact horizontal source segments is **R3901/global845**; bounded
+CPU palette RGB preparation is **P3901/global846**. The total is **846/1,000,
+with 154 remaining**. All 844 preceding entries are preserved. See the
+[batch39 ledger](v148-batch39-recovery-preview-and-pixel.md),
+[validation](v148-batch39-validation.json) and
+[raw evidence](v148-batch39-evidence.json). Mixed whole-caller timings and
+unchanged peak-memory controls are retained; no general speed or RSS gain
+is claimed.
 
 | Global IDs | Local IDs | Area | Count | Evidence |
 | --- | --- | --- | ---: | --- |
@@ -151,8 +163,12 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 | 842 | R3002 | Batch 30 Picture-palette append-only assignment reuse | 1 | [Evidence](v148-batch30-palette-growth.md); actual callers and independent review. |
 | 843 | R3101 | Batch 31 budgeted Portrait contour selection | 1 | [Evidence](v148-batch31-portrait-edge-budget.md); actual callers, complete parity and bounded measurement claims. |
 | 844 | P3801 | Batch 38 opaque Auto-count preparation | 1 | [Profile, image and planner ledger](v148-batch38-lifecycle-and-planning.md); independent ownership and counting reviews. |
+| 845 | R3901 | Batch 39 shared exact Pixel source segments | 1 | [Recovery, preview and Pixel ledger](v148-batch39-recovery-preview-and-pixel.md); independent source, ordering and deduplication reviews. |
+| 846 | P3901 | Batch 39 bounded necessary CPU palette preparation | 1 | [Recovery, preview and Pixel ledger](v148-batch39-recovery-preview-and-pixel.md); dense reference, actual callers and independent deduplication review. |
 
 ## Integration evidence
+
+- Batch 39 records **846 implemented improvements, 154 remaining**. Final new-module integration passed **32/32** in 4.298 s; full discovery passed **4,768 total, 4,682 passed and 86 skipped** in 263.504 s. Four real Linux/Xorg UI cases passed in 20.254 s. All three runs share 958 unchanged hashes. The 5,000-cycle source gate and 1,423-file package check passed. Required-image recovery and preview lifetime add zero IDs; only R3901 and P3901 are new. All 844 preceding entries and 134 earlier JSON reports are preserved. [Final local validation](v148-batch39-validation.json) records source bindings, mixed measurements and prior diagnostics. Published-head CI is separate in PR46; no release is published.
 
 - Batch 31 records **843 distinct improvements, 157 remaining**. One contour-prefix work-reduction group is registered as R3101/global843. Local import-stream and outer Portrait-plan ownership complete existing contracts with zero IDs. All 842 preceding registry entries and 80 prior benchmark JSON reports are preserved. Completed frozen discovery ran **4,569 tests in 244.002 seconds: 4,496 passed and 73 skipped**, with all 947 source/configuration hashes unchanged. Fourteen Linux/Xorg native cases, the 5,000-cycle source gate, eight exact existing-raster fixtures and initial package hygiene (1,370 files) passed. The package check after final metadata passed with 1,372 files and no warnings. Seven complete historical Portrait public-plan pairs retain finite time-fitting, actual rescue and borrowed inputs. The contour experiment compares the whole published Portrait module within shared current dependencies: 3 complete preparations, 39 exact helper/public comparisons and 9 workloads with six balanced pairs and separate traced allocations. Scanning and the cell-winner dictionary remain; whole-helper and whole-public-plan observations, slower controls and allocation costs are kept separate. Early source maps, expected red proofs and initial harness diagnostics remain explicit. No universal application speed, RSS, physical drawing or GPU improvement is claimed. Published parent e49 passed seven exact-head checks and all fourteen Windows steps on attempt one; the new head requires its own CI. Version 1.0.148 remains unreleased. [Final validation](v148-batch31-validation.json).
 

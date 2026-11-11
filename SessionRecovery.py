@@ -398,6 +398,9 @@ def load_snapshot() -> dict | None:
         "options": cleaned,
         "saved_area": valid_area,
         "has_image": image_path is not None and image_path.is_file(),
+        # Keep the checkpoint's requirement distinct from file availability.
+        # A missing/invalid image reference must not become settings-only.
+        "image_required": raw.get('has_image') is True,
         "image_sha256": digest,
         "target_lock_hint": _clean_target_lock(raw.get('target_lock_hint')),
         "subject_selection": clean_subject_selection(raw.get('subject_selection'), digest),

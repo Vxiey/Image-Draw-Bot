@@ -718,7 +718,7 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
     rgb=visible=None
     def prepare_host_pixels():
         # OpenCL consumes raw RGBA and produces its own visibility mask. Keep
-        # the full host composite lazy for CPU/CUDA or an actual CPU fallback.
+        # the full host composite lazy for CUDA and small CPU sources only.
         nonlocal raw,rgb,visible
         try:
             if rgb is None:
@@ -736,47 +736,71 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
         prepare_host_pixels()
     perceptual=color_rendering!="RGB nearest"; fidelity=2 if color_fidelity=="Faithful" else (1 if color_fidelity=="Balanced" else 0); custom_first=custom_mode=="Custom colors first" and bool(np.any(custom))
     def cpu():
-        prepare_host_pixels()
-        # Bound both dimensions: even a one-row panorama or a large custom
-        # palette must never allocate a full pixel x palette distance cube.
-        flat = rgb.reshape(-1, 3)
-        out = np.empty(pixels, dtype=np.int16)
-        palette_lab = _oklab_cpu(pal / 255.0) if perceptual else None
-        palette_features = _palette_features(palette_lab) if perceptual and color_fidelity in ('Balanced','Faithful') else None
-        for start in range(0, pixels, 4096):
-            _cancel(cancelled)
-            end = min(pixels, start + 4096)
-            source_lab = _oklab_cpu(flat[start:end] / 255.0) if perceptual else None
-            source_features = _palette_features(source_lab) if palette_features is not None else None
-            best = np.full(end-start, np.inf, dtype=np.float32)
-            custom_best = np.full_like(best, np.inf)
-            chosen = np.full(end-start, ids[0], dtype=np.int16)
-            custom_chosen = chosen.copy()
-            for p0 in range(0, len(ids), 32):
+        nonlocal raw,rgb,visible
+        try:
+            if rgb is not None or pixels <= 4096:
+                # Reuse CUDA's existing host composite after a native failure.
+                prepare_host_pixels()
+                flat = rgb.reshape(-1, 3)
+                raw_flat = None
+            else:
+                # CPU scoring consumes one tile at a time; its full-image
+                # outputs do not require a full float32 RGB scratch image.
+                flat = None
+                raw_flat = raw.reshape(-1, 4)
+                visible = np.empty((h, w), dtype=np.bool_)
+            flat_visible = visible.reshape(-1)
+            out = np.empty(pixels, dtype=np.int16)
+            palette_lab = _oklab_cpu(pal / 255.0) if perceptual else None
+            palette_features = _palette_features(palette_lab) if perceptual and color_fidelity in ('Balanced','Faithful') else None
+            # Bound both dimensions: even a one-row panorama or a large custom
+            # palette must never allocate a full pixel x palette distance cube.
+            for start in range(0, pixels, 4096):
                 _cancel(cancelled)
-                p1 = min(len(ids), p0+32)
-                dist = _palette_cost_cpu(flat[start:end], pal[p0:p1],
-                                         perceptual=perceptual, fidelity=color_fidelity,
-                                         src_lab=source_lab,
-                                         pal_lab=None if palette_lab is None else palette_lab[p0:p1],
-                                         src_features=source_features,
-                                         pal_features=None if palette_features is None else tuple(a[p0:p1] for a in palette_features))
-                pos = np.argmin(dist, axis=1)
-                score = dist[np.arange(end-start), pos]
-                better = score < best
-                chosen[better] = ids[p0+pos[better]]
-                best = np.minimum(best, score)
-                if custom_first:
-                    dist[:, ~custom[p0:p1].astype(bool)] = np.inf
+                end = min(pixels, start + 4096)
+                if flat is None:
+                    tile, tile_visible = _rgba_visible_rgb(raw_flat[start:end])
+                    if skip_white:tile_visible &= np.min(tile, axis=1) < 245.0
+                    flat_visible[start:end] = tile_visible
+                    tile_visible = None
+                else:
+                    tile = flat[start:end]
+                source_lab = _oklab_cpu(tile / 255.0) if perceptual else None
+                source_features = _palette_features(source_lab) if palette_features is not None else None
+                best = np.full(end-start, np.inf, dtype=np.float32)
+                custom_best = np.full_like(best, np.inf)
+                chosen = np.full(end-start, ids[0], dtype=np.int16)
+                custom_chosen = chosen.copy()
+                for p0 in range(0, len(ids), 32):
+                    _cancel(cancelled)
+                    p1 = min(len(ids), p0+32)
+                    dist = _palette_cost_cpu(tile, pal[p0:p1],
+                                             perceptual=perceptual, fidelity=color_fidelity,
+                                             src_lab=source_lab,
+                                             pal_lab=None if palette_lab is None else palette_lab[p0:p1],
+                                             src_features=source_features,
+                                             pal_features=None if palette_features is None else tuple(a[p0:p1] for a in palette_features))
                     pos = np.argmin(dist, axis=1)
                     score = dist[np.arange(end-start), pos]
-                    better = score < custom_best
-                    custom_chosen[better] = ids[p0+pos[better]]
-                    custom_best = np.minimum(custom_best, score)
-            if custom_first:
-                chosen = np.where(custom_best <= best*1.06+0.0006, custom_chosen, chosen)
-            out[start:end] = chosen
-        return out.reshape(h,w), visible.astype(np.bool_,copy=False)
+                    better = score < best
+                    chosen[better] = ids[p0+pos[better]]
+                    best = np.minimum(best, score)
+                    if custom_first:
+                        dist[:, ~custom[p0:p1].astype(bool)] = np.inf
+                        pos = np.argmin(dist, axis=1)
+                        score = dist[np.arange(end-start), pos]
+                        better = score < custom_best
+                        custom_chosen[better] = ids[p0+pos[better]]
+                        custom_best = np.minimum(custom_best, score)
+                if custom_first:
+                    chosen = np.where(custom_best <= best*1.06+0.0006, custom_chosen, chosen)
+                out[start:end] = chosen
+                tile = None
+            return out.reshape(h,w), visible.astype(np.bool_,copy=False)
+        finally:
+            # A retained native traceback can still hold these closure cells
+            # after CPU fallback. The returned arrays own their own references.
+            raw=rgb=visible=None
     if not route.accelerated:
         result=cpu();return result,route.as_dict()
     def accelerated():

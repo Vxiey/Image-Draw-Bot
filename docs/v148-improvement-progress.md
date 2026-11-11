@@ -6,6 +6,38 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
+Batch 39 completes four recovery, preview and Pixel preparation corrections.
+**R3901/global845** shares exact horizontal source segments during component
+collection, and **P3901/global846** bounds necessary CPU palette RGB preparation.
+Required-image recovery and preview result ownership complete existing contracts
+with zero new IDs. The total is **846/1,000 implemented; 154 remaining**.
+All 844 preceding registry entries and 134 earlier JSON reports, including
+84 benchmark reports, are preserved.
+
+The final four-module integration passed **32/32 new tests in 4.298 s**.
+Full local discovery passed **4,768 tests in 263.504 s: 4,682 passed and
+86 skipped**, with no failures/errors. Four existing real Linux/Xorg workspace
+and shutdown cases passed in 20.254 s. All three runs bind the same **958
+unchanged source/configuration/fixture hashes**. The 5,000-cycle source gate
+and 1,423-file source-package check passed without warnings.
+
+The [ledger](v148-batch39-recovery-preview-and-pixel.md),
+[validation](v148-batch39-validation.json) and
+[raw evidence](v148-batch39-evidence.json) retain exact before/after results,
+initial fixture/runner diagnostics, every paired timing sample and slower
+controls. The CPU RGB-composite payload is bounded to 49,152 bytes for the
+measured large sources; required image-sized inputs/outputs remain. Pixel
+planning avoids the duplicate scan and segment objects with identical outputs.
+The mixed whole-caller timings do not establish a general speedup or a lower
+whole-plan/RSS peak.
+
+Exact published-head Windows/Linux, dependency, CodeQL and packaged-app
+verification is reported separately in
+[draft PR #46](https://github.com/Vxiey/Image-Draw-Bot/pull/46).
+Version 1.0.148 remains unreleased. Merge and release require explicit approval.
+
+### Previously recorded batch38 checkpoint
+
 Batch 38 completes eight profile, image and planner corrections. One opaque
 Auto-count preparation group, **P3801/global844**, is new; the remaining
 completions receive zero IDs. The current total is **844/1,000 implemented,

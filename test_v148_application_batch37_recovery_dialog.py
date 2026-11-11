@@ -111,6 +111,12 @@ class RecoveryDialogIdentityTests(unittest.TestCase):
             name, variable = self.variables.pop()
             setattr(self.app, name, None)
             del variable
+        # Even a non-screen worker owns this creator-thread Tcl alias. Retire
+        # it after joining workers, before later worker GC can collect the app.
+        screen_window = getattr(self.app, 'screen_task_window', None)
+        if screen_window is not None:
+            screen_window.root = None
+        self.app.screen_task_window = None
         self.app.root = None
         self.root = None
 
@@ -119,8 +125,13 @@ class RecoveryDialogIdentityTests(unittest.TestCase):
             during_dialog()
             return answer
         with patch('DrawBot.messagebox.askyesno', side_effect=respond) as dialog:
-            DrawBotApp.offer_safe_session_recovery(self.app)
-        dialog.assert_called_once()
+            try:
+                DrawBotApp.offer_safe_session_recovery(self.app)
+                dialog.assert_called_once()
+            finally:
+                # Mock call history also borrows parent=self.root. Do not leave
+                # that Tcl alias in mock cycles for a later worker to collect.
+                dialog.reset_mock(return_value=True, side_effect=True)
         if self.app.worker is not None:
             self.workers.append(self.app.worker)
 
@@ -353,8 +364,11 @@ class RecoveryDialogIdentityTests(unittest.TestCase):
                             setattr(self.app, field, value)
                             return answer
                         with patch('DrawBot.messagebox.askyesno', side_effect=respond) as dialog:
-                            DrawBotApp.offer_safe_session_recovery(self.app)
-                        self.assertEqual(dialog.call_count, int(moment == 'during'))
+                            try:
+                                DrawBotApp.offer_safe_session_recovery(self.app)
+                                self.assertEqual(dialog.call_count, int(moment == 'during'))
+                            finally:
+                                dialog.reset_mock(return_value=True, side_effect=True)
                         self.assertIsNone(self.app.worker)
                         self.assertEqual(self.payloads(), self.before)
                         self.assertIs(self.app.original, self.source)

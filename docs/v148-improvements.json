@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 1000,
-  "implemented": 844,
+  "implemented": 846,
   "release_published": false,
-  "validation": "Batch 38 records 844 distinct behavior improvements, with 156 remaining. P3801/global844 reduces private preparation for opaque Auto exact-color-count samples while preserving exact pixels and recommendation metadata. Seven additional corrections complete existing profile, cancellation, ownership and prepared-cost contracts with zero new IDs. All 843 preceding registry entries are preserved. Focused baseline comparisons, source hashes, measured controls and rejected experiments are documented in v148-batch38-lifecycle-and-planning.md and its validation record. Whole-project verification and published-commit CI have separate receipts. Version 1.0.148 remains unreleased.",
+  "validation": "Batch 39 records 846 distinct behavior improvements, with 154 remaining. R3901/global845 shares exact horizontal source segments during Pixel component collection; P3901/global846 bounds necessary large CPU palette RGB preparation to 4096-pixel blocks. Required-image recovery and preview-result ownership complete existing contracts with zero new IDs. All 844 preceding registry entries are preserved. Frozen regressions, actual-caller parity, balanced measurements and explicit limits are documented in v148-batch39-recovery-preview-and-pixel.md and its validation record. Whole-project verification and published-commit CI have separate receipts. Version 1.0.148 remains unreleased.",
   "improvements": [
     {
       "id": 1,
@@ -6571,6 +6571,22 @@
       "batch": 38,
       "ledger": "v148-batch38-lifecycle-and-planning.md",
       "description": "Reduce private source-image preparation for Auto exact-color-count sampling. Large opaque RGB/L inputs use direct Pillow BOX reduction; fully opaque RGBA inputs reduce one original channel at a time and merge only the bounded sample. Preserve exact sample pixels, complete recommendation metadata and the real tuner caller. Mixed alpha and color-key inputs retain full visible compositing before resampling. Independent historical pixel oracles and observed private-image channel counts establish the reduction; balanced whole-recommendation timings retain slower controls. Channel counts are not allocated bytes or process RSS, and no general CPU or whole-application speedup is claimed. Owned-image cleanup, Stop and GPU fallback completions add no further IDs."
+    },
+    {
+      "id": 845,
+      "local_id": "R3901",
+      "area": "batch39-rendering",
+      "batch": 39,
+      "ledger": "v148-batch39-recovery-preview-and-pixel.md",
+      "description": "Reuse each exact horizontal segment produced during Pixel component collection in the public source-color groups. Lines planning no longer scans the same PixelMap separately for source groups or allocates a second set of identical segment tuples. Preserve validation before model construction, row/color/component order, complete public-plan geometry and metadata, timed/subject behavior and unchanged dots/standalone consumers. Existing statistics batching, later topology handoff and path scheduling remain intact. One group covers the avoided scan and duplicate immutable segments; tests and Stop controls add no IDs. Whole-caller paired observations and slower controls are recorded separately from changed stage timings."
+    },
+    {
+      "id": 846,
+      "local_id": "P3901",
+      "area": "batch39-platform",
+      "batch": 39,
+      "ledger": "v148-batch39-recovery-preview-and-pixel.md",
+      "description": "Bound the necessary visible float32 RGB preparation for large normal CPU palette mapping to the existing 4096-pixel scoring blocks, including OpenCL-to-CPU fallback. Preserve exact alpha/white handling, candidate ties, custom-color policy, public PixelMap results and route metadata. Small inputs and already prepared CUDA data retain their existing path. Observed live composite RGB ndarray payload falls to 49152 bytes while required image-size raw/output arrays remain. Balanced full exact_palette_map timings retain slower controls; no overall RSS, physical GPU or universal speed claim. Private fallback closure cleanup completes existing ownership with zero extra IDs."
     }
   ]
 }

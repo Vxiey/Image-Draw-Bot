@@ -19,6 +19,7 @@ import numpy as np
 
 from ContinuousPaths import order_paths
 from PixelAccuratePlanner import PixelMap, groups_from_pixel_map, validated_pixel_indices
+from PixelMapValidation import validate_palette_count
 
 Point = tuple[int, int]
 Segment = tuple[int, int, int, int]
@@ -242,7 +243,7 @@ def _row_component_statistics(pixel_map: PixelMap, y: int, row_runs, *, cancelle
 
 
 def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, include_vertical_runs: bool = True,
-                         cancelled=lambda: False) -> tuple[list[Component], np.ndarray, dict]:
+                         cancelled=lambda: False, _source_groups=None) -> tuple[list[Component], np.ndarray, dict]:
     """Label lossless same-palette 4-connected regions using run union-find."""
     runs, rows, uf = _row_runs(pixel_map, cancelled)
     h, w = pixel_map.height, pixel_map.width
@@ -266,7 +267,12 @@ def connected_components(pixel_map: PixelMap, *, cpu_workers: int = 1, include_v
             comp.area += run.x1 - run.x0 + 1
             x0, y0, x1, y1 = comp.bbox
             comp.bbox = (min(x0, run.x0), min(y0, run.y), max(x1, run.x1), max(y1, run.y))
-            comp.horizontal_runs.append((run.x0, run.y, run.x1, run.y))
+            segment = (run.x0, run.y, run.x1, run.y)
+            comp.horizontal_runs.append(segment)
+            if _source_groups is not None:
+                # The source groups share these immutable segments in the same
+                # row-major order, without scanning the PixelMap a second time.
+                _source_groups[run.color].append(segment)
             # These fields hold sums until the component is complete; avoid a
             # second Python dictionary and five boxed sums per component.
             comp.importance_mean += float(sums[0][run_index])
@@ -798,7 +804,12 @@ def build_pixel_stroke_plan(pixel_map: PixelMap, palette_count: int, *, lines: b
                             _region_topology=None) -> dict:
     """Build Block B component paths while preserving every drawable PixelMap pixel."""
     started=time.perf_counter()
-    groups = groups_from_pixel_map(pixel_map, palette_count, lines=lines, cancelled=cancelled)
+    if lines:
+        count = validate_palette_count(palette_count)
+        validated_pixel_indices(pixel_map, count, cancelled=cancelled)
+        groups = [[] for _ in range(count)]
+    else:
+        groups = groups_from_pixel_map(pixel_map, palette_count, lines=lines, cancelled=cancelled)
     groups_done=time.perf_counter()
     cost_model=None
     if isinstance(options,dict) and str(options.get("adaptive_hybrid_cost","Auto")) != "Off":
@@ -821,7 +832,8 @@ def build_pixel_stroke_plan(pixel_map: PixelMap, palette_count: int, *, lines: b
         return {"groups": groups, "execution_groups": execution_groups, "execution_sequence": sequence,
                 "metadata": {"engine": "Pixel Stroke Engine Block B", "component_count": 0, "scheduled_paths": len(sequence), "dot_mode": True}}
 
-    components, component_map, component_meta = connected_components(pixel_map, cpu_workers=cpu_workers, cancelled=cancelled)
+    components, component_map, component_meta = connected_components(
+        pixel_map, cpu_workers=cpu_workers, cancelled=cancelled, _source_groups=groups)
     components_done=time.perf_counter()
     total_drawable = int(np.count_nonzero(pixel_map.drawable_mask))
     orientation_counts = {"horizontal": 0, "vertical": 0}

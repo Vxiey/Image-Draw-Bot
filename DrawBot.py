@@ -4945,6 +4945,9 @@ class DrawBotApp:
                     if self.stop.is_set():
                         if image is not None:image.close()
                         raise InterruptedError('Recovery loading cancelled.')
+                    if image is None and (state.get('image_required') is True or state.get('has_image') is True):
+                        # A failed required image is not a settings-only restore.
+                        raise ValueError('The local recovery image could not be read or verified. Your current work was kept.')
                     self.events.put(('recovery_loaded',(state,image)))
                 self.begin_worker('recovery-load',work)
                 return
@@ -8911,7 +8914,7 @@ class DrawBotApp:
         try:original=self.original.copy()
         except MemoryError:
             self.status.set('Not enough memory to build preview. Close other images or use a smaller source.');return
-        def prepare_preview():
+        def prepare_preview(owner):
             started=time.monotonic()
             requested=(preview_options.get('_preview_requested_planning_resolution'),
                        preview_options.get('_preview_requested_color_rendering'),
@@ -8923,6 +8926,8 @@ class DrawBotApp:
                 f'requested_color={requested[1]} requested_layers={requested[2]} {_resource_log_text(preview_options)}')
 
             def run_attempt(attempt_options, timeout):
+                accepted=False
+                failure=None
                 try:
                     from ReleaseStabilityHardening import PreviewAttemptGuard, merge_stability_meta, classify_preview_timeout
                     guard=PreviewAttemptGuard(timeout_seconds=float(timeout),external_cancelled=lambda:self.stop.is_set() or self.closing,label='preview planning')
@@ -8930,15 +8935,26 @@ class DrawBotApp:
                     def preview_cancelled():
                         return guard.cancelled()
                     result=make_plan(original,preview_area,attempt_options,preview_cancelled)
+                    owner.capture(result)
                     if guard.cancelled():
                         merge_stability_meta(attempt_options, preview_attempt=guard.meta(), preview_timeout=classify_preview_timeout(float(timeout),timeout_seconds=float(timeout)))
+                        if self.stop.is_set() or self.closing:raise InterruptedError()
                         return None
                     merge_stability_meta(attempt_options, preview_attempt=guard.meta())
+                    accepted=True
                     return result
-                except InterruptedError:
+                except InterruptedError as error:
+                    failure=error
                     if self.stop.is_set() or self.closing:
                         raise
                     return None
+                except BaseException as error:
+                    failure=error
+                    raise
+                finally:
+                    # A completed attempt can expire at its return boundary.
+                    # Retire its buffers before allocating the fallback plan.
+                    if not accepted:owner.retire(failure=failure)
 
             plan=run_attempt(preview_options,60 if full_detail else PREVIEW_PLAN_TIMEOUT_SECONDS)
             used_fallback=False
@@ -8977,10 +8993,22 @@ class DrawBotApp:
             plan['preview_elapsed_seconds']=round(time.monotonic()-started,3)
             log_event(f'Preview planning finished in {plan["preview_elapsed_seconds"]:.3f} s fallback={used_fallback}: {_plan_log_text(plan)}.')
             self.events.put(('planned',plan))
+            return plan
         def work():
             from DrawTimeEstimate import preview_estimate_scope
-            with preview_estimate_scope():
-                prepare_preview()
+            borrowed=[original,*preview_options.values(),*_plan_images({'options':preview_options})]
+            owner=_PlanImageOwner(borrowed)
+            published=failure=None
+            try:
+                with preview_estimate_scope():
+                    published=prepare_preview(owner)
+            except BaseException as error:
+                failure=error
+                raise
+            finally:
+                # The queue owns a successful publication. Finalization or put
+                # failures still belong to this worker, even with a traceback.
+                owner.close(published,failure)
         # Historic v1.0.10 status string kept for release-test visibility: Planning optimized preview.
         self.status.set('Building preview…' if user_initiated else 'Planning lightweight auto preview…')
         started=False
