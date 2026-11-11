@@ -127,6 +127,27 @@ the combined source snapshot. Source-package hygiene passed for **1,395 files**,
 forbidden/missing paths. `git diff --check` passed. Both checks are recorded
 there after the final documentation was assembled.
 
+## Full-suite CI follow-up
+
+The first published commit, `5e95afd0b5f4767ef2423c03316587ddbd469c79`,
+completed Linux discovery with **4,647 tests in 314.809 seconds** but reported
+**16 errors across four methods**, with 81 skips. Every error was the same
+worker-adapter signature mismatch in the two older preview/capture modules;
+the 41 new portable cases passed and the three new native cases were skipped
+on that headless runner. The failed
+[CI job](https://github.com/Vxiey/Image-Draw-Bot/actions/runs/43035849444/job/130574326842)
+and representative tracebacks are retained in the validation record.
+
+A separate fixture-only correction makes both adapters accept the existing
+`reset_stop` keyword and explicitly require `False` before queuing the job.
+All **14 existing test methods**, their earlier assertions and raster fixtures
+remain unchanged. No product file, new regression, timeout, skip or CI gate was
+changed. No additional local runtime test is claimed for this follow-up; its
+verification is the subsequent complete Windows/Linux CI on the new commit.
+The original 912-file local map remains bound to its original run, with the
+exact two changed fixture hashes recorded separately. PR46 records the final
+commit's results without presenting this failed attempt as a passing run.
+
 ## Limits and review history
 
 The file-type check does not claim to eliminate a separate `stat`/`open` race.

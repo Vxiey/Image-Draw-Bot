@@ -2084,5 +2084,99 @@
       "--check"
     ],
     "exit_code": 0
+  },
+  "ci_fixture_followup": {
+    "parent_commit": "5e95afd0b5f4767ef2423c03316587ddbd469c79",
+    "initial_linux_run": {
+      "commit": "5e95afd0b5f4767ef2423c03316587ddbd469c79",
+      "run_id": 43035849444,
+      "job_id": 130574326842,
+      "url": "https://github.com/Vxiey/Image-Draw-Bot/actions/runs/43035849444/job/130574326842",
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-v"
+      ],
+      "tests_run": 4647,
+      "unittest_seconds": 314.809,
+      "failures": 0,
+      "errors": 16,
+      "affected_method_count": 4,
+      "skipped": 81,
+      "conclusion": "failure",
+      "cause": "Two older worker adapters did not accept reset_stop, producing TypeError before their export checks ran.",
+      "affected_methods": [
+        "test_v148_application_batch06_preview.PreviewViewTests.test_background_toggle_exports_the_same_stroke_image_as_the_visible_final_view",
+        "test_v148_application_batch06_preview.PreviewViewTests.test_each_view_exports_its_complete_source_pixels_and_descriptive_filename",
+        "test_v148_application_batch08_capture.CaptureExportOwnershipTests.test_cancel_or_partial_encoder_failure_preserves_existing_file_and_closes_snapshot",
+        "test_v148_application_batch08_capture.CaptureExportOwnershipTests.test_png_encoding_waits_for_worker_and_owns_snapshot_after_capture_closes"
+      ],
+      "representative_tracebacks_normalized": [
+        "ERROR: test_background_toggle_exports_the_same_stroke_image_as_the_visible_final_view (test_v148_application_batch06_preview.PreviewViewTests.test_background_toggle_exports_the_same_stroke_image_as_the_visible_final_view)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"<repository>/test_v148_application_batch06_preview.py\", line 50, in test_background_toggle_exports_the_same_stroke_image_as_the_visible_final_view\n    self.assertTrue(DrawBotApp.export_preview(app))\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<repository>/DrawBot.py\", line 9301, in export_preview\n    started=bool(self.begin_worker('preview-export',work,reset_stop=False,cleanup=snapshot.close))\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1139, in __call__\n    return self._mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1143, in _mock_call\n    return self._execute_mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1204, in _execute_mock_call\n    result = effect(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: PreviewViewTests.app.<locals>.begin() got an unexpected keyword argument 'reset_stop'",
+        "ERROR: test_each_view_exports_its_complete_source_pixels_and_descriptive_filename (test_v148_application_batch06_preview.PreviewViewTests.test_each_view_exports_its_complete_source_pixels_and_descriptive_filename) (view='Original')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"<repository>/test_v148_application_batch06_preview.py\", line 36, in test_each_view_exports_its_complete_source_pixels_and_descriptive_filename\n    self.assertTrue(DrawBotApp.export_preview(app))\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<repository>/DrawBot.py\", line 9301, in export_preview\n    started=bool(self.begin_worker('preview-export',work,reset_stop=False,cleanup=snapshot.close))\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1139, in __call__\n    return self._mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1143, in _mock_call\n    return self._execute_mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1204, in _execute_mock_call\n    result = effect(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: PreviewViewTests.app.<locals>.begin() got an unexpected keyword argument 'reset_stop'",
+        "ERROR: test_cancel_or_partial_encoder_failure_preserves_existing_file_and_closes_snapshot (test_v148_application_batch08_capture.CaptureExportOwnershipTests.test_cancel_or_partial_encoder_failure_preserves_existing_file_and_closes_snapshot) (failure='stop')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"<repository>/test_v148_application_batch08_capture.py\", line 99, in test_cancel_or_partial_encoder_failure_preserves_existing_file_and_closes_snapshot\n    self.assertTrue(DrawBotApp._save_captured_png(app, image))\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<repository>/DrawBot.py\", line 8458, in _save_captured_png\n    started=bool(self.begin_worker('png-export',work,reset_stop=False,cleanup=snapshot.close))\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1139, in __call__\n    return self._mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1143, in _mock_call\n    return self._execute_mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1204, in _execute_mock_call\n    result = effect(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: CaptureExportOwnershipTests.app.<locals>.<lambda>() got an unexpected keyword argument 'reset_stop'",
+        "ERROR: test_png_encoding_waits_for_worker_and_owns_snapshot_after_capture_closes (test_v148_application_batch08_capture.CaptureExportOwnershipTests.test_png_encoding_waits_for_worker_and_owns_snapshot_after_capture_closes)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"<repository>/test_v148_application_batch08_capture.py\", line 78, in test_png_encoding_waits_for_worker_and_owns_snapshot_after_capture_closes\n    self.assertTrue(DrawBotApp._save_captured_png(app, image))\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<repository>/DrawBot.py\", line 8458, in _save_captured_png\n    started=bool(self.begin_worker('png-export',work,reset_stop=False,cleanup=snapshot.close))\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1139, in __call__\n    return self._mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1143, in _mock_call\n    return self._execute_mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<ci-python>/lib/python3.12/unittest/mock.py\", line 1204, in _execute_mock_call\n    result = effect(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: CaptureExportOwnershipTests.app.<locals>.<lambda>() got an unexpected keyword argument 'reset_stop'"
+      ],
+      "all_new_cases": "41 new cases passed; 3 native UI cases skipped on headless Linux.",
+      "production_files_unchanged_in_followup": true,
+      "saved_job_log_sha256": "e1db2bd3aa3628a85080a63e6eda8227682e34d833de23443544636f124bc3ad"
+    },
+    "static_review": {
+      "reviewed_at_utc": "2026-11-11T14:18:51.344451+00:00",
+      "base_commit": "5e95afd0b5f4767ef2423c03316587ddbd469c79",
+      "runtime_tests_run_locally": false,
+      "reason": "Existing complete CI supplies the before evidence; the next complete CI verifies these two older modules after. No local execution or raster-fixture changes were performed.",
+      "fixture_changes": "Both begin_worker fixtures now accept reset_stop=True and require the export caller to pass literal False before enqueuing the unchanged worker.",
+      "files": {
+        "test_v148_application_batch06_preview.py": {
+          "sha256_before": "961226fd4be018e031bb6e3a3ea06e8a1b783e5bdb7ab9a931e30a5138991851",
+          "sha256_after": "0feb6979a1322cd8798c040f421c1f55e38f4ec49f881a07cf76b346aacbfd8c",
+          "existing_test_method_count": 6,
+          "all_existing_test_method_asts_unchanged": true
+        },
+        "test_v148_application_batch08_capture.py": {
+          "sha256_before": "46a1b63f29aba56a0f07ee73f4d29ea24f964ffe2c1dc5f9bd341396fc24fc3a",
+          "sha256_after": "254681397308f8aebcb252471cdc4a565c0aff072306d1bbbd434f27d2976158",
+          "existing_test_method_count": 8,
+          "all_existing_test_method_asts_unchanged": true
+        }
+      },
+      "drawbot_matches_head": true,
+      "drawbot_sha256": "4d7a772ca5f32408fcb52726e0a27f04967068e14ec14a3d17846d0563e3f014",
+      "diff_check_exit_code": 0,
+      "read_only_export_fixture_search": {
+        "matching_test_modules": 5,
+        "additional_incompatible_export_fixtures_found": 0,
+        "other_modules": [
+          "test_v148_ui_batch03.py: compatible reset_stop signatures",
+          "test_v148_application_batch15_image_worker_cleanup.py: real begin_worker",
+          "test_v148_application_batch36_export_stop.py: real begin_worker"
+        ]
+      }
+    },
+    "runtime_tests_run_locally_after_fixture_change": false,
+    "production_and_new_tests_unchanged": true,
+    "source_delta_from_combined_local_gate": {
+      "test_v148_application_batch06_preview.py": {
+        "sha256_before": "961226fd4be018e031bb6e3a3ea06e8a1b783e5bdb7ab9a931e30a5138991851",
+        "sha256_after": "0feb6979a1322cd8798c040f421c1f55e38f4ec49f881a07cf76b346aacbfd8c",
+        "existing_test_method_count": 6,
+        "all_existing_test_method_asts_unchanged": true
+      },
+      "test_v148_application_batch08_capture.py": {
+        "sha256_before": "46a1b63f29aba56a0f07ee73f4d29ea24f964ffe2c1dc5f9bd341396fc24fc3a",
+        "sha256_after": "254681397308f8aebcb252471cdc4a565c0aff072306d1bbbd434f27d2976158",
+        "existing_test_method_count": 8,
+        "all_existing_test_method_asts_unchanged": true
+      }
+    },
+    "notes": [
+      "Only the two existing begin_worker adapters change: accept the established keyword and require reset_stop to be literal False.",
+      "All 14 existing test methods and prior assertions remain unchanged. No timeout, skip, test selection or CI gate is weakened.",
+      "The original combined 44-case source map remains historical evidence; the two fixture hashes above are its complete source delta. Final full CI is required for the follow-up commit."
+    ],
+    "final_ci": "Pending on follow-up commit; exact-head results are recorded in PR46."
   }
 }
