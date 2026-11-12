@@ -71,16 +71,12 @@ def resolve_adaptive_detail(mode: str, *, complexity_score: float | None = None,
     if mode != "Auto":
         return mode
     score = 0.25 if complexity_score is None else max(0.0, min(1.0, float(complexity_score)))
-    # Very detailed images retain more source structure; simple/noisy images can
-    # be simplified more aggressively without harming important contours.
+    # A low global average cannot distinguish empty background from a few
+    # important low-contrast eyes/text pixels. Auto therefore uses the same
+    # conservative floor for Preview and Draw. Strong remains an explicit mode.
     if score >= 0.36:
         effective = "Preserve detail"
-    elif score <= 0.12:
-        effective = "Strong simplify"
     else:
-        effective = "Balanced"
-    # Preview should remain representative, not more destructive than final.
-    if preview and effective == "Strong simplify":
         effective = "Balanced"
     return effective
 

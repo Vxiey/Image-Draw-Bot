@@ -130,25 +130,27 @@ def _distance2(a, b):
     return sum((int(a[i]) - int(b[i])) ** 2 for i in range(3))
 
 
-def simplify_background(image, mode="Balanced", *, cancelled=lambda: False):
+def simplify_background(image, mode="Balanced", *, protected_mask=None, cancelled=lambda: False):
     """Simplify only a border-connected background to one calibrated color.
 
     The flood starts at matching border pixels and therefore does not rewrite a
     similarly colored island enclosed inside the subject.  This is deliberately
     done before palette stroke extraction so it reduces noisy JPEG/gradient runs
-    and makes a later base Fill both safer and much cheaper.
+    and makes a later base Fill both safer and much cheaper. A same-size L/1
+    protection mask is a barrier to that flood, preserving previously identified
+    detail and any interior separated from the border by its protected contour.
     """
     validate_background_simplification(mode)
     if cancelled():raise InterruptedError()
     rgb = image.convert("RGB")
     try:
-        return _simplify_rgb_background(rgb, mode, cancelled=cancelled)
+        return _simplify_rgb_background(rgb, mode, protected_mask=protected_mask,cancelled=cancelled)
     except BaseException:
         rgb.close()
         raise
 
 
-def _simplify_rgb_background(rgb, mode, *, cancelled):
+def _simplify_rgb_background(rgb, mode, *, protected_mask=None, cancelled):
     """Work in the owned conversion; the caller's source is never modified."""
     if cancelled():raise InterruptedError()
     if mode == "Off":
@@ -156,6 +158,11 @@ def _simplify_rgb_background(rgb, mode, *, cancelled):
     w, h = rgb.size
     if w < 8 or h < 8:
         return rgb, BackgroundSimplification(False, reason="Image is too small for background simplification.")
+    protected=None
+    if protected_mask is not None:
+        if protected_mask.size!=rgb.size or protected_mask.mode not in ('L','1'):
+            raise ValueError('Background protection requires a same-size L/1 mask.')
+        protected=protected_mask.load()
     winner, confidence = _dominant_border(rgb)
     if cancelled():raise InterruptedError()
     cfg = {
@@ -177,7 +184,8 @@ def _simplify_rgb_background(rgb, mode, *, cancelled):
     visited = bytearray(w * h); queue = deque()
     def push(x, y):
         pos = y * w + x
-        if not visited[pos] and _distance2(px[x, y], winner) <= tol2:
+        if (not visited[pos] and (protected is None or not protected[x,y]) and
+                _distance2(px[x, y], winner) <= tol2):
             visited[pos] = 1; queue.append((x, y))
     for x in range(w):
         if x % 1024 == 0 and cancelled():raise InterruptedError()

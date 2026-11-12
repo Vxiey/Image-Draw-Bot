@@ -67,11 +67,21 @@ class SpecializedDispatchTests(unittest.TestCase):
                     wrapper.assert_not_called();self.assert_pixel_owner(plan)
                     target=np.any(np.asarray(image)!=255,axis=2)
                     painted=sequence_raster(plan['execution_sequence'],image.size)
-                    self.assertTrue(painted.any())
+                    meta=plan['options']['pixel_accuracy_meta']
+                    budget=meta['progressive_time_budget']
+                    if seconds==5:
+                        # Real fixed work already exhausts this render window;
+                        # do not revive a path merely to satisfy the old PPS cap.
+                        self.assertTrue(budget['fixed_overhead_exceeds_budget'])
+                        self.assertEqual(budget['sequence_budget_seconds'],0)
+                        self.assertFalse(painted.any())
+                        self.assertEqual(plan['execution_sequence'],[])
+                    else:
+                        self.assertTrue(painted.any())
+                        self.assertGreater(budget['paths_omitted'],0)
                     self.assertTrue(np.any(target&~painted))
                     self.assertFalse(np.any(painted&~target))
                     np.testing.assert_array_equal(np.asarray(plan['ui_previews']['coverage']),coverage_rgb(target,painted))
-                    meta=plan['options']['pixel_accuracy_meta']
                     self.assertEqual(meta['missing_pixels'],int(np.count_nonzero(target&~painted)))
                     self.assertAlmostEqual(meta['coverage_percent'],100*np.count_nonzero(target&painted)/np.count_nonzero(target),places=3)
                     # The public summary prices the same actual color/phase
@@ -81,6 +91,10 @@ class SpecializedDispatchTests(unittest.TestCase):
                         state=entry['color_index'],entry['phase']
                         selections+=state!=previous;previous=state
                     model=build_cost_model(plan['options'],plan['image'].size,plan['fitted'])
+                    actual_cost=model.sequence_cost(plan['execution_sequence'],initial_brush=1,
+                        include_color_verification=True)
+                    self.assertLessEqual(model.risk_adjusted_seconds(actual_cost.total_seconds),
+                        budget['sequence_budget_seconds']+1e-9)
                     self.assertAlmostEqual(plan['options']['operation_timing_meta']['palette_seconds'],
                                            selections*model.delivery.palette_click_delay,places=4)
                     self.assertEqual(plan['options']['operation_timing_meta']['custom_color_seconds'],0)

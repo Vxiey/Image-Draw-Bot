@@ -68,7 +68,8 @@ class PreviewEstimateFixture(PlanStatusFixture):
         self.stack.enter_context(patch('DrawTimeCalibration.FILE', self.directory / 'legacy.json'))
         read_speed = RealSpeedBudget.load_profile
         self.stack.enter_context(patch('RealSpeedBudget.load_profile',
-                                       side_effect=lambda key: read_speed(key, self.directory / 'speed.json')))
+                                       side_effect=lambda key, **kwargs:
+                                           read_speed(key, self.directory / 'speed.json', **kwargs)))
         self.stack.enter_context(patch('ScreenTaskWindow.ScreenTaskWindow'))
         self.stack.enter_context(patch.object(DrawBot.DrawBotApp, '_schedule_poll'))
 

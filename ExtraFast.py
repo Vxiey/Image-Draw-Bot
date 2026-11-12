@@ -38,7 +38,7 @@ def _finite_cost(value, fallback=None):
 
 def select_fast_regions(regions,source_size,target_size,options,cancelled=lambda:False):
     transform=CanvasTransform(*source_size,target_size)
-    by_color=defaultdict(list);rejected=0
+    by_color=defaultdict(list);rejected=0;model_costs=False
     for region in regions:
         if cancelled():raise InterruptedError()
         contour=list(region.get('contour') or ())
@@ -58,7 +58,7 @@ def select_fast_regions(regions,source_size,target_size,options,cancelled=lambda
             if explicit is None:
                 fill_core=total_fill
             else:
-                removed_batchable=max(0.0,min(float(explicit),total_fill*.50))
+                removed_batchable=max(0.0,min(float(explicit),total_fill))
                 fill_core=max(.001,total_fill-removed_batchable)
         elif fill_core is not None and total_fill is not None:
             removed_batchable=max(0.0,total_fill-fill_core)
@@ -80,13 +80,22 @@ def select_fast_regions(regions,source_size,target_size,options,cancelled=lambda
         try:key=int(item.get('color_index',-1))
         except (TypeError,ValueError):key=-1
         by_color[key].append(item)
+        model_costs|=('fill_core_cost_seconds' in region or
+                      'fill_batchable_overhead_seconds' in region)
 
-    ui_actions=len(options.get('fill_tool_actions') or ())+len(options.get('fill_restore_actions') or ())
-    if ui_actions==0 and options.get('fill_tool_available'):ui_actions=2
-    try:ui_delay=float(options.get('ui_control_delay',.22))
-    except (TypeError,ValueError,OverflowError):ui_delay=.22
-    if not math.isfinite(ui_delay) or ui_delay<0:ui_delay=.22
-    batch_overhead=max(0.,ui_actions*ui_delay)
+    if model_costs:
+        from RegionFillEngine import fill_tool_batch_cost
+        batch_overhead=fill_tool_batch_cost(options)
+    else:
+        # External legacy candidates declare their own cost semantics. Keep
+        # their explicit UI-delay override; real RegionFill candidates share
+        # the same calibrated transition model as their scanline comparison.
+        ui_actions=len(options.get('fill_tool_actions') or ())+len(options.get('fill_restore_actions') or ())
+        if ui_actions==0 and options.get('fill_tool_available'):ui_actions=2
+        try:ui_delay=float(options.get('ui_control_delay',.22))
+        except (TypeError,ValueError,OverflowError):ui_delay=.22
+        if not math.isfinite(ui_delay) or ui_delay<0:ui_delay=.22
+        batch_overhead=max(0.,ui_actions*ui_delay)
 
     accepted=[];seconds=0.;saved=0.;batch_rejected=0
     for color,items in sorted(by_color.items(),key=lambda kv:kv[0]):
@@ -112,7 +121,8 @@ def select_fast_regions(regions,source_size,target_size,options,cancelled=lambda
         'fill_pixels':pixels,'fill_estimated_seconds':round(seconds,3),
         'estimated_seconds_saved_vs_scanlines':round(saved,3),
         'fallback_strategy':'connected serpentine scanlines',
-        'tool_switch_cost_model':'explicit RegionFill batchable cost removed; real controls shared once per color batch',
+        'tool_switch_cost_model':('calibrated actual controls shared once per color batch' if model_costs else
+            'legacy explicit UI delay shared once per color batch'),
         'per_region_tool_switch_double_charge':False,
         'legacy_fill_cost_semantics_preserved':True,
     }

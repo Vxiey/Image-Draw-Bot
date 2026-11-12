@@ -376,17 +376,18 @@ inline float4 ds_oklab(float3 c) {
 inline float ds_hue(float a, float b) {
     float h=atan2(b,a)*57.29577951308232f; return h<0.0f?h+360.0f:h;
 }
-__kernel void ds_oklab_kernel(__global const float4 *src, __global float4 *dst, const int n) {
-    int i=get_global_id(0); if(i>=n)return; dst[i]=ds_oklab(src[i].xyz);
+__kernel void ds_oklab_kernel(__global const float4 *src, __global float *dst, const int n) {
+    int i=get_global_id(0); if(i>=n)return; float4 lab=ds_oklab(src[i].xyz);
+    dst[i*3]=lab.x; dst[i*3+1]=lab.y; dst[i*3+2]=lab.z;
 }
-__kernel void ds_delta_kernel(__global const float4 *a, __global const float4 *b,
+__kernel void ds_delta_kernel(__global const float *a, __global const float *b,
                               __global float *out, const int n) {
-    int i=get_global_id(0); if(i>=n)return; float3 d=a[i].xyz-b[i].xyz;
+    int i=get_global_id(0); if(i>=n)return; float3 d=vload3(i,a)-vload3(i,b);
     out[i]=sqrt(dot(d,d));
 }
-__kernel void ds_pairwise_lab(__global const float4 *lab, __global float *out, const int n) {
+__kernel void ds_pairwise_lab(__global const float *lab, __global float *out, const int n) {
     int i=get_global_id(0); int total=n*n; if(i>=total)return; int a=i/n; int b=i-a*n;
-    float3 d=lab[a].xyz-lab[b].xyz; out[i]=sqrt(dot(d,d))*100.0f;
+    float3 d=vload3(a,lab)-vload3(b,lab); out[i]=sqrt(dot(d,d))*100.0f;
 }
 __kernel void ds_edge_kernel(__global const float *src, __global float *dst, const int w, const int h) {
     int i=get_global_id(0); int n=w*h; if(i>=n)return; int x=i%w; int y=i/w;
@@ -657,10 +658,14 @@ def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInpu
                 mf=cl.mem_flags
                 host4=_float4_host(arr)
                 src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4)
-                dst=cl.Buffer(ctx,mf.WRITE_ONLY,host4.nbytes)
+                # The native input uses float4 alignment, but returned Lab has
+                # exactly three channels. Write packed scalars so the result
+                # neither retains padding nor needs a second full-frame copy.
+                sink=np.empty(shape,dtype=np.float32)
+                dst=cl.Buffer(ctx,mf.WRITE_ONLY,sink.nbytes)
                 program.ds_oklab_kernel(queue,(pixels,),None,src,dst,np.int32(pixels))
-                sink=np.empty_like(host4);cl.enqueue_copy(queue,sink,dst);queue.finish()
-                return sink[:,:3].reshape(shape).astype(np.float32,copy=False),route.as_dict()
+                cl.enqueue_copy(queue,sink,dst);queue.finish()
+                return sink,route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     return _run_accelerated(route, accelerated,
         lambda fallback: (_oklab_cpu(arr), fallback.as_dict()), cancelled)
@@ -703,12 +708,12 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
                 mf=cl.mem_flags
                 a4=_float4_host(src);b4=_float4_host(dst)
                 ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4)
-                la=cl.Buffer(ctx,mf.READ_WRITE,a4.nbytes);lb=cl.Buffer(ctx,mf.READ_WRITE,b4.nbytes);bd=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4)
+                la=cl.Buffer(ctx,mf.READ_WRITE,pixels*12);lb=cl.Buffer(ctx,mf.READ_WRITE,pixels*12);bd=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4)
                 program.ds_oklab_kernel(queue,(pixels,),None,ba,la,np.int32(pixels));program.ds_oklab_kernel(queue,(pixels,),None,bb,lb,np.int32(pixels));program.ds_delta_kernel(queue,(pixels,),None,la,lb,bd,np.int32(pixels))
-                sa=np.empty_like(a4);sb=np.empty_like(b4);de=np.empty((pixels,),dtype=np.float32)
+                sa=np.empty(src.shape,dtype=np.float32);sb=np.empty(dst.shape,dtype=np.float32);de=np.empty((pixels,),dtype=np.float32)
                 cl.enqueue_copy(queue,sa,la);cl.enqueue_copy(queue,sb,lb);cl.enqueue_copy(queue,de,bd);queue.finish()
                 target=src.shape
-                return sa[:,:3].reshape(target),sb[:,:3].reshape(target),de.reshape(target[:-1]),route.as_dict()
+                return sa,sb,de.reshape(target[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     return _run_accelerated(route, accelerated, cpu, cancelled)
 
@@ -723,7 +728,7 @@ def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: Pr
     from ImageGradients import luminance_edges
     h,w=lum.shape;pixels=int(h*w);route=select_route("edge_map",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     def cpu():
-        return luminance_edges(lum)
+        return luminance_edges(lum, cancelled=cancelled)
     if not pixels:return cpu(),_cpu_route("edge_map",0,"Empty luminance grid").as_dict()
     if not route.accelerated:return cpu(),route.as_dict()
     def accelerated():
@@ -1033,7 +1038,7 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
             with _opencl_session(route) as (cl, ctx, queue, program):
-                mf=cl.mem_flags;host4=_float4_host(arr);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4);lab=cl.Buffer(ctx,mf.READ_WRITE,host4.nbytes);outb=cl.Buffer(ctx,mf.WRITE_ONLY,n*n*4);program.ds_oklab_kernel(queue,(n,),None,src,lab,np.int32(n));program.ds_pairwise_lab(queue,(n*n,),None,lab,outb,np.int32(n));sink=np.empty((n*n,),dtype=np.float32);cl.enqueue_copy(queue,sink,outb);queue.finish();return sink.reshape(n,n),route.as_dict()
+                mf=cl.mem_flags;host4=_float4_host(arr);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4);lab=cl.Buffer(ctx,mf.READ_WRITE,n*12);outb=cl.Buffer(ctx,mf.WRITE_ONLY,n*n*4);program.ds_oklab_kernel(queue,(n,),None,src,lab,np.int32(n));program.ds_pairwise_lab(queue,(n*n,),None,lab,outb,np.int32(n));sink=np.empty((n*n,),dtype=np.float32);cl.enqueue_copy(queue,sink,outb);queue.finish();return sink.reshape(n,n),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     return _run_accelerated(route, accelerated,
         lambda fallback: (_pairwise_lab_distance(_oklab_cpu(arr),cancelled=cancelled), fallback.as_dict()), cancelled)

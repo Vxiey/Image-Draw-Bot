@@ -1,0 +1,285 @@
+{
+  "baseline_commit": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "baseline_tree": "72e55f2a6d3dad971a13e9ab9141aa521cf15177",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "fixture": {
+    "path": "assets/paint-tools-reference.png",
+    "sha256": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586"
+  },
+  "sha256": {
+    "ImageGradients.py": "48f446232373c4256a578bb31bce12aa866fdcf4650df10e3481e049a2561856",
+    "UniversalGpuAcceleration.py": "a2554c90ca03e9853cf8a2669eaeb943dc71b62c64779d95e33800aa47adf5d7",
+    "AccuracyEvaluator.py": "bc9af121c4662d9bb907961a1f8e1cf77394e1059744bb6e8347a90360d3ac76",
+    "VisualImportanceMap.py": "2750c0c391e23395af4094f899831c0dd138a347248d603e86dbab7e0beab6b4",
+    "PixelAccuratePlanner.py": "84a0850cdc345fdccbc8ad979c828dc672a5400183bf86b92fe75a29b74c98a4",
+    "ShadowDetailEngine.py": "9565c2f04ea08b815533323a56b030b27b355524eaaa0ac710be4efc7f1c3ded",
+    "test_v148_runtime_batch42_opencl_layout.py": "09616ad0953385af43cbffd7d2794504afa74e1f59df1adc091bc15bdbd7234b",
+    "benchmark_v148_runtime_batch42.py": "d09f26a8129e8e8a1b57d5bfbb8b9ab9affb024b69c3278d1a6fd02b82d56ff8"
+  },
+  "method": "Actual public callers with matching historical/current native Lab layouts, deterministic CPU arithmetic only at the native ABI, and exact whole-output comparison. No physical GPU or timing claim.",
+  "before": [
+    {
+      "name": "oklab",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          49152
+        ],
+        [
+          2,
+          49152
+        ]
+      ],
+      "device_buffer_request_total": 98304,
+      "logical_output_bytes": 36864,
+      "retained_host_owner_bytes": 49152,
+      "outputs_contiguous": [
+        false
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "a0f3d076736eca82d180ceb29bfce013baf490022aa52dae13c9d4a1e4738241"
+        }
+      ]
+    },
+    {
+      "name": "perceptual_pair",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          49152
+        ],
+        [
+          9,
+          49152
+        ],
+        [
+          4,
+          49152
+        ],
+        [
+          4,
+          49152
+        ],
+        [
+          2,
+          12288
+        ]
+      ],
+      "device_buffer_request_total": 208896,
+      "logical_output_bytes": 86016,
+      "retained_host_owner_bytes": 110592,
+      "outputs_contiguous": [
+        false,
+        false,
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "a0f3d076736eca82d180ceb29bfce013baf490022aa52dae13c9d4a1e4738241"
+        },
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "c5535a43eae6d6ae726818a71c426b1102f8e74967b5a6f0b8f29d4ceb1cc9d8"
+        },
+        {
+          "shape": [
+            48,
+            64
+          ],
+          "dtype": "<f4",
+          "sha256": "2f0d239e3d783fe18fc920eaafd74cd55a11e596e6e94feee308ca58fe1b806f"
+        }
+      ]
+    },
+    {
+      "name": "pairwise",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          496
+        ],
+        [
+          4,
+          496
+        ],
+        [
+          2,
+          3844
+        ]
+      ],
+      "device_buffer_request_total": 4836,
+      "logical_output_bytes": 3844,
+      "retained_host_owner_bytes": 3844,
+      "outputs_contiguous": [
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            31,
+            31
+          ],
+          "dtype": "<f4",
+          "sha256": "646801d98200804679e98f8179cd85a855eabcb787cfe0669020a160da071ea9"
+        }
+      ]
+    }
+  ],
+  "after": [
+    {
+      "name": "oklab",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          49152
+        ],
+        [
+          2,
+          36864
+        ]
+      ],
+      "device_buffer_request_total": 86016,
+      "logical_output_bytes": 36864,
+      "retained_host_owner_bytes": 36864,
+      "outputs_contiguous": [
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "a0f3d076736eca82d180ceb29bfce013baf490022aa52dae13c9d4a1e4738241"
+        }
+      ]
+    },
+    {
+      "name": "perceptual_pair",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          49152
+        ],
+        [
+          9,
+          49152
+        ],
+        [
+          4,
+          36864
+        ],
+        [
+          4,
+          36864
+        ],
+        [
+          2,
+          12288
+        ]
+      ],
+      "device_buffer_request_total": 184320,
+      "logical_output_bytes": 86016,
+      "retained_host_owner_bytes": 86016,
+      "outputs_contiguous": [
+        true,
+        true,
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "a0f3d076736eca82d180ceb29bfce013baf490022aa52dae13c9d4a1e4738241"
+        },
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "c5535a43eae6d6ae726818a71c426b1102f8e74967b5a6f0b8f29d4ceb1cc9d8"
+        },
+        {
+          "shape": [
+            48,
+            64
+          ],
+          "dtype": "<f4",
+          "sha256": "2f0d239e3d783fe18fc920eaafd74cd55a11e596e6e94feee308ca58fe1b806f"
+        }
+      ]
+    },
+    {
+      "name": "pairwise",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          496
+        ],
+        [
+          4,
+          372
+        ],
+        [
+          2,
+          3844
+        ]
+      ],
+      "device_buffer_request_total": 4712,
+      "logical_output_bytes": 3844,
+      "retained_host_owner_bytes": 3844,
+      "outputs_contiguous": [
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            31,
+            31
+          ],
+          "dtype": "<f4",
+          "sha256": "646801d98200804679e98f8179cd85a855eabcb787cfe0669020a160da071ea9"
+        }
+      ]
+    }
+  ],
+  "experiment_status": "Initial 66564-pixel gradient cutoff rejected for marginal small-grid memory benefit and slower public-edge controls. Raw observations retained; P4201 layout is unchanged.",
+  "gradient_source_at_observation": "\"\"\"Shared finite-difference semantics for CPU and array-compatible GPU callers.\"\"\"\nfrom __future__ import annotations\n\nimport numpy as np\n\n_EDGE_TILE_SIDE = 256\n_DENSE_EDGE_PIXELS = (_EDGE_TILE_SIDE + 2) ** 2\n\n\ndef _dense_luminance_edges(luminance, *, xp):\n    \"\"\"Unchanged finite-difference arithmetic for one complete grid.\"\"\"\n    gx = gy = None\n    try:\n        gx = xp.zeros_like(luminance)\n        gy = xp.zeros_like(luminance)\n        height, width = luminance.shape\n        if width > 1:\n            gx[:, 0] = luminance[:, 1] - luminance[:, 0]\n            gx[:, -1] = luminance[:, -1] - luminance[:, -2]\n            gx[:, 1:-1] = (luminance[:, 2:] - luminance[:, :-2]) * .5\n        if height > 1:\n            gy[0, :] = luminance[1, :] - luminance[0, :]\n            gy[-1, :] = luminance[-1, :] - luminance[-2, :]\n            gy[1:-1, :] = (luminance[2:, :] - luminance[:-2, :]) * .5\n        return xp.sqrt(gx * gx + gy * gy)\n    finally:\n        gx = gy = luminance = None\n\n\ndef luminance_edges(luminance, *, xp=np, cancelled=None):\n    \"\"\"Centered interior differences and one-sided existing-image boundaries.\n\n    A singleton axis has no gradient. Two-pixel axes retain their real edge on\n    both pixels, and empty grids retain their shape without a backend launch.\n    The caller owns input validation and conversion to floating-point luminance.\n    \"\"\"\n    def check():\n        if cancelled is not None and cancelled():\n            raise InterruptedError('Edge analysis cancelled.')\n\n    result = output = None\n    try:\n        check()\n        # Native GPU expressions and small grids keep their existing dispatch.\n        # Other dtypes also retain NumPy's established casting/error behavior;\n        # the documented callers prepare float luminance before reaching here.\n        if xp is not np or luminance.size <= _DENSE_EDGE_PIXELS or luminance.dtype.kind != 'f':\n            result = _dense_luminance_edges(luminance, xp=xp)\n            check()\n            return result\n        height, width = luminance.shape\n        output = np.empty_like(luminance, order='K')\n        # One sample of halo is sufficient for the centered differences. Only\n        # original-image boundaries use the one-sided formula. Keep both axes\n        # bounded, including a panorama whose single row exceeds a tile.\n        for top in range(0, height, _EDGE_TILE_SIDE):\n            bottom = min(height, top + _EDGE_TILE_SIDE)\n            halo_top, halo_bottom = max(0, top - 1), min(height, bottom + 1)\n            for left in range(0, width, _EDGE_TILE_SIDE):\n                check()\n                right = min(width, left + _EDGE_TILE_SIDE)\n                halo_left, halo_right = max(0, left - 1), min(width, right + 1)\n                result = _dense_luminance_edges(\n                    luminance[halo_top:halo_bottom, halo_left:halo_right], xp=np)\n                output[top:bottom, left:right] = result[\n                    top - halo_top:bottom - halo_top, left - halo_left:right - halo_left]\n                result = None\n        check()\n        return output\n    finally:\n        # Returned owners transfer normally; stopped/failed private tile or\n        # full-output owners must not survive solely in a retained traceback.\n        result = output = luminance = None\n",
+  "harness_sources": {
+    "benchmark_v148_runtime_batch42.py": "\"\"\"Paired CPU observations for bounded edge scratch, using an existing asset.\n\nRun only in an otherwise idle test window. No raster is generated or saved.\nThe historical UniversalGpuAcceleration consumer is held constant in both\ndirections, so its old helper call signature needs no adapter and the only\nmeasured implementation difference is ImageGradients.\n\"\"\"\nfrom contextlib import ExitStack, closing\nimport gc\nimport hashlib\nimport json\nfrom pathlib import Path\nimport statistics\nimport subprocess\nimport sys\nimport time\nimport tracemalloc\nfrom types import ModuleType\nfrom unittest.mock import patch\n\nimport numpy as np\nfrom PIL import Image\n\nimport ImageGradients as current\n\n\nBASELINE = 'e33fa67d17e3c33ccda8e736e7e16c2582d9fc06'\nROOT = Path(__file__).resolve().parent\n\n\ndef historical(filename):\n    name = '_runtime42_baseline_' + Path(filename).stem\n    source = subprocess.check_output(['git', 'show', f'{BASELINE}:{filename}'], cwd=ROOT)\n    module = ModuleType(name)\n    module.__file__ = f'{BASELINE}:{filename}'\n    sys.modules[name] = module\n    exec(compile(source, module.__file__, 'exec'), module.__dict__)\n    return module\n\n\ndef digest(value):\n    if isinstance(value, np.ndarray):\n        return {'shape': value.shape, 'dtype': value.dtype.str,\n                'sha256': hashlib.sha256(value.tobytes()).hexdigest()}\n    if isinstance(value, dict):\n        return {key: digest(item) for key, item in value.items()}\n    if isinstance(value, (list, tuple)):\n        return [digest(item) for item in value]\n    if hasattr(value, '__dataclass_fields__'):\n        return digest(vars(value))\n    if isinstance(value, np.generic):\n        return value.item()\n    return value\n\n\ndef elapsed(call):\n    start = time.perf_counter()\n    result = call()\n    duration = time.perf_counter() - start\n    return duration * 1000.0, result\n\n\ndef peak(call):\n    gc.collect()\n    tracemalloc.start()\n    try:\n        result = call()\n        _live, maximum = tracemalloc.get_traced_memory()\n        return maximum, digest(result)\n    finally:\n        tracemalloc.stop()\n\n\ndef compare(label, call, before_module, baseline_gpu, *, pairs=4):\n    def execute(module):\n        with patch.dict(sys.modules, {'ImageGradients': module,\n                                      'UniversalGpuAcceleration': baseline_gpu}):\n            return call(module)\n    warm_before, warm_after = execute(before_module), execute(current)\n    expected = digest(warm_before)\n    if digest(warm_after) != expected:\n        raise AssertionError(f'{label}: complete output differs from the fixed historical gradient')\n    del warm_before, warm_after\n    samples = {'before_ms': [], 'after_ms': []}\n    for repeat in range(pairs):\n        order = (('before_ms', before_module), ('after_ms', current))\n        if repeat % 2:\n            order = order[::-1]\n        for key, module in order:\n            ms, result = elapsed(lambda: execute(module))\n            samples[key].append(ms)\n            if digest(result) != expected:\n                raise AssertionError(f'{label}: timed output changed')\n            del result\n    before_peak, before_result = peak(lambda: execute(before_module))\n    after_peak, after_result = peak(lambda: execute(current))\n    if before_result != expected or after_result != expected:\n        raise AssertionError(f'{label}: allocation observation changed output')\n    return {'name': label, **samples, 'before_median_ms': statistics.median(samples['before_ms']),\n            'after_median_ms': statistics.median(samples['after_ms']),\n            'before_traced_peak_bytes': before_peak, 'after_traced_peak_bytes': after_peak,\n            'exact_complete_output': True, 'output': expected}\n\n\ndef opencl_layout_observation(module, channels):\n    \"\"\"Observe actual public host owners at the matching historical native ABI.\n\n    Native arithmetic is supplied at the unavailable OpenCL boundary only;\n    neither these recorded byte requests nor their Python backing stores are a\n    physical VRAM observation. No timing is attributed to the native facade.\n    \"\"\"\n    from test_v148_runtime_batch42_opencl_layout import (\n        PackedLabBoundary, asset_rgb, measured_profile, retained_owner_bytes)\n\n    class LayoutBoundary(PackedLabBoundary):\n        def lab(self, queue, global_size, local_size, source, destination, count):\n            self.launch(queue, global_size, local_size, count)\n            assert source.data.size == count * 4\n            assert destination.data.size == count * channels\n            values = destination.data.reshape(-1, channels)\n            values[:, :3] = module._oklab_cpu(source.data.reshape(-1, 4)[:, :3])\n            if channels == 4:\n                values[:, 3] = 0\n\n        def delta(self, queue, global_size, local_size, left, right, destination, count):\n            self.launch(queue, global_size, local_size, count)\n            assert left.data.size == right.data.size == count * channels\n            assert destination.data.size == count\n            a = left.data.reshape(-1, channels)[:, :3]\n            b = right.data.reshape(-1, channels)[:, :3]\n            destination.data[:] = np.linalg.norm(a - b, axis=1)\n\n        def pairwise(self, queue, global_size, local_size, source, destination, count):\n            self.launch(queue, global_size, local_size, np.int32(count * count))\n            assert source.data.size == count * channels\n            assert destination.data.size == count * count\n            destination.data[:] = module._pairwise_lab_distance(\n                source.data.reshape(-1, channels)[:, :3]).reshape(-1)\n\n    source = asset_rgb()\n    colors = np.unique((source * 255).astype(np.uint8).reshape(-1, 3), axis=0)[:31]\n    profile = measured_profile()\n    calls = (\n        ('oklab', lambda **kw: module.oklab_array(source, **kw)),\n        ('perceptual_pair', lambda **kw: module.perceptual_pair(source, source[:, ::-1], **kw)),\n        ('pairwise', lambda **kw: module.pairwise_oklab_distance(colors, **kw)),\n    )\n    rows = []\n    for label, call in calls:\n        boundary = LayoutBoundary()\n        expected = call(gpu_mode='CPU')[:-1]\n        with ExitStack() as native:\n            for name in ('_FAILED', '_OPENCL_CACHE', '_OPENCL_IN_USE'):\n                native.enter_context(patch.object(module, name, {}))\n            native.enter_context(patch.object(module, '_opencl_context', return_value=boundary.native))\n            result = call(profile=profile)\n        if not result[-1]['accelerated']:\n            raise AssertionError(f'{label}: observation fell back from its native boundary')\n        for actual, reference in zip(result[:-1], expected):\n            np.testing.assert_array_equal(actual, reference)\n        rows.append({'name': label, 'device_buffer_requests_bytes': boundary.allocations,\n                     'device_buffer_request_total': sum(size for _flags, size in boundary.allocations),\n                     'logical_output_bytes': sum(value.nbytes for value in result[:-1]),\n                     'retained_host_owner_bytes': sum(retained_owner_bytes(value) for value in result[:-1]),\n                     'outputs_contiguous': [bool(value.flags.c_contiguous) for value in result[:-1]],\n                     'exact_cpu_output': True, 'output': digest(result[:-1])})\n    return rows\n\n\ndef main():\n    import AccuracyEvaluator\n    import PixelAccuratePlanner\n    import VisualImportanceMap\n    before = historical('ImageGradients.py')\n    baseline_gpu = historical('UniversalGpuAcceleration.py')\n    import UniversalGpuAcceleration as current_gpu\n    layout_before = opencl_layout_observation(baseline_gpu, 4)\n    layout_after = opencl_layout_observation(current_gpu, 3)\n    for old, new in zip(layout_before, layout_after):\n        if old['name'] != new['name'] or old['output'] != new['output']:\n            raise AssertionError('Complete OpenCL-boundary output changed across the layout revision')\n    rows = []\n    source_path = ROOT / 'assets' / 'paint-tools-reference.png'\n    with closing(Image.open(source_path)) as original, closing(original.convert('RGB')) as rgb:\n        for size in ((384, 256), (1536, 1024)):\n            with closing(rgb.resize(size, Image.Resampling.NEAREST)) as source, \\\n                    closing(source.convert('L')) as gray, \\\n                    closing(source.resize((max(1, size[0] // 4), max(1, size[1] // 4)), Image.Resampling.BOX)) as small, \\\n                    closing(small.resize(size, Image.Resampling.NEAREST)) as preview:\n                luminance = np.asarray(gray, dtype=np.float32) / np.float32(255)\n                rows.append(compare(f'gradient_{size[0]}x{size[1]}',\n                                    lambda module: module.luminance_edges(luminance), before, baseline_gpu))\n                rows.append(compare(f'complete_accuracy_{size[0]}x{size[1]}',\n                                    lambda _: AccuracyEvaluator.evaluate_preview(source, preview, gpu_mode='CPU'),\n                                    before, baseline_gpu))\n                rows.append(compare(f'complete_importance_{size[0]}x{size[1]}',\n                                    lambda _: VisualImportanceMap.build_importance_map(source, {'gpu_mode': 'CPU'}),\n                                    before, baseline_gpu))\n        with closing(rgb.resize((385, 257), Image.Resampling.NEAREST)) as source:\n            palette = ((0, 0, 0), (255, 255, 255), (128, 128, 128), (200, 40, 40), (20, 70, 210))\n            rows.append(compare('complete_pixel_map_385x257',\n                                lambda _: PixelAccuratePlanner.build_pixel_map(source, palette, gpu_mode='CPU'),\n                                before, baseline_gpu))\n    files = ('ImageGradients.py', 'UniversalGpuAcceleration.py', 'AccuracyEvaluator.py',\n             'VisualImportanceMap.py', 'PixelAccuratePlanner.py', 'ShadowDetailEngine.py',\n             'test_v148_runtime_batch42_opencl_layout.py',\n             Path(__file__).name)\n    report = {\n        'baseline_commit': BASELINE,\n        'baseline_tree': subprocess.check_output(['git', 'rev-parse', f'{BASELINE}^{{tree}}'], cwd=ROOT, text=True).strip(),\n        'method': 'Four alternating AB/BA elapsed pairs after exact-output warm checks; separate tracemalloc observations. Fixed historical gradient and universal CPU consumer; other public consumers are current source in both directions.',\n        'scope': 'CPU helper and complete numeric consumer calls, not physical GPU execution, native drawing, process RSS or a universal speed claim. Caller-owned source/preview preparation is outside measurements; required returned arrays and all traced scratch inside each call are included.',\n        'python': sys.version, 'numpy': np.__version__,\n        'fixture': {'path': source_path.relative_to(ROOT).as_posix(),\n                    'sha256': hashlib.sha256(source_path.read_bytes()).hexdigest()},\n        'sha256': {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files},\n        'cases': rows,\n    }\n    output = ROOT / 'docs' / 'v148-batch42-runtime-gradients.json'\n    output.write_text(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + '\\n', encoding='utf-8')\n    layout_report = {key: report[key] for key in ('baseline_commit', 'baseline_tree', 'python', 'numpy', 'fixture', 'sha256')}\n    layout_report.update(\n        method='Actual public callers with matching historical/current native Lab layouts, deterministic CPU arithmetic only at the native ABI, and exact whole-output comparison. No physical GPU or timing claim.',\n        before=layout_before, after=layout_after)\n    (ROOT / 'docs' / 'v148-batch42-runtime-opencl-layout.json').write_text(\n        json.dumps(layout_report, indent=2, ensure_ascii=False, allow_nan=False) + '\\n', encoding='utf-8')\n    print(json.dumps([{key: row[key] for key in ('name', 'before_median_ms', 'after_median_ms',\n                     'before_traced_peak_bytes', 'after_traced_peak_bytes', 'exact_complete_output')}\n                     for row in rows], indent=2))\n\n\nif __name__ == '__main__':\n    main()\n",
+    "benchmark_v148_runtime_batch42_edge_consumer.py": "\"\"\"Measure the complete public edge operation on real luminance/Lab inputs.\n\nThis follow-up retains the initial whole-analysis report unchanged. It resolves\nwhether the bounded helper still benefits the public validation/route/Stop\nwrapper and the noncontiguous Lab-channel layout used by AccuracyEvaluator.\n\"\"\"\nfrom contextlib import closing\nimport hashlib\nimport json\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nimport numpy as np\nfrom PIL import Image\n\nimport UniversalGpuAcceleration as current_gpu\nfrom benchmark_v148_runtime_batch42 import BASELINE, ROOT, compare, current, historical\n\n\ndef main():\n    before = historical('ImageGradients.py')\n    baseline_gpu = historical('UniversalGpuAcceleration.py')\n    source_path = ROOT / 'assets' / 'paint-tools-reference.png'\n    rows = []\n    with closing(Image.open(source_path)) as original, closing(original.convert('RGB')) as rgb:\n        for size in ((384, 256), (1536, 1024)):\n            with closing(rgb.resize(size, Image.Resampling.NEAREST)) as source, \\\n                    closing(source.convert('L')) as gray:\n                luminance = np.asarray(gray, dtype=np.float32) / np.float32(255)\n                lab, _ = baseline_gpu.oklab_array(np.asarray(source), gpu_mode='CPU')\n                for kind, values in (('dense_luminance', luminance), ('strided_lab', lab[..., 0])):\n                    def operation(module):\n                        executor = baseline_gpu if module is before else current_gpu\n                        return executor.edge_magnitude(values, gpu_mode='CPU')\n                    row = compare(f'complete_edge_{kind}_{size[0]}x{size[1]}', operation,\n                                  before, baseline_gpu, pairs=4)\n                    row.update(input_strides=values.strides, input_contiguous=bool(values.flags.c_contiguous))\n                    rows.append(row)\n    files = ('ImageGradients.py', 'UniversalGpuAcceleration.py',\n             'benchmark_v148_runtime_batch42.py', Path(__file__).name)\n    report = {\n        'baseline_commit': BASELINE,\n        'baseline_tree': subprocess.check_output(['git', 'rev-parse', f'{BASELINE}^{{tree}}'], cwd=ROOT, text=True).strip(),\n        'method': 'Four alternating AB/BA elapsed pairs and separate traced peaks, exact complete array/route equality. Each side uses its actual historical/current public edge_magnitude and matching gradient implementation.',\n        'scope': 'Public CPU edge operation including validation, route selection and completion. Caller-owned dense luminance and real CPU Lab channels are prepared outside the call. This does not replace or invalidate the initial complete Accuracy/Importance/PixelMap observations.',\n        'python': sys.version, 'numpy': np.__version__,\n        'fixture': {'path': source_path.relative_to(ROOT).as_posix(),\n                    'sha256': hashlib.sha256(source_path.read_bytes()).hexdigest()},\n        'sha256': {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files},\n        'cases': rows,\n    }\n    (ROOT / 'docs' / 'v148-batch42-runtime-edge-consumer.json').write_text(\n        json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + '\\n', encoding='utf-8')\n    print(json.dumps([{key: row[key] for key in ('name', 'before_median_ms', 'after_median_ms',\n                     'before_traced_peak_bytes', 'after_traced_peak_bytes', 'exact_complete_output')}\n                     for row in rows], indent=2))\n\n\nif __name__ == '__main__':\n    main()\n"
+  }
+}

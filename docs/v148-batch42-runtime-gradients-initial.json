@@ -1,0 +1,553 @@
+{
+  "baseline_commit": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "baseline_tree": "72e55f2a6d3dad971a13e9ab9141aa521cf15177",
+  "method": "Four alternating AB/BA elapsed pairs after exact-output warm checks; separate tracemalloc observations. Fixed historical gradient and universal CPU consumer; other public consumers are current source in both directions.",
+  "scope": "CPU helper and complete numeric consumer calls, not physical GPU execution, native drawing, process RSS or a universal speed claim. Caller-owned source/preview preparation is outside measurements; required returned arrays and all traced scratch inside each call are included.",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "fixture": {
+    "path": "assets/paint-tools-reference.png",
+    "sha256": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586"
+  },
+  "sha256": {
+    "ImageGradients.py": "48f446232373c4256a578bb31bce12aa866fdcf4650df10e3481e049a2561856",
+    "UniversalGpuAcceleration.py": "a2554c90ca03e9853cf8a2669eaeb943dc71b62c64779d95e33800aa47adf5d7",
+    "AccuracyEvaluator.py": "bc9af121c4662d9bb907961a1f8e1cf77394e1059744bb6e8347a90360d3ac76",
+    "VisualImportanceMap.py": "2750c0c391e23395af4094f899831c0dd138a347248d603e86dbab7e0beab6b4",
+    "PixelAccuratePlanner.py": "84a0850cdc345fdccbc8ad979c828dc672a5400183bf86b92fe75a29b74c98a4",
+    "ShadowDetailEngine.py": "9565c2f04ea08b815533323a56b030b27b355524eaaa0ac710be4efc7f1c3ded",
+    "test_v148_runtime_batch42_opencl_layout.py": "09616ad0953385af43cbffd7d2794504afa74e1f59df1adc091bc15bdbd7234b",
+    "benchmark_v148_runtime_batch42.py": "d09f26a8129e8e8a1b57d5bfbb8b9ab9affb024b69c3278d1a6fd02b82d56ff8"
+  },
+  "cases": [
+    {
+      "name": "gradient_384x256",
+      "before_ms": [
+        2.0636350000131642,
+        1.2668629997278913,
+        1.3816569999107742,
+        1.4497940001092502
+      ],
+      "after_ms": [
+        1.172772000245459,
+        1.5510180001001572,
+        1.1135740005556727,
+        1.1328930004310678
+      ],
+      "before_median_ms": 1.4157255000100122,
+      "after_median_ms": 1.1528325003382633,
+      "before_traced_peak_bytes": 1587264,
+      "after_traced_peak_bytes": 1460864,
+      "exact_complete_output": true,
+      "output": {
+        "shape": [
+          256,
+          384
+        ],
+        "dtype": "<f4",
+        "sha256": "5d5156563ed71b03f8a181b4d31f476e2b1e57005853c51a73b07f7b9987fa83"
+      }
+    },
+    {
+      "name": "complete_accuracy_384x256",
+      "before_ms": [
+        53.92104000020481,
+        41.64256900003238,
+        85.57609699983004,
+        110.38258699954895
+      ],
+      "after_ms": [
+        46.52079099923867,
+        71.03315299991664,
+        214.38086400030443,
+        100.3274020004028
+      ],
+      "before_median_ms": 69.74856850001743,
+      "after_median_ms": 85.68027750015972,
+      "before_traced_peak_bytes": 7590984,
+      "after_traced_peak_bytes": 7590968,
+      "exact_complete_output": true,
+      "output": {
+        "raw_pixel_accuracy_percent": 98.48,
+        "source_pixel_accuracy_percent": 98.48,
+        "perceptual_color_accuracy_percent": 97.08,
+        "luminance_accuracy_percent": 98.7,
+        "hue_accuracy_percent": 93.32,
+        "hue_evaluation_pixels": 4245,
+        "edge_accuracy_percent": 40.35,
+        "important_feature_accuracy_percent": 97.08,
+        "visual_accuracy_percent": 80.78,
+        "method": "final simulated drawing vs original source; sRGB/OKLab source-relative evaluation",
+        "visual_accuracy_weights": {
+          "perceptual_color_accuracy_percent": 0.4,
+          "luminance_accuracy_percent": 0.2,
+          "edge_accuracy_percent": 0.25,
+          "coverage_percent": 0.15
+        },
+        "normalized_source_size": [
+          384,
+          256
+        ],
+        "delta_e_oklab": {
+          "space": "OKLab",
+          "metric": "euclidean OKLab distance",
+          "mean_delta_e_oklab": 0.01321,
+          "median_delta_e_oklab": 0.0,
+          "p95_delta_e_oklab": 0.10084,
+          "max_delta_e_oklab": 0.62278,
+          "severe_error_pixels_percent": 2.29
+        },
+        "acceleration_routes": {
+          "pixel_math": {
+            "workload": "pixel_math",
+            "profile_workload": "bulk_matrix",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98304,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "delta_e_oklab": {
+            "workload": "delta_e",
+            "profile_workload": "oklab",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98304,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_source": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98304,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_final": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98304,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "complete_importance_384x256",
+      "before_ms": [
+        16.909531999772298,
+        20.809001000088756,
+        20.28440999947634,
+        25.426625999898533
+      ],
+      "after_ms": [
+        17.604847000256996,
+        19.318726000165043,
+        19.90053400004399,
+        35.882115000276826
+      ],
+      "before_median_ms": 20.546705499782547,
+      "after_median_ms": 19.609630000104517,
+      "before_traced_peak_bytes": 4010664,
+      "after_traced_peak_bytes": 4010630,
+      "exact_complete_output": true,
+      "output": [
+        {
+          "shape": [
+            256,
+            384
+          ],
+          "dtype": "<f4",
+          "sha256": "db03b85b55cd582a6bc46b7278e619eccb126dcde6510c2adfa41e61eb65d950"
+        },
+        {
+          "backend": "cpu-numpy",
+          "edge_mean": 0.04785991832613945,
+          "contrast_mean": 0.04681744799017906,
+          "foreground_mean": 0.05604780837893486,
+          "protected_percent": 3.5420735677083335,
+          "border_rgb": [
+            248,
+            249,
+            250
+          ],
+          "width": 384,
+          "height": 256,
+          "pixels": 98304,
+          "estimated_working_mb": 4.5,
+          "gpu_fallback_reason": "GPU disabled or VRAM budget too small"
+        }
+      ]
+    },
+    {
+      "name": "gradient_1536x1024",
+      "before_ms": [
+        29.010694999669795,
+        24.840362999384524,
+        25.272093000239693,
+        26.690384000175982
+      ],
+      "after_ms": [
+        16.92964299945743,
+        15.420546999848739,
+        14.394531999641913,
+        13.841937000506732
+      ],
+      "before_median_ms": 25.981238500207837,
+      "after_median_ms": 14.907539499745326,
+      "before_traced_peak_bytes": 25180128,
+      "after_traced_peak_bytes": 7371624,
+      "exact_complete_output": true,
+      "output": {
+        "shape": [
+          1024,
+          1536
+        ],
+        "dtype": "<f4",
+        "sha256": "0a9f7e6b29dd05d289fc2635f2f7ccb0e4c0e0a924cbbf524ba990dc720322b8"
+      }
+    },
+    {
+      "name": "complete_accuracy_1536x1024",
+      "before_ms": [
+        652.4631919992316,
+        550.129093000578,
+        727.2091949998867,
+        692.5636420000956
+      ],
+      "after_ms": [
+        670.5761650000568,
+        930.3331710007114,
+        791.1854040003163,
+        586.1000209997655
+      ],
+      "before_median_ms": 672.5134169996636,
+      "after_median_ms": 730.8807845001866,
+      "before_traced_peak_bytes": 97539872,
+      "after_traced_peak_bytes": 97539924,
+      "exact_complete_output": true,
+      "output": {
+        "raw_pixel_accuracy_percent": 99.56,
+        "source_pixel_accuracy_percent": 99.56,
+        "perceptual_color_accuracy_percent": 99.15,
+        "luminance_accuracy_percent": 99.62,
+        "hue_accuracy_percent": 97.85,
+        "hue_evaluation_pixels": 68457,
+        "edge_accuracy_percent": 31.48,
+        "important_feature_accuracy_percent": 99.15,
+        "visual_accuracy_percent": 79.36,
+        "method": "final simulated drawing vs original source; sRGB/OKLab source-relative evaluation",
+        "visual_accuracy_weights": {
+          "perceptual_color_accuracy_percent": 0.4,
+          "luminance_accuracy_percent": 0.2,
+          "edge_accuracy_percent": 0.25,
+          "coverage_percent": 0.15
+        },
+        "normalized_source_size": [
+          1536,
+          1024
+        ],
+        "delta_e_oklab": {
+          "space": "OKLab",
+          "metric": "euclidean OKLab distance",
+          "mean_delta_e_oklab": 0.00383,
+          "median_delta_e_oklab": 0.0,
+          "p95_delta_e_oklab": 0.0,
+          "max_delta_e_oklab": 0.68854,
+          "severe_error_pixels_percent": 0.55
+        },
+        "acceleration_routes": {
+          "pixel_math": {
+            "workload": "pixel_math",
+            "profile_workload": "bulk_matrix",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 1572864,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "delta_e_oklab": {
+            "workload": "delta_e",
+            "profile_workload": "oklab",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 1572864,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_source": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 1572864,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_final": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 1572864,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "complete_importance_1536x1024",
+      "before_ms": [
+        253.6675790006484,
+        395.4304429998956,
+        321.2185660004252,
+        484.26638699947944
+      ],
+      "after_ms": [
+        356.9941799996741,
+        478.0040559999179,
+        319.1523479999887,
+        350.51996000038343
+      ],
+      "before_median_ms": 358.3245045001604,
+      "after_median_ms": 353.75707000002876,
+      "before_traced_peak_bytes": 61472501,
+      "after_traced_peak_bytes": 61472533,
+      "exact_complete_output": true,
+      "output": [
+        {
+          "shape": [
+            1024,
+            1536
+          ],
+          "dtype": "<f4",
+          "sha256": "5a888862cd80a8c3506e473ae786bbf095d2655fd95b10ce1c105d27f8010a71"
+        },
+        {
+          "backend": "cpu-numpy",
+          "edge_mean": 0.021129479631781578,
+          "contrast_mean": 0.0211349967867136,
+          "foreground_mean": 0.05650489032268524,
+          "protected_percent": 2.046712239583333,
+          "border_rgb": [
+            248,
+            249,
+            250
+          ],
+          "width": 1536,
+          "height": 1024,
+          "pixels": 1572864,
+          "estimated_working_mb": 72.0,
+          "gpu_fallback_reason": "GPU disabled or VRAM budget too small"
+        }
+      ]
+    },
+    {
+      "name": "complete_pixel_map_385x257",
+      "before_ms": [
+        110.58871800014458,
+        95.20720100044855,
+        93.9350190001278,
+        95.44735400049831
+      ],
+      "after_ms": [
+        91.33043700057897,
+        94.78833699995448,
+        109.18195700014621,
+        81.82980499987025
+      ],
+      "before_median_ms": 95.32727750047343,
+      "after_median_ms": 93.05938700026672,
+      "before_traced_peak_bytes": 6198306,
+      "after_traced_peak_bytes": 6198348,
+      "exact_complete_output": true,
+      "output": {
+        "width": 385,
+        "height": 257,
+        "rgb": {
+          "shape": [
+            257,
+            385,
+            3
+          ],
+          "dtype": "|u1",
+          "sha256": "84fd95f9ee0dfd486bc8c88036fd57400ec92f17bb098de31ed158714260ec1c"
+        },
+        "palette_index": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<i2",
+          "sha256": "80630159486c623d70d6bab05cc377e7b254fa926c48b0294c6cccf21553f497"
+        },
+        "drawable_mask": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "|b1",
+          "sha256": "9d1245d7543fa8b004ceb26c020c0ac9903b05442178ae11b67911368e82334d"
+        },
+        "edge_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "588ef0af8eb0448dff765b3db18f654250e92f3c301fc0a4fb5a0cc860e4f4a2"
+        },
+        "importance_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "6f684f939d69725eabce394e0deef4a9b06d44b800be3984fe18b0a253c100d7"
+        },
+        "protected_mask": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "|b1",
+          "sha256": "7b738322b1263399966951a6e6bd02dee928d60f2a287d5607b061fb7c74e27d"
+        },
+        "metadata": {
+          "engine": "Shadow + Contour Analysis v1",
+          "step": 26,
+          "detail_fidelity": true,
+          "full_resolution": true,
+          "destructive_simplification": false,
+          "tiny_feature_protection": true,
+          "shadow_analysis": true,
+          "contour_analysis": true,
+          "post_processing_priority": true,
+          "micro_detail_protection": true,
+          "simplification_policy": "lossless-only",
+          "analysis_backends": {
+            "palette": "cpu:numpy",
+            "edge": "cpu:numpy",
+            "importance": "cpu:numpy",
+            "micro_detail": "cpu:numpy"
+          },
+          "palette_backend": "cpu-numpy",
+          "palette_backend_id": "cpu:numpy",
+          "palette_vendor": "CPU",
+          "palette_device": "x86_64",
+          "palette_route": {
+            "workload": "palette_match",
+            "profile_workload": "palette_match",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98945,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "palette_distance": "OKLab",
+          "palette_fidelity": "Faithful",
+          "edge_backend": "cpu-numpy",
+          "edge_backend_id": "cpu:numpy",
+          "edge_vendor": "CPU",
+          "edge_device": "x86_64",
+          "edge_route": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98945,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_signal": "luminance and chromatic contrast",
+          "chromatic_edge_backend": "cpu-numpy-tiled",
+          "non_ai": true,
+          "local_tone_radius": 5,
+          "contour_pixels": 1562,
+          "contour_percent": 17.169,
+          "shadow_detail_pixels": 1456,
+          "shadow_detail_percent": 16.004,
+          "deep_shadow_pixels": 1630,
+          "deep_shadow_percent": 17.916,
+          "contour_threshold": 1.0,
+          "shadow_detail_threshold": 0.8335,
+          "post_processing": "contour + shadow-detail cleanup priority"
+        },
+        "contour_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "64a6052740a87eae06458a56aff62dcf13dd14d8b94f2673f6bece1bf55b8647"
+        },
+        "shadow_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "99e426e650f0022058a4fb7591c85b6f6a736a9dcb5806de91feef8aa6643114"
+        },
+        "shadow_detail_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "ef47db5ddf07a242550509f0954c499d3582c9969e392f9f37322038d5be37b1"
+        },
+        "micro_detail_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "690af1d90757d1a297d7bde3b6b84c2f5f1e8d40099b139c5a6588ec5ac32697"
+        }
+      }
+    }
+  ],
+  "experiment_status": "Initial 66564-pixel gradient cutoff rejected for marginal small-grid memory benefit and slower public-edge controls. Raw observations retained; P4201 layout is unchanged.",
+  "gradient_source_at_observation": "\"\"\"Shared finite-difference semantics for CPU and array-compatible GPU callers.\"\"\"\nfrom __future__ import annotations\n\nimport numpy as np\n\n_EDGE_TILE_SIDE = 256\n_DENSE_EDGE_PIXELS = (_EDGE_TILE_SIDE + 2) ** 2\n\n\ndef _dense_luminance_edges(luminance, *, xp):\n    \"\"\"Unchanged finite-difference arithmetic for one complete grid.\"\"\"\n    gx = gy = None\n    try:\n        gx = xp.zeros_like(luminance)\n        gy = xp.zeros_like(luminance)\n        height, width = luminance.shape\n        if width > 1:\n            gx[:, 0] = luminance[:, 1] - luminance[:, 0]\n            gx[:, -1] = luminance[:, -1] - luminance[:, -2]\n            gx[:, 1:-1] = (luminance[:, 2:] - luminance[:, :-2]) * .5\n        if height > 1:\n            gy[0, :] = luminance[1, :] - luminance[0, :]\n            gy[-1, :] = luminance[-1, :] - luminance[-2, :]\n            gy[1:-1, :] = (luminance[2:, :] - luminance[:-2, :]) * .5\n        return xp.sqrt(gx * gx + gy * gy)\n    finally:\n        gx = gy = luminance = None\n\n\ndef luminance_edges(luminance, *, xp=np, cancelled=None):\n    \"\"\"Centered interior differences and one-sided existing-image boundaries.\n\n    A singleton axis has no gradient. Two-pixel axes retain their real edge on\n    both pixels, and empty grids retain their shape without a backend launch.\n    The caller owns input validation and conversion to floating-point luminance.\n    \"\"\"\n    def check():\n        if cancelled is not None and cancelled():\n            raise InterruptedError('Edge analysis cancelled.')\n\n    result = output = None\n    try:\n        check()\n        # Native GPU expressions and small grids keep their existing dispatch.\n        # Other dtypes also retain NumPy's established casting/error behavior;\n        # the documented callers prepare float luminance before reaching here.\n        if xp is not np or luminance.size <= _DENSE_EDGE_PIXELS or luminance.dtype.kind != 'f':\n            result = _dense_luminance_edges(luminance, xp=xp)\n            check()\n            return result\n        height, width = luminance.shape\n        output = np.empty_like(luminance, order='K')\n        # One sample of halo is sufficient for the centered differences. Only\n        # original-image boundaries use the one-sided formula. Keep both axes\n        # bounded, including a panorama whose single row exceeds a tile.\n        for top in range(0, height, _EDGE_TILE_SIDE):\n            bottom = min(height, top + _EDGE_TILE_SIDE)\n            halo_top, halo_bottom = max(0, top - 1), min(height, bottom + 1)\n            for left in range(0, width, _EDGE_TILE_SIDE):\n                check()\n                right = min(width, left + _EDGE_TILE_SIDE)\n                halo_left, halo_right = max(0, left - 1), min(width, right + 1)\n                result = _dense_luminance_edges(\n                    luminance[halo_top:halo_bottom, halo_left:halo_right], xp=np)\n                output[top:bottom, left:right] = result[\n                    top - halo_top:bottom - halo_top, left - halo_left:right - halo_left]\n                result = None\n        check()\n        return output\n    finally:\n        # Returned owners transfer normally; stopped/failed private tile or\n        # full-output owners must not survive solely in a retained traceback.\n        result = output = luminance = None\n",
+  "harness_sources": {
+    "benchmark_v148_runtime_batch42.py": "\"\"\"Paired CPU observations for bounded edge scratch, using an existing asset.\n\nRun only in an otherwise idle test window. No raster is generated or saved.\nThe historical UniversalGpuAcceleration consumer is held constant in both\ndirections, so its old helper call signature needs no adapter and the only\nmeasured implementation difference is ImageGradients.\n\"\"\"\nfrom contextlib import ExitStack, closing\nimport gc\nimport hashlib\nimport json\nfrom pathlib import Path\nimport statistics\nimport subprocess\nimport sys\nimport time\nimport tracemalloc\nfrom types import ModuleType\nfrom unittest.mock import patch\n\nimport numpy as np\nfrom PIL import Image\n\nimport ImageGradients as current\n\n\nBASELINE = 'e33fa67d17e3c33ccda8e736e7e16c2582d9fc06'\nROOT = Path(__file__).resolve().parent\n\n\ndef historical(filename):\n    name = '_runtime42_baseline_' + Path(filename).stem\n    source = subprocess.check_output(['git', 'show', f'{BASELINE}:{filename}'], cwd=ROOT)\n    module = ModuleType(name)\n    module.__file__ = f'{BASELINE}:{filename}'\n    sys.modules[name] = module\n    exec(compile(source, module.__file__, 'exec'), module.__dict__)\n    return module\n\n\ndef digest(value):\n    if isinstance(value, np.ndarray):\n        return {'shape': value.shape, 'dtype': value.dtype.str,\n                'sha256': hashlib.sha256(value.tobytes()).hexdigest()}\n    if isinstance(value, dict):\n        return {key: digest(item) for key, item in value.items()}\n    if isinstance(value, (list, tuple)):\n        return [digest(item) for item in value]\n    if hasattr(value, '__dataclass_fields__'):\n        return digest(vars(value))\n    if isinstance(value, np.generic):\n        return value.item()\n    return value\n\n\ndef elapsed(call):\n    start = time.perf_counter()\n    result = call()\n    duration = time.perf_counter() - start\n    return duration * 1000.0, result\n\n\ndef peak(call):\n    gc.collect()\n    tracemalloc.start()\n    try:\n        result = call()\n        _live, maximum = tracemalloc.get_traced_memory()\n        return maximum, digest(result)\n    finally:\n        tracemalloc.stop()\n\n\ndef compare(label, call, before_module, baseline_gpu, *, pairs=4):\n    def execute(module):\n        with patch.dict(sys.modules, {'ImageGradients': module,\n                                      'UniversalGpuAcceleration': baseline_gpu}):\n            return call(module)\n    warm_before, warm_after = execute(before_module), execute(current)\n    expected = digest(warm_before)\n    if digest(warm_after) != expected:\n        raise AssertionError(f'{label}: complete output differs from the fixed historical gradient')\n    del warm_before, warm_after\n    samples = {'before_ms': [], 'after_ms': []}\n    for repeat in range(pairs):\n        order = (('before_ms', before_module), ('after_ms', current))\n        if repeat % 2:\n            order = order[::-1]\n        for key, module in order:\n            ms, result = elapsed(lambda: execute(module))\n            samples[key].append(ms)\n            if digest(result) != expected:\n                raise AssertionError(f'{label}: timed output changed')\n            del result\n    before_peak, before_result = peak(lambda: execute(before_module))\n    after_peak, after_result = peak(lambda: execute(current))\n    if before_result != expected or after_result != expected:\n        raise AssertionError(f'{label}: allocation observation changed output')\n    return {'name': label, **samples, 'before_median_ms': statistics.median(samples['before_ms']),\n            'after_median_ms': statistics.median(samples['after_ms']),\n            'before_traced_peak_bytes': before_peak, 'after_traced_peak_bytes': after_peak,\n            'exact_complete_output': True, 'output': expected}\n\n\ndef opencl_layout_observation(module, channels):\n    \"\"\"Observe actual public host owners at the matching historical native ABI.\n\n    Native arithmetic is supplied at the unavailable OpenCL boundary only;\n    neither these recorded byte requests nor their Python backing stores are a\n    physical VRAM observation. No timing is attributed to the native facade.\n    \"\"\"\n    from test_v148_runtime_batch42_opencl_layout import (\n        PackedLabBoundary, asset_rgb, measured_profile, retained_owner_bytes)\n\n    class LayoutBoundary(PackedLabBoundary):\n        def lab(self, queue, global_size, local_size, source, destination, count):\n            self.launch(queue, global_size, local_size, count)\n            assert source.data.size == count * 4\n            assert destination.data.size == count * channels\n            values = destination.data.reshape(-1, channels)\n            values[:, :3] = module._oklab_cpu(source.data.reshape(-1, 4)[:, :3])\n            if channels == 4:\n                values[:, 3] = 0\n\n        def delta(self, queue, global_size, local_size, left, right, destination, count):\n            self.launch(queue, global_size, local_size, count)\n            assert left.data.size == right.data.size == count * channels\n            assert destination.data.size == count\n            a = left.data.reshape(-1, channels)[:, :3]\n            b = right.data.reshape(-1, channels)[:, :3]\n            destination.data[:] = np.linalg.norm(a - b, axis=1)\n\n        def pairwise(self, queue, global_size, local_size, source, destination, count):\n            self.launch(queue, global_size, local_size, np.int32(count * count))\n            assert source.data.size == count * channels\n            assert destination.data.size == count * count\n            destination.data[:] = module._pairwise_lab_distance(\n                source.data.reshape(-1, channels)[:, :3]).reshape(-1)\n\n    source = asset_rgb()\n    colors = np.unique((source * 255).astype(np.uint8).reshape(-1, 3), axis=0)[:31]\n    profile = measured_profile()\n    calls = (\n        ('oklab', lambda **kw: module.oklab_array(source, **kw)),\n        ('perceptual_pair', lambda **kw: module.perceptual_pair(source, source[:, ::-1], **kw)),\n        ('pairwise', lambda **kw: module.pairwise_oklab_distance(colors, **kw)),\n    )\n    rows = []\n    for label, call in calls:\n        boundary = LayoutBoundary()\n        expected = call(gpu_mode='CPU')[:-1]\n        with ExitStack() as native:\n            for name in ('_FAILED', '_OPENCL_CACHE', '_OPENCL_IN_USE'):\n                native.enter_context(patch.object(module, name, {}))\n            native.enter_context(patch.object(module, '_opencl_context', return_value=boundary.native))\n            result = call(profile=profile)\n        if not result[-1]['accelerated']:\n            raise AssertionError(f'{label}: observation fell back from its native boundary')\n        for actual, reference in zip(result[:-1], expected):\n            np.testing.assert_array_equal(actual, reference)\n        rows.append({'name': label, 'device_buffer_requests_bytes': boundary.allocations,\n                     'device_buffer_request_total': sum(size for _flags, size in boundary.allocations),\n                     'logical_output_bytes': sum(value.nbytes for value in result[:-1]),\n                     'retained_host_owner_bytes': sum(retained_owner_bytes(value) for value in result[:-1]),\n                     'outputs_contiguous': [bool(value.flags.c_contiguous) for value in result[:-1]],\n                     'exact_cpu_output': True, 'output': digest(result[:-1])})\n    return rows\n\n\ndef main():\n    import AccuracyEvaluator\n    import PixelAccuratePlanner\n    import VisualImportanceMap\n    before = historical('ImageGradients.py')\n    baseline_gpu = historical('UniversalGpuAcceleration.py')\n    import UniversalGpuAcceleration as current_gpu\n    layout_before = opencl_layout_observation(baseline_gpu, 4)\n    layout_after = opencl_layout_observation(current_gpu, 3)\n    for old, new in zip(layout_before, layout_after):\n        if old['name'] != new['name'] or old['output'] != new['output']:\n            raise AssertionError('Complete OpenCL-boundary output changed across the layout revision')\n    rows = []\n    source_path = ROOT / 'assets' / 'paint-tools-reference.png'\n    with closing(Image.open(source_path)) as original, closing(original.convert('RGB')) as rgb:\n        for size in ((384, 256), (1536, 1024)):\n            with closing(rgb.resize(size, Image.Resampling.NEAREST)) as source, \\\n                    closing(source.convert('L')) as gray, \\\n                    closing(source.resize((max(1, size[0] // 4), max(1, size[1] // 4)), Image.Resampling.BOX)) as small, \\\n                    closing(small.resize(size, Image.Resampling.NEAREST)) as preview:\n                luminance = np.asarray(gray, dtype=np.float32) / np.float32(255)\n                rows.append(compare(f'gradient_{size[0]}x{size[1]}',\n                                    lambda module: module.luminance_edges(luminance), before, baseline_gpu))\n                rows.append(compare(f'complete_accuracy_{size[0]}x{size[1]}',\n                                    lambda _: AccuracyEvaluator.evaluate_preview(source, preview, gpu_mode='CPU'),\n                                    before, baseline_gpu))\n                rows.append(compare(f'complete_importance_{size[0]}x{size[1]}',\n                                    lambda _: VisualImportanceMap.build_importance_map(source, {'gpu_mode': 'CPU'}),\n                                    before, baseline_gpu))\n        with closing(rgb.resize((385, 257), Image.Resampling.NEAREST)) as source:\n            palette = ((0, 0, 0), (255, 255, 255), (128, 128, 128), (200, 40, 40), (20, 70, 210))\n            rows.append(compare('complete_pixel_map_385x257',\n                                lambda _: PixelAccuratePlanner.build_pixel_map(source, palette, gpu_mode='CPU'),\n                                before, baseline_gpu))\n    files = ('ImageGradients.py', 'UniversalGpuAcceleration.py', 'AccuracyEvaluator.py',\n             'VisualImportanceMap.py', 'PixelAccuratePlanner.py', 'ShadowDetailEngine.py',\n             'test_v148_runtime_batch42_opencl_layout.py',\n             Path(__file__).name)\n    report = {\n        'baseline_commit': BASELINE,\n        'baseline_tree': subprocess.check_output(['git', 'rev-parse', f'{BASELINE}^{{tree}}'], cwd=ROOT, text=True).strip(),\n        'method': 'Four alternating AB/BA elapsed pairs after exact-output warm checks; separate tracemalloc observations. Fixed historical gradient and universal CPU consumer; other public consumers are current source in both directions.',\n        'scope': 'CPU helper and complete numeric consumer calls, not physical GPU execution, native drawing, process RSS or a universal speed claim. Caller-owned source/preview preparation is outside measurements; required returned arrays and all traced scratch inside each call are included.',\n        'python': sys.version, 'numpy': np.__version__,\n        'fixture': {'path': source_path.relative_to(ROOT).as_posix(),\n                    'sha256': hashlib.sha256(source_path.read_bytes()).hexdigest()},\n        'sha256': {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files},\n        'cases': rows,\n    }\n    output = ROOT / 'docs' / 'v148-batch42-runtime-gradients.json'\n    output.write_text(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + '\\n', encoding='utf-8')\n    layout_report = {key: report[key] for key in ('baseline_commit', 'baseline_tree', 'python', 'numpy', 'fixture', 'sha256')}\n    layout_report.update(\n        method='Actual public callers with matching historical/current native Lab layouts, deterministic CPU arithmetic only at the native ABI, and exact whole-output comparison. No physical GPU or timing claim.',\n        before=layout_before, after=layout_after)\n    (ROOT / 'docs' / 'v148-batch42-runtime-opencl-layout.json').write_text(\n        json.dumps(layout_report, indent=2, ensure_ascii=False, allow_nan=False) + '\\n', encoding='utf-8')\n    print(json.dumps([{key: row[key] for key in ('name', 'before_median_ms', 'after_median_ms',\n                     'before_traced_peak_bytes', 'after_traced_peak_bytes', 'exact_complete_output')}\n                     for row in rows], indent=2))\n\n\nif __name__ == '__main__':\n    main()\n",
+    "benchmark_v148_runtime_batch42_edge_consumer.py": "\"\"\"Measure the complete public edge operation on real luminance/Lab inputs.\n\nThis follow-up retains the initial whole-analysis report unchanged. It resolves\nwhether the bounded helper still benefits the public validation/route/Stop\nwrapper and the noncontiguous Lab-channel layout used by AccuracyEvaluator.\n\"\"\"\nfrom contextlib import closing\nimport hashlib\nimport json\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nimport numpy as np\nfrom PIL import Image\n\nimport UniversalGpuAcceleration as current_gpu\nfrom benchmark_v148_runtime_batch42 import BASELINE, ROOT, compare, current, historical\n\n\ndef main():\n    before = historical('ImageGradients.py')\n    baseline_gpu = historical('UniversalGpuAcceleration.py')\n    source_path = ROOT / 'assets' / 'paint-tools-reference.png'\n    rows = []\n    with closing(Image.open(source_path)) as original, closing(original.convert('RGB')) as rgb:\n        for size in ((384, 256), (1536, 1024)):\n            with closing(rgb.resize(size, Image.Resampling.NEAREST)) as source, \\\n                    closing(source.convert('L')) as gray:\n                luminance = np.asarray(gray, dtype=np.float32) / np.float32(255)\n                lab, _ = baseline_gpu.oklab_array(np.asarray(source), gpu_mode='CPU')\n                for kind, values in (('dense_luminance', luminance), ('strided_lab', lab[..., 0])):\n                    def operation(module):\n                        executor = baseline_gpu if module is before else current_gpu\n                        return executor.edge_magnitude(values, gpu_mode='CPU')\n                    row = compare(f'complete_edge_{kind}_{size[0]}x{size[1]}', operation,\n                                  before, baseline_gpu, pairs=4)\n                    row.update(input_strides=values.strides, input_contiguous=bool(values.flags.c_contiguous))\n                    rows.append(row)\n    files = ('ImageGradients.py', 'UniversalGpuAcceleration.py',\n             'benchmark_v148_runtime_batch42.py', Path(__file__).name)\n    report = {\n        'baseline_commit': BASELINE,\n        'baseline_tree': subprocess.check_output(['git', 'rev-parse', f'{BASELINE}^{{tree}}'], cwd=ROOT, text=True).strip(),\n        'method': 'Four alternating AB/BA elapsed pairs and separate traced peaks, exact complete array/route equality. Each side uses its actual historical/current public edge_magnitude and matching gradient implementation.',\n        'scope': 'Public CPU edge operation including validation, route selection and completion. Caller-owned dense luminance and real CPU Lab channels are prepared outside the call. This does not replace or invalidate the initial complete Accuracy/Importance/PixelMap observations.',\n        'python': sys.version, 'numpy': np.__version__,\n        'fixture': {'path': source_path.relative_to(ROOT).as_posix(),\n                    'sha256': hashlib.sha256(source_path.read_bytes()).hexdigest()},\n        'sha256': {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files},\n        'cases': rows,\n    }\n    (ROOT / 'docs' / 'v148-batch42-runtime-edge-consumer.json').write_text(\n        json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + '\\n', encoding='utf-8')\n    print(json.dumps([{key: row[key] for key in ('name', 'before_median_ms', 'after_median_ms',\n                     'before_traced_peak_bytes', 'after_traced_peak_bytes', 'exact_complete_output')}\n                     for row in rows], indent=2))\n\n\nif __name__ == '__main__':\n    main()\n"
+  }
+}

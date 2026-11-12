@@ -1,0 +1,955 @@
+{
+  "baseline": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "method": "Real public historical/current planners, followed by alternating CPU host-function pairs and separate tracemalloc runs.",
+  "limits": [
+    "Delivery costs are modeled seconds, not native Windows/browser timing.",
+    "tracemalloc measures tracked Python/NumPy allocations; it does not measure complete process RSS or GPU VRAM.",
+    "No CUDA hardware is used. Ordered host rectangle equality is proven before the unchanged GPU boundary.",
+    "The physical Fill regression models the real three-pixel CanvasGuard inset explicitly."
+  ],
+  "cases": [
+    {
+      "group": "R4204",
+      "case": "actual-public-Fill-admission",
+      "source": "golden-regression/dominant-hue-four-color.png",
+      "before": {
+        "source_size": [
+          192,
+          128
+        ],
+        "working_size": [
+          192,
+          128
+        ],
+        "fitted": [
+          192.0,
+          128.0
+        ],
+        "paths": 32,
+        "detail_paths": 0,
+        "base_geometry_sha256": "6096c2ec3cca68f139084facb2543ddb82b9fe5d4ac83879825f048d2684bdae",
+        "geometry_sha256": "6096c2ec3cca68f139084facb2543ddb82b9fe5d4ac83879825f048d2684bdae",
+        "preview_sha256": "cd6aa4e53dc111550dd8e09dae38fb1209e5e2f32737f0121d6903224ac0f274",
+        "image_sha256": "b7881cca803b2cdfd74d17660b192ef4c132be64541572e4bb21013bfa7a62e8",
+        "source_unchanged": true,
+        "modeled_sequence_seconds": 189.44942116238227,
+        "modeled_fixed_seconds": 3.35,
+        "modeled_fill_seconds": 11.776,
+        "time_budget_active": false,
+        "modeled_complete_seconds": 204.57542116238227,
+        "render_budget_seconds": null,
+        "fill_batches": {
+          "0": {
+            "regions": 4,
+            "areas": [
+              266,
+              266,
+              252,
+              252
+            ],
+            "scanline_seconds": 8.73502,
+            "core_seconds": 3.393,
+            "tool_seconds": 2.0,
+            "complete_seconds": 5.393,
+            "color_selection_seconds": 0.24
+          },
+          "3": {
+            "regions": 4,
+            "areas": [
+              161,
+              160,
+              159,
+              160
+            ],
+            "scanline_seconds": 5.74958,
+            "core_seconds": 3.9029999999999996,
+            "tool_seconds": 2.0,
+            "complete_seconds": 5.903,
+            "color_selection_seconds": 0.24
+          }
+        },
+        "fill_batch_admission": null,
+        "fill_revalidation": {
+          "enabled": true,
+          "model": "stateful local-ROI discrete contour + flood simulation",
+          "runtime_guard_authoritative": true,
+          "input_regions": 8,
+          "accepted_regions": 8,
+          "rejected_regions": 0,
+          "painted_state_pixels": 1676,
+          "rejections": [],
+          "allocation_strategy": "one global state + bounded per-region ROI masks",
+          "peak_roi_pixels": 696,
+          "total_roi_pixels": 5016,
+          "peak_roi_percent_of_canvas": 2.832,
+          "full_canvas_state_copies_per_region": 0
+        },
+        "hybrid_quality": {
+          "coverage_percent": 100.0,
+          "color_accuracy_percent": 100.0,
+          "edge_preservation_percent": 100.0,
+          "protected_detail_percent": 100.0,
+          "spill_accuracy_percent": 100.0,
+          "wrong_color_pixels": 0,
+          "spill_pixels": 0,
+          "missing_pixels": 0,
+          "pixel_accuracy_score": 100.0,
+          "score_formula": "0.35*color_accuracy + 0.25*coverage + 0.20*edge_preservation + 0.15*protected_detail + 0.05*spill_accuracy"
+        },
+        "detail_zoom": {
+          "enabled": false,
+          "requested": "Off",
+          "factor": 1,
+          "reason": "no useful zoom gain for current quality/budget",
+          "target_app_zoomed": false
+        }
+      },
+      "after": {
+        "source_size": [
+          192,
+          128
+        ],
+        "working_size": [
+          192,
+          128
+        ],
+        "fitted": [
+          192.0,
+          128.0
+        ],
+        "paths": 36,
+        "detail_paths": 0,
+        "base_geometry_sha256": "a2b1edca6599efe018401405f3e492e8f34041bfd05ea6cc847245c932a3d26f",
+        "geometry_sha256": "a2b1edca6599efe018401405f3e492e8f34041bfd05ea6cc847245c932a3d26f",
+        "preview_sha256": "cd6aa4e53dc111550dd8e09dae38fb1209e5e2f32737f0121d6903224ac0f274",
+        "image_sha256": "b7881cca803b2cdfd74d17660b192ef4c132be64541572e4bb21013bfa7a62e8",
+        "source_unchanged": true,
+        "modeled_sequence_seconds": 195.33717199072888,
+        "modeled_fixed_seconds": 3.35,
+        "modeled_fill_seconds": 5.633,
+        "time_budget_active": false,
+        "modeled_complete_seconds": 204.32017199072888,
+        "render_budget_seconds": null,
+        "fill_batches": {
+          "0": {
+            "regions": 4,
+            "areas": [
+              266,
+              266,
+              252,
+              252
+            ],
+            "scanline_seconds": 8.73502,
+            "core_seconds": 3.393,
+            "tool_seconds": 2.0,
+            "complete_seconds": 5.393,
+            "color_selection_seconds": 0.24
+          }
+        },
+        "fill_batch_admission": {
+          "engine": "Extra Fast 2.0 outline/fill selector",
+          "accepted_regions": 4,
+          "cost_rejected_regions": 4,
+          "batch_rejected_regions": 4,
+          "fill_color_batches": 1,
+          "fill_pixels": 1036,
+          "fill_estimated_seconds": 5.393,
+          "estimated_seconds_saved_vs_scanlines": 3.342,
+          "fallback_strategy": "connected serpentine scanlines",
+          "tool_switch_cost_model": "calibrated actual controls shared once per color batch",
+          "per_region_tool_switch_double_charge": false,
+          "legacy_fill_cost_semantics_preserved": true,
+          "cost_filtered_regions": 4
+        },
+        "fill_revalidation": {
+          "enabled": true,
+          "model": "stateful local-ROI discrete contour + flood simulation",
+          "runtime_guard_authoritative": true,
+          "input_regions": 8,
+          "accepted_regions": 4,
+          "rejected_regions": 0,
+          "painted_state_pixels": 1036,
+          "rejections": [],
+          "allocation_strategy": "one global state + bounded per-region ROI masks",
+          "peak_roi_pixels": 696,
+          "total_roi_pixels": 7752,
+          "peak_roi_percent_of_canvas": 2.832,
+          "full_canvas_state_copies_per_region": 0,
+          "cost_filtered_regions": 4,
+          "batch_revalidation_passes": 2
+        },
+        "hybrid_quality": {
+          "coverage_percent": 100.0,
+          "color_accuracy_percent": 100.0,
+          "edge_preservation_percent": 100.0,
+          "protected_detail_percent": 100.0,
+          "spill_accuracy_percent": 100.0,
+          "wrong_color_pixels": 0,
+          "spill_pixels": 0,
+          "missing_pixels": 0,
+          "pixel_accuracy_score": 100.0,
+          "score_formula": "0.35*color_accuracy + 0.25*coverage + 0.20*edge_preservation + 0.15*protected_detail + 0.05*spill_accuracy"
+        },
+        "detail_zoom": {
+          "enabled": false,
+          "requested": "Off",
+          "factor": 1,
+          "reason": "no useful zoom gain for current quality/budget",
+          "target_app_zoomed": false
+        }
+      }
+    },
+    {
+      "group": "R4205",
+      "case": "late-Detail-Zoom-real-budget",
+      "source": "golden-regression/small-detail-preservation.png",
+      "base_without_zoom": {
+        "source_size": [
+          360,
+          240
+        ],
+        "working_size": [
+          96,
+          64
+        ],
+        "fitted": [
+          96.0,
+          64.0
+        ],
+        "paths": 13,
+        "detail_paths": 0,
+        "base_geometry_sha256": "714308fa258e50cdf63776a1edd32f1a8f68befa1b266ab8ffc59052d7e1595b",
+        "geometry_sha256": "714308fa258e50cdf63776a1edd32f1a8f68befa1b266ab8ffc59052d7e1595b",
+        "preview_sha256": "211d8c00de84f36dc17d10166096be473e75e1d1bba356f70eca4fb36a02a2e7",
+        "image_sha256": "fe4986765fda319781c010db93428bf15c18f480382c3510ddb4b67a02efb4c3",
+        "source_unchanged": true,
+        "modeled_sequence_seconds": 6.636405195527591,
+        "modeled_fixed_seconds": 3.35,
+        "modeled_fill_seconds": 0.0,
+        "time_budget_active": true,
+        "modeled_complete_seconds": 10.299886780007984,
+        "render_budget_seconds": 11.82,
+        "fill_batches": {},
+        "fill_batch_admission": null,
+        "fill_revalidation": null,
+        "hybrid_quality": null,
+        "detail_zoom": {
+          "enabled": false,
+          "requested": "Off",
+          "factor": 1,
+          "reason": "no useful zoom gain for current quality/budget",
+          "target_app_zoomed": false
+        }
+      },
+      "before": {
+        "source_size": [
+          360,
+          240
+        ],
+        "working_size": [
+          96,
+          64
+        ],
+        "fitted": [
+          96.0,
+          64.0
+        ],
+        "paths": 29,
+        "detail_paths": 16,
+        "base_geometry_sha256": "714308fa258e50cdf63776a1edd32f1a8f68befa1b266ab8ffc59052d7e1595b",
+        "geometry_sha256": "54ed10e4d88221b371720d68ff8cf289b6397bcb65c73574c7fdc8f7eaf48c84",
+        "preview_sha256": "a41b97b91f810170e31e4df71a12b44244375ec85640e7168fbfeceb24202197",
+        "image_sha256": "fe4986765fda319781c010db93428bf15c18f480382c3510ddb4b67a02efb4c3",
+        "source_unchanged": true,
+        "modeled_sequence_seconds": 13.280791945360853,
+        "modeled_fixed_seconds": 3.35,
+        "modeled_fill_seconds": 0.0,
+        "time_budget_active": true,
+        "modeled_complete_seconds": 17.25813213625093,
+        "render_budget_seconds": 11.82,
+        "fill_batches": {},
+        "fill_batch_admission": null,
+        "fill_revalidation": null,
+        "hybrid_quality": null,
+        "detail_zoom": {
+          "enabled": true,
+          "requested": "4x",
+          "factor": 4,
+          "analysis_zoom": "4x",
+          "target_app_zoomed": false,
+          "target_zoom_policy": "internal-source-analysis-only",
+          "detail_paths_added": 16,
+          "detail_pixels_added": 16,
+          "candidate_cells": 32,
+          "accepted_cells": 32,
+          "rejected_same_color": 0,
+          "rejected_weak_palette_delta": 0,
+          "threshold": 109.088,
+          "smallest_detail_brush_px": 1,
+          "roi_boxes": [
+            [
+              81,
+              12,
+              87,
+              22
+            ],
+            [
+              81,
+              22,
+              87,
+              32
+            ],
+            [
+              81,
+              32,
+              87,
+              42
+            ],
+            [
+              81,
+              42,
+              87,
+              52
+            ],
+            [
+              8,
+              13,
+              14,
+              21
+            ],
+            [
+              8,
+              17,
+              14,
+              25
+            ],
+            [
+              81,
+              18,
+              87,
+              26
+            ],
+            [
+              81,
+              28,
+              87,
+              36
+            ]
+          ],
+          "deadline_aware": true,
+          "path_cap": 16,
+          "sequence_appended": true,
+          "sequence_created_for_detail_pass": false,
+          "sequence_base_paths": 13,
+          "active_color_indices": [
+            3
+          ],
+          "working_size": [
+            96,
+            64
+          ],
+          "reason": "zoomed source regions added as bounded high-value detail paths"
+        }
+      },
+      "after": {
+        "source_size": [
+          360,
+          240
+        ],
+        "working_size": [
+          96,
+          64
+        ],
+        "fitted": [
+          96.0,
+          64.0
+        ],
+        "paths": 16,
+        "detail_paths": 3,
+        "base_geometry_sha256": "714308fa258e50cdf63776a1edd32f1a8f68befa1b266ab8ffc59052d7e1595b",
+        "geometry_sha256": "90411dfb898c99a188804a3aad9f775206291cc6b424e9d805ac41ccef8ba912",
+        "preview_sha256": "4bd538405aea42a823525f12f4978773c41cb72cfc6e27f846a00c53f1816c4e",
+        "image_sha256": "fe4986765fda319781c010db93428bf15c18f480382c3510ddb4b67a02efb4c3",
+        "source_unchanged": true,
+        "modeled_sequence_seconds": 8.079621945360852,
+        "modeled_fixed_seconds": 3.35,
+        "modeled_fill_seconds": 0.0,
+        "time_budget_active": true,
+        "modeled_complete_seconds": 11.811276261938927,
+        "render_budget_seconds": 11.82,
+        "fill_batches": {},
+        "fill_batch_admission": null,
+        "fill_revalidation": null,
+        "hybrid_quality": null,
+        "detail_zoom": {
+          "enabled": true,
+          "requested": "4x",
+          "factor": 4,
+          "analysis_zoom": "4x",
+          "target_app_zoomed": false,
+          "target_zoom_policy": "internal-source-analysis-only",
+          "detail_paths_added": 3,
+          "detail_pixels_added": 3,
+          "candidate_cells": 32,
+          "accepted_cells": 32,
+          "rejected_same_color": 0,
+          "rejected_weak_palette_delta": 0,
+          "threshold": 109.088,
+          "smallest_detail_brush_px": 1,
+          "roi_boxes": [
+            [
+              81,
+              14,
+              87,
+              22
+            ],
+            [
+              81,
+              46,
+              87,
+              52
+            ]
+          ],
+          "deadline_aware": true,
+          "path_cap": 16,
+          "sequence_appended": true,
+          "sequence_created_for_detail_pass": false,
+          "sequence_base_paths": 13,
+          "active_color_indices": [
+            3
+          ],
+          "working_size": [
+            96,
+            64
+          ],
+          "reason": "zoomed source regions added as bounded high-value detail paths",
+          "execution_budget": {
+            "proposed_paths": 16,
+            "admitted_paths": 3,
+            "sequence_budget_seconds": 8.47,
+            "sequence_seconds": 8.079621945360852,
+            "risk_adjusted_sequence_seconds": 8.461276261938927,
+            "render_budget_seconds": 11.82,
+            "fixed_overhead_seconds": 3.35,
+            "omitted_paths": 13,
+            "source": "actual appended delivery model"
+          }
+        }
+      }
+    },
+    {
+      "group": "R4205",
+      "case": "Unlimited-complete-plan-parity",
+      "source": "golden-regression/small-detail-preservation.png",
+      "before": {
+        "source_size": [
+          360,
+          240
+        ],
+        "working_size": [
+          96,
+          64
+        ],
+        "fitted": [
+          96.0,
+          64.0
+        ],
+        "paths": 354,
+        "detail_paths": 120,
+        "base_geometry_sha256": "33a8985230e676f62092a768d30c502305346b153a899ce7f720e77bbb0bb346",
+        "geometry_sha256": "7fff414f2aa939c0566cf16282e8e02f30642965167e918b786d8af3881b5069",
+        "preview_sha256": "299c15452d2309252db5ad896b2a4ff3c4feb60963af4dff9113f8508c7f0009",
+        "image_sha256": "fe4986765fda319781c010db93428bf15c18f480382c3510ddb4b67a02efb4c3",
+        "source_unchanged": true,
+        "modeled_sequence_seconds": 164.71789070984175,
+        "modeled_fixed_seconds": 3.35,
+        "modeled_fill_seconds": 0.0,
+        "time_budget_active": false,
+        "modeled_complete_seconds": 168.06789070984175,
+        "render_budget_seconds": null,
+        "fill_batches": {},
+        "fill_batch_admission": null,
+        "fill_revalidation": null,
+        "hybrid_quality": null,
+        "detail_zoom": {
+          "enabled": true,
+          "requested": "4x",
+          "factor": 4,
+          "analysis_zoom": "4x",
+          "target_app_zoomed": false,
+          "target_zoom_policy": "internal-source-analysis-only",
+          "detail_paths_added": 120,
+          "detail_pixels_added": 120,
+          "candidate_cells": 138,
+          "accepted_cells": 138,
+          "rejected_same_color": 0,
+          "rejected_weak_palette_delta": 0,
+          "threshold": 109.088,
+          "smallest_detail_brush_px": 1,
+          "roi_boxes": [
+            [
+              8,
+              8,
+              17,
+              17
+            ],
+            [
+              8,
+              17,
+              14,
+              27
+            ],
+            [
+              8,
+              27,
+              14,
+              37
+            ],
+            [
+              8,
+              37,
+              14,
+              47
+            ],
+            [
+              17,
+              51,
+              27,
+              57
+            ],
+            [
+              22,
+              7,
+              32,
+              13
+            ],
+            [
+              27,
+              51,
+              37,
+              57
+            ],
+            [
+              32,
+              7,
+              42,
+              13
+            ]
+          ],
+          "deadline_aware": false,
+          "path_cap": 120,
+          "sequence_appended": true,
+          "sequence_created_for_detail_pass": true,
+          "sequence_base_paths": 234,
+          "active_color_indices": [
+            0,
+            3,
+            7
+          ],
+          "working_size": [
+            96,
+            64
+          ],
+          "reason": "zoomed source regions added as bounded high-value detail paths"
+        }
+      },
+      "after": {
+        "source_size": [
+          360,
+          240
+        ],
+        "working_size": [
+          96,
+          64
+        ],
+        "fitted": [
+          96.0,
+          64.0
+        ],
+        "paths": 354,
+        "detail_paths": 120,
+        "base_geometry_sha256": "33a8985230e676f62092a768d30c502305346b153a899ce7f720e77bbb0bb346",
+        "geometry_sha256": "7fff414f2aa939c0566cf16282e8e02f30642965167e918b786d8af3881b5069",
+        "preview_sha256": "299c15452d2309252db5ad896b2a4ff3c4feb60963af4dff9113f8508c7f0009",
+        "image_sha256": "fe4986765fda319781c010db93428bf15c18f480382c3510ddb4b67a02efb4c3",
+        "source_unchanged": true,
+        "modeled_sequence_seconds": 164.71789070984175,
+        "modeled_fixed_seconds": 3.35,
+        "modeled_fill_seconds": 0.0,
+        "time_budget_active": false,
+        "modeled_complete_seconds": 168.06789070984175,
+        "render_budget_seconds": null,
+        "fill_batches": {},
+        "fill_batch_admission": null,
+        "fill_revalidation": null,
+        "hybrid_quality": null,
+        "detail_zoom": {
+          "enabled": true,
+          "requested": "4x",
+          "factor": 4,
+          "analysis_zoom": "4x",
+          "target_app_zoomed": false,
+          "target_zoom_policy": "internal-source-analysis-only",
+          "detail_paths_added": 120,
+          "detail_pixels_added": 120,
+          "candidate_cells": 138,
+          "accepted_cells": 138,
+          "rejected_same_color": 0,
+          "rejected_weak_palette_delta": 0,
+          "threshold": 109.088,
+          "smallest_detail_brush_px": 1,
+          "roi_boxes": [
+            [
+              8,
+              8,
+              17,
+              17
+            ],
+            [
+              8,
+              17,
+              14,
+              27
+            ],
+            [
+              8,
+              27,
+              14,
+              37
+            ],
+            [
+              8,
+              37,
+              14,
+              47
+            ],
+            [
+              17,
+              51,
+              27,
+              57
+            ],
+            [
+              22,
+              7,
+              32,
+              13
+            ],
+            [
+              27,
+              51,
+              37,
+              57
+            ],
+            [
+              32,
+              7,
+              42,
+              13
+            ]
+          ],
+          "deadline_aware": false,
+          "path_cap": 120,
+          "sequence_appended": true,
+          "sequence_created_for_detail_pass": true,
+          "sequence_base_paths": 234,
+          "active_color_indices": [
+            0,
+            3,
+            7
+          ],
+          "working_size": [
+            96,
+            64
+          ],
+          "reason": "zoomed source regions added as bounded high-value detail paths"
+        }
+      }
+    },
+    {
+      "group": "R4206",
+      "case": "original",
+      "mode": "RGBA",
+      "source": "assets/image-draw-bot-icon.png",
+      "source_size": [
+        512,
+        512
+      ],
+      "shape": [
+        512,
+        512,
+        3
+      ],
+      "dtype": "uint8",
+      "output_bytes": 786432,
+      "output_sha256": "55cd94b9031a2d8684748408c9c1a80277e9eb763d1bbd9db17ae9621276290d",
+      "exact_output_parity": true,
+      "samples_seconds": {
+        "before": [
+          0.016877863999980036,
+          0.008610068000052706,
+          0.009314492999692447,
+          0.008577895998314489,
+          0.011540770001374767,
+          0.012476152998715406,
+          0.009338569001556607
+        ],
+        "after": [
+          0.010283699999490636,
+          0.008136760001434595,
+          0.008711511000001337,
+          0.006972741000936367,
+          0.012753724000504008,
+          0.010407423000287963,
+          0.00956282100014505
+        ]
+      },
+      "median_seconds": {
+        "before": 0.009338569001556607,
+        "after": 0.00956282100014505
+      },
+      "memory": {
+        "before": {
+          "traced_current_bytes": 787556,
+          "traced_peak_bytes": 11536117
+        },
+        "after": {
+          "traced_current_bytes": 788360,
+          "traced_peak_bytes": 3673864
+        }
+      }
+    },
+    {
+      "group": "R4206",
+      "case": "small-square",
+      "mode": "RGBA",
+      "source": "assets/image-draw-bot-icon.png",
+      "source_size": [
+        128,
+        128
+      ],
+      "shape": [
+        128,
+        128,
+        3
+      ],
+      "dtype": "uint8",
+      "output_bytes": 49152,
+      "output_sha256": "2b9fc47e442b1100c4a738a024f52135b5a69aeeb3816ee348c00942182cb159",
+      "exact_output_parity": true,
+      "samples_seconds": {
+        "before": [
+          0.00041683600102260243,
+          0.00040818700108502526,
+          0.000289158999294159,
+          0.0004965780008205911,
+          0.0003299449999758508,
+          0.0002740870004345197,
+          0.000267083998551243
+        ],
+        "after": [
+          0.0004323960001784144,
+          0.0004617099984898232,
+          0.0003029290000995388,
+          0.0002705530005187029,
+          0.0002810730002238415,
+          0.00033027400058927014,
+          0.0004053590000694385
+        ]
+      },
+      "median_seconds": {
+        "before": 0.0003299449999758508,
+        "after": 0.00033027400058927014
+      },
+      "memory": {
+        "before": {
+          "traced_current_bytes": 50276,
+          "traced_peak_bytes": 722677
+        },
+        "after": {
+          "traced_current_bytes": 50460,
+          "traced_peak_bytes": 723543
+        }
+      }
+    },
+    {
+      "group": "R4206",
+      "case": "horizontal-panorama",
+      "mode": "RGBA",
+      "source": "assets/image-draw-bot-icon.png",
+      "source_size": [
+        512,
+        2
+      ],
+      "shape": [
+        2,
+        512,
+        3
+      ],
+      "dtype": "uint8",
+      "output_bytes": 3072,
+      "output_sha256": "db16a5b67c34610bbb8f724a226d169df92c893a183926d5bc8de2ab6377cb84",
+      "exact_output_parity": true,
+      "samples_seconds": {
+        "before": [
+          7.586499850731343e-05,
+          8.339300075022038e-05,
+          4.461900061869528e-05,
+          4.449600055522751e-05,
+          4.191900006844662e-05,
+          5.922600030316971e-05,
+          5.879299897060264e-05
+        ],
+        "after": [
+          5.534100091608707e-05,
+          4.621900006895885e-05,
+          4.505199831328355e-05,
+          4.6815001041977666e-05,
+          4.526200063992292e-05,
+          4.77679986943258e-05,
+          0.00019367400091141462
+        ]
+      },
+      "median_seconds": {
+        "before": 5.879299897060264e-05,
+        "after": 4.6815001041977666e-05
+      },
+      "memory": {
+        "before": {
+          "traced_current_bytes": 4196,
+          "traced_peak_bytes": 66890
+        },
+        "after": {
+          "traced_current_bytes": 4380,
+          "traced_peak_bytes": 67519
+        }
+      }
+    },
+    {
+      "group": "R4206",
+      "case": "vertical-panorama",
+      "mode": "RGBA",
+      "source": "assets/image-draw-bot-icon.png",
+      "source_size": [
+        2,
+        512
+      ],
+      "shape": [
+        512,
+        2,
+        3
+      ],
+      "dtype": "uint8",
+      "output_bytes": 3072,
+      "output_sha256": "4ce59e962ebb21ebb02b139b54c5d3f5b01cec7b93af51becf11ea2e2bf5c344",
+      "exact_output_parity": true,
+      "samples_seconds": {
+        "before": [
+          0.0002861479988496285,
+          5.0204998842673376e-05,
+          4.705700121121481e-05,
+          7.16519989509834e-05,
+          0.0001496559998486191,
+          6.498100083263125e-05,
+          6.408500121324323e-05
+        ],
+        "after": [
+          8.424799852946308e-05,
+          5.4767999245086685e-05,
+          4.982599966751877e-05,
+          0.0004028009989269776,
+          8.277199958683923e-05,
+          6.946800021978561e-05,
+          6.71540001349058e-05
+        ]
+      },
+      "median_seconds": {
+        "before": 6.498100083263125e-05,
+        "after": 6.946800021978561e-05
+      },
+      "memory": {
+        "before": {
+          "traced_current_bytes": 4196,
+          "traced_peak_bytes": 66890
+        },
+        "after": {
+          "traced_current_bytes": 4380,
+          "traced_peak_bytes": 67519
+        }
+      }
+    },
+    {
+      "group": "R4207",
+      "case": "actual-public-Pixel-rectangle-catalogue",
+      "source": "golden-regression/red-bananas-texture.png",
+      "paths": 258,
+      "phases": {
+        "fill": 26,
+        "mid_detail": 1,
+        "fine_detail": 2,
+        "cleanup": 229
+      },
+      "shape": [
+        2566,
+        5
+      ],
+      "dtype": "int32",
+      "output_bytes": 51320,
+      "output_sha256": "b921adaa1c07a490a650b2dfbe11337228a87ef426e3331ed4ee68b4ae991c68",
+      "exact_output_parity": true,
+      "samples_seconds": {
+        "before": [
+          0.00778942600118171,
+          0.007802648999131634,
+          0.007005324001511326,
+          0.011927539999305736,
+          0.00985199000024295,
+          0.012083216000974062,
+          0.01003575200047635
+        ],
+        "after": [
+          0.008298927999931038,
+          0.006597543999305344,
+          0.014187676999426913,
+          0.00884477900035563,
+          0.03211419500075863,
+          0.010913371999777155,
+          0.012655921000259696
+        ]
+      },
+      "median_seconds": {
+        "before": 0.00985199000024295,
+        "after": 0.010913371999777155
+      },
+      "memory": {
+        "before": {
+          "traced_current_bytes": 332864,
+          "traced_peak_bytes": 487876
+        },
+        "after": {
+          "traced_current_bytes": 174024,
+          "traced_peak_bytes": 192572
+        }
+      }
+    }
+  ],
+  "source_files_sha256": {
+    "DetailZoomPass.py": "ed4f4c859f75e0d8bd384b8afdba17362712d3f318cb13bd21fc7a79f6fe2322",
+    "PixelAccuracyGpu.py": "0e07e45a951d7def1caf0e72e78faca245aa33e6f22f49f27b61bbc1e6b7aa49",
+    "AdaptiveRegionHybrid.py": "56d705d3f502b108aa9e718ada7eb8b57126faae7945fdc5b62655a9ab883652",
+    "RegionFillEngine.py": "ace0563ba2083dfe7f63ca6c3f9050b3ab00c3789445b8abf4ff27740d3bd356",
+    "ExtraFast.py": "b9454b502abbe7d98fa31d67b8acdc3b7c58d31bab99bfbde554694976aceaf7",
+    "DrawBot.py": "53e205c9b2bffd6a4bf1d34e31758ed90d8da63946f19e375946039b876ecda2",
+    "test_v148_rendering_batch42_costs.py": "4aac562df4a5032e838d8efe72c2613a9d50ce23e2e4fa01a1864c26dfc49dfd",
+    "test_v148_rendering_batch42_staging.py": "21d964cb1bc59340d88cdf77f88d7a2b757245413df04c1a3d3645a4b931ba54",
+    "benchmark_v148_rendering_batch42_costs.py": "0b1fedda79d76c14d33bcba8842ae576285072ec0921dd062dabce9561f735ae"
+  },
+  "assets_sha256": {
+    "golden-regression/dominant-hue-four-color.png": "b3e06c7f7c28957d8b252583e93103490934bdb353cb2b3618521a691b848011",
+    "golden-regression/small-detail-preservation.png": "a60cce8704b56796f38d803cefb0fe80ba35293a4f4f5070f8bff3bed658f46c",
+    "golden-regression/red-bananas-texture.png": "cf16283e0d7b78a3aa01c8d0380bab8d36aa1c06a0e0a9bb1acd35b83e6251e1",
+    "assets/image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300"
+  }
+}

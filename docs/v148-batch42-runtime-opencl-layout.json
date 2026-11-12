@@ -1,0 +1,279 @@
+{
+  "baseline_commit": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "baseline_tree": "72e55f2a6d3dad971a13e9ab9141aa521cf15177",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "fixture": {
+    "path": "assets/paint-tools-reference.png",
+    "sha256": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586"
+  },
+  "sha256": {
+    "ImageGradients.py": "5eb52ff00ea04ae46cf1116eb55e84f201fc3abc3e81e83f92764313a2fcfd5b",
+    "UniversalGpuAcceleration.py": "a2554c90ca03e9853cf8a2669eaeb943dc71b62c64779d95e33800aa47adf5d7",
+    "AccuracyEvaluator.py": "bc9af121c4662d9bb907961a1f8e1cf77394e1059744bb6e8347a90360d3ac76",
+    "VisualImportanceMap.py": "2750c0c391e23395af4094f899831c0dd138a347248d603e86dbab7e0beab6b4",
+    "PixelAccuratePlanner.py": "84a0850cdc345fdccbc8ad979c828dc672a5400183bf86b92fe75a29b74c98a4",
+    "ShadowDetailEngine.py": "9565c2f04ea08b815533323a56b030b27b355524eaaa0ac710be4efc7f1c3ded",
+    "test_v148_runtime_batch42_opencl_layout.py": "09616ad0953385af43cbffd7d2794504afa74e1f59df1adc091bc15bdbd7234b",
+    "benchmark_v148_runtime_batch42.py": "ad894379093fe52926c1af3b919d5334ff36a1435d7be289c5c6f9c96864a5e2"
+  },
+  "method": "Actual public callers with matching historical/current native Lab layouts, deterministic CPU arithmetic only at the native ABI, and exact whole-output comparison. No physical GPU or timing claim.",
+  "before": [
+    {
+      "name": "oklab",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          49152
+        ],
+        [
+          2,
+          49152
+        ]
+      ],
+      "device_buffer_request_total": 98304,
+      "logical_output_bytes": 36864,
+      "retained_host_owner_bytes": 49152,
+      "outputs_contiguous": [
+        false
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "a0f3d076736eca82d180ceb29bfce013baf490022aa52dae13c9d4a1e4738241"
+        }
+      ]
+    },
+    {
+      "name": "perceptual_pair",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          49152
+        ],
+        [
+          9,
+          49152
+        ],
+        [
+          4,
+          49152
+        ],
+        [
+          4,
+          49152
+        ],
+        [
+          2,
+          12288
+        ]
+      ],
+      "device_buffer_request_total": 208896,
+      "logical_output_bytes": 86016,
+      "retained_host_owner_bytes": 110592,
+      "outputs_contiguous": [
+        false,
+        false,
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "a0f3d076736eca82d180ceb29bfce013baf490022aa52dae13c9d4a1e4738241"
+        },
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "c5535a43eae6d6ae726818a71c426b1102f8e74967b5a6f0b8f29d4ceb1cc9d8"
+        },
+        {
+          "shape": [
+            48,
+            64
+          ],
+          "dtype": "<f4",
+          "sha256": "2f0d239e3d783fe18fc920eaafd74cd55a11e596e6e94feee308ca58fe1b806f"
+        }
+      ]
+    },
+    {
+      "name": "pairwise",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          496
+        ],
+        [
+          4,
+          496
+        ],
+        [
+          2,
+          3844
+        ]
+      ],
+      "device_buffer_request_total": 4836,
+      "logical_output_bytes": 3844,
+      "retained_host_owner_bytes": 3844,
+      "outputs_contiguous": [
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            31,
+            31
+          ],
+          "dtype": "<f4",
+          "sha256": "646801d98200804679e98f8179cd85a855eabcb787cfe0669020a160da071ea9"
+        }
+      ]
+    }
+  ],
+  "after": [
+    {
+      "name": "oklab",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          49152
+        ],
+        [
+          2,
+          36864
+        ]
+      ],
+      "device_buffer_request_total": 86016,
+      "logical_output_bytes": 36864,
+      "retained_host_owner_bytes": 36864,
+      "outputs_contiguous": [
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "a0f3d076736eca82d180ceb29bfce013baf490022aa52dae13c9d4a1e4738241"
+        }
+      ]
+    },
+    {
+      "name": "perceptual_pair",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          49152
+        ],
+        [
+          9,
+          49152
+        ],
+        [
+          4,
+          36864
+        ],
+        [
+          4,
+          36864
+        ],
+        [
+          2,
+          12288
+        ]
+      ],
+      "device_buffer_request_total": 184320,
+      "logical_output_bytes": 86016,
+      "retained_host_owner_bytes": 86016,
+      "outputs_contiguous": [
+        true,
+        true,
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "a0f3d076736eca82d180ceb29bfce013baf490022aa52dae13c9d4a1e4738241"
+        },
+        {
+          "shape": [
+            48,
+            64,
+            3
+          ],
+          "dtype": "<f4",
+          "sha256": "c5535a43eae6d6ae726818a71c426b1102f8e74967b5a6f0b8f29d4ceb1cc9d8"
+        },
+        {
+          "shape": [
+            48,
+            64
+          ],
+          "dtype": "<f4",
+          "sha256": "2f0d239e3d783fe18fc920eaafd74cd55a11e596e6e94feee308ca58fe1b806f"
+        }
+      ]
+    },
+    {
+      "name": "pairwise",
+      "device_buffer_requests_bytes": [
+        [
+          9,
+          496
+        ],
+        [
+          4,
+          372
+        ],
+        [
+          2,
+          3844
+        ]
+      ],
+      "device_buffer_request_total": 4712,
+      "logical_output_bytes": 3844,
+      "retained_host_owner_bytes": 3844,
+      "outputs_contiguous": [
+        true
+      ],
+      "exact_cpu_output": true,
+      "output": [
+        {
+          "shape": [
+            31,
+            31
+          ],
+          "dtype": "<f4",
+          "sha256": "646801d98200804679e98f8179cd85a855eabcb787cfe0669020a160da071ea9"
+        }
+      ]
+    }
+  ]
+}

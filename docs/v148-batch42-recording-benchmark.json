@@ -1,0 +1,308 @@
+{
+  "baseline_commit": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "python": "3.12.14",
+  "pillow": "13.0.0",
+  "scope": "Whole public append_recorded_frame call. Capture P mode/size is the real recorder bound; RGBA is an independent public-API control. Excludes capture, quantization, GIF encoding, physical desktop and process RSS. Tracemalloc does not measure Pillow core crop storage; each pair additionally owns at most two 65536-pixel strip cores.",
+  "asset": "assets/image-draw-bot-app-screenshot.png",
+  "asset_sha256": "286e03e9eb7ae809a2cf37a443ca52e858a22fd8851aa3486f7cdf8d92c104fa",
+  "source_sha256": {
+    "before": "ddecd4da08ceee98464b4dc8fe7a5efd7e658153223173874f13885afb73bee4",
+    "after": "cf65379faca4db66ea2673601b3ce68bee0419f2b2dbe1d61a7c92f7261f1df0"
+  },
+  "results": {
+    "capture_palette_static": {
+      "size": [
+        800,
+        500
+      ],
+      "mode": "P",
+      "changed_first_pixel": false,
+      "pairs_seconds": [
+        {
+          "before": 0.000175851350013545,
+          "after": 0.00035075140003755224
+        },
+        {
+          "after": 0.00047342580000986345,
+          "before": 0.00012519704996520885
+        },
+        {
+          "before": 0.00021812915001646617,
+          "after": 0.0003176021999934164
+        },
+        {
+          "after": 0.000363732049936516,
+          "before": 0.00024511040001016224
+        },
+        {
+          "before": 0.00013170724996598439,
+          "after": 0.0002350726499571465
+        },
+        {
+          "after": 0.0004059113999574038,
+          "before": 0.00015687955001340015
+        }
+      ],
+      "median_seconds": {
+        "before": 0.00016636545001347258,
+        "after": 0.0003572417249870341
+      },
+      "allocations": {
+        "before": {
+          "retained_traced_bytes": 216,
+          "peak_traced_bytes": 1200769
+        },
+        "after": {
+          "retained_traced_bytes": 680,
+          "peak_traced_bytes": 132210
+        }
+      },
+      "exact_retention_and_duration_parity": true
+    },
+    "capture_palette_changing": {
+      "size": [
+        800,
+        500
+      ],
+      "mode": "P",
+      "changed_first_pixel": true,
+      "pairs_seconds": [
+        {
+          "before": 0.00013351255001907701,
+          "after": 8.839849997457349e-05
+        },
+        {
+          "after": 4.3868850025319264e-05,
+          "before": 0.00011579649999475805
+        },
+        {
+          "before": 0.000124121200042282,
+          "after": 4.737369999929797e-05
+        },
+        {
+          "after": 4.3486950016813355e-05,
+          "before": 0.00013986245003252406
+        },
+        {
+          "before": 0.0001319175000389805,
+          "after": 5.638365000777412e-05
+        },
+        {
+          "after": 4.327810001996113e-05,
+          "before": 0.0001492050000706513
+        }
+      ],
+      "median_seconds": {
+        "before": 0.00013271502502902876,
+        "after": 4.562127501230862e-05
+      },
+      "allocations": {
+        "before": {
+          "retained_traced_bytes": 164,
+          "peak_traced_bytes": 1200717
+        },
+        "after": {
+          "retained_traced_bytes": 584,
+          "peak_traced_bytes": 132050
+        }
+      },
+      "exact_retention_and_duration_parity": true
+    },
+    "small_palette_static": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "P",
+      "changed_first_pixel": false,
+      "pairs_seconds": [
+        {
+          "before": 2.019280000240542e-05,
+          "after": 1.9886800055246566e-05
+        },
+        {
+          "after": 1.8154050030716463e-05,
+          "before": 1.789620000636205e-05
+        },
+        {
+          "before": 3.015454994965694e-05,
+          "after": 0.00011024379991795286
+        },
+        {
+          "after": 1.9657850043586222e-05,
+          "before": 1.7743499938660534e-05
+        },
+        {
+          "before": 1.7630799993639813e-05,
+          "after": 2.8987449968553847e-05
+        },
+        {
+          "after": 1.843885002017487e-05,
+          "before": 1.956925007107202e-05
+        }
+      ],
+      "median_seconds": {
+        "before": 1.8732725038717035e-05,
+        "after": 1.9772325049416392e-05
+      },
+      "allocations": {
+        "before": {
+          "retained_traced_bytes": 216,
+          "peak_traced_bytes": 131578
+        },
+        "after": {
+          "retained_traced_bytes": 216,
+          "peak_traced_bytes": 131578
+        }
+      },
+      "exact_retention_and_duration_parity": true
+    },
+    "small_palette_changing": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "P",
+      "changed_first_pixel": true,
+      "pairs_seconds": [
+        {
+          "before": 1.6048999987106073e-05,
+          "after": 0.000211977199978719
+        },
+        {
+          "after": 2.016379994529416e-05,
+          "before": 2.1974500032229117e-05
+        },
+        {
+          "before": 2.9529099992942066e-05,
+          "after": 3.498070000205189e-05
+        },
+        {
+          "after": 3.104310007984168e-05,
+          "before": 2.1896299949730745e-05
+        },
+        {
+          "before": 5.681429993273923e-05,
+          "after": 2.073875002679415e-05
+        },
+        {
+          "after": 1.7673949969321257e-05,
+          "before": 1.574059997437871e-05
+        }
+      ],
+      "median_seconds": {
+        "before": 2.1935399990979933e-05,
+        "after": 2.5890925053317913e-05
+      },
+      "allocations": {
+        "before": {
+          "retained_traced_bytes": 164,
+          "peak_traced_bytes": 131526
+        },
+        "after": {
+          "retained_traced_bytes": 164,
+          "peak_traced_bytes": 131526
+        }
+      },
+      "exact_retention_and_duration_parity": true
+    },
+    "large_rgba_api_control_static": {
+      "size": [
+        1920,
+        1080
+      ],
+      "mode": "RGBA",
+      "changed_first_pixel": false,
+      "pairs_seconds": [
+        {
+          "before": 0.022544928099978278,
+          "after": 0.00770528214998194
+        },
+        {
+          "after": 0.008555040650026057,
+          "before": 0.026549859250008013
+        },
+        {
+          "before": 0.027714607600046293,
+          "after": 0.00842784335000033
+        },
+        {
+          "after": 0.007999269500032824,
+          "before": 0.020081424900035928
+        },
+        {
+          "before": 0.02620622969998294,
+          "after": 0.00707344809998176
+        },
+        {
+          "after": 0.005434144300033949,
+          "before": 0.020623665600032835
+        }
+      ],
+      "median_seconds": {
+        "before": 0.02437557889998061,
+        "after": 0.007852275825007382
+      },
+      "allocations": {
+        "before": {
+          "retained_traced_bytes": 52,
+          "peak_traced_bytes": 24899949
+        },
+        "after": {
+          "retained_traced_bytes": 644,
+          "peak_traced_bytes": 785341
+        }
+      },
+      "exact_retention_and_duration_parity": true
+    },
+    "large_rgba_api_control_changing": {
+      "size": [
+        1920,
+        1080
+      ],
+      "mode": "RGBA",
+      "changed_first_pixel": true,
+      "pairs_seconds": [
+        {
+          "before": 0.03165523870002289,
+          "after": 0.00014678044999527629
+        },
+        {
+          "after": 0.00015088569998624734,
+          "before": 0.018125597200014453
+        },
+        {
+          "before": 0.041355802349971785,
+          "after": 0.0005124996499944245
+        },
+        {
+          "after": 0.0004593192999891471,
+          "before": 0.045011930500004384
+        },
+        {
+          "before": 0.035327733600024655,
+          "after": 0.00043600005001280805
+        },
+        {
+          "after": 0.00025815945000431386,
+          "before": 0.020084827300070173
+        }
+      ],
+      "median_seconds": {
+        "before": 0.03349148615002377,
+        "after": 0.00034707975000856093
+      },
+      "allocations": {
+        "before": {
+          "retained_traced_bytes": 52,
+          "peak_traced_bytes": 24899949
+        },
+        "after": {
+          "retained_traced_bytes": 420,
+          "peak_traced_bytes": 785053
+        }
+      },
+      "exact_retention_and_duration_parity": true
+    }
+  }
+}

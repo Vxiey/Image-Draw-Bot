@@ -84,7 +84,8 @@ def public_environment(directory, module=timing):
         speed_path = Path(directory) / 'speed.json'
         stack.enter_context(patch.object(speed, 'SPEED_FILE', speed_path))
         stack.enter_context(patch.object(speed, 'load_profile',
-            side_effect=lambda key, path=None: actual_speed(key, speed_path if path is None else path)))
+            side_effect=lambda key, path=None, **kwargs:
+                actual_speed(key, speed_path if path is None else path, **kwargs)))
         stack.enter_context(patch('ResourceAllocation.available_ram_mb', return_value=8192))
         stack.enter_context(patch('ResourceAllocation.logical_cpu_count', return_value=8))
         yield

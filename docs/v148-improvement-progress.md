@@ -6,34 +6,48 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
-The current reviewed source checkpoint contains **869/900 distinct implemented
-improvements, with 31 remaining**. Batch 40 added 15 groups; batch 41 adds eight:
-typed ETA calibration, copy-free oriented upscale input, actual-cost Pixel time
-budgets, bounded Hybrid mask transitions, hardware-generation GPU evidence,
-executor-bound worker recommendations, delivery-specific timing history and
-brush-correct representative dry runs. All 861 preceding registry entries are
-preserved exactly. Tests, review completions and Tcl-fixture repairs add no IDs.
+The current reviewed source checkpoint contains **886/900 distinct implemented
+improvements, with 14 remaining**. Batch 42 adds 17 groups: four application,
+seven rendering, two runtime and four native-input/resource groups. All 869
+preceding registry entries are preserved exactly. Delivery-context follow-ups,
+test-fixture repairs, tests, documentation and review completions add no IDs.
 
+The [application](v148-batch42-application.md),
+[rendering](v148-batch42-rendering.md), [runtime](v148-batch42-runtime.md) and
+[native](v148-batch42-native.md) ledgers retain historical reproductions,
+exact controls, raw paired measurements and limitations. Focused selections
+pass 22 application, 28 rendering and 14 runtime methods; the 19 native methods
+have 18 passes and one unavailable real-Windows skip. Adjacent selections pass
+85 application, 135 rendering, 168 runtime and 144 of 145 native methods (the
+same Windows skip). These selections overlap; their counts are not added into
+a fabricated full-suite result.
+
+The [initial complete batch41 discovery](v148-batch41-initial-full-validation.json)
+finished 4,884 methods with **4,788 passes, nine failures, one error and 86
+skips**. All 1,014 source/configuration/fixture hashes remained unchanged and
+there was no Tcl abort. This is a failed gate. Six worker/helper timeout methods
+subsequently [passed unchanged in isolation](v148-batch42-timeout-followup.json)
+in 41.847 seconds with the original limits. Four other old fixtures are adapted
+to their implemented cancellation, timing-budget or delivery-identity contracts
+without weakening those contracts. Final isolated complete discovery on the
+finished 900-group source remains pending.
+
+The earlier batch40 Tcl-aborted discovery and runner-main-guard diagnostic
+remain preserved. Their two test-owner disposal repairs are proved separately;
+no product GC policy or timeout was weakened. Exact newly published-head
+Windows/Linux, CodeQL and packaged-app results remain separate gates.
+Version 1.0.148 is unreleased; no merge or release is authorized by this checkpoint.
+
+### Previously recorded batch41 checkpoint
+
+Batch41 contained **869/900, with 31 remaining**, adding eight independently
+reviewed behavior groups after batch40's 15. Its combined
+[focused integration](v148-batch41-focused-integration.json) passed **47/47**
+methods with 970 unchanged Python hashes. The complete discovery subsequently
+failed as reported above; the focused result is not a substitute for that gate.
 The [application](v148-batch41-application.md),
 [rendering](v148-batch41-rendering.md), [runtime](v148-batch41-runtime.md) and
-[native delivery](v148-batch41-delivery.md) ledgers document the behavior,
-historical negative evidence, exact controls and limitations. The combined
-[focused integration](v148-batch41-focused-integration.json) passed **47/47**
-methods with no failures, errors or skips and 970 unchanged Python hashes.
-
-Complete isolated discovery is pending at this checkpoint. The earlier batch40
-full attempt reached 4,663 reported methods without an assertion failure before
-aborting in Tcl; it is not a completed pass. Two preceding fixtures retained
-interpreter owners in captured exception frames. Their corrected creator-thread
-disposal passes the 21-method affected sequence and two subprocess ownership
-checks; no product GC policy, assertion, skip or timeout was weakened. See the
-[Tcl diagnostic](v148-batch40-tcl-abort.json) and
-[fixture evidence](v148-batch40-boundary-fixture.md). The separate first-runner
-main-guard defect remains in [its original diagnostic](v148-batch40-initial-runner.json).
-
-The previous published head has no completed Windows/Linux or CodeQL result.
-Each newly published head requires its own CI. Version 1.0.148 remains
-unreleased; work continues toward the revised 900 target.
+[delivery](v148-batch41-delivery.md) ledgers preserve the original evidence.
 
 ### Previously recorded batch40 checkpoint
 

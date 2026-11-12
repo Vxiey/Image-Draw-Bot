@@ -120,6 +120,7 @@ class WindowsMouse:
         down=self.buttons_down()
         if down:
             raise InterruptedError('Release all mouse buttons before starting mouse control: '+', '.join(down)+'.')
+        self._check_modifiers()
         self._input_armed = True
 
     @_serialized_input
@@ -140,6 +141,26 @@ class WindowsMouse:
         """Return physical/logical mouse buttons Windows currently reports down."""
         keys=((0x01,'left'),(0x02,'right'),(0x04,'middle'),(0x05,'x1'),(0x06,'x2'))
         return tuple(name for vk,name in keys if self.api.GetAsyncKeyState(vk)&0x8000)
+
+    def _check_modifiers(self):
+        """Do not turn an ordinary stroke/control click into a modified action.
+
+        Shift can constrain strokes, Ctrl can change a canvas gesture, and Alt
+        or Windows can redirect it into application/system commands. The bot
+        never owns these held keys across a mouse gesture. In particular, do
+        not send key-up events for keys which belong to the user.
+        """
+        read = getattr(getattr(self, 'api', None), 'GetAsyncKeyState', None)
+        if not callable(read):
+            # Older injected native backends may implement cursor input only.
+            # Real user32 always exposes the function bound in __init__.
+            return
+        keys = ((0x10, 'Shift'), (0x11, 'Ctrl'), (0x12, 'Alt'),
+                (0x5B, 'Left Windows'), (0x5C, 'Right Windows'))
+        down = tuple(name for vk, name in keys if read(vk) & 0x8000)
+        if down:
+            raise InterruptedError('Stopped: release the held keyboard modifiers before mouse control: '
+                                   + ', '.join(down) + '.')
 
     def desktop_rect(self):
         # SM_X/Y/CX/CYVIRTUALSCREEN = 76,77,78,79
@@ -195,6 +216,7 @@ class WindowsMouse:
                 down = tuple(button for button in down if button != 'left')
             if down:
                 raise InterruptedError('Stopped: a mouse button is held ('+', '.join(down)+'). Release it before moving the pointer.')
+            self._check_modifiers()
             if self.held and getattr(self, 'drag_backend', 'cursor') == 'sendinput':
                 self._send_absolute_move(x, y)
                 return
@@ -229,6 +251,7 @@ class WindowsMouse:
         down=self.buttons_down()
         if down:
             raise InterruptedError('Stopped: release all mouse buttons before Image Draw Bot presses the brush.')
+        self._check_modifiers()
         self._send(0x0002)  # MOUSEEVENTF_LEFTDOWN
         self.held = True
 

@@ -7,6 +7,7 @@ from the configured VRAM budget.  CPU remains the deterministic fallback.
 """
 from __future__ import annotations
 
+from array import array
 from dataclasses import dataclass
 from typing import Sequence
 import math
@@ -66,43 +67,54 @@ def compile_swept_rectangles(sequence: Sequence[dict], brush_px: int, width: int
     rectangle per segment; diagonal compatibility paths become ordered point
     rectangles via Bresenham, matching the CPU simulator.
     """
-    rects=[]
-    w=max(1,int(width));h=max(1,int(height))
-    current_brush=max(1,int(brush_px))
-    def add(x0,y0,x1,y1,color):
-        from PixelAccuracyEngine import _clip_rect
-        clipped=_clip_rect(x0,y0,x1,y1,w,h)
-        if clipped is None:return
-        x0,y0,x1,y1=clipped
-        rects.append((x0,y0,x1,y1,int(color)))
-    def checked_path(points):
-        for point_index,point in enumerate(points):
-            if point_index%128==0 and cancelled():raise InterruptedError()
-            yield tuple(map(int,point))
-    for n,entry in enumerate(sequence):
-        if n%128==0 and cancelled():raise InterruptedError()
-        try:raw_color=entry['color_index'];points=entry['path']
-        except (KeyError,TypeError):continue
-        color=validate_color_index(raw_color)
-        try:path=tuple(checked_path(points))
-        except (KeyError,TypeError,ValueError):continue
-        if not path:continue
-        current_brush=brush_for_entry(entry,current_brush);before,after=_brush_extents(current_brush)
-        if len(path)==1:
-            x,y=path[0];add(x-before,y-before,x+after,y+after,color);continue
-        for segment_index,(a,b) in enumerate(zip(path,path[1:])):
-            if segment_index%128==0 and cancelled():raise InterruptedError()
-            x0,y0=a;x1,y1=b
-            if y0==y1:
-                lo,hi=sorted((x0,x1));add(lo-before,y0-before,hi+after,y0+after,color)
-            elif x0==x1:
-                lo,hi=sorted((y0,y1));add(x0-before,lo-before,x0+after,hi+after,color)
-            else:
-                for point_index,(x,y) in enumerate(clipped_bresenham(a,b,w,h,before=before,after=after)):
-                    if point_index%128==0 and cancelled():raise InterruptedError()
-                    add(x-before,y-before,x+after,y+after,color)
-    if not rects:return np.empty((0,5),dtype=np.int32)
-    return np.asarray(rects,dtype=np.int32)
+    rects=path=points=entry=None
+    try:
+        if cancelled():raise InterruptedError()
+        # The returned array owns this private compact buffer through its base.
+        # Avoid retaining a Python tuple plus five Python integers per rectangle
+        # and then allocating a second complete catalogue during conversion.
+        rects=array('i')
+        if rects.itemsize!=np.dtype(np.int32).itemsize:
+            raise RuntimeError('Rectangle staging requires a native 32-bit integer buffer.')
+        w=max(1,int(width));h=max(1,int(height))
+        current_brush=max(1,int(brush_px))
+        def add(x0,y0,x1,y1,color):
+            from PixelAccuracyEngine import _clip_rect
+            clipped=_clip_rect(x0,y0,x1,y1,w,h)
+            if clipped is None:return
+            x0,y0,x1,y1=clipped
+            rects.extend((x0,y0,x1,y1,int(color)))
+        def checked_path(points):
+            for point_index,point in enumerate(points):
+                if point_index%128==0 and cancelled():raise InterruptedError()
+                yield tuple(map(int,point))
+        for n,entry in enumerate(sequence):
+            if n%128==0 and cancelled():raise InterruptedError()
+            try:raw_color=entry['color_index'];points=entry['path']
+            except (KeyError,TypeError):continue
+            color=validate_color_index(raw_color)
+            try:path=tuple(checked_path(points))
+            except (KeyError,TypeError,ValueError):continue
+            if not path:continue
+            current_brush=brush_for_entry(entry,current_brush);before,after=_brush_extents(current_brush)
+            if len(path)==1:
+                x,y=path[0];add(x-before,y-before,x+after,y+after,color);continue
+            for segment_index,(a,b) in enumerate(zip(path,path[1:])):
+                if segment_index%128==0 and cancelled():raise InterruptedError()
+                x0,y0=a;x1,y1=b
+                if y0==y1:
+                    lo,hi=sorted((x0,x1));add(lo-before,y0-before,hi+after,y0+after,color)
+                elif x0==x1:
+                    lo,hi=sorted((y0,y1));add(x0-before,lo-before,x0+after,hi+after,color)
+                else:
+                    for point_index,(x,y) in enumerate(clipped_bresenham(a,b,w,h,before=before,after=after)):
+                        if point_index%128==0 and cancelled():raise InterruptedError()
+                        add(x-before,y-before,x+after,y+after,color)
+        if cancelled():raise InterruptedError()
+        if not rects:return np.empty((0,5),dtype=np.int32)
+        return np.frombuffer(rects,dtype=np.int32).reshape(-1,5)
+    finally:
+        rects=path=points=entry=sequence=None
 
 
 _KERNEL_SOURCE = r'''

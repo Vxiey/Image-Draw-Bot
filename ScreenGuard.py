@@ -1,5 +1,6 @@
 """Windows window/position checks before mouse input. No input on import."""
 import ctypes
+import math
 import os
 import time
 from contextlib import contextmanager, nullcontext
@@ -612,6 +613,9 @@ class GuardedMouse:
             self.check()
         else:
             self._check_modal_geometry(modal_point)
+        check_modifiers=getattr(self.mouse,'_check_modifiers',None)
+        if callable(check_modifiers):check_modifiers()
+        self._check_stop()
 
     def release(self):
         self.mouse.release()
@@ -683,6 +687,93 @@ class GuardedMouse:
             reason='The rendered stroke color does not match the requested color closely enough.'
         return {'matched':best_error<=tolerance,'expected':expected,'actual':best,'error':int(best_error),
                 'confidence':confidence,'sample_count':sample_count,'reason':reason,'failure_kind':failure_kind}
+
+    @staticmethod
+    def _ink_site_sample_indices(points,radius):
+        """Assign each physical sample pixel to its nearest distinct site once."""
+        owners={}
+        for site,(x,y) in enumerate(points):
+            offset=0
+            for dy in range(-radius,radius+1):
+                for dx in range(-radius,radius+1):
+                    pixel=(x+dx,y+dy);distance=dx*dx+dy*dy
+                    previous=owners.get(pixel)
+                    if previous is None or distance<previous[0]:
+                        owners[pixel]=(distance,site,offset)
+                    offset+=1
+        indices=[[] for _ in points]
+        for _distance,site,offset in owners.values():indices[site].append(offset)
+        return indices
+
+    def inspect_ink_coverage(self,start,end,expected,brush_px=1,tolerance=48):
+        """Require ink in a majority of distinct sites on the delivered segment.
+
+        A nearest color anywhere is useful for Paint color selection, but does
+        not confirm that a browser delivered the rest of a long stroke. Keep
+        that existing API separate. Matches from different settling attempts
+        never accumulate, and overlapping patches cannot count one physical
+        pixel for several sites. Sparse/cross-monitor capture fallbacks observe
+        sites successively; this is a static-ink sampling heuristic, not proof
+        of one atomic display frame or an exact pixel-accuracy score.
+        """
+        expected=tuple(map(int,expected));tolerance=max(1,min(120,int(tolerance)))
+        points=tuple(dict.fromkeys(self._ink_probe_points(start,end)))
+        radius=max(2,min(6,int(round(max(1,int(brush_px))/2))+2))
+        patch_size=(2*radius+1)**2
+        site_indices=self._ink_site_sample_indices(points,radius)
+        required=max(1,math.ceil(len(points)*.6))
+        best=None;sample_count=0
+        for settle in (0.0,.08,.18,.32):
+            if settle:self._wait(settle)
+            for point in points:self.check(point)
+            sample_many=getattr(self.monitor,'colors_near_many',None)
+            if callable(sample_many):
+                samples=sample_many(points,radius)
+                # Native grouped reads have a fixed square-patch contract. An
+                # incomplete response must not shift colors into another site.
+                complete=len(samples)==len(points)*patch_size
+                sample_count+=len(samples)
+                groups=[[samples[i*patch_size+j] for j in indices]
+                        for i,indices in enumerate(site_indices)] if complete else []
+            else:
+                sample_point=getattr(self.monitor,'color',None)
+                if not callable(sample_point):
+                    # Preserve the established color-only API for injected
+                    # providers which cannot identify physical sample sites.
+                    result=self.inspect_ink_segment(start,end,expected,brush_px,tolerance)
+                    result['coverage_unavailable']='provider has no located pixel samples'
+                    return result
+                groups=[]
+                for point in points:
+                    self._check_stop()
+                    groups.append([sample_point(point)])
+                    sample_count+=1
+                complete=all(bool(group) for group in groups)
+            for point in points:self.check(point)
+            matched=0;closest=None;closest_error=999
+            for group in groups:
+                error=999
+                for actual in group:
+                    actual=tuple(map(int,actual))
+                    distance=max(abs(actual[i]-expected[i]) for i in range(3))
+                    error=min(error,distance)
+                    if distance<closest_error:closest_error,closest=distance,actual
+                matched+=error<=tolerance
+            payload={'matched':bool(complete and matched>=required),
+                     'expected':expected,'actual':closest,'error':closest_error,
+                     'confidence':100.0*matched/len(points),
+                     'matched_sites':matched,'tested_sites':len(points),'required_sites':required,
+                     'sample_count':sample_count,'failure_kind':'partial-stroke',
+                     'reason':(f'Expected ink found at {matched}/{len(points)} sampled stroke sites '
+                               f'({required} required).' if complete else 'Incomplete stroke-neighborhood capture.')}
+            if best is None or matched>best['matched_sites'] or (
+                    matched==best['matched_sites'] and closest_error<best['error']):
+                best=payload
+            self._check_stop()
+            if payload['matched']:return payload
+        best['sample_count']=sample_count
+        self._check_stop()
+        return best
 
     def verify_ink_segment(self,start,end,expected,brush_px=1):
         """Backward-compatible strict verifier used by older callers/plugins."""

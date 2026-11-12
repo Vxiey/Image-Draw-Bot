@@ -1,0 +1,208 @@
+{
+  "baseline_commit": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "baseline_tree": "72e55f2a6d3dad971a13e9ab9141aa521cf15177",
+  "method": "Four alternating AB/BA elapsed pairs and separate traced peaks, exact complete array/route equality. Each side uses its actual historical/current public edge_magnitude and matching gradient implementation.",
+  "scope": "Public CPU edge operation including validation, route selection and completion. Caller-owned dense luminance and real CPU Lab channels are prepared outside the call. This does not replace or invalidate the initial complete Accuracy/Importance/PixelMap observations.",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "fixture": {
+    "path": "assets/paint-tools-reference.png",
+    "sha256": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586"
+  },
+  "sha256": {
+    "ImageGradients.py": "5eb52ff00ea04ae46cf1116eb55e84f201fc3abc3e81e83f92764313a2fcfd5b",
+    "UniversalGpuAcceleration.py": "a2554c90ca03e9853cf8a2669eaeb943dc71b62c64779d95e33800aa47adf5d7",
+    "benchmark_v148_runtime_batch42.py": "ad894379093fe52926c1af3b919d5334ff36a1435d7be289c5c6f9c96864a5e2",
+    "benchmark_v148_runtime_batch42_edge_consumer.py": "600889b7d9d77473b56b9414b45832caa6ceb7497fc2613cc8e41f5f354e20c4"
+  },
+  "cases": [
+    {
+      "name": "complete_edge_dense_luminance_384x256",
+      "before_ms": [
+        0.628789000074903,
+        0.7064330002322095,
+        0.6817599996793433,
+        0.70616599987261
+      ],
+      "after_ms": [
+        0.8517559999745572,
+        0.5799760001536924,
+        0.47557199923176086,
+        0.48584799969830783
+      ],
+      "before_median_ms": 0.6939629997759766,
+      "after_median_ms": 0.5329119999260001,
+      "before_traced_peak_bytes": 1588624,
+      "after_traced_peak_bytes": 1588920,
+      "exact_complete_output": true,
+      "output": [
+        {
+          "shape": [
+            256,
+            384
+          ],
+          "dtype": "<f4",
+          "sha256": "5d5156563ed71b03f8a181b4d31f476e2b1e57005853c51a73b07f7b9987fa83"
+        },
+        {
+          "workload": "edge_map",
+          "profile_workload": "edge_map",
+          "backend_id": "cpu:numpy",
+          "backend": "CPU/NumPy",
+          "vendor": "CPU",
+          "device": "x86_64",
+          "accelerated": false,
+          "pixels": 98304,
+          "reason": "CPU mode selected",
+          "fallback_reason": ""
+        }
+      ],
+      "input_strides": [
+        1536,
+        4
+      ],
+      "input_contiguous": true
+    },
+    {
+      "name": "complete_edge_strided_lab_384x256",
+      "before_ms": [
+        0.749935999920126,
+        0.817686000118556,
+        2.1060190001662704,
+        0.6076370000300813
+      ],
+      "after_ms": [
+        1.0797140002978267,
+        1.0457729995323461,
+        2.2107599997980287,
+        0.8501769998474629
+      ],
+      "before_median_ms": 0.783811000019341,
+      "after_median_ms": 1.0627434999150864,
+      "before_traced_peak_bytes": 1588464,
+      "after_traced_peak_bytes": 1588752,
+      "exact_complete_output": true,
+      "output": [
+        {
+          "shape": [
+            256,
+            384
+          ],
+          "dtype": "<f4",
+          "sha256": "775e35a6090937c8311da153ad6cc9efbc893a463152776a3f94722e3386d7ae"
+        },
+        {
+          "workload": "edge_map",
+          "profile_workload": "edge_map",
+          "backend_id": "cpu:numpy",
+          "backend": "CPU/NumPy",
+          "vendor": "CPU",
+          "device": "x86_64",
+          "accelerated": false,
+          "pixels": 98304,
+          "reason": "CPU mode selected",
+          "fallback_reason": ""
+        }
+      ],
+      "input_strides": [
+        4608,
+        12
+      ],
+      "input_contiguous": false
+    },
+    {
+      "name": "complete_edge_dense_luminance_1536x1024",
+      "before_ms": [
+        14.15304600050149,
+        23.438555000211636,
+        27.63209199929406,
+        21.22063499973592
+      ],
+      "after_ms": [
+        19.17896600025415,
+        10.98408699999709,
+        14.743598999302776,
+        26.087418000315665
+      ],
+      "before_median_ms": 22.32959499997378,
+      "after_median_ms": 16.961282499778463,
+      "before_traced_peak_bytes": 25181416,
+      "after_traced_peak_bytes": 7372960,
+      "exact_complete_output": true,
+      "output": [
+        {
+          "shape": [
+            1024,
+            1536
+          ],
+          "dtype": "<f4",
+          "sha256": "0a9f7e6b29dd05d289fc2635f2f7ccb0e4c0e0a924cbbf524ba990dc720322b8"
+        },
+        {
+          "workload": "edge_map",
+          "profile_workload": "edge_map",
+          "backend_id": "cpu:numpy",
+          "backend": "CPU/NumPy",
+          "vendor": "CPU",
+          "device": "x86_64",
+          "accelerated": false,
+          "pixels": 1572864,
+          "reason": "CPU mode selected",
+          "fallback_reason": ""
+        }
+      ],
+      "input_strides": [
+        6144,
+        4
+      ],
+      "input_contiguous": true
+    },
+    {
+      "name": "complete_edge_strided_lab_1536x1024",
+      "before_ms": [
+        32.091908999973384,
+        20.531638999273127,
+        26.11753899964242,
+        25.934352000149374
+      ],
+      "after_ms": [
+        73.59918400015886,
+        19.34205700035818,
+        18.296707000445167,
+        19.18957700036117
+      ],
+      "before_median_ms": 26.025945499895897,
+      "after_median_ms": 19.265817000359675,
+      "before_traced_peak_bytes": 25181416,
+      "after_traced_peak_bytes": 7372960,
+      "exact_complete_output": true,
+      "output": [
+        {
+          "shape": [
+            1024,
+            1536
+          ],
+          "dtype": "<f4",
+          "sha256": "5de2e21b0185a1966863076224a9392e2bfe30c1e4984e79fc2a1194e13626c2"
+        },
+        {
+          "workload": "edge_map",
+          "profile_workload": "edge_map",
+          "backend_id": "cpu:numpy",
+          "backend": "CPU/NumPy",
+          "vendor": "CPU",
+          "device": "x86_64",
+          "accelerated": false,
+          "pixels": 1572864,
+          "reason": "CPU mode selected",
+          "fallback_reason": ""
+        }
+      ],
+      "input_strides": [
+        18432,
+        12
+      ],
+      "input_contiguous": false
+    }
+  ]
+}

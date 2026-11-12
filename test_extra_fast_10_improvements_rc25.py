@@ -109,8 +109,8 @@ class ExtraFastTenImprovementTests(unittest.TestCase):
             width=40,height=24,importance_mean=.1,importance_max=.1,edge_mean=.1,contour_mean=.1,
             protected_pixels=0,protected_ratio=0.0)
         m=build_cost_model(opts(30),(40,24),(40,24));real=ar._runs_from_mask
-        def spy(mask,row_stride=1,row_offset=0,orientation='horizontal'):
-            seen.append(int(row_stride));return real(mask,row_stride,row_offset,orientation)
+        def spy(mask,row_stride=1,row_offset=0,orientation='horizontal',*,cancelled=lambda:False):
+            seen.append(int(row_stride));return real(mask,row_stride,row_offset,orientation,cancelled=cancelled)
         with patch.object(ar,'_runs_from_mask',side_effect=spy):
             paths,painted,_cost=ar._candidate_paths_for_brush(target,residual,8,model=m,comp=comp,phase='foundation',final_size=False)
         self.assertTrue(paths);self.assertTrue(np.any(painted));self.assertIn(8,seen);self.assertIn(4,seen)

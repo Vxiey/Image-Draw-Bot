@@ -29,8 +29,8 @@ class RealSpeedResetTests(unittest.TestCase):
         self.speed_file = self.root / 'real-speed-profiles.json'
         self.stack.enter_context(patch.object(speed, 'SPEED_FILE', self.speed_file))
         read_speed = speed.load_profile
-        self.stack.enter_context(patch.object(speed, 'load_profile', side_effect=lambda key, path=None:
-            read_speed(key, self.speed_file if path is None else path)))
+        self.stack.enter_context(patch.object(speed, 'load_profile', side_effect=lambda key, path=None, **kwargs:
+            read_speed(key, self.speed_file if path is None else path, **kwargs)))
         self.stack.enter_context(patch.object(storage, 'data_dir', return_value=self.root))
         self.stack.enter_context(patch.object(portability, 'data_dir', return_value=self.root))
         self.stack.enter_context(patch.object(timing, 'FILE', self.root / 'legacy-timing.json'))
@@ -49,6 +49,10 @@ class RealSpeedResetTests(unittest.TestCase):
                 self.addCleanup(value.close)
         for key, seconds in (('gartic-phone', 100.), ('skribbl', 20.)):
             self.assertTrue(speed.record_runtime_sample(key, 20, seconds, path=self.speed_file)['recorded'])
+        # The application reads explicitly bound evidence. Keep the older row
+        # too, so the existing reset assertions cover both generations.
+        self.assertTrue(speed.record_runtime_sample('gartic-phone', 20, 100.,
+            path=self.speed_file, options=self.plan['options'])['recorded'])
         self.other = speed.load_profile('skribbl')
         self.app = SimpleNamespace(activity=None, closing=False,
             game=Value('Gartic Phone'), options=lambda: dict(self.options), plan=self.plan,

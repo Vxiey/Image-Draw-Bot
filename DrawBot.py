@@ -1242,7 +1242,8 @@ def _make_plan(original, area, options, cancelled=lambda: False):
 
         simplification_mode=options.get('background_simplification','Balanced')
         with closing(palette_image) as unsimplified:
-            palette_image,simplification=simplify_background(unsimplified,simplification_mode,cancelled=cancelled)
+            palette_image,simplification=simplify_background(unsimplified,simplification_mode,
+                protected_mask=adaptive_mask,cancelled=cancelled)
         plan_options['background_simplification_meta']=simplification.as_dict()
         with closing(palette_image):
             image=_own_color_plan_image(palette_image.convert('RGBA'))
@@ -2032,7 +2033,8 @@ def _finish_plan(image,fitted,groups,options,cancelled,owner):
         _detail_source=options.get('_accuracy_original_source')
         if isinstance(_detail_source,Image.Image):
             groups,execution_groups,execution_sequence,_detail_zoom_meta=add_detail_zoom_pass(
-                _detail_source,image,palette_rgb,groups,execution_groups,execution_sequence,options,cancelled=cancelled)
+                _detail_source,image,palette_rgb,groups,execution_groups,execution_sequence,options,
+                fitted=fitted,cancelled=cancelled)
             options['detail_zoom_meta']=dict(_detail_zoom_meta or {})
             if options['detail_zoom_meta'].get('enabled'):
                 _added=int(options['detail_zoom_meta'].get('detail_paths_added',0) or 0)
@@ -3517,6 +3519,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                             raise StrokeDeliveryVerificationError(
                                 f'Stroke delivery verification failed after {delivery_verify_policy.retry_cap} retry. '
                                 f'Expected RGB {tuple(plan["colors"][index])}; closest rendered RGB was {actual}. '
+                                f'{delivery_result.get("reason") or "The stroke could not be confirmed."} '
                                 'The failed path was not marked complete, so Smart Recovery can resume from it safely.')
                 else:
                     delivery_verify_meta['skipped']=int(delivery_verify_meta.get('skipped',0))+1
@@ -4318,7 +4321,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 speed_meta=({'recorded':False,'reason':pause_reason} if pause_reason else record_runtime_sample(
                     str(plan['options'].get('profile_key') or ''),sent_paths,elapsed,
                     colors=sum(bool(g) for g in (plan.get('execution_groups') or plan.get('groups') or [])),
-                    test_run=bool(plan['options'].get('test_run',False))))
+                    test_run=bool(plan['options'].get('test_run',False)),options=plan['options']))
                 plan['options']['real_speed_runtime_meta']=speed_meta
                 if speed_meta.get('recorded'):
                     log_event(f"Real-Speed sample saved: profile={speed_meta.get('profile_key')} paths={sent_paths} elapsed={elapsed:.3f}s pps={float(speed_meta.get('last_sample_pps',0)):.2f} learned={float(speed_meta.get('paths_per_second',0)):.2f}.")
@@ -4650,6 +4653,7 @@ class DrawBotApp:
         self.saved_area = None
         from ProfileIsolation import capture_defaults
         capture_defaults(self)
+        apply_profile_defaults(self,self.game.get())
         self.read_settings()
         from StudioUI import build_ui
         build_ui(self,QUALITY,SPEED)
@@ -4675,34 +4679,7 @@ class DrawBotApp:
         except Exception as error:
             self.status.set(f'Global hotkeys are unavailable: {error}. Use the buttons in the window.')
         root.bind('<Control-v>',self.paste_shortcut)
-        if hasattr(root,'drop_target_register'):
-            try:
-                from tkinterdnd2 import DND_FILES
-                try:
-                    from tkinterdnd2 import DND_TEXT
-                except ImportError:
-                    DND_TEXT='DND_Text'
-                dnd_types=(DND_FILES,DND_TEXT)
-                # v1.0.121: File Explorer drops arrive as files, while Chrome/
-                # Edge image drags can arrive as URL/text. Accept both. Window
-                # drops remain import-only; preview-canvas drops may auto-start.
-                root.drop_target_register(*dnd_types)
-                root.dnd_bind('<<Drop>>',lambda event:self.drop_image(event,drop_to_draw=False))
-                canvas_targets=tuple(
-                    target for target in (
-                        getattr(self,'original_canvas',None),getattr(self,'result_canvas',None),
-                        getattr(self,'detail_zoom_canvas',None),
-                        getattr(self,'safety_canvas',None),getattr(self,'safety_debug_canvas',None),
-                        getattr(self,'stroke_canvas',None),getattr(self,'fill_canvas',None),
-                        getattr(self,'color_canvas',None)) if target is not None)
-                for target in canvas_targets:
-                    target.drop_target_register(*dnd_types)
-                    target.dnd_bind('<<Drop>>',lambda event:self.drop_image(event,drop_to_draw=True))
-                    target.dnd_bind('<<DropEnter>>',lambda event,target=target:(target.configure(bg='#254237'),'copy')[1])
-                    target.dnd_bind('<<DropLeave>>',lambda event,target=target:(target.configure(bg='#131a25'),'copy')[1])
-            except (ImportError,RuntimeError,tk.TclError) as error:
-                log_event(f'Drag and drop unavailable: {error!r}')
-                self.status.set('Drag and drop could not be enabled. Use Select image or Ctrl+V.')
+        self._install_image_drop_targets()
         root.protocol('WM_DELETE_WINDOW',self.close)
         self.refresh_palette()
         self.refresh_tool_calibration()
@@ -4720,6 +4697,35 @@ class DrawBotApp:
                     root.after(650, self.show_welcome)
             except Exception as error:
                 log_event(f'First-run welcome state ignored: {error!r}')
+
+    def _install_image_drop_targets(self):
+        root=self.root
+        if hasattr(root,'drop_target_register'):
+            try:
+                from tkinterdnd2 import DND_FILES
+                try:
+                    from tkinterdnd2 import DND_TEXT
+                except ImportError:
+                    DND_TEXT='DND_Text'
+                dnd_types=(DND_FILES,DND_TEXT)
+                # Files and browser image/text drags use the same parser. The
+                # window imports only; every named preview uses the existing
+                # explicit canvas gesture and its normal verification gates.
+                root.drop_target_register(*dnd_types)
+                root.dnd_bind('<<Drop>>',lambda event:self.drop_image(event,drop_to_draw=False))
+                from PreviewViews import VIEW_SPECS
+                seen={id(root)}
+                for _label,attribute,_layer,_filename in VIEW_SPECS:
+                    target=getattr(self,attribute,None)
+                    if target is None or id(target) in seen:continue
+                    seen.add(id(target))
+                    target.drop_target_register(*dnd_types)
+                    target.dnd_bind('<<Drop>>',lambda event:self.drop_image(event,drop_to_draw=True))
+                    target.dnd_bind('<<DropEnter>>',lambda event,target=target:(target.configure(bg='#254237'),'copy')[1])
+                    target.dnd_bind('<<DropLeave>>',lambda event,target=target:(target.configure(bg='#131a25'),'copy')[1])
+            except (ImportError,RuntimeError,tk.TclError) as error:
+                log_event(f'Drag and drop unavailable: {error!r}')
+                self.status.set('Drag and drop could not be enabled. Use Select image or Ctrl+V.')
 
     def _recovery_option_snapshot(self):
         """Return only primitive configuration values; never safety/arming state."""
@@ -8468,7 +8474,8 @@ class DrawBotApp:
     def display_screen(self,image):
         if self.closing:
             image.close();return False
-        from PIL import ImageTk
+        from PIL import Image,ImageTk
+        from ImageGeometry import thumbnail_size
         try:
             window=tk.Toplevel(self.root)
         except BaseException:
@@ -8476,8 +8483,11 @@ class DrawBotApp:
         window.title('Captured drawing area')
         window.bind('<Destroy>',lambda event:image.close() if event.widget is window else None,add='+')
         try:
-            with closing(image.copy()) as view:
-                view.thumbnail((800,480))
+            # The dialog owns the captured source for Use/Save. Read its pixels
+            # directly into the bounded display image, with thumbnail's exact
+            # resampling/reduction policy, instead of first copying the screen.
+            with closing(image.resize(thumbnail_size(image.size,(800,480)),
+                                      Image.Resampling.BICUBIC,reducing_gap=2.0)) as view:
                 photo=ImageTk.PhotoImage(view)
         except BaseException:
             try:window.destroy()

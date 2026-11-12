@@ -33,14 +33,15 @@ class RealSpeedBudgetIntegrationTests(unittest.TestCase):
 
     def test_budget_policy_reduces_detail_and_colors(self):
         p=self.tmp_path/'speed.json'
-        record_runtime_sample('gartic-phone',60,20.0,path=p)
         options={
             'profile_key':'gartic-phone','profile_engine':'Auto','time_budget_active':True,
             'time_budget_seconds':30,'max_seconds':30,'target_stroke_count':'Auto',
             'target_stroke_count_resolved':500,'adaptive_detail':'Auto','color_grouping':'Smart',
             'planning_resolution':'High',
         }
+        record_runtime_sample('gartic-phone',60,20.0,path=p,options=options)
         out=apply_budget_policy(options,path=p)
+        assert out['real_speed_budget_meta']['learned']
         assert out['target_stroke_count_resolved'] < 500
         assert out['gartic_phone_max_colors'] <= 4
         assert out['adaptive_detail']=='Strong simplify'

@@ -10,6 +10,7 @@ The pass is deterministic, local-only, palette-safe and deadline-aware.
 """
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import dataclass
 from typing import Sequence
 import math
@@ -27,11 +28,47 @@ def validate_detail_zoom_mode(value: str) -> str:
     return value
 
 
-def _visible_rgb(image: Image.Image) -> np.ndarray:
-    rgba = np.asarray(ImageOps.exif_transpose(image).convert("RGBA"), dtype=np.uint8)
-    alpha = rgba[..., 3:4].astype(np.float32) / 255.0
-    rgb = rgba[..., :3].astype(np.float32) * alpha + 255.0 * (1.0 - alpha)
-    return np.rint(rgb).clip(0, 255).astype(np.uint8)
+_VISIBLE_TILE_SIDE = 256
+
+
+def _visible_rgb_tile(image):
+    """The established float32 alpha-composite arithmetic on a bounded tile."""
+    rgba=alpha=rgb=result=None
+    try:
+        with closing(image.convert('RGBA')) as converted:
+            rgba=np.asarray(converted,dtype=np.uint8)
+            alpha=rgba[...,3:4].astype(np.float32)/255.0
+            rgb=rgba[...,:3].astype(np.float32)*alpha+255.0*(1.0-alpha)
+            result=np.rint(rgb).clip(0,255).astype(np.uint8)
+        return result
+    finally:
+        rgba=alpha=rgb=result=image=None
+
+
+def _visible_rgb(image: Image.Image, *, cancelled=lambda: False) -> np.ndarray:
+    """Retain the required visible RGB output without full-source float planes."""
+    result=tile=None
+    try:
+        if cancelled():raise InterruptedError()
+        with closing(ImageOps.exif_transpose(image)) as oriented:
+            width,height=oriented.size
+            if width*height<=_VISIBLE_TILE_SIDE*_VISIBLE_TILE_SIDE:
+                result=_visible_rgb_tile(oriented)
+            else:
+                result=np.empty((height,width,3),dtype=np.uint8)
+                for top in range(0,height,_VISIBLE_TILE_SIDE):
+                    bottom=min(height,top+_VISIBLE_TILE_SIDE)
+                    for left in range(0,width,_VISIBLE_TILE_SIDE):
+                        if cancelled():raise InterruptedError()
+                        right=min(width,left+_VISIBLE_TILE_SIDE)
+                        with closing(oriented.crop((left,top,right,bottom))) as cropped:
+                            tile=_visible_rgb_tile(cropped)
+                        result[top:bottom,left:right]=tile
+                        tile=None
+            if cancelled():raise InterruptedError()
+        return result
+    finally:
+        result=tile=image=None
 
 
 def _resolved_factor(mode: str, options: dict, source_size, work_size) -> int:
@@ -293,9 +330,40 @@ def _base_color_sequence(execution_groups, options, cancelled):
     return sequence
 
 
+def _fit_zoom_delivery(sequence, proposals, options, source_size, fitted, cancelled):
+    """Admit only affordable optional detail after all existing drawing work."""
+    if not options.get('time_budget_active') or options.get('unlimited_time'):
+        return proposals,None
+    from ExecutionCostModel import build_cost_model
+    from PixelAccuracyEngine import _fit_correction_delivery as fit_appended_delivery
+    from RegionFillEngine import estimate_fill_execution_seconds,fill_tool_batch_cost
+    model=build_cost_model(options,source_size,fitted)
+    seconds=options.get('deadline_render_budget_seconds')
+    if seconds is None:seconds=options.get('time_budget_seconds') or options.get('max_seconds') or 180
+    seconds=float(seconds)
+    if not math.isfinite(seconds) or seconds<0:
+        raise ValueError('Detail Zoom execution budget must be finite and nonnegative.')
+    fixed=float(model.fixed_overhead(active_colors=0).total_seconds)
+    fixed+=max(0.,float(options.get('canvas_clear_estimate_seconds') or 0.))
+    regions=options.get('fill_regions') or ()
+    if regions:
+        fixed+=float(estimate_fill_execution_seconds(regions,source_size,fitted,options,cost_model=model)['total_seconds'])
+        for color in dict.fromkeys(int(region['color_index']) for region in regions):
+            fixed+=sum(model.color_selection_cost(color))
+    background=options.get('background_fill_plan') or {}
+    if background.get('enabled'):
+        fixed+=model.switch_cost('fill')+fill_tool_batch_cost(options,cost_model=model)
+        if background.get('color_index') is not None:
+            fixed+=sum(model.color_selection_cost(int(background['color_index'])))
+    selected,meta=fit_appended_delivery(sequence,proposals,model,max(0.,seconds-fixed),cancelled=cancelled)
+    meta.update(render_budget_seconds=seconds,fixed_overhead_seconds=fixed,
+                omitted_paths=len(proposals)-len(selected),source='actual appended delivery model')
+    return selected,meta
+
+
 def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Image,
                          palette_rgb: Sequence[Sequence[int]], groups, execution_groups,
-                         execution_sequence, options: dict, *, cancelled=lambda: False):
+                         execution_sequence, options: dict, *, fitted=None, cancelled=lambda: False):
     """Return updated geometry plus compact Detail Zoom metadata.
 
     The original source is revisited at a bounded 2x/4x analysis resolution.  Only
@@ -329,8 +397,10 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
     if effective < 2:
         return groups, execution_groups, execution_sequence, {"enabled": False, "requested": mode, "factor": 1, "reason": "planning image already near detail-analysis limit", "target_app_zoomed": False}
 
-    base = _visible_rgb(working_image)
-    source_zoom = np.asarray(Image.fromarray(_visible_rgb(original_source), "RGB").resize((w * effective, h * effective), Image.Resampling.LANCZOS), dtype=np.uint8)
+    base = _visible_rgb(working_image,cancelled=cancelled)
+    with closing(Image.fromarray(_visible_rgb(original_source,cancelled=cancelled),"RGB")) as visible_source:
+        with closing(visible_source.resize((w*effective,h*effective),Image.Resampling.LANCZOS)) as zoomed:
+            source_zoom=np.asarray(zoomed,dtype=np.uint8)
     if cancelled():
         raise InterruptedError()
     score, edge_hi = _candidate_cells(source_zoom, base, effective, skip_white=bool(options.get("skip_white", True)))
@@ -397,9 +467,7 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
     phase = "important_details" if deadline_mode else "details"
     seconds_per = max(.015, float(options.get("delay", .002) or .002) * 3.0 + .018)
 
-    appended = 0
-    detail_pixels = 0
-    appended_colors = set()
+    proposals=[]
     for color, path in detail_paths:
         if cancelled():
             raise InterruptedError()
@@ -408,15 +476,6 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
         clean = [(int(x), int(y)) for x, y in path]
         if not clean:
             continue
-        new_exec[color].append(clean)
-        # Keep legacy group-based diagnostics/active-colour accounting aware of
-        # the new detail without changing the earlier source-stroke count.
-        if 0 <= color < len(new_groups):
-            if len(clean) == 1:
-                x, y = clean[0]; new_groups[color].append((x, y, x, y))
-            else:
-                for a, b in zip(clean, clean[1:]):
-                    new_groups[color].append((a[0], a[1], b[0], b[1]))
         imp = max(.72, min(.99, max(float(score[y, x]) for x, y in clean) / 140.0 * .25 + .74))
         entry = {
             "color_index": int(color), "path": tuple(clean), "phase": phase,
@@ -428,12 +487,32 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
         }
         if deadline_mode:
             entry["deadline_phase"] = "important_details"
+        proposals.append(entry)
+
+    chosen,delivery_budget=_fit_zoom_delivery(new_seq,proposals,options,(w,h),
+        tuple(fitted) if fitted is not None else (w,h),cancelled)
+    appended = 0
+    detail_pixels = 0
+    appended_colors = set()
+    drawn_cells=[]
+    for entry in chosen:
+        if cancelled():raise InterruptedError()
+        color=entry['color_index'];clean=list(entry['path'])
+        new_exec[color].append(clean)
+        # Publish geometry and diagnostics only for the admitted detail work.
+        if 0<=color<len(new_groups):
+            if len(clean)==1:
+                x,y=clean[0];new_groups[color].append((x,y,x,y))
+            else:
+                for a,b in zip(clean,clean[1:]):
+                    new_groups[color].append((a[0],a[1],b[0],b[1]))
         new_seq.append(entry)
         appended_colors.add(int(color))
         appended += 1
         detail_pixels += len(clean)
+        drawn_cells.extend((x,y,float(score[y,x])) for x,y in clean)
 
-    rois = _roi_boxes(accepted_cells, w, h, effective)
+    rois = _roi_boxes(drawn_cells if delivery_budget is not None else accepted_cells, w, h, effective)
     meta = {
         "enabled": bool(appended), "requested": mode, "factor": int(effective),
         "analysis_zoom": f"{int(effective)}x", "target_app_zoomed": False,
@@ -452,6 +531,9 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
         "working_size": (int(w), int(h)),
         "reason": "zoomed source regions added as bounded high-value detail paths" if appended else "no useful detail paths",
     }
+    if delivery_budget is not None:
+        meta['execution_budget']=delivery_budget
+        if not appended:meta['reason']='no optional detail fits the remaining execution budget'
     if cancelled():
         raise InterruptedError()
     if not appended:

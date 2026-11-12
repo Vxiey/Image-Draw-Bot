@@ -24,7 +24,7 @@ class AdaptiveDetailV1038Tests(unittest.TestCase):
         self.assertEqual(ADAPTIVE_DETAIL_MODES,('Off','Auto','Preserve detail','Balanced','Strong simplify'))
         self.assertEqual(resolve_adaptive_detail('Auto',complexity_score=.5),'Preserve detail')
         self.assertEqual(resolve_adaptive_detail('Auto',complexity_score=.22),'Balanced')
-        self.assertEqual(resolve_adaptive_detail('Auto',complexity_score=.05),'Strong simplify')
+        self.assertEqual(resolve_adaptive_detail('Auto',complexity_score=.05),'Balanced')
         self.assertEqual(resolve_adaptive_detail('Auto',complexity_score=.05,preview=True),'Balanced')
         with self.assertRaises(ValueError):validate_adaptive_detail('Destroy details')
 

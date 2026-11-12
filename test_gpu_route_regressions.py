@@ -49,11 +49,11 @@ class PaletteNormalizationRegressionTests(unittest.TestCase):
                 self.data = np.array(hostbuf, copy=True) if hostbuf is not None else np.empty(size // 4, dtype=np.float32)
 
         def lab_kernel(_queue, _global, _local, src, dst, _n):
-            target = dst.data.reshape(-1, 4)
-            target[:, :3] = universal._oklab_cpu(src.data[:, :3])
+            target = dst.data.reshape(-1, 3)
+            target[:] = universal._oklab_cpu(src.data[:, :3])
 
         def distance_kernel(_queue, _global, _local, lab, dst, _n):
-            values = lab.data.reshape(-1, 4)[:, :3]
+            values = lab.data.reshape(-1, 3)
             dst.data[:] = (np.linalg.norm(values[:, None] - values[None, :], axis=-1) * 100.0).ravel()
 
         cl = SimpleNamespace(

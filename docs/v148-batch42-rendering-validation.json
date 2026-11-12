@@ -1,0 +1,733 @@
+{
+  "baseline": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "source": "golden-regression/small-detail-preservation.png",
+  "source_sha256": "a60cce8704b56796f38d803cefb0fe80ba35293a4f4f5070f8bff3bed658f46c",
+  "method": "Actual historical functions in the same CPU public planner; only the named change differs.",
+  "limits": [
+    "Linux CPU model observations; no physical Windows/browser/GPU result is claimed.",
+    "Palette derivatives retain existing source label geometry.",
+    "No wall-clock speed or memory measurements are made."
+  ],
+  "cases": [
+    {
+      "group": "R4201",
+      "case": "actual-pixel-component-priority",
+      "size": [
+        360,
+        240
+      ],
+      "palette": [
+        [
+          160,
+          100,
+          10
+        ],
+        [
+          116,
+          103,
+          110
+        ]
+      ],
+      "before": {
+        "edge_pixels": 0,
+        "protected_pixels": 0,
+        "contour_pixels": 4704,
+        "phase_counts": {
+          "fill": 19,
+          "mid_detail": 4
+        },
+        "protected_paths": 0,
+        "source_palette_sha256": "1eb3018b03e7864f3598d721e70c66f6157d46fe765badecfff7546d8eaf0f5b",
+        "geometry_sha256": "cbe22afe8fd948badc35f7ac3341b23c47aaca2281f46e1c218d3acf0b04cafa"
+      },
+      "after": {
+        "edge_pixels": 4704,
+        "protected_pixels": 9120,
+        "contour_pixels": 4704,
+        "phase_counts": {
+          "fill": 9,
+          "mid_detail": 4,
+          "cleanup": 10
+        },
+        "protected_paths": 23,
+        "source_palette_sha256": "1eb3018b03e7864f3598d721e70c66f6157d46fe765badecfff7546d8eaf0f5b",
+        "geometry_sha256": "a890dd2dc45da5e59b45a5c8d64cfa3f5fd07dbc087dca294dacf891bf72e160"
+      }
+    },
+    {
+      "group": "R4201",
+      "case": "public-pixel-adaptive-brush-plan",
+      "size": [
+        360,
+        240
+      ],
+      "palette": [
+        [
+          160,
+          100,
+          10
+        ],
+        [
+          116,
+          103,
+          110
+        ]
+      ],
+      "before": {
+        "size": [
+          360,
+          240
+        ],
+        "paths": 1067,
+        "groups": [
+          812,
+          572
+        ],
+        "phase_counts": {
+          "fill": 19,
+          "mid_detail": 4,
+          "correction_1": 1044
+        },
+        "brush_counts": {
+          "8": 19,
+          "1": 1048
+        },
+        "protected_paths": 0,
+        "image_sha256": "5a83901c6be381b39281fe086d0894ca3747a41c152aec19b2737ca8efadb58a",
+        "preview_sha256": "1d351404a754658475b6915f745d38248f9efc7ede1932432695fe2f92fcf575",
+        "geometry_sha256": "cd0984f9b0b57dcf23dfba2f20153acebdbaad7868ed697d275e02fb6d2fc7b9",
+        "source_pixels_preserved": true,
+        "estimated_seconds": 46.8728,
+        "adaptive": {
+          "adaptive_detail_requested": "Off",
+          "adaptive_detail_effective": "Off",
+          "adaptive_detail_pruned_micro_strokes": 0,
+          "adaptive_detail_pruned_micro_pixels": 0,
+          "protected_pixels": 0
+        },
+        "background": {
+          "requested": "Off",
+          "effective": "Off",
+          "pixel_accurate_bypass": true
+        },
+        "pixel_accuracy": {
+          "initial_accuracy_percent": 89.8565,
+          "initial_error_pixels": 8764,
+          "final_accuracy_percent": 100.0,
+          "error_pixels": 0,
+          "protected_pixels": 0,
+          "protected_accuracy_percent": 100.0,
+          "passes": [
+            {
+              "pass": 1,
+              "generated_paths": 1044,
+              "accepted": true,
+              "proposed_paths": 1044,
+              "attempted_protected_pixels_lost": 0,
+              "protected_pixels_lost": 0,
+              "detail_preserving_retry_paths": null,
+              "correction_resource_stop": null,
+              "before_accuracy": 89.8565,
+              "after_accuracy": 100.0,
+              "accuracy_gain": 10.1435,
+              "accuracy_gain_per_path": 0.009716,
+              "before_errors": 8764,
+              "after_errors": 0,
+              "errors_repaired": 8764,
+              "repaired_pixels_per_path": 8.394636,
+              "efficiency_floor": 0.05,
+              "stop_reason": "accepted"
+            }
+          ]
+        },
+        "pixel_map": {
+          "edge_mean": 0.0,
+          "protected_pixels": 0,
+          "contour_mean": 0.0185,
+          "micro_detail_mean": 0.008
+        },
+        "source_unchanged": true
+      },
+      "after": {
+        "size": [
+          360,
+          240
+        ],
+        "paths": 23,
+        "groups": [
+          812,
+          572
+        ],
+        "phase_counts": {
+          "fill": 9,
+          "mid_detail": 4,
+          "cleanup": 10
+        },
+        "brush_counts": {
+          "1": 23
+        },
+        "protected_paths": 23,
+        "image_sha256": "5a83901c6be381b39281fe086d0894ca3747a41c152aec19b2737ca8efadb58a",
+        "preview_sha256": "432ea6c11eb9aaec101089f8f8cb52c428522036ec33d3c7ee6f6f9b3dc3831d",
+        "geometry_sha256": "abaecde4edcb42d0927626cf7010373ae03d3102bc12e410d7bada39b52d61c0",
+        "source_pixels_preserved": true,
+        "estimated_seconds": 43.12505,
+        "adaptive": {
+          "adaptive_detail_requested": "Off",
+          "adaptive_detail_effective": "Off",
+          "adaptive_detail_pruned_micro_strokes": 0,
+          "adaptive_detail_pruned_micro_pixels": 0,
+          "protected_pixels": 9120
+        },
+        "background": {
+          "requested": "Off",
+          "effective": "Off",
+          "pixel_accurate_bypass": true
+        },
+        "pixel_accuracy": {
+          "initial_accuracy_percent": 100.0,
+          "initial_error_pixels": 0,
+          "final_accuracy_percent": 100.0,
+          "error_pixels": 0,
+          "protected_pixels": 9120,
+          "protected_accuracy_percent": 100.0,
+          "passes": []
+        },
+        "pixel_map": {
+          "edge_mean": 0.0412,
+          "protected_pixels": 9120,
+          "contour_mean": 0.0495,
+          "micro_detail_mean": 0.022
+        },
+        "source_unchanged": true
+      }
+    },
+    {
+      "group": "R4201",
+      "case": "public-grayscale-parity",
+      "size": [
+        96,
+        64
+      ],
+      "palette": [
+        [
+          220,
+          220,
+          220
+        ],
+        [
+          20,
+          20,
+          20
+        ]
+      ],
+      "before": {
+        "size": [
+          96,
+          64
+        ],
+        "paths": 57,
+        "groups": [
+          212,
+          148
+        ],
+        "phase_counts": {
+          "mid_detail": 2,
+          "cleanup": 55
+        },
+        "brush_counts": {
+          "1": 57
+        },
+        "protected_paths": 57,
+        "image_sha256": "8fa824102ceced63b1563e2c886549c3c6ffedbd90a7b943736e90ccfcb400d6",
+        "preview_sha256": "3b8b2a8d21723e01290684c0be5e92ab9afbaee0d154011bcd91ee0971bb7cd1",
+        "geometry_sha256": "be65f022ee13fee0b18a40ff6184231cfe0c52c4c049f8f4e8b785d1de1b1724",
+        "source_pixels_preserved": true,
+        "estimated_seconds": 6.2907,
+        "adaptive": {
+          "adaptive_detail_requested": "Off",
+          "adaptive_detail_effective": "Off",
+          "adaptive_detail_pruned_micro_strokes": 0,
+          "adaptive_detail_pruned_micro_pixels": 0,
+          "protected_pixels": 1624
+        },
+        "background": {
+          "requested": "Off",
+          "effective": "Off",
+          "pixel_accurate_bypass": true
+        },
+        "pixel_accuracy": {
+          "initial_accuracy_percent": 100.0,
+          "initial_error_pixels": 0,
+          "final_accuracy_percent": 100.0,
+          "error_pixels": 0,
+          "protected_pixels": 1624,
+          "protected_accuracy_percent": 100.0,
+          "passes": []
+        },
+        "pixel_map": {
+          "edge_mean": 0.0945,
+          "protected_pixels": 1624,
+          "contour_mean": 0.1259,
+          "micro_detail_mean": 0.063
+        },
+        "source_unchanged": true
+      },
+      "after": {
+        "size": [
+          96,
+          64
+        ],
+        "paths": 57,
+        "groups": [
+          212,
+          148
+        ],
+        "phase_counts": {
+          "mid_detail": 2,
+          "cleanup": 55
+        },
+        "brush_counts": {
+          "1": 57
+        },
+        "protected_paths": 57,
+        "image_sha256": "8fa824102ceced63b1563e2c886549c3c6ffedbd90a7b943736e90ccfcb400d6",
+        "preview_sha256": "3b8b2a8d21723e01290684c0be5e92ab9afbaee0d154011bcd91ee0971bb7cd1",
+        "geometry_sha256": "be65f022ee13fee0b18a40ff6184231cfe0c52c4c049f8f4e8b785d1de1b1724",
+        "source_pixels_preserved": true,
+        "estimated_seconds": 6.2907,
+        "adaptive": {
+          "adaptive_detail_requested": "Off",
+          "adaptive_detail_effective": "Off",
+          "adaptive_detail_pruned_micro_strokes": 0,
+          "adaptive_detail_pruned_micro_pixels": 0,
+          "protected_pixels": 1624
+        },
+        "background": {
+          "requested": "Off",
+          "effective": "Off",
+          "pixel_accurate_bypass": true
+        },
+        "pixel_accuracy": {
+          "initial_accuracy_percent": 100.0,
+          "initial_error_pixels": 0,
+          "final_accuracy_percent": 100.0,
+          "error_pixels": 0,
+          "protected_pixels": 1624,
+          "protected_accuracy_percent": 100.0,
+          "passes": []
+        },
+        "pixel_map": {
+          "edge_mean": 0.0945,
+          "protected_pixels": 1624,
+          "contour_mean": 0.1259,
+          "micro_detail_mean": 0.063
+        },
+        "source_unchanged": true
+      }
+    },
+    {
+      "group": "R4202",
+      "case": "public-protected-background",
+      "size": [
+        96,
+        64
+      ],
+      "palette": [
+        [
+          220,
+          220,
+          220
+        ],
+        [
+          190,
+          190,
+          190
+        ]
+      ],
+      "before": {
+        "size": [
+          96,
+          64
+        ],
+        "paths": 1,
+        "groups": [
+          64,
+          0
+        ],
+        "phase_counts": {},
+        "brush_counts": {},
+        "protected_paths": 0,
+        "image_sha256": "095e5bdf0be4cb78a820eba0f65e91f34d236ba2ff9fed348fadcbbe24044a19",
+        "preview_sha256": "18b9d5734b0ef4e0d5dd7209349d70ef650f3da3ad6b2a5958f085e8d1d647e5",
+        "geometry_sha256": "c4c6ae52b76c0c4a325e59a367b7df07beac2c4b5c1d5b24c7d7533c947d9bf4",
+        "source_pixels_preserved": false,
+        "estimated_seconds": 4.8085,
+        "adaptive": {
+          "adaptive_detail_requested": "Preserve detail",
+          "adaptive_detail_effective": "Preserve detail",
+          "adaptive_detail_complexity": 0.0229,
+          "adaptive_detail_protected_pixels": 3144,
+          "adaptive_detail_flat_pixels": 3000,
+          "adaptive_detail_total_pixels": 6144,
+          "adaptive_detail_protected_percent": 51.17,
+          "adaptive_detail_smoothing_kernel": 3,
+          "adaptive_detail_threshold": 20,
+          "adaptive_detail_pruned_micro_strokes": 0,
+          "adaptive_detail_pruned_micro_pixels": 0
+        },
+        "background": {
+          "enabled": true,
+          "rgb": [
+            220,
+            220,
+            220
+          ],
+          "color_index": 0,
+          "changed_pixels": 351,
+          "coverage": 1.0,
+          "border_confidence": 1.0,
+          "reason": "Border-connected background simplified to one calibrated palette color."
+        },
+        "pixel_accuracy": {
+          "initial_accuracy_percent": null,
+          "initial_error_pixels": null,
+          "final_accuracy_percent": null,
+          "error_pixels": null,
+          "protected_pixels": null,
+          "protected_accuracy_percent": null,
+          "passes": null
+        },
+        "pixel_map": {
+          "edge_mean": null,
+          "protected_pixels": null,
+          "contour_mean": null,
+          "micro_detail_mean": null
+        },
+        "source_unchanged": true
+      },
+      "after": {
+        "size": [
+          96,
+          64
+        ],
+        "paths": 57,
+        "groups": [
+          212,
+          148
+        ],
+        "phase_counts": {},
+        "brush_counts": {},
+        "protected_paths": 0,
+        "image_sha256": "886a048ffe5e5404a85df78407dec30c4d08b252e1173394050ec28f79b43b76",
+        "preview_sha256": "46292b787d70887d468d53b4e1336a70e03e934457cb5cb19737e439519e6c65",
+        "geometry_sha256": "8c2b2a36b6a8c38dfe4e81af0b9c48e81b4bd248237c62b6478944e12f6bf415",
+        "source_pixels_preserved": true,
+        "estimated_seconds": 5.636099999999999,
+        "adaptive": {
+          "adaptive_detail_requested": "Preserve detail",
+          "adaptive_detail_effective": "Preserve detail",
+          "adaptive_detail_complexity": 0.0229,
+          "adaptive_detail_protected_pixels": 3144,
+          "adaptive_detail_flat_pixels": 3000,
+          "adaptive_detail_total_pixels": 6144,
+          "adaptive_detail_protected_percent": 51.17,
+          "adaptive_detail_smoothing_kernel": 3,
+          "adaptive_detail_threshold": 20,
+          "adaptive_detail_pruned_micro_strokes": 0,
+          "adaptive_detail_pruned_micro_pixels": 0
+        },
+        "background": {
+          "enabled": true,
+          "rgb": [
+            220,
+            220,
+            220
+          ],
+          "color_index": 0,
+          "changed_pixels": 0,
+          "coverage": 0.3068033854166667,
+          "border_confidence": 1.0,
+          "reason": "Border-connected background simplified to one calibrated palette color."
+        },
+        "pixel_accuracy": {
+          "initial_accuracy_percent": null,
+          "initial_error_pixels": null,
+          "final_accuracy_percent": null,
+          "error_pixels": null,
+          "protected_pixels": null,
+          "protected_accuracy_percent": null,
+          "passes": null
+        },
+        "pixel_map": {
+          "edge_mean": null,
+          "protected_pixels": null,
+          "contour_mean": null,
+          "micro_detail_mean": null
+        },
+        "source_unchanged": true
+      }
+    },
+    {
+      "group": "R4203",
+      "case": "public-auto-preview-draw",
+      "size": [
+        96,
+        64
+      ],
+      "palette": [
+        [
+          220,
+          220,
+          220
+        ],
+        [
+          190,
+          190,
+          190
+        ]
+      ],
+      "before": {
+        "preview": {
+          "size": [
+            96,
+            64
+          ],
+          "paths": 57,
+          "groups": [
+            212,
+            148
+          ],
+          "phase_counts": {},
+          "brush_counts": {},
+          "protected_paths": 0,
+          "image_sha256": "886a048ffe5e5404a85df78407dec30c4d08b252e1173394050ec28f79b43b76",
+          "preview_sha256": "46292b787d70887d468d53b4e1336a70e03e934457cb5cb19737e439519e6c65",
+          "geometry_sha256": "8c2b2a36b6a8c38dfe4e81af0b9c48e81b4bd248237c62b6478944e12f6bf415",
+          "source_pixels_preserved": true,
+          "estimated_seconds": 5.636099999999999,
+          "adaptive": {
+            "adaptive_detail_requested": "Auto",
+            "adaptive_detail_effective": "Balanced",
+            "adaptive_detail_complexity": 0.0229,
+            "adaptive_detail_protected_pixels": 2532,
+            "adaptive_detail_flat_pixels": 3612,
+            "adaptive_detail_total_pixels": 6144,
+            "adaptive_detail_protected_percent": 41.21,
+            "adaptive_detail_smoothing_kernel": 3,
+            "adaptive_detail_threshold": 30,
+            "adaptive_detail_pruned_micro_strokes": 0,
+            "adaptive_detail_pruned_micro_pixels": 0
+          },
+          "background": {
+            "enabled": false,
+            "rgb": null,
+            "color_index": null,
+            "changed_pixels": 0,
+            "coverage": 0.0,
+            "border_confidence": 0.0,
+            "reason": "Background simplification is disabled."
+          },
+          "pixel_accuracy": {
+            "initial_accuracy_percent": null,
+            "initial_error_pixels": null,
+            "final_accuracy_percent": null,
+            "error_pixels": null,
+            "protected_pixels": null,
+            "protected_accuracy_percent": null,
+            "passes": null
+          },
+          "pixel_map": {
+            "edge_mean": null,
+            "protected_pixels": null,
+            "contour_mean": null,
+            "micro_detail_mean": null
+          },
+          "source_unchanged": true
+        },
+        "draw": {
+          "size": [
+            96,
+            64
+          ],
+          "paths": 1,
+          "groups": [
+            64,
+            0
+          ],
+          "phase_counts": {},
+          "brush_counts": {},
+          "protected_paths": 0,
+          "image_sha256": "095e5bdf0be4cb78a820eba0f65e91f34d236ba2ff9fed348fadcbbe24044a19",
+          "preview_sha256": "18b9d5734b0ef4e0d5dd7209349d70ef650f3da3ad6b2a5958f085e8d1d647e5",
+          "geometry_sha256": "c4c6ae52b76c0c4a325e59a367b7df07beac2c4b5c1d5b24c7d7533c947d9bf4",
+          "source_pixels_preserved": false,
+          "estimated_seconds": 4.8085,
+          "adaptive": {
+            "adaptive_detail_requested": "Auto",
+            "adaptive_detail_effective": "Strong simplify",
+            "adaptive_detail_complexity": 0.0229,
+            "adaptive_detail_protected_pixels": 0,
+            "adaptive_detail_flat_pixels": 6144,
+            "adaptive_detail_total_pixels": 6144,
+            "adaptive_detail_protected_percent": 0.0,
+            "adaptive_detail_smoothing_kernel": 5,
+            "adaptive_detail_threshold": 42,
+            "adaptive_detail_pruned_micro_strokes": 0,
+            "adaptive_detail_pruned_micro_pixels": 0
+          },
+          "background": {
+            "enabled": false,
+            "rgb": null,
+            "color_index": null,
+            "changed_pixels": 0,
+            "coverage": 0.0,
+            "border_confidence": 0.0,
+            "reason": "Background simplification is disabled."
+          },
+          "pixel_accuracy": {
+            "initial_accuracy_percent": null,
+            "initial_error_pixels": null,
+            "final_accuracy_percent": null,
+            "error_pixels": null,
+            "protected_pixels": null,
+            "protected_accuracy_percent": null,
+            "passes": null
+          },
+          "pixel_map": {
+            "edge_mean": null,
+            "protected_pixels": null,
+            "contour_mean": null,
+            "micro_detail_mean": null
+          },
+          "source_unchanged": true
+        }
+      },
+      "after": {
+        "preview": {
+          "size": [
+            96,
+            64
+          ],
+          "paths": 57,
+          "groups": [
+            212,
+            148
+          ],
+          "phase_counts": {},
+          "brush_counts": {},
+          "protected_paths": 0,
+          "image_sha256": "886a048ffe5e5404a85df78407dec30c4d08b252e1173394050ec28f79b43b76",
+          "preview_sha256": "46292b787d70887d468d53b4e1336a70e03e934457cb5cb19737e439519e6c65",
+          "geometry_sha256": "8c2b2a36b6a8c38dfe4e81af0b9c48e81b4bd248237c62b6478944e12f6bf415",
+          "source_pixels_preserved": true,
+          "estimated_seconds": 5.636099999999999,
+          "adaptive": {
+            "adaptive_detail_requested": "Auto",
+            "adaptive_detail_effective": "Balanced",
+            "adaptive_detail_complexity": 0.0229,
+            "adaptive_detail_protected_pixels": 2532,
+            "adaptive_detail_flat_pixels": 3612,
+            "adaptive_detail_total_pixels": 6144,
+            "adaptive_detail_protected_percent": 41.21,
+            "adaptive_detail_smoothing_kernel": 3,
+            "adaptive_detail_threshold": 30,
+            "adaptive_detail_pruned_micro_strokes": 0,
+            "adaptive_detail_pruned_micro_pixels": 0
+          },
+          "background": {
+            "enabled": false,
+            "rgb": null,
+            "color_index": null,
+            "changed_pixels": 0,
+            "coverage": 0.0,
+            "border_confidence": 0.0,
+            "reason": "Background simplification is disabled."
+          },
+          "pixel_accuracy": {
+            "initial_accuracy_percent": null,
+            "initial_error_pixels": null,
+            "final_accuracy_percent": null,
+            "error_pixels": null,
+            "protected_pixels": null,
+            "protected_accuracy_percent": null,
+            "passes": null
+          },
+          "pixel_map": {
+            "edge_mean": null,
+            "protected_pixels": null,
+            "contour_mean": null,
+            "micro_detail_mean": null
+          },
+          "source_unchanged": true
+        },
+        "draw": {
+          "size": [
+            96,
+            64
+          ],
+          "paths": 57,
+          "groups": [
+            212,
+            148
+          ],
+          "phase_counts": {},
+          "brush_counts": {},
+          "protected_paths": 0,
+          "image_sha256": "886a048ffe5e5404a85df78407dec30c4d08b252e1173394050ec28f79b43b76",
+          "preview_sha256": "46292b787d70887d468d53b4e1336a70e03e934457cb5cb19737e439519e6c65",
+          "geometry_sha256": "8c2b2a36b6a8c38dfe4e81af0b9c48e81b4bd248237c62b6478944e12f6bf415",
+          "source_pixels_preserved": true,
+          "estimated_seconds": 5.636099999999999,
+          "adaptive": {
+            "adaptive_detail_requested": "Auto",
+            "adaptive_detail_effective": "Balanced",
+            "adaptive_detail_complexity": 0.0229,
+            "adaptive_detail_protected_pixels": 2532,
+            "adaptive_detail_flat_pixels": 3612,
+            "adaptive_detail_total_pixels": 6144,
+            "adaptive_detail_protected_percent": 41.21,
+            "adaptive_detail_smoothing_kernel": 3,
+            "adaptive_detail_threshold": 30,
+            "adaptive_detail_pruned_micro_strokes": 0,
+            "adaptive_detail_pruned_micro_pixels": 0
+          },
+          "background": {
+            "enabled": false,
+            "rgb": null,
+            "color_index": null,
+            "changed_pixels": 0,
+            "coverage": 0.0,
+            "border_confidence": 0.0,
+            "reason": "Background simplification is disabled."
+          },
+          "pixel_accuracy": {
+            "initial_accuracy_percent": null,
+            "initial_error_pixels": null,
+            "final_accuracy_percent": null,
+            "error_pixels": null,
+            "protected_pixels": null,
+            "protected_accuracy_percent": null,
+            "passes": null
+          },
+          "pixel_map": {
+            "edge_mean": null,
+            "protected_pixels": null,
+            "contour_mean": null,
+            "micro_detail_mean": null
+          },
+          "source_unchanged": true
+        }
+      }
+    }
+  ],
+  "source_files_sha256": {
+    "PixelAccuratePlanner.py": "84a0850cdc345fdccbc8ad979c828dc672a5400183bf86b92fe75a29b74c98a4",
+    "FillOptimizer.py": "aa61f5263447803755e1a9e0f07e62c9526da711c3e120e1c60a0d33179b2b74",
+    "AdaptiveDetail.py": "a0ca7a36c2498f1cc97820f660c044027c38fb13857d9811539713a7b5a737e6",
+    "DrawBot.py": "53e205c9b2bffd6a4bf1d34e31758ed90d8da63946f19e375946039b876ecda2",
+    "test_v148_rendering_batch42_fidelity.py": "66a3dce671b7e3f4d8aef8aa00578034214e83be0b770d8d52ce4e459af108bb"
+  }
+}

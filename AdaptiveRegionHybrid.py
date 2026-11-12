@@ -1327,6 +1327,7 @@ def _build_fill_regions(groups,palette_rgb,image_size,fitted,options,cancelled,*
         return [],{"enabled":False,"reason":"target has no verified Fill capability"}
     try:
         from FillOptimizer import detect_fill_regions_from_groups
+        from ExtraFast import select_fast_regions
         from RegionFillEngine import evaluate_region_candidates
         from SafeFillMask import filter_fill_regions_by_source_mask,source_fill_margin_px
         mode=str(options.get("background_fill") or "Balanced")
@@ -1343,8 +1344,46 @@ def _build_fill_regions(groups,palette_rgb,image_size,fitted,options,cancelled,*
             accepted,mask_meta=filter_fill_regions_by_source_alpha(
                 accepted,source_image,metadata=mask_meta,cancelled=cancelled)
         accepted,fill_order_meta=_order_fill_regions_for_execution(accepted)
-        accepted,state_meta=filter_stateful_fill_regions(accepted,image_size,brush_px=max(1,int(options.get("brush_px") or 1)),cancelled=cancelled)
+        # Prices apply to surviving same-color batches. A safety rejection can
+        # remove the region that amortized a shared tool switch; conversely,
+        # dropping a costly batch can change the painted state of later fills.
+        # Repeat the existing proof after cost removals, preserving paint order.
+        state_input_count=len(accepted);state_rejected=0;cost_rejected_ids=set()
+        state_rejections=[];state_reasons={};state_passes=0;total_roi=0;peak_roi=0;batch_rejected=0
+        while True:
+            _cancel(cancelled)
+            accepted,state_meta=filter_stateful_fill_regions(accepted,image_size,
+                brush_px=max(1,int(options.get("brush_px") or 1)),cancelled=cancelled)
+            state_passes+=1
+            state_rejected+=int(state_meta.get('rejected_regions',0))
+            total_roi+=int(state_meta.get('total_roi_pixels',0))
+            peak_roi=max(peak_roi,int(state_meta.get('peak_roi_pixels',0)))
+            for rejection in state_meta.get('rejections',()):
+                state_reasons[rejection.get('region_id')]=rejection.get('reason')
+                if len(state_rejections)<24:state_rejections.append(rejection)
+            priced,batch_meta=select_fast_regions(accepted,image_size,fitted,options,cancelled)
+            batch_rejected+=int(batch_meta.get('batch_rejected_regions',0))
+            retained={region['region_fill_id']:region for region in priced}
+            removed={region['region_fill_id'] for region in accepted}-retained.keys()
+            accepted=[retained[region['region_fill_id']] for region in accepted
+                      if region['region_fill_id'] in retained]
+            cost_rejected_ids.update(removed)
+            if not removed:break
+            if not accepted:
+                # An empty retained plan needs no second canvas allocation.
+                state_meta=dict(state_meta,painted_state_pixels=0)
+                break
+        _cancel(cancelled)
+        for region in accepted:
+            region['estimated_time_saved_seconds']=region['extra_fast_region_saving_seconds']
+        state_meta=dict(state_meta,input_regions=state_input_count,accepted_regions=len(accepted),
+            rejected_regions=state_rejected,rejections=state_rejections,
+            cost_filtered_regions=len(cost_rejected_ids),batch_revalidation_passes=state_passes,
+            total_roi_pixels=total_roi,peak_roi_pixels=peak_roi,
+            peak_roi_percent_of_canvas=round(peak_roi/max(1,image_size[0]*image_size[1])*100,3))
         meta=dict(meta);meta["safe_fill_mask"]=mask_meta;meta["stateful_fill_simulation"]=state_meta
+        meta['fill_batch_admission']=dict(batch_meta,cost_filtered_regions=len(cost_rejected_ids),
+            cost_rejected_regions=len(cost_rejected_ids),batch_rejected_regions=batch_rejected)
         # All reported savings/coverage describe the surviving executable
         # regions, not a proposal that a later source/brush proof rejected.
         by_color={}
@@ -1361,14 +1400,16 @@ def _build_fill_regions(groups,palette_rgb,image_size,fitted,options,cancelled,*
             fill_seal_paths=sum(int(r.get('fill_seal_count',0)) for r in accepted),
             fill_coverage_percent=round(sum(int(r.get('area_pixels',0)) for r in accepted)/max(1,image_size[0]*image_size[1])*100,3),
             estimated_saved_strokes=sum(int(r.get('estimated_saved_strokes',0)) for r in accepted),
-            estimated_time_saved_seconds=round(sum(float(r.get('estimated_time_saved_seconds',0)) for r in accepted),3),
-            rejected_by_safety=int(meta.get('rejected_by_safety',0))+rejected_after_cost,
+            estimated_time_saved_seconds=float(batch_meta['estimated_seconds_saved_vs_scanlines']),
+            rejected_by_cost=int(meta.get('rejected_by_cost',0))+len(cost_rejected_ids),
+            rejected_by_safety=int(meta.get('rejected_by_safety',0))+rejected_after_cost-len(cost_rejected_ids),
             fallback_stroke_regions=int(meta.get('fallback_stroke_regions',0))+rejected_after_cost,
             fallback_scanline_regions=int(meta.get('fallback_scanline_regions',0))+rejected_after_cost)
         retained_ids={r.get('region_fill_id') for r in accepted}
-        reasons={r.get('region_id'):r.get('reason') for r in state_meta.get('rejections',())}
         meta['decisions']=[dict(row,accepted=False,render_method='CONNECTED_SCANLINES',
-            estimated_time_saved_seconds=0.0,reason=reasons.get(row.get('region_id')) or 'source mask excludes Fill')
+            estimated_time_saved_seconds=0.0,reason=('same-color Fill batch is slower than stroke fallback'
+                if row.get('region_id') in cost_rejected_ids else
+                state_reasons.get(row.get('region_id')) or 'source mask excludes Fill'))
             if row.get('accepted') and row.get('region_id') not in retained_ids else row
             for row in meta.get('decisions',())]
         return list(accepted),meta

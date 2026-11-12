@@ -99,7 +99,9 @@ def inspect_delivery(mouse, start, end, expected, brush_px: int, policy: Deliver
         return {'supported': False, 'checked': False, 'matched': True, 'reason': 'disabled'}
     if path_length(start, end) < policy.min_length_px:
         return {'supported': True, 'checked': False, 'matched': True, 'reason': 'stroke too short for reliable visual delivery check'}
-    inspector = getattr(mouse, 'inspect_ink_segment', None)
+    inspector = getattr(mouse, 'inspect_ink_coverage', None)
+    if not callable(inspector):
+        inspector = getattr(mouse, 'inspect_ink_segment', None)
     if not callable(inspector):
         return {'supported': False, 'checked': False, 'matched': True, 'reason': 'screen ink inspection unavailable'}
     result = inspector(start, end, expected, brush_px, policy.tolerance)

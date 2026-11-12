@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 900,
-  "implemented": 869,
+  "implemented": 886,
   "release_published": false,
-  "validation": "Batch 41 adds eight independently reviewed behavior groups after the 15 batch40 groups: 869/900, 31 remaining. All 861 preceding entries remain unchanged. The combined 47-method focused integration passed with 970 unchanged Python source/test hashes. Complete local discovery and exact published-head Windows/Linux CI remain separate gates. Tcl-fixture disposal, review corrections, documentation and tests add no IDs. Version 1.0.148 remains unreleased.",
+  "validation": "Batch 42 adds 17 independently reviewed behavior groups: 886/900, 14 remaining. All 869 preceding entries remain unchanged. New focused methods and adjacent application/rendering/runtime/native selections pass with one unavailable Windows boundary skip in native tests. The initial full41 discovery completed with 9 failures, 1 error and 86 skips; its six timeout methods pass unchanged in isolation, and four old fixture contracts are repaired without IDs. Those results do not replace final isolated complete discovery or exact published-head Windows/Linux CI. Delivery-context completion, tests, documentation and review repairs add no IDs. Version 1.0.148 remains unreleased.",
   "improvements": [
     {
       "id": 1,
@@ -6771,6 +6771,142 @@
       "batch": 41,
       "ledger": "v148-batch41-delivery.md",
       "description": "Resolve the canonical execution brush state before selecting bounded representative dry-run paths, so omitted earlier operations cannot change the sampled physical width. Preserve order, repeated-entry state and source ownership. Empty-sample fallback, invalid-row handling and Stop complete this sampler contract without extra IDs."
+    },
+    {
+      "id": 870,
+      "local_id": "A4201",
+      "area": "batch42-application",
+      "batch": 42,
+      "ledger": "v148-batch42-application.md",
+      "description": "Borrow the queue-owned RGBA image during mobile PNG encoding, or resize it directly, instead of creating a redundant identity conversion. Preserve exact encoded bytes, source ownership and the existing async publication/cancellation contract."
+    },
+    {
+      "id": 871,
+      "local_id": "A4202",
+      "area": "batch42-application",
+      "batch": 42,
+      "ledger": "v148-batch42-application.md",
+      "description": "Prepare the captured-screen dialog thumbnail directly from its full-resolution owner with the same Pillow sizing and resampling policy. Avoid the full-screen intermediate copy while preserving exact display pixels and full-resolution Use/Save behavior."
+    },
+    {
+      "id": 872,
+      "local_id": "A4203",
+      "area": "batch42-application",
+      "batch": 42,
+      "ledger": "v148-batch42-application.md",
+      "description": "Register all twelve canonical preview views as image drop targets through VIEW_SPECS, including the four previously omitted pages. Preserve the existing import/verified-start gestures and bind each distinct widget once."
+    },
+    {
+      "id": 873,
+      "local_id": "A4204",
+      "area": "batch42-application",
+      "batch": 42,
+      "ledger": "v148-batch42-application.md",
+      "description": "Apply the initially selected profile defaults before loading saved settings and building widgets, so absent or partial files behave consistently with returning to that profile. Explicit saved settings still override defaults."
+    },
+    {
+      "id": 874,
+      "local_id": "R4201",
+      "area": "batch42-rendering",
+      "batch": 42,
+      "ledger": "v148-batch42-rendering.md",
+      "description": "Protect opaque equal-luminance color boundaries in Pixel Accurate using bounded opponent-color gradients alongside the unchanged luminance signal. Actual brush selection, component priority and corrections consume the shared evidence; grayscale behavior is preserved."
+    },
+    {
+      "id": 875,
+      "local_id": "R4202",
+      "area": "batch42-rendering",
+      "batch": 42,
+      "ledger": "v148-batch42-rendering.md",
+      "description": "Pass the existing protected-detail mask into background simplification, making protected pixels block both flood traversal and writes. Preserve small foreground details and enclosed interiors that the public planner had already identified."
+    },
+    {
+      "id": 876,
+      "local_id": "R4203",
+      "area": "batch42-rendering",
+      "batch": 42,
+      "ledger": "v148-batch42-rendering.md",
+      "description": "Resolve Auto Adaptive Detail consistently for Preview and Draw, using Balanced below the established high-complexity threshold and Preserve detail above it. Keep explicit Strong simplify available and preserve identical planned geometry for equivalent public requests."
+    },
+    {
+      "id": 877,
+      "local_id": "R4204",
+      "area": "batch42-rendering",
+      "batch": 42,
+      "ledger": "v148-batch42-rendering.md",
+      "description": "Admit retained Fill color batches using their complete learned tool-transition cost across Hybrid and Extra Fast. Remove the complete embedded tool share, restore stroke fallback for unprofitable batches, and revalidate stateful Fill safety after removals."
+    },
+    {
+      "id": 878,
+      "local_id": "R4205",
+      "area": "batch42-rendering",
+      "batch": 42,
+      "ledger": "v148-batch42-rendering.md",
+      "description": "Fit optional late Detail Zoom proposals into the finished plan's remaining real execution budget using the stateful delivery-cost gate, including setup, Fill and color changes. Preserve base geometry/order and unchanged Unlimited output."
+    },
+    {
+      "id": 879,
+      "local_id": "R4206",
+      "area": "batch42-rendering",
+      "batch": 42,
+      "ledger": "v148-batch42-rendering.md",
+      "description": "Bound Detail Zoom original-source float compositing to 256 by 256 tiles while preserving the exact formula before analysis resizing. Keep the required RGB result, dense small/panoramic controls, alpha/EXIF semantics and ownership on failure or Stop."
+    },
+    {
+      "id": 880,
+      "local_id": "R4207",
+      "area": "batch42-rendering",
+      "batch": 42,
+      "ledger": "v148-batch42-rendering.md",
+      "description": "Compile ordered visible stroke rectangles into one private native int32 buffer instead of retaining Python tuple/integer records plus a second full NumPy catalogue. Preserve clipping, inherited brushes, raster order and CPU/GPU input semantics."
+    },
+    {
+      "id": 881,
+      "local_id": "P4201",
+      "area": "batch42-runtime",
+      "batch": 42,
+      "ledger": "v148-batch42-runtime.md",
+      "description": "Store OpenCL Lab output as packed scalar triples and consume it with vload3, removing the retained four-float owner without relying on float3 struct alignment. Preserve formulas, public layouts, palette results and CPU fallback."
+    },
+    {
+      "id": 882,
+      "local_id": "P4202",
+      "area": "batch42-runtime",
+      "batch": 42,
+      "ledger": "v148-batch42-runtime.md",
+      "description": "Compute large floating-point CPU gradients in bounded halo-aware tiles with exact centered and one-sided differences. Retain the faster dense path for small inputs and preserve stride/layout semantics, complete consumer output and nonfloat/GPU routes."
+    },
+    {
+      "id": 883,
+      "local_id": "N4201",
+      "area": "batch42-native",
+      "batch": 42,
+      "ledger": "v148-batch42-native.md",
+      "description": "Stop owned mouse and guarded keyboard input when physical Shift, Ctrl, Alt or Windows modifiers are held, including immediately before movements and retry backends. Never release user-owned keys; preserve safe cleanup of the bot-owned button."
+    },
+    {
+      "id": 884,
+      "local_id": "N4202",
+      "area": "batch42-native",
+      "batch": 42,
+      "ledger": "v148-batch42-native.md",
+      "description": "Verify browser stroke delivery using a majority of distinct sites within one capture attempt, rather than accepting one matching pixel anywhere. Assign overlapping sample pixels to only one site, reject incomplete native captures and preserve legacy/native Paint compatibility."
+    },
+    {
+      "id": 885,
+      "local_id": "N4203",
+      "area": "batch42-native",
+      "batch": 42,
+      "ledger": "v148-batch42-native.md",
+      "description": "Give monitor discovery one stable fixed-width ctypes structure and a private native function signature, preventing concurrent GetMonitorInfoW calls from rebinding incompatible per-call classes. Preserve monitor geometry and injectable compatibility."
+    },
+    {
+      "id": 886,
+      "local_id": "N4204",
+      "area": "batch42-native",
+      "batch": 42,
+      "ledger": "v148-batch42-native.md",
+      "description": "Compare large recorded-frame pixel payloads in bounded full-width strips rather than exporting two complete image byte strings. Preserve exact modes, palette/transparency checks, required retained frames and the small-image fast path; measured slower static-frame timing is disclosed."
     }
   ]
 }

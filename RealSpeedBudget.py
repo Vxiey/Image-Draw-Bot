@@ -24,6 +24,7 @@ from AdaptivePaletteFidelity import adaptive_palette_cap, select_adaptive_palett
 SPEED_FILE = data_dir() / 'real-speed-profiles.json'
 VERSION = 1
 MAX_SPEED_FILE_BYTES = 1024 * 1024
+MAX_DELIVERY_CONTEXTS = 256
 SUPPORTED = frozenset({'gartic-phone','skribbl','skribbl-fast','sketchheads','sketchful'})
 
 # Conservative fallback rates used only until a real completed sample exists.
@@ -78,10 +79,12 @@ def profile_reset_changes(profile_key: str, *, path: Path | None = None):
                 raw['version'] != VERSION or not isinstance(raw.get('profiles'), dict)):
             raise ValueError('Real-Speed history cannot be reset safely: unsupported or invalid data.')
         profiles = dict(raw['profiles'])
-        if key not in profiles:
+        owned = [name for name in profiles if name == key or name.startswith(key + '|')]
+        if not owned:
             yield {}
             return
-        profiles.pop(key)
+        for name in owned:
+            profiles.pop(name)
         text = json.dumps({'version': VERSION, 'profiles': profiles},
                           ensure_ascii=False, indent=2, allow_nan=False)
         if len(text.encode('utf-8')) > MAX_SPEED_FILE_BYTES:
@@ -89,9 +92,38 @@ def profile_reset_changes(profile_key: str, *, path: Path | None = None):
         yield {resolved: text}
 
 
-def load_profile(profile_key: str, path: Path = SPEED_FILE) -> dict | None:
+def _context_key(profile_key, options):
+    """Share the same effective schedule identity as the operation estimator.
+
+    Omitting options retains the old profile-only API. Application callers pass
+    their resolved options explicitly and never infer a schedule for legacy
+    timing evidence that did not record one.
+    """
+    key = str(profile_key or '').lower()
+    if options is None:
+        return key, None
+    if not isinstance(options, dict):
+        raise ValueError('Real-Speed delivery options must be a dictionary.')
+    from DrawTimeCalibration import _delivery_signature
+    signature = _delivery_signature(dict(options, profile_key=key))
+    return f'{key}|delivery={signature}', signature
+
+
+def load_profile(profile_key: str, path: Path = SPEED_FILE, *, options=None) -> dict | None:
     key=str(profile_key or '').lower()
-    item=load_all(path)['profiles'].get(key)
+    context, signature = _context_key(key, options)
+    return _matching_profile(load_all(path)['profiles'], key, context, signature)
+
+
+def _matching_profile(profiles, key, context, signature):
+    item = profiles.get(context)
+    if signature is not None:
+        if not isinstance(item, dict):
+            # A deliberately annotated legacy row can migrate without lending
+            # an unbound historical rate to a different delivery schedule.
+            item = profiles.get(key)
+        if not isinstance(item, dict) or item.get('delivery_signature') != signature:
+            return None
     return _clean_profile(item)
 
 
@@ -113,7 +145,8 @@ def _clean_profile(item):
 
 
 def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, *,
-                          colors: int = 0, test_run: bool = False, path: Path = SPEED_FILE) -> dict:
+                          colors: int = 0, test_run: bool = False, path: Path = SPEED_FILE,
+                          options=None) -> dict:
     """Update a robust EMA from a clean completed browser execution.
 
     Tiny samples are ignored. Small-test samples are accepted but deliberately
@@ -127,13 +160,17 @@ def record_runtime_sample(profile_key: str, paths: int, elapsed_seconds: float, 
         return {'recorded':False,'profile_key':key,'reason':'invalid timing sample'}
     if key not in SUPPORTED or paths < 3 or not math.isfinite(elapsed) or elapsed < .20:
         return {'recorded':False,'profile_key':key,'reason':'sample too small or unsupported'}
+    context, signature = _context_key(key, options)
     pps=max(.20,min(80.0,paths/elapsed))
     with file_transaction(path):
-        return _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, path)
+        return _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, path,
+                                             context, signature)
 
 
-def _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, path):
-    db=load_all(path);profiles=db['profiles'];old=_clean_profile(profiles.get(key)) or {}
+def _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, path,
+                                  context, signature):
+    db=load_all(path);profiles=db['profiles']
+    old=_matching_profile(profiles,key,context,signature) or {}
     old_pps=float(old.get('paths_per_second') or 0.0)
     # More completed paths = more trust. Small test remains useful as a first
     # sample but cannot swing a mature profile sharply.
@@ -162,9 +199,39 @@ def _record_runtime_sample_locked(key, paths, elapsed, colors, test_run, pps, pa
         'last_test_run':bool(test_run),
         'updated_at':time.time(),
     }
-    profiles[key]=profile;save_all(db,path)
+    if signature is not None:
+        profile['delivery_signature'] = signature
+    profiles[context]=profile
+    if signature is not None:
+        _bound_delivery_contexts(db, context)
+    save_all(db,path)
     result=dict(profile);result['recorded']=True
     return result
+
+
+def _bound_delivery_contexts(db, keep):
+    """Bound new context history without deleting older profile-only records."""
+    profiles = db['profiles']
+    contexts = []
+    for key, row in profiles.items():
+        profile, separator, signature = key.partition('|delivery=')
+        if (profile in SUPPORTED and separator and len(signature) == 24 and
+                all(character in '0123456789abcdef' for character in signature)):
+            stamp = row.get('updated_at', 0.0) if isinstance(row, dict) else 0.0
+            try:stamp = float(stamp)
+            except (TypeError, ValueError, OverflowError):stamp = 0.0
+            contexts.append((stamp if math.isfinite(stamp) else 0.0, key))
+    oldest = iter(key for _stamp, key in sorted(contexts) if key != keep)
+    count = len(contexts)
+    while True:
+        text = json.dumps(db, ensure_ascii=False, indent=2, allow_nan=False)
+        if count <= MAX_DELIVERY_CONTEXTS and len(text.encode('utf-8')) <= MAX_SPEED_FILE_BYTES:
+            return
+        discard = next(oldest, None)
+        if discard is None:
+            raise ValueError('Real-Speed history exceeds its supported storage limit.')
+        profiles.pop(discard)
+        count -= 1
 
 
 def _fallback_from_static_cap(profile_key: str, seconds: int, static_cap: int | None) -> float:
@@ -200,9 +267,10 @@ class BudgetRecommendation:
 
 
 def recommend_budget(profile_key: str, seconds: int, *, static_cap: int | None = None,
-                     color_fidelity: str = 'Fast', path: Path = SPEED_FILE) -> BudgetRecommendation:
+                     color_fidelity: str = 'Fast', path: Path = SPEED_FILE,
+                     options=None) -> BudgetRecommendation:
     key=str(profile_key or '').lower();seconds=max(5,int(seconds))
-    stored=load_profile(key,path) if key in SUPPORTED else None
+    stored=load_profile(key,path,options=options) if key in SUPPORTED else None
     learned=bool(stored and int(stored.get('samples') or 0)>0)
     pps=float(stored.get('paths_per_second')) if learned else _fallback_from_static_cap(key,seconds,static_cap)
     # Browser input starts after target activation/countdown/tool setup. Keep a
@@ -242,7 +310,7 @@ def apply_budget_policy(options: dict, *, path: Path = SPEED_FILE) -> dict:
     # usable render budget. Feed the original timer here so Real-Speed's own
     # reserve is not subtracted a second time from an already reduced budget.
     _timer_seconds=int(out.get('deadline_total_seconds') or out.get('time_budget_seconds') or out.get('max_seconds') or 60)
-    rec=recommend_budget(key,_timer_seconds,static_cap=static_cap,color_fidelity=str(out.get('color_fidelity') or 'Fast'),path=path)
+    rec=recommend_budget(key,_timer_seconds,static_cap=static_cap,color_fidelity=str(out.get('color_fidelity') or 'Fast'),path=path,options=out)
     # Explicit user caps are respected if lower. Auto gets the measured cap.
     if str(out.get('target_stroke_count') or 'Auto')=='Auto':
         out['target_stroke_count_resolved']=rec.path_cap

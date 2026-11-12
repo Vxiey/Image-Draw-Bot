@@ -124,6 +124,11 @@ def _image_png_bytes(image) -> Optional[bytes]:
         # Alpha/color-key sources retain the original premultiplied-alpha path.
         with closing(image.resize(target, Image.Resampling.LANCZOS)) as reduced:
             copy = reduced.convert('RGBA')
+    elif image.mode == 'RGBA':
+        # The compositor only reads its foreground. The async caller already
+        # owns a detached snapshot, and the synchronous API may borrow a live
+        # source; neither needs another same-sized RGBA conversion here.
+        copy = image if target is None else image.resize(target, Image.Resampling.LANCZOS)
     else:
         copy = image.convert('RGBA')
         if target is not None:
@@ -141,7 +146,8 @@ def _image_png_bytes(image) -> Optional[bytes]:
                 flattened.save(out, format='PNG', optimize=True)
                 return out.getvalue()
     finally:
-        copy.close()
+        if copy is not image:
+            copy.close()
 
 
 @dataclass(frozen=True)

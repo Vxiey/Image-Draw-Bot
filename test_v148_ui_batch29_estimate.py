@@ -238,7 +238,7 @@ class PreviewSequenceTransferTests(PreviewEstimateFixture):
             for _ in range(3):
                 self.assertTrue(timing.record_sample(plan['options'], 10., 20., completed_paths=plan['count'])['recorded'])
             self.assertTrue(speed.record_runtime_sample('gartic-phone', plan['count'], plan['count'] / .25,
-                path=self.directory / 'speed.json')['recorded'])
+                path=self.directory / 'speed.json', options=plan['options'])['recorded'])
             return plan
         with patch.object(DrawBot, 'make_plan', new=learned), patch.object(eta, '_local_calibration', new=calibration), observe_estimates() as records:
             plan, done = self.build(app)

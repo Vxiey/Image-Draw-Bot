@@ -484,6 +484,11 @@ class SketchPresentationTests(unittest.TestCase):
             with self.subTest(quality=quality), planner_fixture(quality, kind='islands',
                     ui_changes=ui_changes) as (source, options):
                 self.assertTrue(options['time_budget_active'])
+                if quality=='Pixel Accurate':
+                    # The inexpensive source now fits in30s under the real
+                    # delivery model. Use an actual slower path delay so this
+                    # fixture continues to exercise nonempty budget trimming.
+                    options=dict(options,delay=.08,_execution_cost_calibration_override={})
                 plans = []; observations = []
                 try:
                     for full in (True, False):
@@ -502,6 +507,10 @@ class SketchPresentationTests(unittest.TestCase):
                         budget = observations[1].inner[0]['options']['pixel_accuracy_meta']['progressive_time_budget']
                         self.assertTrue(budget['active'])
                         self.assertGreater(budget['paths_omitted'], 0)
+                        self.assertGreater(budget['base_path_budget'],0)
+                        self.assertGreater(budget['initial_sequence_seconds'],budget['sequence_budget_seconds'])
+                        self.assertLessEqual(budget['risk_adjusted_sequence_seconds'],
+                                             budget['base_sequence_budget_seconds']+1e-9)
                     self.assertNotIn(HANDOFF, plans[1]['options'])
                 finally:
                     for plan in plans:

@@ -2,10 +2,31 @@
 from __future__ import annotations
 
 import math
+from contextlib import closing
 from numbers import Real
 from pathlib import Path
 
 from RuntimePaths import atomic_binary_writer
+
+
+def _same_recorded_pixels(first, second):
+    """Compare exact storage without exporting two complete large captures.
+
+    Full-width strips preserve packed row padding, including mode ``1``. At
+    most 65536 pixels (or one exceptionally wide row) are exported per strip;
+    the recorder itself caps captures at 800 pixels wide. Small frames retain
+    Pillow's direct byte comparison and no caller-owned image is closed.
+    """
+    width, height = first.size
+    if width * height <= 65536:
+        return first.tobytes() == second.tobytes()
+    rows = max(1, 65536 // width)
+    for top in range(0, height, rows):
+        box = (0, top, width, min(height, top + rows))
+        with closing(first.crop(box)) as left, closing(second.crop(box)) as right:
+            if left.tobytes() != right.tobytes():
+                return False
+    return True
 
 
 def gif_durations(durations):
@@ -43,7 +64,7 @@ def append_recorded_frame(frames, durations, frame, duration):
         if (frame.mode==previous.mode and frame.size==previous.size
                 and frame.info.get('transparency')==previous.info.get('transparency')
                 and frame.getpalette('RGBA')==previous.getpalette('RGBA')
-                and frame.tobytes()==previous.tobytes()):
+                and _same_recorded_pixels(frame,previous)):
             durations[-1]+=duration
             return False
     frames.append(frame)

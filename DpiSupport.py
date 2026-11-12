@@ -7,12 +7,22 @@ safe to import on non-Windows systems and have no input side effects.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ctypes
 import sys
 from WindowsSystem import load_system_library
 
 BASE_DPI = 96
 MIN_DPI = 48
 MAX_DPI = 768
+
+
+class _MonitorRect(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_int32) for name in ('left', 'top', 'right', 'bottom')]
+
+
+class _MonitorInfo(ctypes.Structure):
+    _fields_ = [('cbSize', ctypes.c_uint32), ('rcMonitor', _MonitorRect),
+                ('rcWork', _MonitorRect), ('dwFlags', ctypes.c_uint32)]
 
 
 @dataclass(frozen=True)
@@ -97,23 +107,19 @@ def enable_per_monitor_v2() -> str:
 def _monitor_info(user32, monitor):
     if not monitor:
         return None, None
-    import ctypes
-    from ctypes import wintypes
-
-    class MONITORINFO(ctypes.Structure):
-        _fields_ = [
-            ('cbSize', wintypes.DWORD),
-            ('rcMonitor', wintypes.RECT),
-            ('rcWork', wintypes.RECT),
-            ('dwFlags', wintypes.DWORD),
-        ]
-
     try:
-        user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
-        user32.GetMonitorInfoW.restype = wintypes.BOOL
-        info = MONITORINFO()
+        # The DLL handle is shared with capture and other DPI observations.
+        # Indexing gives this call its own function signature instead of
+        # replacing a concurrently used cached symbol's pointer class.
+        try:
+            query = user32['GetMonitorInfoW']
+        except (TypeError, AttributeError):
+            query = user32.GetMonitorInfoW  # Existing injected providers.
+        query.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MonitorInfo)]
+        query.restype = ctypes.c_int32
+        info = _MonitorInfo()
         info.cbSize = ctypes.sizeof(info)
-        if user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        if query(monitor, ctypes.byref(info)):
             m = info.rcMonitor
             w = info.rcWork
             return (m.left, m.top, m.right, m.bottom), (w.left, w.top, w.right, w.bottom)

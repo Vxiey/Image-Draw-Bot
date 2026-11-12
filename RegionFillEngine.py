@@ -387,12 +387,34 @@ def _batchable_tool_cost(options: dict[str, Any], *, cost_model=_UNSET_MODEL) ->
         delivery=resolve_stroke_delivery(options,dry_run=False)
         return max(.08,float(delivery.ui_control_delay)*.45)
 
+
+def fill_tool_batch_cost(options: dict[str, Any], *, cost_model=_UNSET_MODEL) -> float:
+    """Price the actual Fill/restore controls once for one retained color batch."""
+    actions=len(options.get('fill_tool_actions') or ())+len(options.get('fill_restore_actions') or ())
+    if actions==0 and options.get('fill_tool_available'):
+        # Preview has verified capability but deliberately omits screen points.
+        actions=2
+    if not actions:return 0.0
+    model=_cost_model(options,(1,1),(1,1)) if cost_model is _UNSET_MODEL else cost_model
+    try:
+        control=_finite_cost(model.switch_cost('tool_change'))
+    except InterruptedError:
+        raise
+    except Exception:
+        control=None
+    if control is None:
+        control=max(.02,float(resolve_stroke_delivery(options,dry_run=False).ui_control_delay))
+    return actions*control
+
+
 def _region_cost_components(region: dict[str, Any], options: dict[str, Any], image_size: tuple[int, int], fitted: tuple[int, int], *, cost_model=_UNSET_MODEL, seal_cost=None) -> tuple[float, float, float, float]:
     model=_cost_model(options,image_size,fitted) if cost_model is _UNSET_MODEL else cost_model
     stroke_cost, fill_cost = _region_cost(region, options, image_size, fitted, cost_model=model)
     if seal_cost is None:seal_cost = _seal_cost_seconds(region.get("fill_seal_paths") or (), options, image_size, fitted, cost_model=model)
     fill_cost += seal_cost
-    batchable = max(0.0, min(_batchable_tool_cost(options,cost_model=model), fill_cost * .50))
+    # This exact candidate includes one complete tool switch. A slow learned
+    # switch can exceed half the total; retain only the real contour/fill core.
+    batchable = max(0.0, min(_batchable_tool_cost(options,cost_model=model), fill_cost))
     fill_core = max(.001, fill_cost - batchable)
     return stroke_cost, fill_cost, fill_core, batchable
 
@@ -667,13 +689,12 @@ def enrich_region_stats(meta: dict[str, Any] | None, *, source_strokes: int, fin
     return out
 
 
-def estimate_fill_execution_seconds(regions: Iterable[dict[str, Any]], image_size: tuple[int, int], fitted: tuple[int, int], options: dict[str, Any], *, use_cached_cost: bool = True) -> dict[str, Any]:
+def estimate_fill_execution_seconds(regions: Iterable[dict[str, Any]], image_size: tuple[int, int], fitted: tuple[int, int], options: dict[str, Any], *, use_cached_cost: bool = True, cost_model=_UNSET_MODEL) -> dict[str, Any]:
     """Batch-aware Fill estimate using the same configured delays as execution."""
     rows = [dict(r) for r in (regions or ())]
-    delivery = resolve_stroke_delivery(options, dry_run=False)
     fill_seconds = 0.0
     removed_per_region_switch = 0.0
-    model=_cost_model(options,image_size,fitted)
+    model=_cost_model(options,image_size,fitted) if cost_model is _UNSET_MODEL else cost_model
     inferred_batchable = _batchable_tool_cost(options,cost_model=model)
     for region in rows:
         # Candidate caches may contain learned timings. A raw, cold ETA must
@@ -694,13 +715,7 @@ def estimate_fill_execution_seconds(regions: Iterable[dict[str, Any]], image_siz
         fill_seconds += core
         removed_per_region_switch += batchable
     colors = {int(r.get("color_index", -1)) for r in rows if int(r.get("color_index", -1)) >= 0}
-    tool_actions = len(options.get("fill_tool_actions") or ()) + len(options.get("fill_restore_actions") or ())
-    # Preview planning intentionally does not resolve screen-coordinate tool
-    # actions. If calibration says Fill is available, model the final Fill +
-    # restore switch pair without inventing coordinates.
-    if tool_actions == 0 and options.get("fill_tool_available"):
-        tool_actions = 2
-    tool_switch_seconds = len(colors) * tool_actions * max(.02, float(delivery.ui_control_delay))
+    tool_switch_seconds = len(colors) * fill_tool_batch_cost(options,cost_model=model)
     return {
         "fill_regions": len(rows),
         "fill_color_batches": len(colors),

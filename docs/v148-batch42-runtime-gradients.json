@@ -1,0 +1,718 @@
+{
+  "baseline_commit": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "baseline_tree": "72e55f2a6d3dad971a13e9ab9141aa521cf15177",
+  "method": "Four alternating AB/BA elapsed pairs after exact-output warm checks; separate tracemalloc observations. Fixed historical gradient and universal CPU consumer; other public consumers are current source in both directions.",
+  "scope": "CPU helper and complete numeric consumer calls, not physical GPU execution, native drawing, process RSS or a universal speed claim. Caller-owned source/preview preparation is outside measurements; required returned arrays and all traced scratch inside each call are included.",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "fixture": {
+    "path": "assets/paint-tools-reference.png",
+    "sha256": "5fc71d4ee12307d616065b7931343944ae321a66ea764b73bde0d36960b6e586"
+  },
+  "sha256": {
+    "ImageGradients.py": "5eb52ff00ea04ae46cf1116eb55e84f201fc3abc3e81e83f92764313a2fcfd5b",
+    "UniversalGpuAcceleration.py": "a2554c90ca03e9853cf8a2669eaeb943dc71b62c64779d95e33800aa47adf5d7",
+    "AccuracyEvaluator.py": "bc9af121c4662d9bb907961a1f8e1cf77394e1059744bb6e8347a90360d3ac76",
+    "VisualImportanceMap.py": "2750c0c391e23395af4094f899831c0dd138a347248d603e86dbab7e0beab6b4",
+    "PixelAccuratePlanner.py": "84a0850cdc345fdccbc8ad979c828dc672a5400183bf86b92fe75a29b74c98a4",
+    "ShadowDetailEngine.py": "9565c2f04ea08b815533323a56b030b27b355524eaaa0ac710be4efc7f1c3ded",
+    "test_v148_runtime_batch42_opencl_layout.py": "09616ad0953385af43cbffd7d2794504afa74e1f59df1adc091bc15bdbd7234b",
+    "benchmark_v148_runtime_batch42.py": "ad894379093fe52926c1af3b919d5334ff36a1435d7be289c5c6f9c96864a5e2"
+  },
+  "cases": [
+    {
+      "name": "gradient_384x256",
+      "before_ms": [
+        2.148761000171362,
+        2.447156000016548,
+        1.4555499992638943,
+        1.302804999795626
+      ],
+      "after_ms": [
+        1.0576320000836859,
+        1.1902589994861046,
+        1.2084859999959008,
+        1.400096999532252
+      ],
+      "before_median_ms": 1.8021554997176281,
+      "after_median_ms": 1.1993724997410027,
+      "before_traced_peak_bytes": 1587264,
+      "after_traced_peak_bytes": 1587504,
+      "exact_complete_output": true,
+      "output": {
+        "shape": [
+          256,
+          384
+        ],
+        "dtype": "<f4",
+        "sha256": "5d5156563ed71b03f8a181b4d31f476e2b1e57005853c51a73b07f7b9987fa83"
+      }
+    },
+    {
+      "name": "complete_accuracy_384x256",
+      "before_ms": [
+        29.806589000145323,
+        36.429380000299716,
+        36.19181199974264,
+        34.608889000082854
+      ],
+      "after_ms": [
+        37.68013100034295,
+        33.950948999518005,
+        35.53753100004542,
+        33.82432299986249
+      ],
+      "before_median_ms": 35.40035049991275,
+      "after_median_ms": 34.74423999978171,
+      "before_traced_peak_bytes": 7590984,
+      "after_traced_peak_bytes": 7590968,
+      "exact_complete_output": true,
+      "output": {
+        "raw_pixel_accuracy_percent": 98.48,
+        "source_pixel_accuracy_percent": 98.48,
+        "perceptual_color_accuracy_percent": 97.08,
+        "luminance_accuracy_percent": 98.7,
+        "hue_accuracy_percent": 93.32,
+        "hue_evaluation_pixels": 4245,
+        "edge_accuracy_percent": 40.35,
+        "important_feature_accuracy_percent": 97.08,
+        "visual_accuracy_percent": 80.78,
+        "method": "final simulated drawing vs original source; sRGB/OKLab source-relative evaluation",
+        "visual_accuracy_weights": {
+          "perceptual_color_accuracy_percent": 0.4,
+          "luminance_accuracy_percent": 0.2,
+          "edge_accuracy_percent": 0.25,
+          "coverage_percent": 0.15
+        },
+        "normalized_source_size": [
+          384,
+          256
+        ],
+        "delta_e_oklab": {
+          "space": "OKLab",
+          "metric": "euclidean OKLab distance",
+          "mean_delta_e_oklab": 0.01321,
+          "median_delta_e_oklab": 0.0,
+          "p95_delta_e_oklab": 0.10084,
+          "max_delta_e_oklab": 0.62278,
+          "severe_error_pixels_percent": 2.29
+        },
+        "acceleration_routes": {
+          "pixel_math": {
+            "workload": "pixel_math",
+            "profile_workload": "bulk_matrix",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98304,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "delta_e_oklab": {
+            "workload": "delta_e",
+            "profile_workload": "oklab",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98304,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_source": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98304,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_final": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98304,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "complete_importance_384x256",
+      "before_ms": [
+        18.324538999877404,
+        16.268567999759398,
+        18.87985400026082,
+        14.698207000037655
+      ],
+      "after_ms": [
+        19.75794899954053,
+        17.352357000163465,
+        18.080855999869527,
+        16.009158000088064
+      ],
+      "before_median_ms": 17.2965534998184,
+      "after_median_ms": 17.716606500016496,
+      "before_traced_peak_bytes": 4010651,
+      "after_traced_peak_bytes": 4010643,
+      "exact_complete_output": true,
+      "output": [
+        {
+          "shape": [
+            256,
+            384
+          ],
+          "dtype": "<f4",
+          "sha256": "db03b85b55cd582a6bc46b7278e619eccb126dcde6510c2adfa41e61eb65d950"
+        },
+        {
+          "backend": "cpu-numpy",
+          "edge_mean": 0.04785991832613945,
+          "contrast_mean": 0.04681744799017906,
+          "foreground_mean": 0.05604780837893486,
+          "protected_percent": 3.5420735677083335,
+          "border_rgb": [
+            248,
+            249,
+            250
+          ],
+          "width": 384,
+          "height": 256,
+          "pixels": 98304,
+          "estimated_working_mb": 4.5,
+          "gpu_fallback_reason": "GPU disabled or VRAM budget too small"
+        }
+      ]
+    },
+    {
+      "name": "gradient_1536x1024",
+      "before_ms": [
+        27.240378999522363,
+        26.22212100050092,
+        34.23034099978395,
+        60.56534599974839
+      ],
+      "after_ms": [
+        13.643629000398505,
+        42.21631499967771,
+        40.27243800010183,
+        23.93581400065159
+      ],
+      "before_median_ms": 30.735359999653156,
+      "after_median_ms": 32.10412600037671,
+      "before_traced_peak_bytes": 25180128,
+      "after_traced_peak_bytes": 7371624,
+      "exact_complete_output": true,
+      "output": {
+        "shape": [
+          1024,
+          1536
+        ],
+        "dtype": "<f4",
+        "sha256": "0a9f7e6b29dd05d289fc2635f2f7ccb0e4c0e0a924cbbf524ba990dc720322b8"
+      }
+    },
+    {
+      "name": "complete_accuracy_1536x1024",
+      "before_ms": [
+        537.3504959998172,
+        860.5314559999897,
+        1300.390122999488,
+        664.2247049994694
+      ],
+      "after_ms": [
+        540.5888970008164,
+        527.3936200001117,
+        839.9905770002078,
+        636.4667409998219
+      ],
+      "before_median_ms": 762.3780804997295,
+      "after_median_ms": 588.5278190003191,
+      "before_traced_peak_bytes": 97539924,
+      "after_traced_peak_bytes": 97539924,
+      "exact_complete_output": true,
+      "output": {
+        "raw_pixel_accuracy_percent": 99.56,
+        "source_pixel_accuracy_percent": 99.56,
+        "perceptual_color_accuracy_percent": 99.15,
+        "luminance_accuracy_percent": 99.62,
+        "hue_accuracy_percent": 97.85,
+        "hue_evaluation_pixels": 68457,
+        "edge_accuracy_percent": 31.48,
+        "important_feature_accuracy_percent": 99.15,
+        "visual_accuracy_percent": 79.36,
+        "method": "final simulated drawing vs original source; sRGB/OKLab source-relative evaluation",
+        "visual_accuracy_weights": {
+          "perceptual_color_accuracy_percent": 0.4,
+          "luminance_accuracy_percent": 0.2,
+          "edge_accuracy_percent": 0.25,
+          "coverage_percent": 0.15
+        },
+        "normalized_source_size": [
+          1536,
+          1024
+        ],
+        "delta_e_oklab": {
+          "space": "OKLab",
+          "metric": "euclidean OKLab distance",
+          "mean_delta_e_oklab": 0.00383,
+          "median_delta_e_oklab": 0.0,
+          "p95_delta_e_oklab": 0.0,
+          "max_delta_e_oklab": 0.68854,
+          "severe_error_pixels_percent": 0.55
+        },
+        "acceleration_routes": {
+          "pixel_math": {
+            "workload": "pixel_math",
+            "profile_workload": "bulk_matrix",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 1572864,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "delta_e_oklab": {
+            "workload": "delta_e",
+            "profile_workload": "oklab",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 1572864,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_source": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 1572864,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_final": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 1572864,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "complete_importance_1536x1024",
+      "before_ms": [
+        301.04561900043336,
+        572.3655390002023,
+        226.4055309997275,
+        204.63793100043404
+      ],
+      "after_ms": [
+        259.2675750001945,
+        174.08080400036852,
+        191.76021800012677,
+        216.55332499994984
+      ],
+      "before_median_ms": 263.7255750000804,
+      "after_median_ms": 204.1567715000383,
+      "before_traced_peak_bytes": 61472501,
+      "after_traced_peak_bytes": 61472533,
+      "exact_complete_output": true,
+      "output": [
+        {
+          "shape": [
+            1024,
+            1536
+          ],
+          "dtype": "<f4",
+          "sha256": "5a888862cd80a8c3506e473ae786bbf095d2655fd95b10ce1c105d27f8010a71"
+        },
+        {
+          "backend": "cpu-numpy",
+          "edge_mean": 0.021129479631781578,
+          "contrast_mean": 0.0211349967867136,
+          "foreground_mean": 0.05650489032268524,
+          "protected_percent": 2.046712239583333,
+          "border_rgb": [
+            248,
+            249,
+            250
+          ],
+          "width": 1536,
+          "height": 1024,
+          "pixels": 1572864,
+          "estimated_working_mb": 72.0,
+          "gpu_fallback_reason": "GPU disabled or VRAM budget too small"
+        }
+      ]
+    },
+    {
+      "name": "complete_pixel_map_385x257",
+      "before_ms": [
+        85.98601700032305,
+        86.2187279999489,
+        121.36712399933458,
+        88.30588599994371
+      ],
+      "after_ms": [
+        71.4066719992843,
+        94.08974300004047,
+        82.06449599947518,
+        86.62100999936229
+      ],
+      "before_median_ms": 87.2623069999463,
+      "after_median_ms": 84.34275299941874,
+      "before_traced_peak_bytes": 6198402,
+      "after_traced_peak_bytes": 6198306,
+      "exact_complete_output": true,
+      "output": {
+        "width": 385,
+        "height": 257,
+        "rgb": {
+          "shape": [
+            257,
+            385,
+            3
+          ],
+          "dtype": "|u1",
+          "sha256": "84fd95f9ee0dfd486bc8c88036fd57400ec92f17bb098de31ed158714260ec1c"
+        },
+        "palette_index": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<i2",
+          "sha256": "80630159486c623d70d6bab05cc377e7b254fa926c48b0294c6cccf21553f497"
+        },
+        "drawable_mask": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "|b1",
+          "sha256": "9d1245d7543fa8b004ceb26c020c0ac9903b05442178ae11b67911368e82334d"
+        },
+        "edge_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "588ef0af8eb0448dff765b3db18f654250e92f3c301fc0a4fb5a0cc860e4f4a2"
+        },
+        "importance_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "6f684f939d69725eabce394e0deef4a9b06d44b800be3984fe18b0a253c100d7"
+        },
+        "protected_mask": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "|b1",
+          "sha256": "7b738322b1263399966951a6e6bd02dee928d60f2a287d5607b061fb7c74e27d"
+        },
+        "metadata": {
+          "engine": "Shadow + Contour Analysis v1",
+          "step": 26,
+          "detail_fidelity": true,
+          "full_resolution": true,
+          "destructive_simplification": false,
+          "tiny_feature_protection": true,
+          "shadow_analysis": true,
+          "contour_analysis": true,
+          "post_processing_priority": true,
+          "micro_detail_protection": true,
+          "simplification_policy": "lossless-only",
+          "analysis_backends": {
+            "palette": "cpu:numpy",
+            "edge": "cpu:numpy",
+            "importance": "cpu:numpy",
+            "micro_detail": "cpu:numpy"
+          },
+          "palette_backend": "cpu-numpy",
+          "palette_backend_id": "cpu:numpy",
+          "palette_vendor": "CPU",
+          "palette_device": "x86_64",
+          "palette_route": {
+            "workload": "palette_match",
+            "profile_workload": "palette_match",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98945,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "palette_distance": "OKLab",
+          "palette_fidelity": "Faithful",
+          "edge_backend": "cpu-numpy",
+          "edge_backend_id": "cpu:numpy",
+          "edge_vendor": "CPU",
+          "edge_device": "x86_64",
+          "edge_route": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 98945,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_signal": "luminance and chromatic contrast",
+          "chromatic_edge_backend": "cpu-numpy-tiled",
+          "non_ai": true,
+          "local_tone_radius": 5,
+          "contour_pixels": 1562,
+          "contour_percent": 17.169,
+          "shadow_detail_pixels": 1456,
+          "shadow_detail_percent": 16.004,
+          "deep_shadow_pixels": 1630,
+          "deep_shadow_percent": 17.916,
+          "contour_threshold": 1.0,
+          "shadow_detail_threshold": 0.8335,
+          "post_processing": "contour + shadow-detail cleanup priority"
+        },
+        "contour_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "64a6052740a87eae06458a56aff62dcf13dd14d8b94f2673f6bece1bf55b8647"
+        },
+        "shadow_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "99e426e650f0022058a4fb7591c85b6f6a736a9dcb5806de91feef8aa6643114"
+        },
+        "shadow_detail_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "ef47db5ddf07a242550509f0954c499d3582c9969e392f9f37322038d5be37b1"
+        },
+        "micro_detail_map": {
+          "shape": [
+            257,
+            385
+          ],
+          "dtype": "<f4",
+          "sha256": "690af1d90757d1a297d7bde3b6b84c2f5f1e8d40099b139c5a6588ec5ac32697"
+        }
+      }
+    },
+    {
+      "name": "complete_pixel_map_771x517",
+      "before_ms": [
+        333.2723370003805,
+        550.6510790000902,
+        404.4844509999166,
+        758.1277159997626
+      ],
+      "after_ms": [
+        332.0175560002099,
+        483.8697459999821,
+        482.0101720006278,
+        892.0933170002172
+      ],
+      "before_median_ms": 477.5677650000034,
+      "after_median_ms": 482.93995900030495,
+      "before_traced_peak_bytes": 24840244,
+      "after_traced_peak_bytes": 24840690,
+      "exact_complete_output": true,
+      "output": {
+        "width": 771,
+        "height": 517,
+        "rgb": {
+          "shape": [
+            517,
+            771,
+            3
+          ],
+          "dtype": "|u1",
+          "sha256": "a7b1d27d07fdb9c6108626e7b3b43391f317e9c1e9c09586e8181c0f15c2f21a"
+        },
+        "palette_index": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "<i2",
+          "sha256": "1dc63538476ed555cf6282ad7af822b9960fefbd4630416d50576be5cf02176e"
+        },
+        "drawable_mask": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "|b1",
+          "sha256": "83e3a3c7f28da42b1025b37e6ef14dcaa8d32cf873be0b7c6f433ae98e34c4ba"
+        },
+        "edge_map": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "<f4",
+          "sha256": "093424a9d86f7aac63643af19db905976246cb7faae49239a07d2e90c8d0b3c4"
+        },
+        "importance_map": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "<f4",
+          "sha256": "4a051f64c9fbe29fffdd0ad8762dfd09ef64264c96af0fe82488cb4e00f9f41d"
+        },
+        "protected_mask": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "|b1",
+          "sha256": "42c795c7d9adf4176403598ff8eb6dac3dc2f0501e95fe0b29c7ff64a2025f9c"
+        },
+        "metadata": {
+          "engine": "Shadow + Contour Analysis v1",
+          "step": 26,
+          "detail_fidelity": true,
+          "full_resolution": true,
+          "destructive_simplification": false,
+          "tiny_feature_protection": true,
+          "shadow_analysis": true,
+          "contour_analysis": true,
+          "post_processing_priority": true,
+          "micro_detail_protection": true,
+          "simplification_policy": "lossless-only",
+          "analysis_backends": {
+            "palette": "cpu:numpy",
+            "edge": "cpu:numpy",
+            "importance": "cpu:numpy",
+            "micro_detail": "cpu:numpy"
+          },
+          "palette_backend": "cpu-numpy",
+          "palette_backend_id": "cpu:numpy",
+          "palette_vendor": "CPU",
+          "palette_device": "x86_64",
+          "palette_route": {
+            "workload": "palette_match",
+            "profile_workload": "palette_match",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 398607,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "palette_distance": "OKLab",
+          "palette_fidelity": "Faithful",
+          "edge_backend": "cpu-numpy",
+          "edge_backend_id": "cpu:numpy",
+          "edge_vendor": "CPU",
+          "edge_device": "x86_64",
+          "edge_route": {
+            "workload": "edge_map",
+            "profile_workload": "edge_map",
+            "backend_id": "cpu:numpy",
+            "backend": "CPU/NumPy",
+            "vendor": "CPU",
+            "device": "x86_64",
+            "accelerated": false,
+            "pixels": 398607,
+            "reason": "CPU mode selected",
+            "fallback_reason": ""
+          },
+          "edge_signal": "luminance and chromatic contrast",
+          "chromatic_edge_backend": "cpu-numpy-tiled",
+          "non_ai": true,
+          "local_tone_radius": 11,
+          "contour_pixels": 5614,
+          "contour_percent": 15.303,
+          "shadow_detail_pixels": 6499,
+          "shadow_detail_percent": 17.716,
+          "deep_shadow_pixels": 8496,
+          "deep_shadow_percent": 23.159,
+          "contour_threshold": 1.0,
+          "shadow_detail_threshold": 0.56,
+          "post_processing": "contour + shadow-detail cleanup priority"
+        },
+        "contour_map": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "<f4",
+          "sha256": "0db045d6f565e70625a24b31a69093064a28b8592da8b6f7bc78d817493b27ec"
+        },
+        "shadow_map": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "<f4",
+          "sha256": "d86ea7706d2956e210588e7c6d4e2adf50d0037d1308daaca173594f51d26a56"
+        },
+        "shadow_detail_map": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "<f4",
+          "sha256": "1c0591a936cfcfcb69a510b33fd42433ce3c79ad617e63c8d02d8c6cfc8c9c7c"
+        },
+        "micro_detail_map": {
+          "shape": [
+            517,
+            771
+          ],
+          "dtype": "<f4",
+          "sha256": "59c77d94b2a6ac96a00d6fb63277515e471165361b11abec5063b0db2de5ce6b"
+        }
+      }
+    }
+  ]
+}

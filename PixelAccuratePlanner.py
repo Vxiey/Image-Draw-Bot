@@ -250,33 +250,97 @@ def _exact_palette_map_visible(rgba, rgb, palette, *, color_rendering, color_fid
         }
 
 
+def _chromatic_edge_tile(rgb):
+    """Hue contrast with the same finite differences as the luminance route."""
+    from ImageGradients import luminance_edges
+    block=opponent=first=second=None
+    try:
+        block=np.asarray(rgb,dtype=np.float32)
+        # Channel opponents remove neutral brightness changes. Grayscale and
+        # constant chroma therefore retain the established luminance arithmetic.
+        opponent=block[...,0]-block[...,1]
+        first=luminance_edges(opponent)
+        opponent=block[...,2]-block[...,1]
+        second=luminance_edges(opponent)
+        np.maximum(first,second,out=first)
+        return first
+    finally:
+        block=opponent=first=second=rgb=None
+
+
+def _chromatic_edge_map(rgb, *, cancelled):
+    """Bound opponent/gradient scratch with one-pixel source halos."""
+    result=tile=None
+    try:
+        if cancelled():raise InterruptedError()
+        result=np.empty(rgb.shape[:2],dtype=np.float32)
+        for output,region,interior in _feature_tiles(result.shape):
+            if cancelled():raise InterruptedError()
+            tile=_chromatic_edge_tile(rgb[region])
+            result[output]=tile[interior]
+            tile=None
+        if cancelled():raise InterruptedError()
+        return result
+    finally:
+        result=tile=rgb=None
+
+
+def _combine_edge_signals(rgb, luminance, *, cancelled):
+    result=tile=None
+    try:
+        if cancelled():raise InterruptedError()
+        result=_chromatic_edge_map(rgb,cancelled=cancelled)
+        scale=max(1.0,float(np.percentile(result,99.5)))
+        np.divide(result,scale,out=result)
+        np.clip(result,0.0,1.0,out=result)
+        scale=max(1.0,float(np.percentile(luminance,99.5)))
+        # Keep the old normalization arithmetic, but merge bounded luminance
+        # tiles into the returned chroma plane instead of owning two full maps.
+        for output,_region,_interior in _feature_tiles(result.shape):
+            if cancelled():raise InterruptedError()
+            tile=np.clip(luminance[output]/scale,0.0,1.0).astype(np.float32)
+            np.maximum(result[output],tile,out=result[output])
+            tile=None
+        if cancelled():raise InterruptedError()
+        return result
+    finally:
+        result=tile=rgb=luminance=None
+
+
 def edge_map(rgb: np.ndarray, *, gpu_mode: str = "Auto", gpu_vram: str = "Auto",
              gpu_performance: str = "High throughput", cancelled=lambda: False) -> tuple[np.ndarray, dict]:
-    if cancelled():raise InterruptedError()
-    gray = np.rint(rgb[..., 0] * .299 + rgb[..., 1] * .587 + rgb[..., 2] * .114).clip(0, 255).astype(np.uint8)
+    gray=mag=metadata=route=None
     try:
-        from UniversalGpuAcceleration import edge_magnitude
-        mag, route = edge_magnitude(gray.astype(np.float32), gpu_mode=gpu_mode,cancelled=cancelled)
-        scale = max(1.0, float(np.percentile(mag, 99.5)))
-        backend_id = str(route.get("backend_id") or "cpu:numpy")
-        legacy_backend = "cpu-numpy" if backend_id == "cpu:numpy" else ("cuda" if backend_id.startswith("cuda:") else ("opencl" if backend_id.startswith("opencl:") else str(route.get("backend") or backend_id)))
         if cancelled():raise InterruptedError()
-        return np.clip(mag / scale, 0.0, 1.0).astype(np.float32), {
-            "edge_backend": legacy_backend,
-            "edge_backend_id": backend_id,
-            "edge_vendor": str(route.get("vendor") or "CPU"),
-            "edge_device": str(route.get("device") or "CPU"),
-            "edge_route": dict(route)}
-    except InterruptedError:
-        raise
-    except Exception as exc:
-        from ImageGradients import luminance_edges
-        mag = luminance_edges(gray.astype(np.float32))
-        scale = max(1.0, float(np.percentile(mag, 99.5)))
-        if cancelled():raise InterruptedError()
-        return np.clip(mag / scale, 0.0, 1.0).astype(np.float32), {
-            "edge_backend": "cpu-numpy", "edge_backend_id": "cpu:numpy",
-            "edge_route": {"fallback_reason": f"{type(exc).__name__}: {exc}"}}
+        gray = np.rint(rgb[..., 0] * .299 + rgb[..., 1] * .587 + rgb[..., 2] * .114).clip(0, 255).astype(np.uint8)
+        try:
+            from UniversalGpuAcceleration import edge_magnitude
+            mag, route = edge_magnitude(gray.astype(np.float32), gpu_mode=gpu_mode,cancelled=cancelled)
+            backend_id = str(route.get("backend_id") or "cpu:numpy")
+            legacy_backend = "cpu-numpy" if backend_id == "cpu:numpy" else ("cuda" if backend_id.startswith("cuda:") else ("opencl" if backend_id.startswith("opencl:") else str(route.get("backend") or backend_id)))
+            if cancelled():raise InterruptedError()
+            metadata={
+                "edge_backend": legacy_backend,
+                "edge_backend_id": backend_id,
+                "edge_vendor": str(route.get("vendor") or "CPU"),
+                "edge_device": str(route.get("device") or "CPU"),
+                "edge_route": dict(route)}
+        except InterruptedError:
+            raise
+        except Exception as exc:
+            from ImageGradients import luminance_edges
+            mag = luminance_edges(gray.astype(np.float32))
+            if cancelled():raise InterruptedError()
+            metadata={
+                "edge_backend": "cpu-numpy", "edge_backend_id": "cpu:numpy",
+                "edge_route": {"fallback_reason": f"{type(exc).__name__}: {exc}"}}
+        metadata.update(edge_signal='luminance and chromatic contrast',
+                        chromatic_edge_backend='cpu-numpy-tiled')
+        return _combine_edge_signals(rgb,mag,cancelled=cancelled),metadata
+    finally:
+        # Retained Stop tracebacks must not own completed private luminance
+        # buffers after chromatic analysis or normalization is interrupted.
+        gray=mag=metadata=route=rgb=None
 
 
 _FEATURE_TILE_SIDE = 256

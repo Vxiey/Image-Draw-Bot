@@ -1,0 +1,759 @@
+{
+  "schema": 1,
+  "local_baseline_commit": "b75ef8e",
+  "equivalent_public_commit": "e33fa67d17e3c33ccda8e736e7e16c2582d9fc06",
+  "equivalent_public_tree": "72e55f2a6d3dad971a13e9ab9141aa521cf15177",
+  "source_hashes_before": {
+    "MobilePreview.py": "ab56999c8cbafa47c7124d9acf1ce1be0ebe94b11683da80e07808b235f10c5c",
+    "DrawBot.py": "53e205c9b2bffd6a4bf1d34e31758ed90d8da63946f19e375946039b876ecda2",
+    "ImageGeometry.py": "34bccf137dc31f7136d6b904e4fa41ce074fefd27121ee35cbe65ab202583467",
+    "MobilePreviewQueue.py": "2c4b42f1a7ec77e63700c0c6fc67ed1a88ccf024e8cdcd11d34fc990e57b98a6",
+    "docs/v148-batch42-application-benchmark.py": "9942e0de960ffa39b1c43a11f9b95930749f1f779b0495f956d3d7b2fdec7766"
+  },
+  "source_hashes_after": {
+    "MobilePreview.py": "ab56999c8cbafa47c7124d9acf1ce1be0ebe94b11683da80e07808b235f10c5c",
+    "DrawBot.py": "53e205c9b2bffd6a4bf1d34e31758ed90d8da63946f19e375946039b876ecda2",
+    "ImageGeometry.py": "34bccf137dc31f7136d6b904e4fa41ce074fefd27121ee35cbe65ab202583467",
+    "MobilePreviewQueue.py": "2c4b42f1a7ec77e63700c0c6fc67ed1a88ccf024e8cdcd11d34fc990e57b98a6",
+    "docs/v148-batch42-application-benchmark.py": "9942e0de960ffa39b1c43a11f9b95930749f1f779b0495f956d3d7b2fdec7766"
+  },
+  "changed_sources": [],
+  "asset_sha256": {
+    "image-draw-bot-app-screenshot.png": "286e03e9eb7ae809a2cf37a443ca52e858a22fd8851aa3486f7cdf8d92c104fa",
+    "image-draw-bot-icon.png": "143e2271c4309fe593c4fe3f86d5ec116212dabd324bf6b32507f28feec1b300"
+  },
+  "method": "7 alternating baseline/candidate complete-call timing pairs after one equal warmup; allocations are separate fresh-process probes.",
+  "limits": [
+    "Mobile timing includes resize, alpha composition, RGB conversion and PNG encoding; queue snapshot capture and HTTP transport are outside the encoder boundary.",
+    "Capture timing executes actual display_screen with native widget allocation and Tk bitmap upload replaced by inert boundaries; this is not native GUI latency.",
+    "tracemalloc measures Python allocations and excludes Pillow native pixel cores. Linux ru_maxrss is a process high-water mark affected by earlier input construction and allocator reuse; growth is not an exact encoder live-set size.",
+    "Source-copy payload counts only observed identity-source Pillow copy calls, using four bytes per pixel for these RGB/RGBA inputs. It is not a total RSS reduction claim.",
+    "All slower and unchanged controls are retained. Results describe these existing-asset inputs on this host, not universal speed or memory improvements."
+  ],
+  "cases": [
+    {
+      "case": "mobile-rgba-small",
+      "kind": "mobile",
+      "asset": "image-draw-bot-icon.png",
+      "mode": "RGBA",
+      "size": [
+        256,
+        256
+      ],
+      "input_pixel_sha256": "54e5f223cf4efe7b6fba1923371bb0b447f1f8cc5f15ec2ebf8bf2ddb1206973",
+      "output_parity": true,
+      "output": {
+        "png_sha256": "7e148e9bfbfb431ff5f153a1975d79473d9630307f335236a60a26381c463f38",
+        "png_bytes": 17988
+      },
+      "round_order": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "raw_seconds": {
+        "baseline": [
+          0.022065797000323073,
+          0.11790446899976814,
+          0.029977515000609856,
+          0.04930618399976083,
+          0.023909143000309996,
+          0.059544463999372965,
+          0.02025983699968492
+        ],
+        "candidate": [
+          0.025220000999979675,
+          0.06491043999994872,
+          0.027448161999927834,
+          0.02376666899999691,
+          0.02100661599979503,
+          0.03709155500018824,
+          0.019387206000828883
+        ]
+      },
+      "median_seconds": {
+        "baseline": 0.029977515000609856,
+        "candidate": 0.025220000999979675
+      },
+      "candidate_over_baseline": 0.8412972522727986,
+      "allocations": {
+        "baseline": {
+          "rss_before_kib": 28372,
+          "rss_after_kib": 28372,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 68728,
+          "source_copy_count": 1,
+          "source_copy_pixel_payload_bytes": 262144
+        },
+        "candidate": {
+          "rss_before_kib": 28360,
+          "rss_after_kib": 28360,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 68451,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        }
+      }
+    },
+    {
+      "case": "mobile-rgba-bound",
+      "kind": "mobile",
+      "asset": "image-draw-bot-icon.png",
+      "mode": "RGBA",
+      "size": [
+        1600,
+        1600
+      ],
+      "input_pixel_sha256": "3d4074d076bdf90e1551d598603edb27d85f43b4d88a984202c55bc7c8f57e2a",
+      "output_parity": true,
+      "output": {
+        "png_sha256": "a855e95f1dc696b3c1306a2485ce245625ff2dd1a5395e166c6d97e2dbe817c8",
+        "png_bytes": 244369
+      },
+      "round_order": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "raw_seconds": {
+        "baseline": [
+          2.6086831660004464,
+          0.4474492259996623,
+          2.357517899999948,
+          0.5793045680002251,
+          0.43214489000001777,
+          0.4429184910004551,
+          0.8838343950001217
+        ],
+        "candidate": [
+          0.9260691859999497,
+          0.6743979970005967,
+          0.5164243700000952,
+          1.2639169310004945,
+          0.4493965669998943,
+          0.4039542150003399,
+          0.5934783520006022
+        ]
+      },
+      "median_seconds": {
+        "baseline": 0.5793045680002251,
+        "candidate": 0.5934783520006022
+      },
+      "candidate_over_baseline": 1.0244668949345683,
+      "allocations": {
+        "baseline": {
+          "rss_before_kib": 75740,
+          "rss_after_kib": 75740,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 355713,
+          "source_copy_count": 1,
+          "source_copy_pixel_payload_bytes": 10240000
+        },
+        "candidate": {
+          "rss_before_kib": 75740,
+          "rss_after_kib": 75740,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 355372,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        }
+      }
+    },
+    {
+      "case": "mobile-rgba-reduced",
+      "kind": "mobile",
+      "asset": "image-draw-bot-icon.png",
+      "mode": "RGBA",
+      "size": [
+        2400,
+        2400
+      ],
+      "input_pixel_sha256": "46ea573c3555d65aaadecabf7075b81e153b8076d9814778a3d5240d100264f2",
+      "output_parity": true,
+      "output": {
+        "png_sha256": "df8003ed70cb77f79b8967cb65dbaf2742efc272dca3575042e0995c05618ca2",
+        "png_bytes": 251670
+      },
+      "round_order": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "raw_seconds": {
+        "baseline": [
+          2.1498367220001455,
+          1.692708003000007,
+          1.7010540129995206,
+          1.0290088520005156,
+          1.1747447629995804,
+          2.1248733419997734,
+          0.8591482019992327
+        ],
+        "candidate": [
+          1.3635215570002401,
+          1.1465992339999502,
+          1.701649104000353,
+          1.0808413190006831,
+          0.7114931440000873,
+          0.7383079679993898,
+          0.6672621810002966
+        ]
+      },
+      "median_seconds": {
+        "baseline": 1.692708003000007,
+        "candidate": 1.0808413190006831
+      },
+      "candidate_over_baseline": 0.6385279192188463,
+      "allocations": {
+        "baseline": {
+          "rss_before_kib": 125808,
+          "rss_after_kib": 125808,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 356286,
+          "source_copy_count": 1,
+          "source_copy_pixel_payload_bytes": 23040000
+        },
+        "candidate": {
+          "rss_before_kib": 125808,
+          "rss_after_kib": 125808,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 355665,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        }
+      }
+    },
+    {
+      "case": "mobile-rgb-control",
+      "kind": "mobile",
+      "asset": "image-draw-bot-icon.png",
+      "mode": "RGB",
+      "size": [
+        1600,
+        1600
+      ],
+      "input_pixel_sha256": "bb31cc695b08404a175af76024b40c0e60390461461dfd4ac6cf82d39e210330",
+      "output_parity": true,
+      "output": {
+        "png_sha256": "45402f49ce733c454ac8dd2becf415ce57384138802ebcdf89937f9752b7db4d",
+        "png_bytes": 246707
+      },
+      "round_order": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "raw_seconds": {
+        "baseline": [
+          0.843133628999567,
+          0.7543764820002252,
+          0.8833038659995509,
+          0.8956929550004133,
+          0.6109564739999769,
+          0.5201432280000517,
+          0.511629227999947
+        ],
+        "candidate": [
+          0.7304179510001632,
+          2.0404796550001265,
+          0.6015927750004266,
+          1.2019189660004486,
+          0.5367436850001468,
+          0.6766087630003312,
+          0.4798049040000478
+        ]
+      },
+      "median_seconds": {
+        "baseline": 0.7543764820002252,
+        "candidate": 0.6766087630003312
+      },
+      "candidate_over_baseline": 0.8969112626712682,
+      "allocations": {
+        "baseline": {
+          "rss_before_kib": 125808,
+          "rss_after_kib": 125808,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 355761,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        },
+        "candidate": {
+          "rss_before_kib": 125808,
+          "rss_after_kib": 125808,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 355761,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        }
+      }
+    },
+    {
+      "case": "mobile-l-control",
+      "kind": "mobile",
+      "asset": "image-draw-bot-icon.png",
+      "mode": "L",
+      "size": [
+        256,
+        256
+      ],
+      "input_pixel_sha256": "ee9fc5c85ba4792159a3de0ed46c157d0a0114f731109f5ddfa0276b1a019102",
+      "output_parity": true,
+      "output": {
+        "png_sha256": "a511d48d71dc227dc3a1935cb7c007229f08f4fe576ef540920040712b4bea47",
+        "png_bytes": 15204
+      },
+      "round_order": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "raw_seconds": {
+        "baseline": [
+          0.06395961999987776,
+          0.04513029500049015,
+          0.03427993199966295,
+          0.04945980800039251,
+          0.05297567799971148,
+          0.08698420699965936,
+          0.06026427100005094
+        ],
+        "candidate": [
+          0.05448327900012373,
+          0.043307154000103765,
+          0.036436163999496785,
+          0.0423129010005141,
+          0.052224509000552644,
+          0.06050719700033369,
+          0.0907340240000849
+        ]
+      },
+      "median_seconds": {
+        "baseline": 0.05297567799971148,
+        "candidate": 0.052224509000552644
+      },
+      "candidate_over_baseline": 0.9858204929597517,
+      "allocations": {
+        "baseline": {
+          "rss_before_kib": 125808,
+          "rss_after_kib": 125808,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 68776,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        },
+        "candidate": {
+          "rss_before_kib": 125808,
+          "rss_after_kib": 125808,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 68776,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        }
+      }
+    },
+    {
+      "case": "capture-rgb-screen",
+      "kind": "capture",
+      "asset": "image-draw-bot-app-screenshot.png",
+      "mode": "RGB",
+      "size": [
+        1920,
+        1048
+      ],
+      "input_pixel_sha256": "3ee238abbb7359d0ed6bce19143b947069c89ac577838d7b0e1dce1b0e7e6805",
+      "output_parity": true,
+      "output": {
+        "mode": "RGB",
+        "size": [
+          800,
+          437
+        ],
+        "pixel_sha256": "e055a2c7879ebe1cf85f36c8711288a513383730c2c727194e82d7fb9f39636b"
+      },
+      "round_order": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "raw_seconds": {
+        "baseline": [
+          0.047206434000145236,
+          0.041650275999927544,
+          0.05394417399929807,
+          0.03742819699982647,
+          0.03495934900001885,
+          0.04182836400013912,
+          0.04975073500008875
+        ],
+        "candidate": [
+          0.04958920999979455,
+          0.04171198499989259,
+          0.07067066000035993,
+          0.03041441700042924,
+          0.03492263499992987,
+          0.06032737999976234,
+          0.03601626700037741
+        ]
+      },
+      "median_seconds": {
+        "baseline": 0.04182836400013912,
+        "candidate": 0.04171198499989259
+      },
+      "candidate_over_baseline": 0.9972177013605854,
+      "allocations": {
+        "baseline": {
+          "rss_before_kib": 134612,
+          "rss_after_kib": 134612,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 2092,
+          "source_copy_count": 1,
+          "source_copy_pixel_payload_bytes": 8048640
+        },
+        "candidate": {
+          "rss_before_kib": 134612,
+          "rss_after_kib": 134612,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 2076,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        }
+      }
+    },
+    {
+      "case": "capture-rgba-screen",
+      "kind": "capture",
+      "asset": "image-draw-bot-app-screenshot.png",
+      "mode": "RGBA",
+      "size": [
+        1920,
+        1048
+      ],
+      "input_pixel_sha256": "b7e95e700fc0eb1b58d7fd26f7dc706ad84633793f48ece332aa22527f839975",
+      "output_parity": true,
+      "output": {
+        "mode": "RGBA",
+        "size": [
+          800,
+          437
+        ],
+        "pixel_sha256": "e353b00b3d76aa1a3b181d97c3f54b42969612aed9110a5f4b90606cb30a4012"
+      },
+      "round_order": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "raw_seconds": {
+        "baseline": [
+          0.07238185700043687,
+          0.059844039999916276,
+          0.05652996099979646,
+          0.06015214899980492,
+          0.03936910100037494,
+          0.0520445740003197,
+          0.03767932200025825
+        ],
+        "candidate": [
+          0.07408161300008942,
+          0.08870510700035084,
+          0.0524793429995043,
+          0.09231264500067482,
+          0.039458393000131764,
+          0.041422784000133106,
+          0.042818496999643685
+        ]
+      },
+      "median_seconds": {
+        "baseline": 0.05652996099979646,
+        "candidate": 0.0524793429995043
+      },
+      "candidate_over_baseline": 0.9283456431129194,
+      "allocations": {
+        "baseline": {
+          "rss_before_kib": 134812,
+          "rss_after_kib": 134812,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 2495,
+          "source_copy_count": 1,
+          "source_copy_pixel_payload_bytes": 8048640
+        },
+        "candidate": {
+          "rss_before_kib": 134812,
+          "rss_after_kib": 134812,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 2045,
+          "source_copy_count": 0,
+          "source_copy_pixel_payload_bytes": 0
+        }
+      }
+    },
+    {
+      "case": "capture-small-control",
+      "kind": "capture",
+      "asset": "image-draw-bot-icon.png",
+      "mode": "RGBA",
+      "size": [
+        63,
+        37
+      ],
+      "input_pixel_sha256": "72b9cbfa31d30207d058306e2ed81860e86674eca252d5834128ea9c1eb68a7e",
+      "output_parity": true,
+      "output": {
+        "mode": "RGBA",
+        "size": [
+          63,
+          37
+        ],
+        "pixel_sha256": "72b9cbfa31d30207d058306e2ed81860e86674eca252d5834128ea9c1eb68a7e"
+      },
+      "round_order": [
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "baseline"
+        ],
+        [
+          "baseline",
+          "candidate"
+        ]
+      ],
+      "raw_seconds": {
+        "baseline": [
+          2.2789000468037557e-05,
+          9.759999556990806e-06,
+          8.224999874073546e-06,
+          9.205000424117316e-06,
+          7.653000466234516e-06,
+          1.9140999938827008e-05,
+          8.110000635497272e-06
+        ],
+        "candidate": [
+          1.873299970611697e-05,
+          1.2896999578515533e-05,
+          1.2137000339862425e-05,
+          1.0913000551227015e-05,
+          1.1662000360956881e-05,
+          0.00025962899962905794,
+          1.8550999811850488e-05
+        ]
+      },
+      "median_seconds": {
+        "baseline": 9.205000424117316e-06,
+        "candidate": 1.2896999578515533e-05
+      },
+      "candidate_over_baseline": 1.4010862557621502,
+      "allocations": {
+        "baseline": {
+          "rss_before_kib": 134832,
+          "rss_after_kib": 134832,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 2037,
+          "source_copy_count": 1,
+          "source_copy_pixel_payload_bytes": 9324
+        },
+        "candidate": {
+          "rss_before_kib": 134832,
+          "rss_after_kib": 134832,
+          "rss_high_water_growth_kib": 0,
+          "whole_call_python_peak_bytes": 1981,
+          "source_copy_count": 1,
+          "source_copy_pixel_payload_bytes": 9324
+        }
+      }
+    }
+  ]
+}

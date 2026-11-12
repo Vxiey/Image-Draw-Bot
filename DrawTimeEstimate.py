@@ -468,7 +468,7 @@ def _measured_throughput_floor(plan: dict[str, Any], seconds: float) -> tuple[fl
     key = str(options.get("profile_key") or "").lower()
     try:
         from RealSpeedBudget import load_profile
-        stored = load_profile(key)
+        stored = load_profile(key, options=options)
         if not stored or int(stored.get("samples") or 0) <= 0:
             return seconds, 0
         pps = float(stored.get("paths_per_second") or 0.0)

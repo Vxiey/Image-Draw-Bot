@@ -58,7 +58,10 @@ class StorageProfilesBatch02Tests(unittest.TestCase):
             legacy, current, other = [root / name for name in ('legacy.json', 'timing.json', 'other.json')]
             options = {'profile_key': 'microsoft-paint'}
             old = {'version': 1, 'profiles': {timing._legacy_key(options):
-                {'samples': 5, 'ratio_ema': 2, 'mape_ema': .1}}}
+                {'samples': 5, 'ratio_ema': 2, 'mape_ema': .1,
+                 # A legacy key is usable only when its measured delivery
+                 # context is explicit. Reset must still prevent reimport.
+                 'delivery_signature': timing._delivery_signature(options)}}}
             legacy.write_text(json.dumps(old), encoding='utf-8')
             current.write_text(json.dumps(old), encoding='utf-8')
             other.write_text('preserve this other profile', encoding='utf-8')
