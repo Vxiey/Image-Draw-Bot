@@ -1,0 +1,6 @@
+{
+  "status": "aborted",
+  "scope": "Initial batch40 complete-discovery attempt",
+  "cause": "Temporary root runner omitted an if __name__ == __main__ guard. Spawned process-pool workers executed discovery again and reopened the shared log. This was a runner defect; it does not establish a product regression or complete-suite result.",
+  "resolution": "Interrupted the process group, added the main guard, and restarted the same complete discovery after the micro-detail ownership review fix. No product test, assertion, skip policy, or timeout was weakened."
+}

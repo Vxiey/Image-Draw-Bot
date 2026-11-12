@@ -8,6 +8,7 @@ areas classified as low detail.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import ExitStack, closing
 from typing import Sequence
 
 ADAPTIVE_DETAIL_MODES = (
@@ -97,14 +98,17 @@ def _settings(effective_mode: str) -> tuple[int, int, int, int]:
 
 def _detail_signal(rgb):
     from PIL import ImageChops, ImageFilter
-    gray = rgb.convert("L")
-    # A local luminance range is stable on flat colours/gradients yet spikes on
-    # object borders, thin lines, text-like marks and facial features.  Unlike
-    # FIND_EDGES it does not create a strong response across a uniformly bright
-    # region.
-    local_hi = gray.filter(ImageFilter.MaxFilter(5))
-    local_lo = gray.filter(ImageFilter.MinFilter(5))
-    return ImageChops.subtract(local_hi, local_lo)
+    # Equal-luminance colours can still form a distinct edge or a tiny mark.
+    # Inspect the largest local channel range so red/green and blue/orange
+    # detail survives smoothing. Uniform colours and grayscale retain their
+    # original range; RGB is already composited against the visible background.
+    with ExitStack() as owned:
+        local_hi = owned.enter_context(closing(rgb.filter(ImageFilter.MaxFilter(5))))
+        local_lo = owned.enter_context(closing(rgb.filter(ImageFilter.MinFilter(5))))
+        ranges = owned.enter_context(closing(ImageChops.subtract(local_hi, local_lo)))
+        red, green, blue = [owned.enter_context(closing(channel)) for channel in ranges.split()]
+        first = owned.enter_context(closing(ImageChops.lighter(red, green)))
+        return ImageChops.lighter(first, blue)
 
 
 def _restore_source_alpha(source, visible_rgb, processed_rgb, cancelled):
@@ -142,81 +146,106 @@ def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = Fa
     """Return (processed_rgba, protected_mask_L, stats).
 
     The protected mask is 255 around detail that should not be simplified and 0
-    in flat regions.  Alpha is preserved exactly.
+    in flat regions. Alpha is preserved exactly. Only returned images escape the
+    explicit temporary owner, including when a retained error interrupts work.
     """
     from PIL import Image, ImageFilter, ImageChops, ImageDraw
 
     validate_adaptive_detail(mode)
     if cancelled():
         raise InterruptedError()
-    source = image.convert("RGBA")
-    if mode == "Off" or source.width < 4 or source.height < 4:
-        total = source.width * source.height
-        mask = Image.new("L", source.size, 255)
-        stats = AdaptiveDetailStats(mode, "Off", 0.0, total, 0, total, 100.0, 1, 255)
+    published = set()
+    with ExitStack() as owned:
+        def close_unpublished(value):
+            if id(value) not in published:
+                value.close()
+
+        def keep(value):
+            owned.callback(close_unpublished, value)
+            return value
+
+        source = keep(image.convert("RGBA"))
+        if mode == "Off" or source.width < 4 or source.height < 4:
+            total = source.width * source.height
+            mask = keep(Image.new("L", source.size, 255))
+            stats = AdaptiveDetailStats(mode, "Off", 0.0, total, 0, total, 100.0, 1, 255)
+            if cancelled():
+                raise InterruptedError()
+            published.update((id(source), id(mask)))
+            return source, mask, stats
         if cancelled():
             raise InterruptedError()
-        return source, mask, stats
-    if cancelled():
-        raise InterruptedError()
 
-    alpha = source.getchannel("A")
-    flat = Image.new("RGBA", source.size, "white")
-    flat.alpha_composite(source)
-    rgb = flat.convert("RGB")
-    signal = _detail_signal(rgb)
-    complexity = _complexity_from_detail(signal)
-    effective = resolve_adaptive_detail(mode, complexity_score=complexity,
-                                        drawing_mode=drawing_mode, preview=preview)
-    threshold, dilation, smooth_kernel, _micro = _settings(effective)
-    protected = signal.point(lambda v: 255 if v >= threshold else 0)
-    if dilation > 1:
-        protected = protected.filter(ImageFilter.MaxFilter(dilation))
+        alpha = keep(source.getchannel("A"))
+        opaque = alpha.getextrema() == (255, 255)
+        alpha.close()
+        flat = keep(Image.new("RGBA", source.size, "white"))
+        flat.alpha_composite(source)
+        rgb = keep(flat.convert("RGB"))
+        flat.close()
+        signal = keep(_detail_signal(rgb))
+        complexity = _complexity_from_detail(signal)
+        effective = resolve_adaptive_detail(mode, complexity_score=complexity,
+                                            drawing_mode=drawing_mode, preview=preview)
+        threshold, dilation, smooth_kernel, _micro = _settings(effective)
+        protected = keep(signal.point(lambda v: 255 if v >= threshold else 0))
+        signal.close()
+        if dilation > 1:
+            previous = protected
+            protected = keep(previous.filter(ImageFilter.MaxFilter(dilation)))
+            previous.close()
 
-    # A centered subject is already an explicit user preference elsewhere in the
-    # app. Protect its core a little more so smooth backgrounds can be simplified
-    # without softening a face/object in the middle.
-    if subject_focus and source.width >= 12 and source.height >= 12:
-        focus = Image.new("L", source.size, 0)
-        d = ImageDraw.Draw(focus)
-        mx = max(2, round(source.width * 0.17))
-        my = max(2, round(source.height * 0.12))
-        d.ellipse((mx, my, source.width - 1 - mx, source.height - 1 - my), fill=96)
-        protected = ImageChops.lighter(protected, focus)
+        # Soft focus complements hard local edge protection.
+        if subject_focus and source.width >= 12 and source.height >= 12:
+            focus = keep(Image.new("L", source.size, 0))
+            draw = ImageDraw.Draw(focus)
+            try:
+                mx = max(2, round(source.width * 0.17))
+                my = max(2, round(source.height * 0.12))
+                draw.ellipse((mx, my, source.width - 1 - mx, source.height - 1 - my), fill=96)
+            finally:
+                draw = None
+            previous = protected
+            protected = keep(ImageChops.lighter(previous, focus))
+            previous.close()
+            focus.close()
 
-    if cancelled():
-        raise InterruptedError()
+        if cancelled():
+            raise InterruptedError()
 
-    if smooth_kernel <= 1:
-        simplified = rgb
-    elif effective == "Strong simplify":
-        # Median removes isolated texture/noise while a light local resample makes
-        # large flat gradients cheaper to quantize. Protected detail is restored.
-        simplified = rgb.filter(ImageFilter.MedianFilter(smooth_kernel))
-        w2, h2 = max(1, source.width // 2), max(1, source.height // 2)
-        simplified = simplified.resize((w2, h2), Image.Resampling.BILINEAR).resize(source.size, Image.Resampling.BILINEAR)
-    else:
-        simplified = rgb.filter(ImageFilter.MedianFilter(smooth_kernel))
+        if smooth_kernel <= 1:
+            simplified = rgb
+        elif effective == "Strong simplify":
+            simplified = keep(rgb.filter(ImageFilter.MedianFilter(smooth_kernel)))
+            w2, h2 = max(1, source.width // 2), max(1, source.height // 2)
+            reduced = keep(simplified.resize((w2, h2), Image.Resampling.BILINEAR))
+            simplified.close()
+            simplified = keep(reduced.resize(source.size, Image.Resampling.BILINEAR))
+            reduced.close()
+        else:
+            simplified = keep(rgb.filter(ImageFilter.MedianFilter(smooth_kernel)))
 
-    # Use the soft 96-valued focus area as a blend instead of a hard mask; hard
-    # detail edges remain 255 and are copied exactly from the source.
-    processed_rgb = Image.composite(rgb, simplified, protected)
-    if alpha.getextrema() == (255, 255):
-        processed = processed_rgb.convert("RGBA")
-    else:
-        processed = _restore_source_alpha(source, rgb, processed_rgb, cancelled)
+        processed_rgb = keep(Image.composite(rgb, simplified, protected))
+        if simplified is not rgb:
+            simplified.close()
+        if opaque:
+            processed = keep(processed_rgb.convert("RGBA"))
+        else:
+            processed = keep(_restore_source_alpha(source, rgb, processed_rgb, cancelled))
+        processed_rgb.close()
+        rgb.close()
 
-    hist = protected.histogram()
-    # Any nonzero protection contributes; 255 pixels are hard-protected.
-    protected_pixels = sum(hist[1:])
-    total = max(1, source.width * source.height)
-    stats = AdaptiveDetailStats(
-        mode, effective, complexity, protected_pixels, total - protected_pixels,
-        total, protected_pixels * 100.0 / total, smooth_kernel, threshold,
-    )
-    if cancelled():
-        raise InterruptedError()
-    return processed, protected, stats
+        hist = protected.histogram()
+        protected_pixels = sum(hist[1:])
+        total = max(1, source.width * source.height)
+        stats = AdaptiveDetailStats(
+            mode, effective, complexity, protected_pixels, total - protected_pixels,
+            total, protected_pixels * 100.0 / total, smooth_kernel, threshold,
+        )
+        if cancelled():
+            raise InterruptedError()
+        published.update((id(processed), id(protected)))
+        return processed, protected, stats
 
 
 def prune_flat_micro_strokes(groups: Sequence[Sequence[tuple[int, int, int, int]]], protected_mask,

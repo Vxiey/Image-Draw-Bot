@@ -164,19 +164,19 @@ def _orientation_paths(comp, orientation: str, component_map: np.ndarray, cancel
     """Reuse PixelStrokeEngine's verified lossless merger for one forced orientation."""
     from PixelStrokeEngine import (
         _merge_horizontal_runs_lossless, _transpose_segments, _transpose_paths,
-        _path_inside_component, _paths_exact_component_coverage,
+        _paths_exact_component_coverage,
     )
     runs=comp.horizontal_runs if orientation=="horizontal" else comp.vertical_runs
     if orientation=="horizontal":
         paths=_merge_horizontal_runs_lossless(runs,cancelled=cancelled)
     else:
         paths=_transpose_paths(_merge_horizontal_runs_lossless(_transpose_segments(runs),cancelled=cancelled))
-    exact=all(_path_inside_component(p,component_map,comp.component_id) for p in paths)
-    exact=exact and _paths_exact_component_coverage(paths,component_map,comp)
+    # The exact coverage verifier already checks every segment's containment.
+    # A separate scan did identical work and omitted this caller's Stop check.
+    exact=_paths_exact_component_coverage(paths,component_map,comp,cancelled=cancelled)
     if not exact:
         paths=_individual_paths(runs)
-        exact=all(_path_inside_component(p,component_map,comp.component_id) for p in paths)
-        exact=exact and _paths_exact_component_coverage(paths,component_map,comp)
+        exact=_paths_exact_component_coverage(paths,component_map,comp,cancelled=cancelled)
     return list(paths),bool(exact)
 
 
@@ -756,21 +756,28 @@ def _schedule(choices, sequences_by_component, size, model,options,fill_regions,
         selected_rows=[by_id[i] for i in ids if i in by_id]
         cursor=None;current_color=None;current_brush=initial_brush;ordered=[]
         for phase in PHASES:
-            phase_rows=[c for c in selected_rows if c.phase==phase]
-            if phase_rows:current_color=None
-            colors={int(c.color_index) for c in phase_rows}
+            # Component membership cannot change within this ordering attempt.
+            # Partition once; every changing cursor comparison still computes
+            # its original transition cost and preserves the stable row order.
+            batches={}
+            for serial,c in enumerate(selected_rows):
+                if serial%256==0:_cancel(cancelled)
+                if c.phase==phase:
+                    batches.setdefault(int(c.color_index),[]).append(c)
+            if batches:current_color=None
+            colors=set(batches)
             while colors:
                 _cancel(cancelled)
                 if current_color in colors:
                     ci=int(current_color)
                 else:
                     def color_key(color):
-                        rows=[c for c in phase_rows if int(c.color_index)==color]
+                        rows=batches[color]
                         best=min((transition_seconds(c,cursor,current_color,current_brush) for c in rows),default=0.0)
                         gain=max((c.gain_per_ms for c in rows),default=0.0)
                         return (best,-gain,color)
                     ci=min(colors,key=color_key)
-                batch=[c for c in phase_rows if int(c.color_index)==ci]
+                batch=batches[ci]
                 if len(batch)<=96:
                     ordering_stats["greedy_batches"]+=1
                     remaining=list(batch)

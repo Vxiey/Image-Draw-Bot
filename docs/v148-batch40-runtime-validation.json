@@ -1,0 +1,1370 @@
+{
+  "baseline_commit": "888116094b91758dded968a7e3b5559683db9ad7",
+  "current_source_sha256": {
+    "ResourceAllocation.py": "59c6d69cc8247251bcc666aa79ac7a1005c8122d6fa121592b2cb1868b5e1595",
+    "UniversalGpuAcceleration.py": "10be233a5eb89b26008097b624f3a43fb0762d90e4cfff14b7f1683fb209042b",
+    "AccuracyEvaluator.py": "bc9af121c4662d9bb907961a1f8e1cf77394e1059744bb6e8347a90360d3ac76",
+    "benchmark_v148_runtime_batch40_palette.py": "6a114e22a79fb8baacbfe9bb320e1900842a432dd5f2c26bb7e96f254f2b51e1",
+    "benchmark_v148_runtime_batch40_errors.py": "08a411a823d1289d0bff3e6ebac2075a7793e1aabfdf57ce7fe5896326fb54d9",
+    "test_v148_runtime_batch40_completion.py": "19bfd414114efd70508ec49f95ea203e446abb03e0df3c6c75c48f7dc2e1eb40",
+    "test_v148_runtime_batch40_error_tiles.py": "11c0653fddec7d7bcf0e8058d98e5f9716d87bf0f5cd9e7284228ff0cc5b47b9",
+    "test_v148_runtime_batch40_normalization.py": "28b01395eeb730e6bc15ea49d7e317a728eda214e0af50a154b515684a7dbf05",
+    "test_v148_storage_batch02_resources.py": "8951b18e683e1a5e55573c27925583d5c4f1f2265eae5f2d5edbc1117d0c0437",
+    "test_v148_platform_batch19_profile_observation.py": "e603e54eae4a4da420b1ee97e13f2043c064fa5180846b2a04a7c9c9722923ad",
+    "test_v148_gpu_numeric.py": "63fe13b39bb78ea0cda559138082e98b13add2526ef70bbcce5521bc79da198e",
+    "test_v148_platform_batch22_numeric_ownership.py": "d44c643bff2af3c3584df53044ca7f5776c3959cf7872a282807fa23858ef2bb",
+    "test_step23_universal_gpu_acceleration_v10146.py": "9aee04f4d60543a97dbddaa393ce9adff359745604fac32f1b78a4879a54a1f6",
+    "test_v148_colour_batch29_accuracy_inputs.py": "2452e2a26827929cb5be2286e9260b208d5b68625631c460fcaacbbaeb261258",
+    "test_v148_platform_batch39_cpu_palette.py": "2e591facac0e6e5be45e6d6362d735f7ebfe5cd6a28f4cf3ea750d65882ba898",
+    "test_v148_platform_batch26_palette_boundaries.py": "28e3c619b2f6d674a4e3d0f3660347d0963350d41d7a8fbe0a36a0ad578428cc",
+    "test_v148_platform_batch25_palette_preparation.py": "321a5a609b848a85c1b457e06ab1f86894473520430a2d427dc3e8559d62c758",
+    "test_gpu_pipeline_optimization.py": "78980829dbc7af2d88944e26ca0755695a716c03cba6e397a9def7eb468eefa8",
+    "test_v148_platform_batch03_numeric.py": "fd20862ccb38f8f249db5f95bacb09d0032f4cf53b61f9ea514a7ab379a8f200",
+    "test_gpu_route_regressions.py": "79848a1fe4f94fa962f27dd491d718cfdeebff6edd19fbd213959be12e4fa337",
+    "test_v148_resource_safety.py": "2b457b0176f28fe959a6c66e4beb00e4bcda83afe1a310f2ee642ee5ee117230",
+    "test_v148_colour_batch05_resources.py": "a2e99167e67c23db4af0e05ae18ce9968b92593a67658eebc32774eb38260887",
+    "test_v148_platform_batch20_gpu_cache.py": "8a9a2a79301f289aaccc323ce522cf0429a8fc630f24a16e45d9f213139b86c5"
+  },
+  "sources_unchanged_during_run": true,
+  "command": [
+    "/workspace/scratch/7954b07f6790/Image-Draw-Bot/.venv/bin/python",
+    "-m",
+    "unittest",
+    "-q",
+    "test_v148_runtime_batch40_completion",
+    "test_v148_runtime_batch40_error_tiles",
+    "test_v148_runtime_batch40_normalization",
+    "test_v148_storage_batch02_resources",
+    "test_v148_platform_batch19_profile_observation",
+    "test_v148_gpu_numeric",
+    "test_v148_platform_batch22_numeric_ownership",
+    "test_step23_universal_gpu_acceleration_v10146",
+    "test_v148_colour_batch29_accuracy_inputs",
+    "test_v148_platform_batch39_cpu_palette",
+    "test_v148_platform_batch26_palette_boundaries",
+    "test_v148_platform_batch25_palette_preparation",
+    "test_gpu_pipeline_optimization",
+    "test_v148_platform_batch03_numeric",
+    "test_gpu_route_regressions",
+    "test_v148_resource_safety",
+    "test_v148_colour_batch05_resources",
+    "test_v148_platform_batch20_gpu_cache"
+  ],
+  "wall_seconds": 15.64940619700019,
+  "exit_code": 0,
+  "raw_output": "----------------------------------------------------------------------\nRan 157 tests in 14.020s\n\nOK (skipped=2)\n",
+  "historical_red": {
+    "baseline_commit": "888116094b91758dded968a7e3b5559683db9ad7",
+    "product_sha256": {
+      "ResourceAllocation.py": "91cbbde88cc5eeac844e1db911fcc92409686dc496c9be3311c927e621de85b7",
+      "UniversalGpuAcceleration.py": "6bc72dd8e79d6f9f27d8f10d3a660b55dd0a6ceed487fafd72d37066f6a81a24"
+    },
+    "tests_sha256": {
+      "test_v148_runtime_batch40_completion.py": "19bfd414114efd70508ec49f95ea203e446abb03e0df3c6c75c48f7dc2e1eb40",
+      "test_v148_runtime_batch40_error_tiles.py": "11c0653fddec7d7bcf0e8058d98e5f9716d87bf0f5cd9e7284228ff0cc5b47b9",
+      "test_v148_runtime_batch40_normalization.py": "28b01395eeb730e6bc15ea49d7e317a728eda214e0af50a154b515684a7dbf05"
+    },
+    "test_modules": [
+      "test_v148_runtime_batch40_completion",
+      "test_v148_runtime_batch40_error_tiles",
+      "test_v148_runtime_batch40_normalization"
+    ],
+    "tests_run": 16,
+    "failures": 14,
+    "errors": 7,
+    "skipped": 0,
+    "passed": false,
+    "raw_output": "test_actual_worker_timeout_keeps_original_exception_identity (test_v148_runtime_batch40_completion.ExecutorCompletionRaceTests.test_actual_worker_timeout_keeps_original_exception_identity) ... ok\ntest_success_between_poll_timeout_and_done_is_collected_in_order (test_v148_runtime_batch40_completion.ExecutorCompletionRaceTests.test_success_between_poll_timeout_and_done_is_collected_in_order) ... ERROR\ntest_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) ... \n  test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='rows', operation='oklab') ... FAIL\n  test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='rows', operation='pair') ... FAIL\n  test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='rows', operation='channels') ... FAIL\n  test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='rows', operation='edges') ... FAIL\n  test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='columns', operation='oklab') ... FAIL\n  test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='columns', operation='pair') ... FAIL\n  test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='columns', operation='channels') ... FAIL\n  test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='columns', operation='edges') ... FAIL\ntest_empty_work_respects_stop_before_publication (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_work_respects_stop_before_publication) ... ok\ntest_interrupted_observation_can_retry_without_reusing_partial_state (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_interrupted_observation_can_retry_without_reusing_partial_state) ... FAIL\ntest_ordinary_profile_failure_still_selects_cpu (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_ordinary_profile_failure_still_selects_cpu) ... ok\ntest_profile_interruption_never_falls_back_to_heavy_cpu_work (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_profile_interruption_never_falls_back_to_heavy_cpu_work) ... \n  test_profile_interruption_never_falls_back_to_heavy_cpu_work (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_profile_interruption_never_falls_back_to_heavy_cpu_work) (observation=False) ... FAIL\n  test_profile_interruption_never_falls_back_to_heavy_cpu_work (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_profile_interruption_never_falls_back_to_heavy_cpu_work) (observation=True) ... FAIL\ntest_cancel_after_one_channel_tile_releases_partial_output (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_cancel_after_one_channel_tile_releases_partial_output) ... FAIL\ntest_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) ... \n  test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(8640, 12, 4)) ... ERROR\n  test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(8640, -12, 4)) ... ERROR\n  test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(12, 8640, 4)) ... ERROR\n  test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(3395520, 12, 4)) ... ERROR\n  test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(3395520, 3395520, 12, 4)) ... ERROR\ntest_failed_native_attempt_uses_the_bounded_real_cpu_reduction (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_failed_native_attempt_uses_the_bounded_real_cpu_reduction) ... FAIL\ntest_perceptual_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_perceptual_error_uses_bounded_reductions_and_matches_dense_oracle) ... ERROR\ntest_single_rgb_keeps_the_original_numpy_scalar_contract (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_single_rgb_keeps_the_original_numpy_scalar_contract) ... ok\ntest_all_public_numeric_callers_retain_integer_byte_scale (test_v148_runtime_batch40_normalization.RgbNormalizationTests.test_all_public_numeric_callers_retain_integer_byte_scale) ... ok\ntest_new_float_owner_survives_division_without_second_rgb_allocation (test_v148_runtime_batch40_normalization.RgbNormalizationTests.test_new_float_owner_survives_division_without_second_rgb_allocation) ... FAIL\ntest_normalized_float_input_remains_borrowed_and_byte_scaled_float_is_copied (test_v148_runtime_batch40_normalization.RgbNormalizationTests.test_normalized_float_input_remains_borrowed_and_byte_scaled_float_is_copied) ... ok\ntest_numeric_dtypes_ranges_and_strides_preserve_exact_normalized_values (test_v148_runtime_batch40_normalization.RgbNormalizationTests.test_numeric_dtypes_ranges_and_strides_preserve_exact_normalized_values) ... ok\n\n======================================================================\nERROR: test_success_between_poll_timeout_and_done_is_collected_in_order (test_v148_runtime_batch40_completion.ExecutorCompletionRaceTests.test_success_between_poll_timeout_and_done_is_collected_in_order)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 47, in test_success_between_poll_timeout_and_done_is_collected_in_order\n    actual = allocation.parallel_map(operation, [3, 1, 2, 5],\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/ResourceAllocation.py\", line 355, in parallel_map\n    value = current.result(timeout=.05)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 36, in boundary\n    return result(future, timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py\", line 458, in result\n    raise TimeoutError()\nTimeoutError\n\n======================================================================\nERROR: test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(8640, 12, 4))\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 36, in test_channel_error_uses_bounded_reductions_and_matches_dense_oracle\n    actual, metadata = gpu.pixel_channel_error(source, target, gpu_mode='CPU')\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 112, in checked\n    \"\"\"Withhold cancelled results without retaining their private array owners.\"\"\"\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 626, in pixel_channel_error\n    with used_cuda_device(cp, _cuda_device_id(route.backend_id)):\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 33, in bounded\n    raise MemoryError('Scalar channel reduction exceeds its scratch budget')\nMemoryError: Scalar channel reduction exceeds its scratch budget\n\n======================================================================\nERROR: test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(8640, -12, 4))\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 36, in test_channel_error_uses_bounded_reductions_and_matches_dense_oracle\n    actual, metadata = gpu.pixel_channel_error(source, target, gpu_mode='CPU')\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 112, in checked\n    \"\"\"Withhold cancelled results without retaining their private array owners.\"\"\"\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 626, in pixel_channel_error\n    with used_cuda_device(cp, _cuda_device_id(route.backend_id)):\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 33, in bounded\n    raise MemoryError('Scalar channel reduction exceeds its scratch budget')\nMemoryError: Scalar channel reduction exceeds its scratch budget\n\n======================================================================\nERROR: test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(12, 8640, 4))\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 36, in test_channel_error_uses_bounded_reductions_and_matches_dense_oracle\n    actual, metadata = gpu.pixel_channel_error(source, target, gpu_mode='CPU')\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 112, in checked\n    \"\"\"Withhold cancelled results without retaining their private array owners.\"\"\"\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 626, in pixel_channel_error\n    with used_cuda_device(cp, _cuda_device_id(route.backend_id)):\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 33, in bounded\n    raise MemoryError('Scalar channel reduction exceeds its scratch budget')\nMemoryError: Scalar channel reduction exceeds its scratch budget\n\n======================================================================\nERROR: test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(3395520, 12, 4))\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 36, in test_channel_error_uses_bounded_reductions_and_matches_dense_oracle\n    actual, metadata = gpu.pixel_channel_error(source, target, gpu_mode='CPU')\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 112, in checked\n    \"\"\"Withhold cancelled results without retaining their private array owners.\"\"\"\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 626, in pixel_channel_error\n    with used_cuda_device(cp, _cuda_device_id(route.backend_id)):\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 33, in bounded\n    raise MemoryError('Scalar channel reduction exceeds its scratch budget')\nMemoryError: Scalar channel reduction exceeds its scratch budget\n\n======================================================================\nERROR: test_channel_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_channel_error_uses_bounded_reductions_and_matches_dense_oracle) (strides=(3395520, 3395520, 12, 4))\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 36, in test_channel_error_uses_bounded_reductions_and_matches_dense_oracle\n    actual, metadata = gpu.pixel_channel_error(source, target, gpu_mode='CPU')\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 112, in checked\n    \"\"\"Withhold cancelled results without retaining their private array owners.\"\"\"\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 626, in pixel_channel_error\n    with used_cuda_device(cp, _cuda_device_id(route.backend_id)):\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 33, in bounded\n    raise MemoryError('Scalar channel reduction exceeds its scratch budget')\nMemoryError: Scalar channel reduction exceeds its scratch budget\n\n======================================================================\nERROR: test_perceptual_error_uses_bounded_reductions_and_matches_dense_oracle (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_perceptual_error_uses_bounded_reductions_and_matches_dense_oracle)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 55, in test_perceptual_error_uses_bounded_reductions_and_matches_dense_oracle\n    source, target, error, metadata = gpu.perceptual_pair(self.source, target, gpu_mode='CPU')\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 112, in checked\n    \"\"\"Withhold cancelled results without retaining their private array owners.\"\"\"\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 562, in perceptual_pair\n    def oklab_array(rgb: np.ndarray, *, gpu_mode: str = \"Auto\", profile: ProfileInput = None,\n                   ^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 559, in cpu\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 52, in bounded\n    raise MemoryError('Scalar perceptual reduction exceeds its scratch budget')\nMemoryError: Scalar perceptual reduction exceeds its scratch budget\n\n======================================================================\nFAIL: test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='rows', operation='oklab')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 92, in test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device\n    opened.assert_not_called()\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 910, in assert_not_called\n    raise AssertionError(msg)\nAssertionError: Expected '_opencl_context' to not have been called. Called 1 times.\nCalls: [call('opencl:0:0')].\n\n======================================================================\nFAIL: test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='rows', operation='pair')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 94, in test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device\n    self.assertEqual(gpu.backend_health_snapshot(), {})\nAssertionError: {'opencl:0:0|oklab': 'RuntimeError: Zero-size native buffers are invalid'} != {}\n- {'opencl:0:0|oklab': 'RuntimeError: Zero-size native buffers are invalid'}\n+ {}\n\n======================================================================\nFAIL: test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='rows', operation='channels')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 92, in test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device\n    opened.assert_not_called()\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 910, in assert_not_called\n    raise AssertionError(msg)\nAssertionError: Expected '_opencl_context' to not have been called. Called 1 times.\nCalls: [call('opencl:0:0')].\n\n======================================================================\nFAIL: test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='rows', operation='edges')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 94, in test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device\n    self.assertEqual(gpu.backend_health_snapshot(), {})\nAssertionError: {'opencl:0:0|oklab': 'RuntimeError: Zero-s[106 chars]lid'} != {}\n+ {}\n- {'opencl:0:0|oklab': 'RuntimeError: Zero-size native buffers are invalid',\n-  'opencl:0:0|pixel_math': 'RuntimeError: Zero-size native buffers are invalid'}\n\n======================================================================\nFAIL: test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='columns', operation='oklab')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 94, in test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device\n    self.assertEqual(gpu.backend_health_snapshot(), {})\nAssertionError: {'opencl:0:0|oklab': 'RuntimeError: Zero-s[106 chars]lid'} != {}\n+ {}\n- {'opencl:0:0|oklab': 'RuntimeError: Zero-size native buffers are invalid',\n-  'opencl:0:0|pixel_math': 'RuntimeError: Zero-size native buffers are invalid'}\n\n======================================================================\nFAIL: test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='columns', operation='pair')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 94, in test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device\n    self.assertEqual(gpu.backend_health_snapshot(), {})\nAssertionError: {'opencl:0:0|oklab': 'RuntimeError: Zero-s[106 chars]lid'} != {}\n+ {}\n- {'opencl:0:0|oklab': 'RuntimeError: Zero-size native buffers are invalid',\n-  'opencl:0:0|pixel_math': 'RuntimeError: Zero-size native buffers are invalid'}\n\n======================================================================\nFAIL: test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='columns', operation='channels')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 94, in test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device\n    self.assertEqual(gpu.backend_health_snapshot(), {})\nAssertionError: {'opencl:0:0|oklab': 'RuntimeError: Zero-s[106 chars]lid'} != {}\n+ {}\n- {'opencl:0:0|oklab': 'RuntimeError: Zero-size native buffers are invalid',\n-  'opencl:0:0|pixel_math': 'RuntimeError: Zero-size native buffers are invalid'}\n\n======================================================================\nFAIL: test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device) (shape='columns', operation='edges')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 94, in test_empty_numeric_arrays_do_not_open_or_quarantine_a_measured_device\n    self.assertEqual(gpu.backend_health_snapshot(), {})\nAssertionError: {'opencl:0:0|oklab': 'RuntimeError: Zero-s[106 chars]lid'} != {}\n+ {}\n- {'opencl:0:0|oklab': 'RuntimeError: Zero-size native buffers are invalid',\n-  'opencl:0:0|pixel_math': 'RuntimeError: Zero-size native buffers are invalid'}\n\n======================================================================\nFAIL: test_interrupted_observation_can_retry_without_reusing_partial_state (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_interrupted_observation_can_retry_without_reusing_partial_state)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 129, in test_interrupted_observation_can_retry_without_reusing_partial_state\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n\n======================================================================\nFAIL: test_profile_interruption_never_falls_back_to_heavy_cpu_work (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_profile_interruption_never_falls_back_to_heavy_cpu_work) (observation=False)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 114, in test_profile_interruption_never_falls_back_to_heavy_cpu_work\n    gpu.oklab_array(self.source, profile=observed)\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 112, in checked\n    \"\"\"Withhold cancelled results without retaining their private array owners.\"\"\"\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 514, in oklab_array\n    if alpha is not None:\n               ^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 1139, in __call__\n    return self._mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 1143, in _mock_call\n    return self._execute_mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 1198, in _execute_mock_call\n    raise effect\nAssertionError: Cancelled routing ran CPU work\n\n======================================================================\nFAIL: test_profile_interruption_never_falls_back_to_heavy_cpu_work (test_v148_runtime_batch40_completion.NumericRoutingCompletionTests.test_profile_interruption_never_falls_back_to_heavy_cpu_work) (observation=True)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_completion.py\", line 114, in test_profile_interruption_never_falls_back_to_heavy_cpu_work\n    gpu.oklab_array(self.source, profile=observed)\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 112, in checked\n    \"\"\"Withhold cancelled results without retaining their private array owners.\"\"\"\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/UniversalGpuAcceleration.py\", line 514, in oklab_array\n    if alpha is not None:\n               ^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 1139, in __call__\n    return self._mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 1143, in _mock_call\n    return self._execute_mock_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 1198, in _execute_mock_call\n    raise effect\nAssertionError: Cancelled routing ran CPU work\n\n======================================================================\nFAIL: test_cancel_after_one_channel_tile_releases_partial_output (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_cancel_after_one_channel_tile_releases_partial_output)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 96, in test_cancel_after_one_channel_tile_releases_partial_output\n    self.assertLessEqual(blocks[0], 65536 * 3)\nAssertionError: 848880 not less than or equal to 196608\n\n======================================================================\nFAIL: test_failed_native_attempt_uses_the_bounded_real_cpu_reduction (test_v148_runtime_batch40_error_tiles.ErrorReductionTileTests.test_failed_native_attempt_uses_the_bounded_real_cpu_reduction)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_error_tiles.py\", line 115, in test_failed_native_attempt_uses_the_bounded_real_cpu_reduction\n    self.assertLessEqual(max(sizes), 65536 * 3)\nAssertionError: 848880 not less than or equal to 196608\n\n======================================================================\nFAIL: test_new_float_owner_survives_division_without_second_rgb_allocation (test_v148_runtime_batch40_normalization.RgbNormalizationTests.test_new_float_owner_survives_division_without_second_rgb_allocation)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/workspace/scratch/7954b07f6790/Image-Draw-Bot/test_v148_runtime_batch40_normalization.py\", line 43, in test_new_float_owner_survives_division_without_second_rgb_allocation\n    self.assertIs(actual, converted[0])\nAssertionError: array([[[0.11764706, 0.1764706 , 0.25490198],\n        [0.09803922, 0.16862746, 0.23529412],\n        [0.0627451 , 0.16470589, 0.2       ],\n        ...,\n        [0.11764706, 0.12156863, 0.13725491],\n        [0.11764706, 0.12156863, 0.13725491],\n        [0.11764706, 0.12156863, 0.13725491]],\n\n       [[0.11372549, 0.1764706 , 0.24313726],\n        [0.21960784, 0.2784314 , 0.34901962],\n        [0.21960784, 0.28627452, 0.3529412 ],\n        ...,\n        [0.13725491, 0.14117648, 0.15686275],\n        [0.13725491, 0.14117648, 0.15686275],\n        [0.13725491, 0.14117648, 0.15686275]],\n\n       [[0.08235294, 0.14901961, 0.1882353 ],\n        [0.27450982, 0.31764707, 0.38039216],\n        [0.40784314, 0.40392157, 0.5294118 ],\n        ...,\n        [0.11764706, 0.12156863, 0.13725491],\n        [0.11764706, 0.12156863, 0.13725491],\n        [0.11764706, 0.12156863, 0.13725491]],\n\n       ...,\n\n       [[0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        ...,\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275]],\n\n       [[0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        ...,\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275]],\n\n       [[0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        ...,\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275],\n        [0.92941177, 0.95686275, 0.95686275]]],\n      shape=(393, 720, 3), dtype=float32) is not array([[[ 30.,  45.,  65.],\n        [ 25.,  43.,  60.],\n        [ 16.,  42.,  51.],\n        ...,\n        [ 30.,  31.,  35.],\n        [ 30.,  31.,  35.],\n        [ 30.,  31.,  35.]],\n\n       [[ 29.,  45.,  62.],\n        [ 56.,  71.,  89.],\n        [ 56.,  73.,  90.],\n        ...,\n        [ 35.,  36.,  40.],\n        [ 35.,  36.,  40.],\n        [ 35.,  36.,  40.]],\n\n       [[ 21.,  38.,  48.],\n        [ 70.,  81.,  97.],\n        [104., 103., 135.],\n        ...,\n        [ 30.,  31.,  35.],\n        [ 30.,  31.,  35.],\n        [ 30.,  31.,  35.]],\n\n       ...,\n\n       [[237., 244., 244.],\n        [237., 244., 244.],\n        [237., 244., 244.],\n        ...,\n        [237., 244., 244.],\n        [237., 244., 244.],\n        [237., 244., 244.]],\n\n       [[237., 244., 244.],\n        [237., 244., 244.],\n        [237., 244., 244.],\n        ...,\n        [237., 244., 244.],\n        [237., 244., 244.],\n        [237., 244., 244.]],\n\n       [[237., 244., 244.],\n        [237., 244., 244.],\n        [237., 244., 244.],\n        ...,\n        [237., 244., 244.],\n        [237., 244., 244.],\n        [237., 244., 244.]]], shape=(393, 720, 3), dtype=float32)\n\n----------------------------------------------------------------------\nRan 16 tests in 3.644s\n\nFAILED (failures=14, errors=7)\n"
+  },
+  "rejected_custom_branch_experiment": {
+    "baseline_commit": "888116094b91758dded968a7e3b5559683db9ad7",
+    "baseline_module_sha256": "6bc72dd8e79d6f9f27d8f10d3a660b55dd0a6ceed487fafd72d37066f6a81a24",
+    "current_module_sha256": "5adbd974a2796b57a901bb774ccb3b97b33d6aab59a8afad6393b6851be63cbb",
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "numpy": "2.3.5",
+    "pairs": 6,
+    "workloads": [
+      {
+        "label": "Paint reference",
+        "asset": "paint-tools-reference.png",
+        "size": [
+          76,
+          76
+        ],
+        "palette_count": 20,
+        "settings": {
+          "gpu_mode": "CPU",
+          "color_rendering": "Perceptual match",
+          "color_fidelity": "Faithful",
+          "skip_white": true,
+          "custom_mode": "Calibrated palette"
+        },
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 17.976519000058033,
+            "after_ms": 11.130907999813644
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 10.559713000020565,
+            "before_ms": 9.623449000173423
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 11.152692999985447,
+            "after_ms": 9.731752999869059
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 7.921641999928397,
+            "before_ms": 9.786383000118803
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 8.35647300027631,
+            "after_ms": 8.497183000145014
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 13.680900000053953,
+            "before_ms": 17.29580800019903
+          }
+        ],
+        "before_median_ms": 10.469538000052125,
+        "after_median_ms": 10.145732999944812,
+        "reduction_percent": 3.0928298851936042,
+        "allocations": {
+          "before_python_traced_peak_bytes": 4250566,
+          "after_python_traced_peak_bytes": 4234014
+        },
+        "output_sha256": [
+          "7a4d22759dbf005b2b054cd20fbdb1768f585cb86cfb40022505ad16b8870bd5",
+          "b82169206847a0dfc0d13111f7342d2801b790bb7243b91abcf52fc95975a2b3"
+        ]
+      },
+      {
+        "label": "Application screenshot RGB",
+        "asset": "image-draw-bot-app-screenshot.webp",
+        "size": [
+          480,
+          262
+        ],
+        "palette_count": 20,
+        "settings": {
+          "gpu_mode": "CPU",
+          "color_rendering": "RGB nearest",
+          "color_fidelity": "Balanced",
+          "skip_white": true,
+          "custom_mode": "Calibrated palette"
+        },
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 40.635805999954755,
+            "after_ms": 41.69381599967892
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 47.639064000122744,
+            "before_ms": 100.40099600018948
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 54.792327000086516,
+            "after_ms": 41.318368000247574
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 43.36945299974104,
+            "before_ms": 44.61827600016477
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 41.368068999872776,
+            "after_ms": 46.292257999994035
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 42.9199149998567,
+            "before_ms": 55.95710699981282
+          }
+        ],
+        "before_median_ms": 49.70530150012564,
+        "after_median_ms": 43.14468399979887,
+        "reduction_percent": 13.199029685616503,
+        "allocations": {
+          "before_python_traced_peak_bytes": 2420678,
+          "after_python_traced_peak_bytes": 2399974
+        },
+        "output_sha256": [
+          "4817377cd091b3b484c1431eaf63458e076b436945de6057d63fe73a85a4da35",
+          "12db7d24d9f808a70e8ecedc4afc79707cfb5fea94e39de9c9312c250a6e8809"
+        ]
+      },
+      {
+        "label": "Icon sparse custom",
+        "asset": "image-draw-bot-icon.png",
+        "size": [
+          192,
+          192
+        ],
+        "palette_count": 70,
+        "settings": {
+          "gpu_mode": "CPU",
+          "color_rendering": "Perceptual match",
+          "color_fidelity": "Faithful",
+          "skip_white": true,
+          "custom_mode": "Custom colors first"
+        },
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 288.48261199982517,
+            "after_ms": 274.744685999849
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 328.0409949998102,
+            "before_ms": 1398.906397999781
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 893.9359500000137,
+            "after_ms": 507.80555500023183
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 655.8452899998883,
+            "before_ms": 233.8302250000197
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 205.03025300013178,
+            "after_ms": 1122.251272000085
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 256.080946000111,
+            "before_ms": 831.4358759998868
+          }
+        ],
+        "before_median_ms": 559.959243999856,
+        "after_median_ms": 417.923275000021,
+        "reduction_percent": 25.365411951279704,
+        "allocations": {
+          "before_python_traced_peak_bytes": 7418820,
+          "after_python_traced_peak_bytes": 7451394
+        },
+        "output_sha256": [
+          "c160f47fc1a790391ace61eaf18537f1e3bbc5e95bcc65db2f7325924421c15c",
+          "a419ee782824c7f468569104e09794e372053f3db67e0a166354a7717326d0a1"
+        ]
+      },
+      {
+        "label": "Screenshot sparse custom",
+        "asset": "image-draw-bot-app-screenshot.webp",
+        "size": [
+          192,
+          105
+        ],
+        "palette_count": 70,
+        "settings": {
+          "gpu_mode": "CPU",
+          "color_rendering": "RGB nearest",
+          "color_fidelity": "Off",
+          "skip_white": true,
+          "custom_mode": "Custom colors first"
+        },
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 22.503726999730134,
+            "after_ms": 38.395132000005106
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 26.789337000082014,
+            "before_ms": 29.75468800013914
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 27.07724900028552,
+            "after_ms": 31.729176999760966
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 24.300819000018237,
+            "before_ms": 21.660195000094973
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 24.937231999956566,
+            "after_ms": 22.465564999947674
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 21.611466000194923,
+            "before_ms": 26.97227999988172
+          }
+        ],
+        "before_median_ms": 25.954755999919144,
+        "after_median_ms": 25.545078000050125,
+        "reduction_percent": 1.5784313282324658,
+        "allocations": {
+          "before_python_traced_peak_bytes": 2471196,
+          "after_python_traced_peak_bytes": 2504402
+        },
+        "output_sha256": [
+          "ec32ca697c2e988efd4f6177e6992832ab78ccc5f36ef37e7fb1f33f61f6432a",
+          "db2af86133891042e7f4cc69bae1cdee940ea88e9481839a9a04f98c6f991698"
+        ]
+      }
+    ],
+    "scope": "Whole public CPU palette mapper, exact outputs and metadata on every invocation. Balanced order; allocation probes separate from timed samples. Local shared Linux environment; no physical GPU, drawing-time or process-RSS claim."
+  },
+  "concurrent_validation_experiment": {
+    "baseline_commit": "888116094b91758dded968a7e3b5559683db9ad7",
+    "baseline_module_sha256": "6bc72dd8e79d6f9f27d8f10d3a660b55dd0a6ceed487fafd72d37066f6a81a24",
+    "current_module_sha256": "5adbd974a2796b57a901bb774ccb3b97b33d6aab59a8afad6393b6851be63cbb",
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "numpy": "2.3.5",
+    "pairs": 6,
+    "workloads": [
+      {
+        "label": "Paint reference",
+        "asset": "paint-tools-reference.png",
+        "size": [
+          76,
+          76
+        ],
+        "palette_count": 20,
+        "settings": {
+          "gpu_mode": "CPU",
+          "color_rendering": "Perceptual match",
+          "color_fidelity": "Faithful",
+          "skip_white": true,
+          "custom_mode": "Calibrated palette"
+        },
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 10.281515999849944,
+            "after_ms": 8.439578999968944
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 9.159872000054747,
+            "before_ms": 8.767542999976286
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 10.843231999842828,
+            "after_ms": 27.86990100003095
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 16.700685000159865,
+            "before_ms": 8.366872999886255
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 13.86091700032921,
+            "after_ms": 8.71141399966291
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 8.739530000184459,
+            "before_ms": 36.333206000108476
+          }
+        ],
+        "before_median_ms": 10.562373999846386,
+        "after_median_ms": 8.949701000119603,
+        "reduction_percent": 15.268092189788362,
+        "allocations": {
+          "before_python_traced_peak_bytes": 4250566,
+          "after_python_traced_peak_bytes": 4234014
+        },
+        "output_sha256": [
+          "7a4d22759dbf005b2b054cd20fbdb1768f585cb86cfb40022505ad16b8870bd5",
+          "b82169206847a0dfc0d13111f7342d2801b790bb7243b91abcf52fc95975a2b3"
+        ]
+      },
+      {
+        "label": "Application screenshot RGB",
+        "asset": "image-draw-bot-app-screenshot.webp",
+        "size": [
+          480,
+          262
+        ],
+        "palette_count": 20,
+        "settings": {
+          "gpu_mode": "CPU",
+          "color_rendering": "RGB nearest",
+          "color_fidelity": "Balanced",
+          "skip_white": true,
+          "custom_mode": "Calibrated palette"
+        },
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 47.56672900020931,
+            "after_ms": 43.0556669998623
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 36.71973700011222,
+            "before_ms": 38.999376999981905
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 38.987868999811326,
+            "after_ms": 36.338740999781294
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 34.9226280000039,
+            "before_ms": 42.42232500018872
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 42.81130999970628,
+            "after_ms": 40.27684299990142
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 36.45672899983765,
+            "before_ms": 38.4646369998336
+          }
+        ],
+        "before_median_ms": 40.71085100008531,
+        "after_median_ms": 36.588232999974935,
+        "reduction_percent": 10.126582714033017,
+        "allocations": {
+          "before_python_traced_peak_bytes": 2420678,
+          "after_python_traced_peak_bytes": 2399974
+        },
+        "output_sha256": [
+          "4817377cd091b3b484c1431eaf63458e076b436945de6057d63fe73a85a4da35",
+          "12db7d24d9f808a70e8ecedc4afc79707cfb5fea94e39de9c9312c250a6e8809"
+        ]
+      },
+      {
+        "label": "Icon sparse custom",
+        "asset": "image-draw-bot-icon.png",
+        "size": [
+          192,
+          192
+        ],
+        "palette_count": 70,
+        "settings": {
+          "gpu_mode": "CPU",
+          "color_rendering": "Perceptual match",
+          "color_fidelity": "Faithful",
+          "skip_white": true,
+          "custom_mode": "Custom colors first"
+        },
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 156.42828599993663,
+            "after_ms": 219.65917099987564
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 658.7614120003309,
+            "before_ms": 291.8830210001033
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 261.880777999977,
+            "after_ms": 814.7244890001275
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 181.95301600007951,
+            "before_ms": 265.0940260000425
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 197.0817769997666,
+            "after_ms": 176.537429000291
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 264.2552530001012,
+            "before_ms": 162.5681070004248
+          }
+        ],
+        "before_median_ms": 229.4812774998718,
+        "after_median_ms": 241.95721199998843,
+        "reduction_percent": -5.436580550726466,
+        "allocations": {
+          "before_python_traced_peak_bytes": 7418820,
+          "after_python_traced_peak_bytes": 7451394
+        },
+        "output_sha256": [
+          "c160f47fc1a790391ace61eaf18537f1e3bbc5e95bcc65db2f7325924421c15c",
+          "a419ee782824c7f468569104e09794e372053f3db67e0a166354a7717326d0a1"
+        ]
+      },
+      {
+        "label": "Screenshot sparse custom",
+        "asset": "image-draw-bot-app-screenshot.webp",
+        "size": [
+          192,
+          105
+        ],
+        "palette_count": 70,
+        "settings": {
+          "gpu_mode": "CPU",
+          "color_rendering": "RGB nearest",
+          "color_fidelity": "Off",
+          "skip_white": true,
+          "custom_mode": "Custom colors first"
+        },
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 25.826065000273957,
+            "after_ms": 19.824947999950382
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 21.28769299997657,
+            "before_ms": 18.40741900014109
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 25.46495699971274,
+            "after_ms": 23.37410900008763
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 39.302230999965104,
+            "before_ms": 20.340181999927154
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 21.92692900007387,
+            "after_ms": 22.201815000244096
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 20.11026900026991,
+            "before_ms": 18.874122999932297
+          }
+        ],
+        "before_median_ms": 21.13355550000051,
+        "after_median_ms": 21.744754000110333,
+        "reduction_percent": -2.8920760641048204,
+        "allocations": {
+          "before_python_traced_peak_bytes": 2471196,
+          "after_python_traced_peak_bytes": 2504402
+        },
+        "output_sha256": [
+          "ec32ca697c2e988efd4f6177e6992832ab78ccc5f36ef37e7fb1f33f61f6432a",
+          "db2af86133891042e7f4cc69bae1cdee940ea88e9481839a9a04f98c6f991698"
+        ]
+      }
+    ],
+    "scope": "Whole public CPU palette mapper, exact outputs and metadata on every invocation. Balanced order; allocation probes separate from timed samples. Local shared Linux environment; no physical GPU, drawing-time or process-RSS claim."
+  },
+  "rejected_flat_gather_error_experiment": {
+    "baseline_commit": "888116094b91758dded968a7e3b5559683db9ad7",
+    "baseline_module_sha256": "6bc72dd8e79d6f9f27d8f10d3a660b55dd0a6ceed487fafd72d37066f6a81a24",
+    "current_module_sha256": "652e5af312d9a3580e9555c299486c1c34a17003c5640fe90dbefc4bab3c8b9d",
+    "source_asset": "assets/image-draw-bot-app-screenshot.webp",
+    "source_size": [
+      720,
+      393
+    ],
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "numpy": "2.3.5",
+    "pairs": 6,
+    "workloads": [
+      {
+        "workload": "Integer RGB normalization",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 2.3647719999644323,
+            "after_ms": 1.4934480000192707
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 1.436060000287398,
+            "before_ms": 3.106063999894104
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 1.6999970002871123,
+            "after_ms": 1.4756249997844861
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 1.430196999990585,
+            "before_ms": 2.62016400029097
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 1.6967320002549968,
+            "after_ms": 2.650629000072513
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 1.3438709997899423,
+            "before_ms": 3.105623999999807
+          }
+        ],
+        "before_median_ms": 2.492468000127701,
+        "after_median_ms": 1.455842500035942,
+        "reduction_percent": 41.59032332766751,
+        "allocations": {
+          "before_python_traced_peak_bytes": 6791964,
+          "before_python_traced_retained_bytes": 3396272,
+          "after_python_traced_peak_bytes": 4246082,
+          "after_python_traced_retained_bytes": 3396272
+        }
+      },
+      {
+        "workload": "Contiguous channel error",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 17.661775999840756,
+            "after_ms": 12.626503999854322
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 17.645159000039712,
+            "before_ms": 12.003119999917544
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 11.862765999921976,
+            "after_ms": 19.303146000311244
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 18.597770999804197,
+            "before_ms": 14.920821000032447
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 21.903650000240305,
+            "after_ms": 11.974569999892992
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 12.30459799990058,
+            "before_ms": 10.224441999980627
+          }
+        ],
+        "before_median_ms": 13.461970499974996,
+        "after_median_ms": 15.135831499947017,
+        "reduction_percent": -12.433996939564906,
+        "allocations": {
+          "before_python_traced_peak_bytes": 6792832,
+          "before_python_traced_retained_bytes": 1133464,
+          "after_python_traced_peak_bytes": 3101952,
+          "after_python_traced_retained_bytes": 1133512
+        }
+      },
+      {
+        "workload": "Strided channel error",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 40.874497999993764,
+            "after_ms": 122.64841899968815
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 140.8612790000916,
+            "before_ms": 26.080442999955267
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 36.026566000145976,
+            "after_ms": 48.579287999928056
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 41.814104999957635,
+            "before_ms": 22.906617999979062
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 23.41637300014554,
+            "after_ms": 160.0817830003507
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 47.46154000031311,
+            "before_ms": 26.556535000054282
+          }
+        ],
+        "before_median_ms": 26.318489000004774,
+        "after_median_ms": 85.6138534998081,
+        "reduction_percent": -225.2992734491428,
+        "allocations": {
+          "before_python_traced_peak_bytes": 6793000,
+          "before_python_traced_retained_bytes": 1133520,
+          "after_python_traced_peak_bytes": 4674984,
+          "after_python_traced_retained_bytes": 1133568
+        }
+      },
+      {
+        "workload": "Perceptual pair",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 35.68568599985156,
+            "after_ms": 36.50108299962085
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 38.77510199981771,
+            "before_ms": 38.84968200009098
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 35.269332000098075,
+            "after_ms": 50.66132900037701
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 37.811009000051854,
+            "before_ms": 39.22210500013534
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 39.273482999760745,
+            "after_ms": 38.97596600018005
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 37.37180100006299,
+            "before_ms": 47.72494799999549
+          }
+        ],
+        "before_median_ms": 39.03589350011316,
+        "after_median_ms": 38.29305549993478,
+        "reduction_percent": 1.9029614377245596,
+        "allocations": {
+          "before_python_traced_peak_bytes": 15848200,
+          "before_python_traced_retained_bytes": 7924888,
+          "after_python_traced_peak_bytes": 10924608,
+          "after_python_traced_retained_bytes": 7924936
+        }
+      },
+      {
+        "workload": "Complete accuracy evaluator",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 97.25748900018516,
+            "after_ms": 295.08358900011444
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 270.57150700011334,
+            "before_ms": 199.45652900014466
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 104.64137100007065,
+            "after_ms": 97.43486700017456
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 124.01660700015782,
+            "before_ms": 101.77371999998286
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 86.89877000006163,
+            "after_ms": 99.19812199996159
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 89.88574600016364,
+            "before_ms": 112.44746100010161
+          }
+        ],
+        "before_median_ms": 103.20754550002675,
+        "after_median_ms": 111.6073645000597,
+        "reduction_percent": -8.138764427869049,
+        "allocations": {
+          "before_python_traced_peak_bytes": 22655392,
+          "before_python_traced_retained_bytes": 19588,
+          "after_python_traced_peak_bytes": 17731832,
+          "after_python_traced_retained_bytes": 19604
+        }
+      }
+    ],
+    "scope": "Exact outputs/metadata on every invocation. Normalization and scalar reduction workloads are separate; the complete evaluator includes both. Balanced order and separate allocation probes. Local shared Linux environment; no process-RSS, GPU or physical drawing-speed claim."
+  },
+  "error_measurement_before_custom_branch_restriction": {
+    "baseline_commit": "888116094b91758dded968a7e3b5559683db9ad7",
+    "baseline_module_sha256": "6bc72dd8e79d6f9f27d8f10d3a660b55dd0a6ceed487fafd72d37066f6a81a24",
+    "current_module_sha256": "5adbd974a2796b57a901bb774ccb3b97b33d6aab59a8afad6393b6851be63cbb",
+    "source_asset": "assets/image-draw-bot-app-screenshot.webp",
+    "source_size": [
+      720,
+      393
+    ],
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "numpy": "2.3.5",
+    "pairs": 6,
+    "workloads": [
+      {
+        "workload": "Integer RGB normalization",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 4.017539999949804,
+            "after_ms": 1.708304999738175
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 4.474504999961937,
+            "before_ms": 4.902584999854298
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 8.96107500011567,
+            "after_ms": 1.6119490001074155
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 3.1194190000860544,
+            "before_ms": 3.505449999920529
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 3.7366340002336074,
+            "after_ms": 2.4301470002683345
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 3.125623999949312,
+            "before_ms": 3.128632999960246
+          }
+        ],
+        "before_median_ms": 3.8770870000917057,
+        "after_median_ms": 2.7747830001771945,
+        "reduction_percent": 28.43124231899976,
+        "allocations": {
+          "before_python_traced_peak_bytes": 6791964,
+          "before_python_traced_retained_bytes": 3396272,
+          "after_python_traced_peak_bytes": 4246082,
+          "after_python_traced_retained_bytes": 3396272
+        }
+      },
+      {
+        "workload": "Contiguous channel error",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 10.861265000130516,
+            "after_ms": 11.550188999990496
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 9.164254000097571,
+            "before_ms": 11.413247000291449
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 17.18629599963606,
+            "after_ms": 16.220718000113266
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 13.059580000117421,
+            "before_ms": 12.376525000036054
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 43.90081300016391,
+            "after_ms": 36.76323299987416
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 20.56761700032439,
+            "before_ms": 39.70707100006621
+          }
+        ],
+        "before_median_ms": 14.781410499836056,
+        "after_median_ms": 14.640149000115343,
+        "reduction_percent": 0.955669959387706,
+        "allocations": {
+          "before_python_traced_peak_bytes": 6792832,
+          "before_python_traced_retained_bytes": 1133464,
+          "after_python_traced_peak_bytes": 3101640,
+          "after_python_traced_retained_bytes": 1134056
+        }
+      },
+      {
+        "workload": "Strided channel error",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 24.02187400002731,
+            "after_ms": 20.777134000127262
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 35.85383599966008,
+            "before_ms": 46.032001999719796
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 23.598693999701936,
+            "after_ms": 22.555951999947865
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 29.286289000083343,
+            "before_ms": 23.715925000033167
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 42.8556159999971,
+            "after_ms": 28.019565000249713
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 41.8729739999435,
+            "before_ms": 26.55016800008525
+          }
+        ],
+        "before_median_ms": 25.28602100005628,
+        "after_median_ms": 28.652927000166528,
+        "reduction_percent": -13.315285944367261,
+        "allocations": {
+          "before_python_traced_peak_bytes": 6793000,
+          "before_python_traced_retained_bytes": 1133520,
+          "after_python_traced_peak_bytes": 3101808,
+          "after_python_traced_retained_bytes": 1134112
+        }
+      },
+      {
+        "workload": "Perceptual pair",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 41.98154300001988,
+            "after_ms": 73.79341499972725
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 36.39332700004161,
+            "before_ms": 41.9785789999878
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 35.69896399994832,
+            "after_ms": 113.10231900006329
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 61.6077800000312,
+            "before_ms": 49.391360000299755
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 42.35565599992697,
+            "after_ms": 37.90021000031629
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 49.349846000041,
+            "before_ms": 45.46965500003353
+          }
+        ],
+        "before_median_ms": 42.168599499973425,
+        "after_median_ms": 55.4788130000361,
+        "reduction_percent": -31.564276874006826,
+        "allocations": {
+          "before_python_traced_peak_bytes": 15848200,
+          "before_python_traced_retained_bytes": 7924888,
+          "after_python_traced_peak_bytes": 10924608,
+          "after_python_traced_retained_bytes": 7925416
+        }
+      },
+      {
+        "workload": "Complete accuracy evaluator",
+        "samples": [
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 106.26394600012645,
+            "after_ms": 187.74794199998723
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 129.58871000000727,
+            "before_ms": 232.1773740000026
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 188.29189300004145,
+            "after_ms": 172.9356280002321
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 155.0928169999679,
+            "before_ms": 131.21154400005253
+          },
+          {
+            "order": [
+              "before",
+              "after"
+            ],
+            "before_ms": 139.64980499986268,
+            "after_ms": 142.3861900002521
+          },
+          {
+            "order": [
+              "after",
+              "before"
+            ],
+            "after_ms": 163.8795700000628,
+            "before_ms": 163.44765800022287
+          }
+        ],
+        "before_median_ms": 151.54873150004278,
+        "after_median_ms": 159.48619350001536,
+        "reduction_percent": -5.237564129641248,
+        "allocations": {
+          "before_python_traced_peak_bytes": 22655392,
+          "before_python_traced_retained_bytes": 19852,
+          "after_python_traced_peak_bytes": 17732376,
+          "after_python_traced_retained_bytes": 21008
+        }
+      }
+    ],
+    "scope": "Exact outputs/metadata on every invocation. Normalization and scalar reduction workloads are separate; the complete evaluator includes both. Balanced order and separate allocation probes. Local shared Linux environment; no process-RSS, GPU or physical drawing-speed claim."
+  },
+  "scope": "CPU/real executors; device failures injected only at driver boundaries. No physical GPU, Paint or Windows execution. Custom-first optimization was rejected; its mixed evidence is retained rather than claimed as a gain."
+}

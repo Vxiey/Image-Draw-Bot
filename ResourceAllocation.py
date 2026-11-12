@@ -356,9 +356,13 @@ def parallel_map(function: Callable[[_T], _U], tasks: Sequence[_T], *, backend: 
                             break
                         except TimeoutError:
                             # A worker can itself raise TimeoutError; do not
-                            # mistake a completed failed task for a wait timeout.
+                            # mistake it for a wait timeout. A successful task
+                            # can also finish between result() timing out and
+                            # done(): collect that result instead of promoting
+                            # the expired poll into an operation failure.
                             if current.done():
-                                raise
+                                value = current.result()
+                                break
                 current = None
                 check_cancelled()
                 result.append(value)

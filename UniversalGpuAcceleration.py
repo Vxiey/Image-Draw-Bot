@@ -67,6 +67,11 @@ class HardwareProfileObservation:
             try:
                 from UniversalHardwareBenchmark import load_hardware_profile
                 self._profile = load_hardware_profile() or {}
+            except InterruptedError:
+                # Stop is not a negative hardware observation. Preserve its
+                # identity and allow a later explicit attempt to read afresh.
+                self._loaded = False
+                raise
             except Exception as error:
                 self._profile = {}
                 self._unavailable = f'hardware profile unavailable: {type(error).__name__}: {error}'
@@ -176,6 +181,10 @@ def select_route(workload: str, *, pixels: int, gpu_mode: str = "Auto",
     mode = str(gpu_mode or "Auto")
     if mode == "CPU":
         return _cpu_route(logical, px, "CPU mode selected")
+    if px == 0:
+        # OpenCL forbids zero-byte buffers/zero-size launches. Empty host work
+        # must not open a device or quarantine a healthy measured backend.
+        return _cpu_route(logical, 0, "Empty workload")
 
     try:
         from UniversalHardwareBenchmark import load_hardware_profile, preferred_backend
@@ -186,6 +195,8 @@ def select_route(workload: str, *, pixels: int, gpu_mode: str = "Auto",
         else:
             prof = profile if isinstance(profile, dict) else (load_hardware_profile() or {})
         pref = dict(preferred_backend(mapped, pixels=px, profile=prof) or {})
+    except InterruptedError:
+        raise
     except Exception as exc:
         return _cpu_route(logical, px, f"hardware profile unavailable: {type(exc).__name__}: {exc}")
 
@@ -274,17 +285,25 @@ def backend_health_snapshot() -> dict[str, str]:
 def _rgb01(array: np.ndarray) -> np.ndarray:
     raw = np.asarray(array)
     a = np.asarray(raw, dtype=np.float32)
+    # A dtype conversion already owns writable storage. Keep using that owner
+    # for scaling/clamping instead of allocating a second complete RGB image.
+    # Native float32 input remains borrowed unless its values need conversion.
+    owned = a is not raw
     if not np.all(np.isfinite(a)):
         raise ValueError('RGB channels must be finite')
     maximum = float(np.max(a)) if a.size else 0.0
     if np.issubdtype(raw.dtype, np.integer) or maximum > 1.5:
-        a = a / 255.0
+        if owned:
+            a /= 255.0
+        else:
+            a = a / 255.0
+            owned = True
         maximum /= 255.0
     # These internal consumers only read normalized input. Borrow valid float
     # buffers instead of copying both full preview frames at every nested call.
     if not a.size or (maximum <= 1.0 and float(np.min(a)) >= 0.0):
         return a
-    return np.clip(a, 0.0, 1.0).astype(np.float32, copy=False)
+    return np.clip(a, 0.0, 1.0, out=a if owned else None).astype(np.float32, copy=False)
 
 
 def _oklab_cpu(rgb: np.ndarray) -> np.ndarray:
@@ -499,6 +518,46 @@ def _float4_host(rgb: np.ndarray, *, alpha: np.ndarray | None = None, scale255: 
     return out
 
 
+def _paired_error_cpu(source, target, *, perceptual, cancelled):
+    """Reduce RGB/Lab pairs without full-image difference/square scratch cubes.
+
+    Both inputs are already normalized/validated by their caller. Preserve the
+    dense formula's arithmetic and scalar return for a single RGB triple.
+    Noncontiguous callers retain their strides in bounded slices, without
+    reshaping their complete image into another private RGB buffer.
+    """
+    def reduce(left, right):
+        difference = left - right
+        if perceptual:
+            return np.linalg.norm(difference, axis=-1).astype(np.float32, copy=False)
+        return np.mean(np.abs(difference), axis=-1, dtype=np.float32)
+
+    _cancel(cancelled)
+    pixels = source.size // 3
+    if pixels <= 65536:
+        return reduce(source, target)
+    output = np.empty(source.shape[:-1], dtype=np.float32)
+
+    def fill(left, right, sink):
+        # Basic slices retain the original strides. A flat-iterator gather
+        # would bound memory too, but needlessly copy every strided input.
+        per_row = left[0].size // 3
+        if per_row > 65536:
+            for index in range(len(left)):
+                _cancel(cancelled)
+                fill(left[index], right[index], sink[index])
+        else:
+            rows = max(1, 65536 // max(1, per_row))
+            for start in range(0, len(left), rows):
+                _cancel(cancelled)
+                end = min(len(left), start + rows)
+                sink[start:end] = reduce(left[start:end], right[start:end])
+
+    fill(source, target, output)
+    _cancel(cancelled)
+    return output
+
+
 @_check_completed
 def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInput = None,
                 cancelled: Callable[[], bool] = lambda: False) -> tuple[np.ndarray, dict[str, Any]]:
@@ -556,7 +615,8 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
         raise ValueError("perceptual_pair requires matching RGB arrays")
     pixels=int(np.prod(src.shape[:-1])); route=select_route("delta_e",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
     def cpu(fallback):
-        sl=_oklab_cpu(src);dl=_oklab_cpu(dst);de=np.linalg.norm(sl-dl,axis=-1).astype(np.float32,copy=False)
+        sl=_oklab_cpu(src);dl=_oklab_cpu(dst)
+        de=_paired_error_cpu(sl,dl,perceptual=True,cancelled=cancelled)
         return sl,dl,de,fallback.as_dict()
     if not route.accelerated:
         return cpu(route)
@@ -623,7 +683,7 @@ def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: s
     a=_rgb01(src_rgb);b=_rgb01(dst_rgb)
     if a.shape!=b.shape or a.ndim < 1 or a.shape[-1]!=3:raise ValueError("pixel_channel_error requires matching RGB arrays")
     pixels=int(np.prod(a.shape[:-1]));route=select_route("pixel_math",pixels=pixels,gpu_mode=gpu_mode,profile=profile)
-    if not route.accelerated:return np.mean(np.abs(a-b),axis=-1,dtype=np.float32),route.as_dict()
+    if not route.accelerated:return _paired_error_cpu(a,b,perceptual=False,cancelled=cancelled),route.as_dict()
     def accelerated():
         if route.backend_id.startswith("cuda:"):
             import cupy as cp
@@ -635,7 +695,7 @@ def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: s
                 mf=cl.mem_flags;a4=_float4_host(a);b4=_float4_host(b);ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4);bo=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4);program.ds_absdiff_kernel(queue,(pixels,),None,ba,bb,bo,np.int32(pixels));sink=np.empty((pixels,),dtype=np.float32);cl.enqueue_copy(queue,sink,bo);queue.finish();return sink.reshape(a.shape[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     return _run_accelerated(route, accelerated,
-        lambda fallback: (np.mean(np.abs(a-b),axis=-1,dtype=np.float32), fallback.as_dict()), cancelled)
+        lambda fallback: (_paired_error_cpu(a,b,perceptual=False,cancelled=cancelled), fallback.as_dict()), cancelled)
 
 
 def _palette_features(lab):
@@ -753,6 +813,11 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
             out = np.empty(pixels, dtype=np.int16)
             palette_lab = _oklab_cpu(pal / 255.0) if perceptual else None
             palette_features = _palette_features(palette_lab) if perceptual and color_fidelity in ('Balanced','Faithful') else None
+            # Ordinary matching needs no custom-winner buffers. Reuse its
+            # row indices and initialize winners directly from the first
+            # candidate block. Keep custom-first's established buffer lifetime:
+            # a persistent row vector raised its peak allocation in measurement.
+            row_indices = None if custom_first else np.arange(min(pixels, 4096))
             # Bound both dimensions: even a one-row panorama or a large custom
             # palette must never allocate a full pixel x palette distance cube.
             for start in range(0, pixels, 4096):
@@ -767,10 +832,14 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
                     tile = flat[start:end]
                 source_lab = _oklab_cpu(tile / 255.0) if perceptual else None
                 source_features = _palette_features(source_lab) if palette_features is not None else None
-                best = np.full(end-start, np.inf, dtype=np.float32)
-                custom_best = np.full_like(best, np.inf)
-                chosen = np.full(end-start, ids[0], dtype=np.int16)
-                custom_chosen = chosen.copy()
+                rows = None if custom_first else row_indices[:end-start]
+                if custom_first:
+                    best = np.full(end-start, np.inf, dtype=np.float32)
+                    custom_best = np.full_like(best, np.inf)
+                    chosen = np.full(end-start, ids[0], dtype=np.int16)
+                    custom_chosen = chosen.copy()
+                else:
+                    best = chosen = custom_best = custom_chosen = None
                 for p0 in range(0, len(ids), 32):
                     _cancel(cancelled)
                     p1 = min(len(ids), p0+32)
@@ -781,10 +850,17 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
                                              src_features=source_features,
                                              pal_features=None if palette_features is None else tuple(a[p0:p1] for a in palette_features))
                     pos = np.argmin(dist, axis=1)
-                    score = dist[np.arange(end-start), pos]
-                    better = score < best
-                    chosen[better] = ids[p0+pos[better]]
-                    best = np.minimum(best, score)
+                    score = dist[np.arange(end-start), pos] if custom_first else dist[rows, pos]
+                    if best is None:
+                        # Preserve the original first-candidate fallback even
+                        # for an unsupported nonfinite distance, and keep the
+                        # exact strict-less tie rule across candidate blocks.
+                        chosen = np.where(score < np.inf, ids[p0+pos], ids[0])
+                        best = np.minimum(np.inf, score)
+                    else:
+                        better = score < best
+                        chosen[better] = ids[p0+pos[better]]
+                        best = np.minimum(best, score)
                     if custom_first:
                         dist[:, ~custom[p0:p1].astype(bool)] = np.inf
                         pos = np.argmin(dist, axis=1)

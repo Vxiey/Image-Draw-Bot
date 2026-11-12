@@ -183,14 +183,18 @@ class WindowsMouse:
     @_serialized_input
     def move(self, x, y):
         self._require_input_armed()
-        if not self.held:
-            down=self.buttons_down()
-            if down:
-                raise InterruptedError('Stopped: a mouse button is held ('+', '.join(down)+'). Release it before moving the pointer.')
         x, y = round(x), round(y)
         # Validate against the complete virtual desktop before calling user32.
         normalize_position(x, y, self.desktop_rect())
         def send_position():
+            down = self.buttons_down()
+            if self.held:
+                # Recheck before every native send, including position retries.
+                # Only the left button belongs to this drag; other buttons are
+                # user input and may open a menu or navigate the target.
+                down = tuple(button for button in down if button != 'left')
+            if down:
+                raise InterruptedError('Stopped: a mouse button is held ('+', '.join(down)+'). Release it before moving the pointer.')
             if self.held and getattr(self, 'drag_backend', 'cursor') == 'sendinput':
                 self._send_absolute_move(x, y)
                 return

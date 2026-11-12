@@ -1,0 +1,355 @@
+{
+  "baseline": "888116094b91758dded968a7e3b5559683db9ad7",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "method": "6 alternating A/B pairs after warmup; separate traced-allocation pass; stage-local inputs prebuilt",
+  "limitations": [
+    "Linux CPU observations, not Windows drawing-time or GPU measurements.",
+    "Tracemalloc is not total RSS; vertical batching adds bounded transition-index scratch.",
+    "Stage performance is not an application-wide speed claim."
+  ],
+  "cases": [
+    {
+      "stage": "chromatic-detail",
+      "source": "palette derivative of golden-regression/small-detail-preservation.png",
+      "before": {
+        "changed_source_pixels": 10949,
+        "protected_pixels": 0
+      },
+      "after": {
+        "changed_source_pixels": 0,
+        "protected_pixels": 12894
+      }
+    },
+    {
+      "stage": "micro-detail",
+      "source": "golden-regression/red-bananas-texture.png",
+      "size": [
+        96,
+        64
+      ],
+      "exact": true,
+      "sha256": "a837e834e30ac34b1175ab28a585eef829dc0ff2ff596e50fd3476f4c8213b97",
+      "pairs_seconds": {
+        "before": [
+          0.000497,
+          0.000419,
+          0.000518,
+          0.000356,
+          0.000471,
+          0.000292
+        ],
+        "after": [
+          0.00066,
+          0.000314,
+          0.000633,
+          0.000318,
+          0.000557,
+          0.000297
+        ]
+      },
+      "median_seconds": {
+        "before": 0.000445,
+        "after": 0.00043749999999999995
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 180336,
+        "after": 180336
+      }
+    },
+    {
+      "stage": "vertical-runs",
+      "size": [
+        96,
+        64
+      ],
+      "exact": true,
+      "runs": 1721,
+      "sha256": "b0aec4ac4ffacbaf1921c39f68588490c61de711644341756885f5db837032b6",
+      "pairs_seconds": {
+        "before": [
+          0.003657,
+          0.002765,
+          0.001978,
+          0.006644,
+          0.00401,
+          0.00202
+        ],
+        "after": [
+          0.001605,
+          0.001637,
+          0.001794,
+          0.001589,
+          0.002631,
+          0.001623
+        ]
+      },
+      "median_seconds": {
+        "before": 0.0032110000000000003,
+        "after": 0.00163
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 238209,
+        "after": 255869
+      }
+    },
+    {
+      "stage": "complete-component-builder",
+      "size": [
+        96,
+        64
+      ],
+      "exact": true,
+      "pairs_seconds": {
+        "before": [
+          0.017362,
+          0.015301,
+          0.014858,
+          0.013068,
+          0.019555,
+          0.014926
+        ],
+        "after": [
+          0.011532,
+          0.014792,
+          0.012493,
+          0.014424,
+          0.014922,
+          0.013363
+        ]
+      },
+      "median_seconds": {
+        "before": 0.0151135,
+        "after": 0.0138935
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 722404,
+        "after": 722196
+      }
+    },
+    {
+      "stage": "hybrid-schedule",
+      "size": [
+        96,
+        64
+      ],
+      "timed": false,
+      "exact": true,
+      "components": 273,
+      "color_integer_reads": {
+        "before": 18738,
+        "after": 11312
+      },
+      "sha256": "1389bf05e90d4475186e038b7284365fea3ff472fc8d0974e74d48499c674038",
+      "pairs_seconds": {
+        "before": [
+          0.027089,
+          0.023049,
+          0.027825,
+          0.027006,
+          0.030953,
+          0.036585
+        ],
+        "after": [
+          0.027025,
+          0.030165,
+          0.023017,
+          0.027342,
+          0.044265,
+          0.037827
+        ]
+      },
+      "median_seconds": {
+        "before": 0.027457,
+        "after": 0.0287535
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 294520,
+        "after": 294744
+      }
+    },
+    {
+      "stage": "hybrid-schedule",
+      "size": [
+        96,
+        64
+      ],
+      "timed": true,
+      "exact": true,
+      "components": 273,
+      "color_integer_reads": {
+        "before": 18738,
+        "after": 11312
+      },
+      "sha256": "733f05f84440e16a8065ba47e9bd4480b0fda4db6fa846ac47af3c7926913e57",
+      "pairs_seconds": {
+        "before": [
+          0.033991,
+          0.026753,
+          0.026802,
+          0.04302,
+          0.023932,
+          0.030079
+        ],
+        "after": [
+          0.031503,
+          0.028739,
+          0.023352,
+          0.02671,
+          0.024176,
+          0.026166
+        ]
+      },
+      "median_seconds": {
+        "before": 0.0284405,
+        "after": 0.026438
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 347672,
+        "after": 347896
+      }
+    },
+    {
+      "stage": "micro-detail",
+      "source": "golden-regression/red-bananas-texture.png",
+      "size": [
+        360,
+        240
+      ],
+      "exact": true,
+      "sha256": "5ff43cb851772f54b2838934783affa24c44051fa2ad96df82a9ee2860c68d67",
+      "pairs_seconds": {
+        "before": [
+          0.003342,
+          0.002877,
+          0.004123,
+          0.001446,
+          0.001441,
+          0.001442
+        ],
+        "after": [
+          0.002193,
+          0.001628,
+          0.007114,
+          0.001864,
+          0.002276,
+          0.002927
+        ]
+      },
+      "median_seconds": {
+        "before": 0.0021615,
+        "after": 0.0022345
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 2162384,
+        "after": 2137880
+      }
+    },
+    {
+      "stage": "vertical-runs",
+      "size": [
+        360,
+        240
+      ],
+      "exact": true,
+      "runs": 6254,
+      "sha256": "95af898bc96413af8df96ec1f8c3a6885ff6e789e7a582fc4de5cedd9f1742b3",
+      "pairs_seconds": {
+        "before": [
+          0.009411,
+          0.010545,
+          0.009675,
+          0.013561,
+          0.008956,
+          0.014195
+        ],
+        "after": [
+          0.005366,
+          0.005665,
+          0.006157,
+          0.005568,
+          0.00533,
+          0.011295
+        ]
+      },
+      "median_seconds": {
+        "before": 0.010110000000000001,
+        "after": 0.0056165
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 858641,
+        "after": 931653
+      }
+    },
+    {
+      "stage": "complete-component-builder",
+      "size": [
+        360,
+        240
+      ],
+      "exact": true,
+      "pairs_seconds": {
+        "before": [
+          0.047921,
+          0.064075,
+          0.045843,
+          0.049995,
+          0.0526,
+          0.049475
+        ],
+        "after": [
+          0.048868,
+          0.048455,
+          0.046277,
+          0.044116,
+          0.048732,
+          0.053723
+        ]
+      },
+      "median_seconds": {
+        "before": 0.049735,
+        "after": 0.0485935
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 2280596,
+        "after": 2325228
+      }
+    },
+    {
+      "stage": "micro-detail",
+      "source": "golden-regression/red-bananas-texture.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "exact": true,
+      "sha256": "44784fce0b93b3668d04716c5942712bf34f6ad18913acf119e3059ecac8f824",
+      "pairs_seconds": {
+        "before": [
+          0.047768,
+          0.052128,
+          0.040138,
+          0.044919,
+          0.051683,
+          0.042703
+        ],
+        "after": [
+          0.041131,
+          0.033507,
+          0.036788,
+          0.032787,
+          0.079813,
+          0.042078
+        ]
+      },
+      "median_seconds": {
+        "before": 0.046343499999999996,
+        "after": 0.0389595
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 39323264,
+        "after": 7996454
+      }
+    }
+  ]
+}

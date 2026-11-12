@@ -279,7 +279,52 @@ def edge_map(rgb: np.ndarray, *, gpu_mode: str = "Auto", gpu_vram: str = "Auto",
             "edge_route": {"fallback_reason": f"{type(exc).__name__}: {exc}"}}
 
 
-def micro_detail_map(palette_index: np.ndarray, drawable: np.ndarray, edges: np.ndarray) -> np.ndarray:
+_FEATURE_TILE_SIDE = 256
+
+
+def _feature_tiles(shape):
+    """Tile one-neighbour feature calculations, retaining their real halo."""
+    height, width = shape
+    for top in range(0, height, _FEATURE_TILE_SIDE):
+        bottom = min(height, top + _FEATURE_TILE_SIDE)
+        for left in range(0, width, _FEATURE_TILE_SIDE):
+            right = min(width, left + _FEATURE_TILE_SIDE)
+            y0, y1 = max(0, top - 1), min(height, bottom + 1)
+            x0, x1 = max(0, left - 1), min(width, right + 1)
+            yield ((slice(top, bottom), slice(left, right)),
+                   (slice(y0, y1), slice(x0, x1)),
+                   (slice(top - y0, bottom - y0), slice(left - x0, right - x0)))
+
+
+def _micro_detail_tile(idx, mask, edge):
+    """Exact established feature arithmetic on at most one bounded tile."""
+    same = neighbours = valid = boundary = thin = score = None
+    try:
+        same = np.zeros(idx.shape, dtype=np.float32)
+        neighbours = np.zeros(idx.shape, dtype=np.float32)
+        for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            src_y = slice(max(0, -dy), idx.shape[0] - max(0, dy))
+            src_x = slice(max(0, -dx), idx.shape[1] - max(0, dx))
+            dst_y = slice(max(0, dy), idx.shape[0] - max(0, -dy))
+            dst_x = slice(max(0, dx), idx.shape[1] - max(0, -dx))
+            valid = mask[src_y, src_x] & mask[dst_y, dst_x]
+            # Skipped white/transparent neighbours still bound a visible feature.
+            neighbours[src_y, src_x] += mask[src_y, src_x]
+            same[src_y, src_x] += (valid & (idx[src_y, src_x] == idx[dst_y, dst_x])).astype(np.float32)
+        boundary = np.where(neighbours > 0, 1.0 - same / np.maximum(neighbours, 1.0), 1.0).astype(np.float32)
+        thin = np.clip((2.5 - same) / 2.5, 0.0, 1.0).astype(np.float32)
+        score = np.clip(boundary * .48 + edge * .34 + thin * .18, 0.0, 1.0)
+        score *= mask.astype(np.float32)
+        return score.astype(np.float32, copy=False)
+    finally:
+        # A retained Stop/allocation traceback must not own private tile buffers
+        # or views of the caller's full image after this operation exits.
+        same = neighbours = valid = boundary = thin = score = None
+        idx = mask = edge = None
+
+
+def micro_detail_map(palette_index: np.ndarray, drawable: np.ndarray, edges: np.ndarray, *,
+                     cancelled=lambda: False) -> np.ndarray:
     """Detect tiny/thin palette features without connected-component allocation.
 
     A pixel scores highly when it lies on a palette boundary, has strong edge
@@ -288,27 +333,27 @@ def micro_detail_map(palette_index: np.ndarray, drawable: np.ndarray, edges: np.
     underweight. The calculation is deterministic NumPy and complements the
     GPU-routed palette/edge stages.
     """
-    idx = np.asarray(palette_index)
-    mask = np.asarray(drawable, dtype=np.bool_)
-    edge = np.asarray(edges, dtype=np.float32)
-    same = np.zeros(idx.shape, dtype=np.float32)
-    neighbours = np.zeros(idx.shape, dtype=np.float32)
-    for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-        src_y = slice(max(0, -dy), idx.shape[0] - max(0, dy))
-        src_x = slice(max(0, -dx), idx.shape[1] - max(0, dx))
-        dst_y = slice(max(0, dy), idx.shape[0] - max(0, -dy))
-        dst_x = slice(max(0, dx), idx.shape[1] - max(0, -dx))
-        valid = mask[src_y, src_x] & mask[dst_y, dst_x]
-        # Skipped white/transparent neighbors still bound a visible feature.
-        # They contribute no same-color support, but must not disappear from
-        # the boundary denominator merely because they need no drawing.
-        neighbours[src_y, src_x] += mask[src_y, src_x]
-        same[src_y, src_x] += (valid & (idx[src_y, src_x] == idx[dst_y, dst_x])).astype(np.float32)
-    boundary = np.where(neighbours > 0, 1.0 - same / np.maximum(neighbours, 1.0), 1.0).astype(np.float32)
-    thin = np.clip((2.5 - same) / 2.5, 0.0, 1.0).astype(np.float32)
-    score = np.clip(boundary * .48 + edge * .34 + thin * .18, 0.0, 1.0)
-    score *= mask.astype(np.float32)
-    return score.astype(np.float32, copy=False)
+    idx = mask = edge = score = None
+    try:
+        if cancelled():raise InterruptedError()
+        idx = np.asarray(palette_index)
+        mask = np.asarray(drawable, dtype=np.bool_)
+        edge = np.asarray(edges, dtype=np.float32)
+        if idx.ndim != 2 or mask.shape != idx.shape or edge.shape != idx.shape:
+            raise ValueError('Micro detail inputs must have the same two-dimensional shape.')
+        if max(idx.shape, default=0) <= _FEATURE_TILE_SIDE:
+            score = _micro_detail_tile(idx, mask, edge)
+        else:
+            score = np.empty(idx.shape, dtype=np.float32)
+            for output, region, interior in _feature_tiles(idx.shape):
+                if cancelled():raise InterruptedError()
+                score[output] = _micro_detail_tile(idx[region], mask[region], edge[region])[interior]
+        if cancelled():raise InterruptedError()
+        return score
+    finally:
+        # Return transfers the completed array; failure drops the unpublished
+        # full output even when diagnostics retain this frame.
+        idx = mask = edge = score = None
 
 
 def importance_map(rgb: np.ndarray, palette_index: np.ndarray, edges: np.ndarray,
@@ -449,7 +494,7 @@ def build_pixel_map(image: Image.Image, palette_rgb: Sequence[Sequence[int]], *,
     finally:
         # Retain only consumed planes; another owner may retain this mapping.
         tone = None
-    micro = micro_detail_map(index_map, drawable, edges)
+    micro = micro_detail_map(index_map, drawable, edges, cancelled=cancelled)
     if cancelled():raise InterruptedError()
     importance = importance_map(
         rgb, index_map, edges, drawable, contour_map=contour,

@@ -169,7 +169,7 @@ class ScreenSamplingTests(unittest.TestCase):
                 self.assertEqual(names.count('GetPixel'), len(points))
                 self.assert_released(native)
 
-    def test_real_guarded_stroke_consumer_keeps_its_verdict_with_five_bulk_reads(self):
+    def test_real_guarded_stroke_consumer_keeps_its_verdict_with_one_grouped_read(self):
         native = self.boundary()
         monitor = object.__new__(WindowMonitor)
         monitor.verify = lambda *_: None
@@ -183,10 +183,10 @@ class ScreenSamplingTests(unittest.TestCase):
         self.assertEqual(verdict['confidence'], 100.0)
         self.assertEqual(verdict['sample_count'], 125)
         names = [name for name, _ in native.calls]
-        self.assertEqual(names.count('BitBlt'), 5)
+        self.assertEqual(names.count('BitBlt'), 1)
         self.assertEqual(names.count('GetPixel'), 0)
-        self.assertEqual(names.count('GetDC'), 5)
-        self.assertEqual(names.count('ReleaseDC'), 5)
+        self.assertEqual(names.count('GetDC'), 1)
+        self.assertEqual(names.count('ReleaseDC'), 1)
         self.assertEqual(native.buffers, {})
 
     def test_fallback_releases_every_completed_native_acquisition(self):

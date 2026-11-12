@@ -2,9 +2,30 @@
 
 ## Requested result
 
-Continue application-wide correctness, performance and security improvements, with a target of **1,000 distinct improvements**, then release **1.0.148**. The 100 already reviewed and merged improvements form the starting point; formatting, tests, documentation and version bumps do not count as additional product improvements.
+Continue application-wide correctness, performance and security improvements, with a target of **900 distinct improvements**, then release **1.0.148**. The user reduced the earlier 1,000 target on 12 November 2026. The 100 already reviewed and merged improvements form the starting point; formatting, tests, documentation and version bumps do not count as additional product improvements. Earlier checkpoint counts below retain their historical targets.
 
 ## Current state
+
+The current reviewed source checkpoint contains **861/900 distinct implemented
+improvements, with 39 remaining**. Batch 40 adds one background Undo handoff,
+four rendering/detail groups, five runtime/numeric groups and five native-input
+or brush-calibration groups. All 846 earlier registry entries are preserved.
+Restored export confirmation, result publication, image lifetime and capture
+revalidation complete existing contracts with zero additional IDs.
+
+The [application](v148-batch40-application.md),
+[rendering](v148-batch40-rendering.md), [runtime](v148-batch40-runtime.md) and
+[native/calibration](v148-batch40-native.md) ledgers separate reproducible defects,
+exact output checks, measured work/allocation changes and limits. Their focused
+checks pass. Integrated full discovery is in progress at this source checkpoint;
+the temporary runner's first attempt was interrupted because its missing main
+guard recursively started discovery in spawned workers. That runner defect is
+recorded in [the diagnostic](v148-batch40-initial-runner.json). No successful
+full-suite or published-commit CI result is claimed yet.
+
+Version 1.0.148 remains unreleased. Work continues toward the reduced 900 target.
+
+### Previously recorded batch39 checkpoint
 
 Batch 39 completes four recovery, preview and Pixel preparation corrections.
 **R3901/global845** shares exact horizontal source segments during component
@@ -442,7 +463,7 @@ CodeQL results belong to its GitHub checks and PR46, separately from batch12.
 
 ## Release condition
 
-Keep publication paused while the requested work and integration verification are incomplete. Do not manufacture a count of 1,000 by counting assertions, affected lines, repeated options, documentation or metadata edits as independent improvements.
+Keep publication paused while the requested work and integration verification are incomplete. Do not manufacture a count of 900 by counting assertions, affected lines, repeated options, documentation or metadata edits as independent improvements.
 
 ## Repository security observations — 2026-11-06 UTC
 

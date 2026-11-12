@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
-  "target": 1000,
-  "implemented": 846,
+  "target": 900,
+  "implemented": 861,
   "release_published": false,
-  "validation": "Batch 39 records 846 distinct behavior improvements, with 154 remaining. R3901/global845 shares exact horizontal source segments during Pixel component collection; P3901/global846 bounds necessary large CPU palette RGB preparation to 4096-pixel blocks. Required-image recovery and preview-result ownership complete existing contracts with zero new IDs. All 844 preceding registry entries are preserved. Frozen regressions, actual-caller parity, balanced measurements and explicit limits are documented in v148-batch39-recovery-preview-and-pixel.md and its validation record. Whole-project verification and published-commit CI have separate receipts. Version 1.0.148 remains unreleased.",
+  "validation": "Batch 40 adds 15 independently reviewed behavior groups, preserving all 846 preceding entries: 861/900, 39 remaining. Application, rendering, runtime and native ledgers record actual regressions, historical comparisons, allocation/work observations and explicit limits. Export/publication, target revalidation, cleanup and Stop completions receive zero additional IDs. Full local discovery and exact published-head Windows/Linux CI are separate gates; version 1.0.148 remains unreleased.",
   "improvements": [
     {
       "id": 1,
@@ -6587,6 +6587,126 @@
       "batch": 39,
       "ledger": "v148-batch39-recovery-preview-and-pixel.md",
       "description": "Bound the necessary visible float32 RGB preparation for large normal CPU palette mapping to the existing 4096-pixel scoring blocks, including OpenCL-to-CPU fallback. Preserve exact alpha/white handling, candidate ties, custom-color policy, public PixelMap results and route metadata. Small inputs and already prepared CUDA data retain their existing path. Observed live composite RGB ndarray payload falls to 49152 bytes while required image-size raw/output arrays remain. Balanced full exact_palette_map timings retain slower controls; no overall RSS, physical GPU or universal speed claim. Private fallback closure cleanup completes existing ownership with zero extra IDs."
+    },
+    {
+      "id": 847,
+      "local_id": "A4001",
+      "area": "batch40-application",
+      "batch": 40,
+      "ledger": "v148-batch40-application.md",
+      "description": "Transfer the existing detached background-removal worker snapshot to the matching Undo consumer instead of copying the full original again on the UI thread. Preserve source identity, exact pixels and metadata, no-op handling and the first Undo image; Stop and failed publication complete existing ownership with zero extra IDs."
+    },
+    {
+      "id": 848,
+      "local_id": "R4001",
+      "area": "batch40-rendering",
+      "batch": 40,
+      "ledger": "v148-batch40-rendering.md",
+      "description": "Protect equal-luminance chromatic detail in Adaptive Detail using maximum local RGB range rather than luminance-only range. Preserve existing thresholds, smoothing, dilation and alpha. Existing detail motif and grayscale controls establish the quality correction; additional retained detail may increase drawing work."
+    },
+    {
+      "id": 849,
+      "local_id": "R4002",
+      "area": "batch40-rendering",
+      "batch": 40,
+      "ledger": "v148-batch40-rendering.md",
+      "description": "Bound Pixel micro-detail neighbor, same-color, boundary and thin-feature intermediates to 256-by-256 tiles with one-pixel halos. Preserve exact float32 output, tiny/noncontiguous geometry and the required full result. Historical stage measurements and independent arithmetic verify the reduced scratch working set; ownership and Stop are uncounted contract completions."
+    },
+    {
+      "id": 850,
+      "local_id": "R4003",
+      "area": "batch40-rendering",
+      "batch": 40,
+      "ledger": "v148-batch40-rendering.md",
+      "description": "Extract exact vertical component transitions in bounded adjacent-column tiles instead of one NumPy dispatch per column. Preserve x-major run order, background gaps, component identities and serial/parallel results. The separate vertical stage improves in measured controls while complete-builder gains are smaller and extra scratch allocation is disclosed."
+    },
+    {
+      "id": 851,
+      "local_id": "R4004",
+      "area": "batch40-rendering",
+      "batch": 40,
+      "ledger": "v148-batch40-rendering.md",
+      "description": "Partition each Hybrid ordering attempt into immutable phase/color membership lists once, avoiding repeated full phase scans for candidate colors. Preserve cursor-dependent costs, tie breaks, phase resets, full schedule and metadata. Actual work counts prove fewer membership conversions; mixed measured timings do not support a universal speedup."
+    },
+    {
+      "id": 852,
+      "local_id": "P4001",
+      "area": "batch40-runtime",
+      "batch": 40,
+      "ledger": "v148-batch40-runtime.md",
+      "description": "Collect a successfully completed executor result when it finishes between the timed Future.result poll and the following done check. Distinguish that race from a genuine worker TimeoutError and preserve order, cancellation and executor cleanup."
+    },
+    {
+      "id": 853,
+      "local_id": "P4002",
+      "area": "batch40-runtime",
+      "batch": 40,
+      "ledger": "v148-batch40-runtime.md",
+      "description": "Keep zero-pixel numeric workloads on an inert CPU route before loading hardware profiles or opening GPU devices. Preserve empty output shapes, dtypes and Stop, avoiding invalid zero-sized native buffers and false device quarantine."
+    },
+    {
+      "id": 854,
+      "local_id": "P4003",
+      "area": "batch40-runtime",
+      "batch": 40,
+      "ledger": "v148-batch40-runtime.md",
+      "description": "Calculate CPU paired-channel and perceptual scalar error fields in bounded 65536-pixel tiles instead of full-image arithmetic scratch. Preserve dense formulas, strided input behavior, full output arrays and fallback parity; cancellation and retained-error cleanup add no separate IDs."
+    },
+    {
+      "id": 855,
+      "local_id": "P4004",
+      "area": "batch40-runtime",
+      "batch": 40,
+      "ledger": "v148-batch40-runtime.md",
+      "description": "Normalize integer RGB input in its already owned float32 conversion buffer using in-place division and clipping, avoiding another full normalization buffer. Never mutate a borrowed float32 input; exact output and ownership controls verify the reduction."
+    },
+    {
+      "id": 856,
+      "local_id": "P4005",
+      "area": "batch40-runtime",
+      "batch": 40,
+      "ledger": "v148-batch40-runtime.md",
+      "description": "Reduce CPU calibrated-palette selection scratch and repeated row-index preparation by avoiding unused custom-winner arrays and initializing normal winners from the first block. Preserve strict first-candidate ties and exact indices/visibility. Custom-first retains its historical path after broader experiments showed no stable net benefit; measured allocation savings and slower timing controls are disclosed."
+    },
+    {
+      "id": 857,
+      "local_id": "N4001",
+      "area": "batch40-native",
+      "batch": 40,
+      "ledger": "v148-batch40-native.md",
+      "description": "Bind an active target guard to its observed native window process/thread identity before activation and check that identity during subsequent window validation. Refuse failed identity reads, replacement during activation and rearming a recycled owner before native movement."
+    },
+    {
+      "id": 858,
+      "local_id": "N4002",
+      "area": "batch40-native",
+      "batch": 40,
+      "ledger": "v148-batch40-native.md",
+      "description": "Stop owned left-button drags when right, middle or side-button user input is observed, checking immediately before every native movement including both position retry backends. Preserve the bot-owned left button for existing cleanup and tolerate delayed observation of that own button."
+    },
+    {
+      "id": 859,
+      "local_id": "N4003",
+      "area": "batch40-native",
+      "batch": 40,
+      "ledger": "v148-batch40-native.md",
+      "description": "Coalesce nearby dense ink-verification neighborhoods into one bounded GDI transfer while preserving ordered colors and duplicates. Retain per-neighborhood reads for sparse, large or cross-monitor unions and optional allocation failure. The actual consumer goes from five native transfers to one; no physical drawing-time gain is claimed."
+    },
+    {
+      "id": 860,
+      "local_id": "N4004",
+      "area": "batch40-native",
+      "batch": 40,
+      "ledger": "v148-batch40-native.md",
+      "description": "Use the active Stop event for guarded click, ink/fill settling and transient-cover waits, checking cancellation at input boundaries while retaining finally-based button release. Preserve compatibility with existing is_set-only tokens and legacy guards without a bound event."
+    },
+    {
+      "id": 861,
+      "local_id": "N4005",
+      "area": "batch40-native",
+      "batch": 40,
+      "ledger": "v148-batch40-native.md",
+      "description": "Crop browser brush-control neighborhoods before RGB conversion, avoiding a whole-screenshot RGB buffer. Preserve exact complete detection plans across RGB, RGBA, grayscale and palette inputs, candidate geometry and borrowed source pixels. Private patch cleanup completes existing ownership without another ID."
     }
   ]
 }

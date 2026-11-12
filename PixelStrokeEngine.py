@@ -178,13 +178,28 @@ def _row_runs(pixel_map: PixelMap, cancelled=lambda: False) -> tuple[list[_Run],
 
 def _vertical_run_chunk(component_map: np.ndarray, x0: int, x1: int, cancelled=lambda: False) -> list[tuple[int, Segment]]:
     h,_w=component_map.shape;out=[]
-    for x in range(int(x0),int(x1)):
+    if cancelled():raise InterruptedError()
+    if not h:return out
+    # Batch a bounded number of adjacent columns. x-major nonzero ordering is
+    # the same order as the original per-column scans, including background
+    # gaps and distinct same-colour components. Only transition scratch changes.
+    columns_per_tile=max(1,min(64,131_072//(h+1)))
+    for left in range(int(x0),int(x1),columns_per_tile):
         if cancelled():raise InterruptedError()
-        values=component_map[:,x]
-        boundaries=np.r_[0,np.flatnonzero(values[1:] != values[:-1])+1,h]
-        for start,end in zip(boundaries[:-1],boundaries[1:]):
-            cid=int(values[start]) if start<h else -1
-            if cid>=0:out.append((cid,(x,int(start),x,int(end)-1)))
+        right=min(int(x1),left+columns_per_tile)
+        values=component_map[:,left:right].T
+        boundaries=np.empty((right-left,h+1),dtype=np.bool_)
+        boundaries[:,0]=True;boundaries[:,-1]=True
+        boundaries[:,1:-1]=values[:,1:]!=values[:,:-1]
+        columns,starts=np.nonzero(boundaries[:,:-1])
+        _columns,ends=np.nonzero(boundaries[:,1:])
+        for serial,(column,start,end) in enumerate(zip(columns,starts,ends)):
+            if serial%256==0 and cancelled():raise InterruptedError()
+            cid=int(values[column,start])
+            if cid>=0:
+                x=int(column)+left
+                out.append((cid,(x,int(start),x,int(end))))
+    if cancelled():raise InterruptedError()
     return out
 
 

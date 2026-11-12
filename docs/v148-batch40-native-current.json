@@ -1,0 +1,25 @@
+{
+  "mode": "current",
+  "baseline": "888116094b91758dded968a7e3b5559683db9ad7",
+  "tests_run": 19,
+  "failure_records": 0,
+  "errors": 0,
+  "skipped": 0,
+  "seconds": 0.8091476549998333,
+  "failure_details": [],
+  "error_details": [],
+  "sources": {
+    "ScreenGuard.py": "9853eef079bf4a8be419161017773df30ad2bc7058d7734d6f7057655bf4cc67",
+    "WindowsMouse.py": "b86b26b9e7789ab899b1461fa39f98969f3c22f50272d54a67b5a2de03df4792",
+    "BrowserBrushSize.py": "12bf8a27e2395480fad021ae6badbf52cd47f5ab244529cce183969ca20bb819",
+    "ScreenPixelSampling.py": "93499957f24b296d382053d6196bdefd7d9de0c39678030ba65691910e6a3220"
+  },
+  "tests": [
+    "test_v148_native_batch40_target_identity",
+    "test_v148_native_batch40_drag_takeover",
+    "test_v148_native_batch40_stop_waits",
+    "test_v148_native_batch25_screen_sampling.ScreenSamplingTests.test_real_guarded_stroke_consumer_keeps_its_verdict_with_one_grouped_read",
+    "test_v148_native_batch40_ink_sampling.GroupedInkTests.test_ink_and_fill_reject_focus_loss_during_matching_sample",
+    "test_v148_calibration_batch40_brush_patches"
+  ]
+}

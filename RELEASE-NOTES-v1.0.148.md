@@ -1,6 +1,15 @@
 # Image Draw Bot v1.0.148 — development release notes
 
-**This version has not been published.** The current checkpoint contains **844 distinct behavior improvements, with 156 remaining** toward the requested 1,000 before release. Batch38 adds one opaque Auto-count preparation group; seven other corrections complete already-counted contracts. Tests, documentation, repeated consumers and version promotion do not increase the count. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps all global IDs to implementation and regression evidence.
+**This version has not been published.** The current reviewed checkpoint contains
+**861 distinct behavior improvements, with 39 remaining** toward the user's
+revised target of **900**. Batch 40 adds 15 distinct implementation groups;
+restored export/publication, image ownership and capture checks complete existing
+contracts without new IDs. Tests, documentation and version promotion do not
+increase the count. The [complete ledger](docs/IMPROVEMENTS-v1.0.148.md) maps every
+ID to implementation and evidence. Current integrated/CI status is kept in the
+[progress record](docs/v148-improvement-progress.md).
+
+### Historical batch38 notes
 
 ## Batch 38: complete profile, image and planner lifetimes
 

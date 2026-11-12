@@ -194,3 +194,28 @@ def sample_screen_colors(points):
         return values
     finally:
         release_dc(None, dc)
+
+
+def sample_screen_color_groups(groups):
+    """Combine small adjacent probes without making sparse probes expensive.
+
+    Ink verification supplies at most five bounded neighbourhoods. A compact
+    single-monitor union can share one native transfer; distant/cross-monitor
+    groups keep their separate transfers instead of degenerating to hundreds
+    of individual GetPixel calls. Sample order and duplicate pixels are kept.
+    """
+    groups = tuple(tuple(group) for group in groups)
+    count = sum(len(group) for group in groups)
+    if _MIN_POINTS <= count <= _MAX_POINTS:
+        try:
+            points = [point for group in groups for point in group]
+            user32 = load_system_library('user32.dll')
+            compact = _compact_bounds(points, user32) is not None
+        except (AttributeError, OSError, MemoryError):
+            compact = False
+        if compact:
+            return sample_screen_colors(points)
+    result = []
+    for group in groups:
+        result.extend(sample_screen_colors(group))
+    return result

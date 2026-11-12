@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 846 distinct behavior improvements are implemented, including the original 100-change baseline. The requested target is **1,000**. **154 remain; 1.0.148 has not been published.** Current verification is recorded below.
+**Development status:** 861 distinct behavior improvements are implemented, including the original 100-change baseline. The user reduced the target to **900** on 12 November 2026. **39 remain; 1.0.148 has not been published.** Batch 40 focused checks pass; integrated and published-commit gates are reported separately.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -254,3 +254,19 @@ The [machine-readable registry](v148-improvements.json) maps every global ID to 
 Benchmarks in the area ledgers disclose inputs, before/after medians, output checks and memory limits. They are specific workload measurements, not a claim that the whole application or every drawing is faster by the same factor. The batch 02 delivery measurements include slower visual sampling and detail-preview cases; those changes establish bounded memory or correctness, not a universal speedup.
 
 Batch 03 likewise reports slower cluster-minimum timing and spatial summaries where the gain is bounded memory. Root review found and corrected preview sampling at floating-point boundaries and NumPy-integer budget overflow; these corrections remain within their original IDs. Owned-image disposal and repeated cancellation/API integrations are counted once in their corresponding shared groups.
+
+
+## Batch 40 — target reduced to 900
+
+| Global IDs | Local IDs | Area | Count | Evidence |
+| --- | --- | --- | ---: | --- |
+| 847 | A4001 | Background Undo snapshot handoff | 1 | [Application ledger](v148-batch40-application.md) |
+| 848–851 | R4001–R4004 | Chromatic detail and bounded planner preparation | 4 | [Rendering ledger](v148-batch40-rendering.md) |
+| 852–856 | P4001–P4005 | Executor completion, inert empty GPU work and CPU buffers | 5 | [Runtime ledger](v148-batch40-runtime.md) |
+| 857–861 | N4001–N4005 | Target identity, physical input, screen sampling, Stop and brush patches | 5 | [Native/calibration ledger](v148-batch40-native.md) |
+
+All 846 previous registry entries are unchanged. Export/publication, image
+ownership, capture revalidation and review corrections receive zero additional
+IDs. There are 39 further distinct improvements left before the requested target.
+The [progress record](v148-improvement-progress.md) distinguishes completed
+focused checks from integrated testing and the published commit's Windows gate.

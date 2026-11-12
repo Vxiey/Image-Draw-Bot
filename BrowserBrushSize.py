@@ -94,7 +94,13 @@ def _patch(image, client_rect, point, radius=15):
     left=x-radius;top=y-radius;right=x+radius+1;bottom=y+radius+1
     if not (0<=left<right<=image.width and 0<=top<bottom<=image.height):
         return None
-    return image.crop((left,top,right,bottom)).convert('RGB')
+    patch = image.crop((left,top,right,bottom))
+    if patch.mode == 'RGB':
+        return patch
+    try:
+        return patch.convert('RGB')
+    finally:
+        patch.close()
 
 
 def _control_score(patch):
@@ -211,12 +217,22 @@ def plan_browser_brush_size(profile_key, screenshot, client_rect, *, canvas_box=
     if len(positions)!=len(sizes):
         safe=int(sizes[safe_index])
         return BrowserBrushPlan(key,positions,sizes,target,None,0.0,None,requested,safe,conservative_brush_guard(key,requested),'control geometry unavailable; current size unverified')
-    screenshot=screenshot.convert('RGB')
-    patches=[_patch(screenshot,client_rect,p) for p in positions]
-    scores=[_control_score(p) for p in patches]
+    # Only these complete 31x31 control patches are inspected. Converting the
+    # entire window duplicated a large screenshot on every brush preflight.
+    # Crop before mode conversion and retain each private patch until both
+    # independent visual scores have been measured.
+    patches = []
+    try:
+        for point in positions:
+            patches.append(_patch(screenshot,client_rect,point))
+        scores=[_control_score(p) for p in patches]
+        select_scores=[_selection_score(p) for p in patches]
+    finally:
+        for patch in patches:
+            if patch is not None:
+                patch.close()
     good=sum(score>=12 for score in scores)
     confidence=max(0.0,min(1.0,(sum(min(60.0,s) for s in scores)/(max(1,len(scores))*60.0))*.70 + (good/len(scores))*.30))
-    select_scores=[_selection_score(p) for p in patches]
     selected=None
     if select_scores:
         order=sorted(range(len(select_scores)),key=lambda i:select_scores[i],reverse=True)

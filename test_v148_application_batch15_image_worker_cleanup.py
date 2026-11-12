@@ -130,7 +130,7 @@ class ImageWorkerCleanupTests(unittest.TestCase):
         before = source.tobytes()
         snapshot = self.enqueue(app, operation, source, captured, destination)
         app.worker.run()
-        self.assert_closed(snapshot)
+        self.assertEqual(snapshot.tobytes(), before)
         delivered = self.events(app)
         self.assertEqual([kind for kind, _ in delivered], ['background_removed', 'done'])
         result = delivered[0][1]
@@ -143,6 +143,7 @@ class ImageWorkerCleanupTests(unittest.TestCase):
             DrawBotApp._handle_event(app, *delivered[0])
         self.addCleanup(app.background_removal_original.close)
         self.assertIs(app.original, result.image)
+        self.assertIs(app.background_removal_original, snapshot)
         self.assertEqual(app.background_removal_original.tobytes(), before)
         self.assertEqual(source.tobytes(), before)
         self.assertEqual(app.original.getpixel((30, 20)), (220, 30, 50, 255))

@@ -170,7 +170,34 @@ class WindowMonitor:
             raise InterruptedError('The target window no longer exists. Select the drawing area again.')
         if not self.api.IsWindowVisible(handle):
             raise InterruptedError('The target window is not visible. Restore it and select the drawing area again.')
+        bound = getattr(self, '_locked_target_identity', None)
+        if bound is not None and handle == bound[0]:
+            if self._process_identity(handle) != bound[1:]:
+                raise InterruptedError('Stopped: the target window identity changed. Select the drawing area again.')
         return handle
+
+    def _process_identity(self, handle):
+        pid = wintypes.DWORD()
+        thread = self.api.GetWindowThreadProcessId(handle, ctypes.byref(pid))
+        if not thread or not pid.value:
+            raise InterruptedError('The target window identity could not be verified. Select the drawing area again.')
+        return int(pid.value), int(thread)
+
+    def lock_target(self, target):
+        """Bind input to the owner observed before foreground activation.
+
+        HWND values are reusable. Matching foreground/geometry alone must not
+        authorize a replacement process or UI thread midway through a draw.
+        An existing binding is checked before it can be refreshed, so rearming
+        the same guard cannot silently adopt a recycled target.
+        """
+        handle, rectangle = target
+        if self.rectangle(handle) != rectangle:
+            raise InterruptedError('The target window moved or changed size. Select the drawing area again.')
+        identity = self._process_identity(handle)
+        self._locked_target_identity = (handle, *identity)
+        # Catch replacement during the initial read before any activation.
+        self._validate_handle(handle)
 
     def at(self,point):
         handle=self.api.WindowFromPoint(wintypes.POINT(*_screen_point(point)))
@@ -269,6 +296,17 @@ class WindowMonitor:
         points=[(x+dx,y+dy) for dy in range(-radius,radius+1) for dx in range(-radius,radius+1)]
         return sample_screen_colors(points)
 
+    def colors_near_many(self, points, radius=2):
+        from ScreenPixelSampling import sample_screen_color_groups
+        radius = max(0, min(6, int(radius)))
+        groups = []
+        for point in points:
+            x, y = _screen_point(point)
+            groups.append([(x + dx, y + dy)
+                           for dy in range(-radius, radius + 1)
+                           for dx in range(-radius, radius + 1)])
+        return sample_screen_color_groups(groups)
+
     def verify(self,target,point):
         handle,rectangle=target
         if self.api.GetForegroundWindow()!=handle:
@@ -332,6 +370,11 @@ class GuardedMouse:
 
     def prepare_target(self,stop,wait,report):
         # Activation may be denied by Windows. Wait without moving/clicking.
+        self._stop_event = stop
+        if stop.is_set():raise InterruptedError()
+        lock_target = getattr(self.monitor, 'lock_target', None)
+        if callable(lock_target):
+            lock_target(self.target)
         if stop.is_set():raise InterruptedError()
         self.monitor.activate(self.target)
         for attempt in range(81):
@@ -351,11 +394,29 @@ class GuardedMouse:
     def reset_tracking(self):
         self.last=None
 
+    def _check_stop(self):
+        stop = getattr(self, '_stop_event', None)
+        if stop is not None and stop.is_set():
+            raise InterruptedError('Mouse operation cancelled.')
+
+    def _wait(self, seconds):
+        """Wake verification/settling waits immediately when this draw stops."""
+        stop = getattr(self, '_stop_event', None)
+        wait = getattr(stop, 'wait', None)
+        if not callable(wait):
+            # Existing embedders may supply an is_set-only cancellation token.
+            self._check_stop()
+            time.sleep(seconds)
+            self._check_stop()
+        elif wait(seconds):
+            raise InterruptedError('Mouse operation cancelled.')
+
     def disarm_input(self):
         if hasattr(self.mouse,'disarm_input'):self.mouse.disarm_input()
         self.last=None
 
     def check(self,point=None):
+        self._check_stop()
         current=self.mouse.get_position()
         if self.live_target_check is not None:
             self.live_target_check(self.monitor,self.target,current if point is None else point)
@@ -370,7 +431,7 @@ class GuardedMouse:
             # immediately because their messages do not match this branch.
             if 'another window covers the click position' not in str(error):
                 raise
-            time.sleep(float(getattr(self,'transient_cover_retry_seconds',0.08)))
+            self._wait(float(getattr(self,'transient_cover_retry_seconds',0.08)))
             current=self.mouse.get_position()
             verify_point=current if point is None else point
             if self.live_target_check is not None:
@@ -391,7 +452,7 @@ class GuardedMouse:
             if delta>tolerance:
                 # A single cursor read can catch the tail of our own Windows move.
                 # Confirm the deviation once before declaring manual takeover.
-                time.sleep(float(getattr(self,'manual_movement_confirm_seconds',0.014)))
+                self._wait(float(getattr(self,'manual_movement_confirm_seconds',0.014)))
                 confirmed=self.mouse.get_position()
                 confirmed_delta=max(abs(confirmed[i]-self.last[i]) for i in (0,1))
                 if confirmed_delta>tolerance:
@@ -399,6 +460,7 @@ class GuardedMouse:
                         f'Stopped: the mouse was moved manually (delta {confirmed_delta}px). No automatic restart.'
                     )
                 self.monitor.verify(self.target,confirmed if point is None else point)
+        self._check_stop()
 
     def verify_palette_layout(self):
         if not self.palette_colors:
@@ -443,11 +505,12 @@ class GuardedMouse:
         # Other injected backends retain their established press/release API.
         with transaction() if callable(transaction) else nullcontext():
             try:
-                self.mouse.press();time.sleep(.015)
+                self.mouse.press();self._wait(.015)
             finally:self.mouse.release()
 
     def _check_modal_geometry(self,point=None):
         """Keep modal color-picker sampling tied to the originally locked target."""
+        self._check_stop()
         handle,rectangle=self.target
         if self.monitor.rectangle(handle)!=rectangle:
             raise InterruptedError('Stopped: target window geometry changed while the custom-color dialog was open.')
@@ -575,12 +638,19 @@ class GuardedMouse:
         best_error=999;best=None;sample_count=0
         for settle in (0.0,0.08,0.18,0.32):
             if settle:
-                time.sleep(settle)
+                self._wait(settle)
                 for point in points:self.check(point)
-            samples=[]
-            for point in points:
-                try:samples.extend(self.monitor.colors_near(point,radius))
-                except AttributeError:samples.append(self.monitor.color(point))
+            sample_many = getattr(self.monitor, 'colors_near_many', None)
+            if callable(sample_many):
+                samples = sample_many(points, radius)
+            else:
+                samples=[]
+                for point in points:
+                    try:samples.extend(self.monitor.colors_near(point,radius))
+                    except AttributeError:samples.append(self.monitor.color(point))
+            # A capture can yield to another application just like a settle
+            # delay. Never accept matching pixels under stale focus evidence.
+            for point in points:self.check(point)
             if not samples:continue
             sample_count+=len(samples)
             scored=[(max(abs(int(actual[i])-expected[i]) for i in range(3)),tuple(map(int,actual))) for actual in samples]
@@ -589,6 +659,7 @@ class GuardedMouse:
             if best_error<=tolerance:break
         if best is None:
             best=tuple(map(int,self.monitor.color(points[len(points)//2])))
+            self.check(points[len(points)//2])
             best_error=max(abs(best[i]-expected[i]) for i in range(3))
             sample_count+=1
         confidence=max(0.0,min(100.0,100.0*(1.0-float(best_error)/255.0)))
@@ -650,16 +721,18 @@ class GuardedMouse:
         best=None;best_error=999
         for settle in (0.0,.10,.22,.38):
             if settle:
-                time.sleep(settle)
+                self._wait(settle)
                 self.check(point)
             try:samples=self.monitor.colors_near(point,4)
             except AttributeError:samples=[self.monitor.color(point)]
+            self.check(point)
             for actual in samples or []:
                 actual=tuple(map(int,actual));error=max(abs(actual[i]-expected[i]) for i in range(3))
                 if error<best_error:best_error,best=error,actual
             if best_error<=52:return
         if best is None:
             best=self.monitor.color(point)
+            self.check(point)
             if max(abs(int(best[i])-expected[i]) for i in range(3))<=52:return
         raise InterruptedError(
             f'Stopped: the Fill tool did not produce the expected color {expected}. Closest rendered RGB was {best}. '

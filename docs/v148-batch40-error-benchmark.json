@@ -1,0 +1,326 @@
+{
+  "baseline_commit": "888116094b91758dded968a7e3b5559683db9ad7",
+  "baseline_module_sha256": "6bc72dd8e79d6f9f27d8f10d3a660b55dd0a6ceed487fafd72d37066f6a81a24",
+  "current_module_sha256": "5adbd974a2796b57a901bb774ccb3b97b33d6aab59a8afad6393b6851be63cbb",
+  "source_asset": "assets/image-draw-bot-app-screenshot.webp",
+  "source_size": [
+    720,
+    393
+  ],
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "pairs": 6,
+  "workloads": [
+    {
+      "workload": "Integer RGB normalization",
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 4.017539999949804,
+          "after_ms": 1.708304999738175
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 4.474504999961937,
+          "before_ms": 4.902584999854298
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 8.96107500011567,
+          "after_ms": 1.6119490001074155
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 3.1194190000860544,
+          "before_ms": 3.505449999920529
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 3.7366340002336074,
+          "after_ms": 2.4301470002683345
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 3.125623999949312,
+          "before_ms": 3.128632999960246
+        }
+      ],
+      "before_median_ms": 3.8770870000917057,
+      "after_median_ms": 2.7747830001771945,
+      "reduction_percent": 28.43124231899976,
+      "allocations": {
+        "before_python_traced_peak_bytes": 6791964,
+        "before_python_traced_retained_bytes": 3396272,
+        "after_python_traced_peak_bytes": 4246082,
+        "after_python_traced_retained_bytes": 3396272
+      }
+    },
+    {
+      "workload": "Contiguous channel error",
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 10.861265000130516,
+          "after_ms": 11.550188999990496
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 9.164254000097571,
+          "before_ms": 11.413247000291449
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 17.18629599963606,
+          "after_ms": 16.220718000113266
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 13.059580000117421,
+          "before_ms": 12.376525000036054
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 43.90081300016391,
+          "after_ms": 36.76323299987416
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 20.56761700032439,
+          "before_ms": 39.70707100006621
+        }
+      ],
+      "before_median_ms": 14.781410499836056,
+      "after_median_ms": 14.640149000115343,
+      "reduction_percent": 0.955669959387706,
+      "allocations": {
+        "before_python_traced_peak_bytes": 6792832,
+        "before_python_traced_retained_bytes": 1133464,
+        "after_python_traced_peak_bytes": 3101640,
+        "after_python_traced_retained_bytes": 1134056
+      }
+    },
+    {
+      "workload": "Strided channel error",
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 24.02187400002731,
+          "after_ms": 20.777134000127262
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 35.85383599966008,
+          "before_ms": 46.032001999719796
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 23.598693999701936,
+          "after_ms": 22.555951999947865
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 29.286289000083343,
+          "before_ms": 23.715925000033167
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 42.8556159999971,
+          "after_ms": 28.019565000249713
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 41.8729739999435,
+          "before_ms": 26.55016800008525
+        }
+      ],
+      "before_median_ms": 25.28602100005628,
+      "after_median_ms": 28.652927000166528,
+      "reduction_percent": -13.315285944367261,
+      "allocations": {
+        "before_python_traced_peak_bytes": 6793000,
+        "before_python_traced_retained_bytes": 1133520,
+        "after_python_traced_peak_bytes": 3101808,
+        "after_python_traced_retained_bytes": 1134112
+      }
+    },
+    {
+      "workload": "Perceptual pair",
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 41.98154300001988,
+          "after_ms": 73.79341499972725
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 36.39332700004161,
+          "before_ms": 41.9785789999878
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 35.69896399994832,
+          "after_ms": 113.10231900006329
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 61.6077800000312,
+          "before_ms": 49.391360000299755
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 42.35565599992697,
+          "after_ms": 37.90021000031629
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 49.349846000041,
+          "before_ms": 45.46965500003353
+        }
+      ],
+      "before_median_ms": 42.168599499973425,
+      "after_median_ms": 55.4788130000361,
+      "reduction_percent": -31.564276874006826,
+      "allocations": {
+        "before_python_traced_peak_bytes": 15848200,
+        "before_python_traced_retained_bytes": 7924888,
+        "after_python_traced_peak_bytes": 10924608,
+        "after_python_traced_retained_bytes": 7925416
+      }
+    },
+    {
+      "workload": "Complete accuracy evaluator",
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 106.26394600012645,
+          "after_ms": 187.74794199998723
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 129.58871000000727,
+          "before_ms": 232.1773740000026
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 188.29189300004145,
+          "after_ms": 172.9356280002321
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 155.0928169999679,
+          "before_ms": 131.21154400005253
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 139.64980499986268,
+          "after_ms": 142.3861900002521
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 163.8795700000628,
+          "before_ms": 163.44765800022287
+        }
+      ],
+      "before_median_ms": 151.54873150004278,
+      "after_median_ms": 159.48619350001536,
+      "reduction_percent": -5.237564129641248,
+      "allocations": {
+        "before_python_traced_peak_bytes": 22655392,
+        "before_python_traced_retained_bytes": 19852,
+        "after_python_traced_peak_bytes": 17732376,
+        "after_python_traced_retained_bytes": 21008
+      }
+    }
+  ],
+  "scope": "Exact outputs/metadata on every invocation. Normalization and scalar reduction workloads are separate; the complete evaluator includes both. Balanced order and separate allocation probes. Local shared Linux environment; no process-RSS, GPU or physical drawing-speed claim."
+}

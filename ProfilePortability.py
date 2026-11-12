@@ -486,11 +486,17 @@ def read_profile_file(path: Path) -> dict:
     return validate_package(data)
 
 
-def write_profile_file(path: Path, package: dict) -> Path:
-    clean = validate_package(package)
+def profile_export_path(path: Path) -> Path:
+    """Resolve the actual export destination before asking about replacement."""
     path = Path(path)
     if path.suffix.lower() not in (".drawprofile", ".json"):
         path = path.with_suffix(".drawprofile")
+    return path
+
+
+def write_profile_file(path: Path, package: dict) -> Path:
+    clean = validate_package(package)
+    path = profile_export_path(path)
     text = json.dumps(clean, ensure_ascii=False, indent=2, sort_keys=True)
     if len(text.encode("utf-8")) > MAX_PROFILE_BYTES:
         raise ProfilePortabilityError("Profile is too large to save safely.")
@@ -915,7 +921,22 @@ def export_profile_dialog(app):
         identity = _profile_identity(str(app.game.get()))
         if identity != (package["profile"]["name"], package["profile"]["key"]):
             raise ProfilePortabilityError('The selected profile changed. Open Export again.')
-        path = write_profile_file(Path(selected), package)
+        destination = profile_export_path(Path(selected))
+        if destination != Path(selected) and destination.exists():
+            # The chooser confirms only its displayed path. A typed .backup
+            # suffix can resolve to a different, already existing export.
+            if not messagebox.askyesno('Replace exported profile?',
+                    f'The profile will be saved as:\n{destination}\n\n'
+                    'That file already exists. Replace it?',
+                    parent=getattr(app, 'root', None), default='no'):
+                return None
+            # Confirmation is another nested event loop, with the same owner
+            # checks as the chooser before any file can be published.
+            _require_idle_profile(app)
+            identity = _profile_identity(str(app.game.get()))
+            if identity != (package["profile"]["name"], package["profile"]["key"]):
+                raise ProfilePortabilityError('The selected profile changed. Open Export again.')
+        path = write_profile_file(destination, package)
         if not getattr(app, 'closing', False):
             messagebox.showinfo("Profile exported", f"Profile saved to:\n{path}", parent=getattr(app, "root", None))
         return path

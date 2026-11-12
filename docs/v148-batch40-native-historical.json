@@ -1,0 +1,135 @@
+{
+  "mode": "historical",
+  "baseline": "888116094b91758dded968a7e3b5559683db9ad7",
+  "tests_run": 19,
+  "failure_records": 25,
+  "errors": 2,
+  "skipped": 0,
+  "seconds": 1.6826777870001024,
+  "failure_details": [
+    {
+      "test": "test_v148_native_batch40_target_identity.TargetIdentityTests.test_changed_owner_thread_stops_even_when_process_and_geometry_match",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_target_identity.py\", line 70, in test_changed_owner_thread_stops_even_when_process_and_geometry_match\n    with self.assertRaisesRegex(InterruptedError, 'identity'):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_target_identity.TargetIdentityTests.test_failed_identity_query_never_arms_input (field='pid')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_target_identity.py\", line 80, in test_failed_identity_query_never_arms_input\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_target_identity.TargetIdentityTests.test_failed_identity_query_never_arms_input (field='thread')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_target_identity.py\", line 80, in test_failed_identity_query_never_arms_input\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_target_identity.TargetIdentityTests.test_rearming_same_guard_cannot_replace_its_previous_owner",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_target_identity.py\", line 103, in test_rearming_same_guard_cannot_replace_its_previous_owner\n    with self.assertRaisesRegex(InterruptedError, 'identity'):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_target_identity.TargetIdentityTests.test_recycled_handle_stops_before_moving_to_a_different_process",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_target_identity.py\", line 61, in test_recycled_handle_stops_before_moving_to_a_different_process\n    with self.assertRaisesRegex(InterruptedError, 'identity'):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_target_identity.TargetIdentityTests.test_target_replaced_during_activation_never_arms_input",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_target_identity.py\", line 93, in test_target_replaced_during_activation_never_arms_input\n    with self.assertRaisesRegex(InterruptedError, 'identity'):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_drag_takeover.DragTakeoverTests.test_conflicting_button_during_drag_never_sends_a_cursor_event (button='right')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_drag_takeover.py\", line 29, in test_conflicting_button_during_drag_never_sends_a_cursor_event\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_drag_takeover.DragTakeoverTests.test_conflicting_button_during_drag_never_sends_a_cursor_event (button='middle')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_drag_takeover.py\", line 29, in test_conflicting_button_during_drag_never_sends_a_cursor_event\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_drag_takeover.DragTakeoverTests.test_conflicting_button_during_drag_never_sends_a_cursor_event (button='x1')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_drag_takeover.py\", line 29, in test_conflicting_button_during_drag_never_sends_a_cursor_event\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_drag_takeover.DragTakeoverTests.test_conflicting_button_during_drag_never_sends_a_cursor_event (button='x2')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_drag_takeover.py\", line 29, in test_conflicting_button_during_drag_never_sends_a_cursor_event\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_stop_waits.NativeStopWaitTests.test_ink_and_fill_stop_inside_settle_without_sampling_again (operation='ink')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_stop_waits.py\", line 40, in test_ink_and_fill_stop_inside_settle_without_sampling_again\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_stop_waits.NativeStopWaitTests.test_ink_and_fill_stop_inside_settle_without_sampling_again (operation='fill')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_stop_waits.py\", line 45, in test_ink_and_fill_stop_inside_settle_without_sampling_again\n    ordinary_sleep.assert_not_called()\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py\", line 910, in assert_not_called\n    raise AssertionError(msg)\nAssertionError: Expected 'sleep' to not have been called. Called 3 times.\nCalls: [call(0.1), call(0.22), call(0.38)].\n"
+    },
+    {
+      "test": "test_v148_native_batch40_stop_waits.NativeStopWaitTests.test_legacy_is_set_only_token_remains_supported_and_checked_after_wait",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_stop_waits.py\", line 88, in test_legacy_is_set_only_token_remains_supported_and_checked_after_wait\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_stop_waits.NativeStopWaitTests.test_stop_before_click_sends_no_input",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_stop_waits.py\", line 62, in test_stop_before_click_sends_no_input\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_stop_waits.NativeStopWaitTests.test_stop_during_click_settle_releases_the_pressed_button",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_stop_waits.py\", line 53, in test_stop_during_click_settle_releases_the_pressed_button\n    with self.assertRaises(InterruptedError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_stop_waits.NativeStopWaitTests.test_stop_during_overlay_retry_never_revalidates_or_clicks",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/ScreenGuard.py\", line 365, in check\n    self.mouse.configure_precision(level)\n  File \"$REPO/test_v148_native_batch40_stop_waits.py\", line 72, in covered\n    raise InterruptedError('Stopped: another window covers the click position.')\nInterruptedError: Stopped: another window covers the click position.\n\nDuring handling of the above exception, another exception occurred:\n\nInterruptedError: Stopped: another window covers the click position.\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_stop_waits.py\", line 75, in test_stop_during_overlay_retry_never_revalidates_or_clicks\n    with self.assertRaisesRegex(InterruptedError, 'cancelled'):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: \"cancelled\" does not match \"Stopped: another window covers the click position.\"\n"
+    },
+    {
+      "test": "test_v148_native_batch25_screen_sampling.ScreenSamplingTests.test_real_guarded_stroke_consumer_keeps_its_verdict_with_one_grouped_read",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch25_screen_sampling.py\", line 186, in test_real_guarded_stroke_consumer_keeps_its_verdict_with_one_grouped_read\n    self.assertEqual(names.count('BitBlt'), 1)\nAssertionError: 5 != 1\n"
+    },
+    {
+      "test": "test_v148_native_batch40_ink_sampling.GroupedInkTests.test_ink_and_fill_reject_focus_loss_during_matching_sample (kind='ink')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_ink_sampling.py\", line 92, in test_ink_and_fill_reject_focus_loss_during_matching_sample\n    with self.assertRaisesRegex(InterruptedError, 'lost focus'):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_native_batch40_ink_sampling.GroupedInkTests.test_ink_and_fill_reject_focus_loss_during_matching_sample (kind='fill')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_ink_sampling.py\", line 92, in test_ink_and_fill_reject_focus_loss_during_matching_sample\n    with self.assertRaisesRegex(InterruptedError, 'lost focus'):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: InterruptedError not raised\n"
+    },
+    {
+      "test": "test_v148_calibration_batch40_brush_patches.BrushPatchPreparationTests.test_existing_screenshot_modes_match_rgb_without_full_window_conversion (mode='RGB')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_calibration_batch40_brush_patches.py\", line 41, in test_existing_screenshot_modes_match_rgb_without_full_window_conversion\n    self.assertNotIn(picture.size, conversions)\nAssertionError: (1920, 1048) unexpectedly found in [(1920, 1048), (31, 31), (31, 31), (31, 31), (31, 31)]\n"
+    },
+    {
+      "test": "test_v148_calibration_batch40_brush_patches.BrushPatchPreparationTests.test_existing_screenshot_modes_match_rgb_without_full_window_conversion (mode='RGBA')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_calibration_batch40_brush_patches.py\", line 41, in test_existing_screenshot_modes_match_rgb_without_full_window_conversion\n    self.assertNotIn(picture.size, conversions)\nAssertionError: (1920, 1048) unexpectedly found in [(1920, 1048), (31, 31), (31, 31), (31, 31), (31, 31)]\n"
+    },
+    {
+      "test": "test_v148_calibration_batch40_brush_patches.BrushPatchPreparationTests.test_existing_screenshot_modes_match_rgb_without_full_window_conversion (mode='L')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_calibration_batch40_brush_patches.py\", line 41, in test_existing_screenshot_modes_match_rgb_without_full_window_conversion\n    self.assertNotIn(picture.size, conversions)\nAssertionError: (1920, 1048) unexpectedly found in [(1920, 1048), (31, 31), (31, 31), (31, 31), (31, 31)]\n"
+    },
+    {
+      "test": "test_v148_calibration_batch40_brush_patches.BrushPatchPreparationTests.test_existing_screenshot_modes_match_rgb_without_full_window_conversion (mode='P')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_calibration_batch40_brush_patches.py\", line 41, in test_existing_screenshot_modes_match_rgb_without_full_window_conversion\n    self.assertNotIn(picture.size, conversions)\nAssertionError: (1920, 1048) unexpectedly found in [(1920, 1048), (31, 31), (31, 31), (31, 31), (31, 31)]\n"
+    },
+    {
+      "test": "test_v148_calibration_batch40_brush_patches.BrushPatchPreparationTests.test_patch_and_scoring_failures_close_already_owned_patches (stage='crop')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_calibration_batch40_brush_patches.py\", line 70, in test_patch_and_scoring_failures_close_already_owned_patches\n    with self.assertRaises(ValueError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ValueError not raised\n"
+    },
+    {
+      "test": "test_v148_calibration_batch40_brush_patches.BrushPatchPreparationTests.test_patch_and_scoring_failures_close_already_owned_patches (stage='score')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_calibration_batch40_brush_patches.py\", line 70, in test_patch_and_scoring_failures_close_already_owned_patches\n    with self.assertRaises(ValueError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ValueError not raised\n"
+    }
+  ],
+  "error_details": [
+    {
+      "test": "test_v148_native_batch40_drag_takeover.DragTakeoverTests.test_button_pressed_during_position_retry_stops_before_another_send (backend='cursor')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_drag_takeover.py\", line 61, in test_button_pressed_during_position_retry_stops_before_another_send\n    mouse.move(20, 30)\n  File \"$REPO/WindowsMouse.py\", line 57, in call\n    return method(self, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"$REPO/WindowsMouse.py\", line 217, in move\n    if retry_after and attempt>=retry_after and (attempt-retry_after)%2==0:\nOSError: The mouse did not reach the target 20,30; Windows reports (0, 0). Select the area again and check Windows display scaling.\n"
+    },
+    {
+      "test": "test_v148_native_batch40_drag_takeover.DragTakeoverTests.test_button_pressed_during_position_retry_stops_before_another_send (backend='sendinput')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch40_drag_takeover.py\", line 61, in test_button_pressed_during_position_retry_stops_before_another_send\n    mouse.move(20, 30)\n  File \"$REPO/WindowsMouse.py\", line 57, in call\n    return method(self, *args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"$REPO/WindowsMouse.py\", line 217, in move\n    if retry_after and attempt>=retry_after and (attempt-retry_after)%2==0:\nOSError: The mouse did not reach the target 20,30; Windows reports (0, 0). Select the area again and check Windows display scaling.\n"
+    }
+  ],
+  "sources": {
+    "ScreenGuard.py": "9853eef079bf4a8be419161017773df30ad2bc7058d7734d6f7057655bf4cc67",
+    "WindowsMouse.py": "b86b26b9e7789ab899b1461fa39f98969f3c22f50272d54a67b5a2de03df4792",
+    "BrowserBrushSize.py": "12bf8a27e2395480fad021ae6badbf52cd47f5ab244529cce183969ca20bb819",
+    "ScreenPixelSampling.py": "93499957f24b296d382053d6196bdefd7d9de0c39678030ba65691910e6a3220"
+  },
+  "tests": [
+    "test_v148_native_batch40_target_identity",
+    "test_v148_native_batch40_drag_takeover",
+    "test_v148_native_batch40_stop_waits",
+    "test_v148_native_batch25_screen_sampling.ScreenSamplingTests.test_real_guarded_stroke_consumer_keeps_its_verdict_with_one_grouped_read",
+    "test_v148_native_batch40_ink_sampling.GroupedInkTests.test_ink_and_fill_reject_focus_loss_during_matching_sample",
+    "test_v148_calibration_batch40_brush_patches"
+  ]
+}

@@ -1,0 +1,319 @@
+{
+  "baseline_commit": "888116094b91758dded968a7e3b5559683db9ad7",
+  "baseline_module_sha256": "6bc72dd8e79d6f9f27d8f10d3a660b55dd0a6ceed487fafd72d37066f6a81a24",
+  "current_module_sha256": "10be233a5eb89b26008097b624f3a43fb0762d90e4cfff14b7f1683fb209042b",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "pairs": 6,
+  "workloads": [
+    {
+      "label": "Paint reference",
+      "asset": "paint-tools-reference.png",
+      "size": [
+        76,
+        76
+      ],
+      "palette_count": 20,
+      "settings": {
+        "gpu_mode": "CPU",
+        "color_rendering": "Perceptual match",
+        "color_fidelity": "Faithful",
+        "skip_white": true,
+        "custom_mode": "Calibrated palette"
+      },
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 96.7041489998337,
+          "after_ms": 23.193085999992036
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 11.123238999971363,
+          "before_ms": 12.90929100014182
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 9.096400000089488,
+          "after_ms": 19.811385000139126
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 25.85892099978082,
+          "before_ms": 19.875697999850672
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 17.43118400008825,
+          "after_ms": 15.220043000226724
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 15.274153000063961,
+          "before_ms": 12.144566000188206
+        }
+      ],
+      "before_median_ms": 15.170237500115036,
+      "after_median_ms": 17.542769000101543,
+      "reduction_percent": -15.639382705567506,
+      "allocations": {
+        "before_python_traced_peak_bytes": 4250566,
+        "after_python_traced_peak_bytes": 4233950
+      },
+      "output_sha256": [
+        "7a4d22759dbf005b2b054cd20fbdb1768f585cb86cfb40022505ad16b8870bd5",
+        "b82169206847a0dfc0d13111f7342d2801b790bb7243b91abcf52fc95975a2b3"
+      ]
+    },
+    {
+      "label": "Application screenshot RGB",
+      "asset": "image-draw-bot-app-screenshot.webp",
+      "size": [
+        480,
+        262
+      ],
+      "palette_count": 20,
+      "settings": {
+        "gpu_mode": "CPU",
+        "color_rendering": "RGB nearest",
+        "color_fidelity": "Balanced",
+        "skip_white": true,
+        "custom_mode": "Calibrated palette"
+      },
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 57.11899700008871,
+          "after_ms": 44.54548400008207
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 67.80373700030395,
+          "before_ms": 61.655802999666776
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 44.748655000148574,
+          "after_ms": 48.79644999982702
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 71.07712600009108,
+          "before_ms": 65.82596299995203
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 116.38638000022183,
+          "after_ms": 46.51079699988259
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 53.467382000235375,
+          "before_ms": 61.538844000097015
+        }
+      ],
+      "before_median_ms": 61.597323499881895,
+      "after_median_ms": 51.1319160000312,
+      "reduction_percent": 16.99003610095293,
+      "allocations": {
+        "before_python_traced_peak_bytes": 2420678,
+        "after_python_traced_peak_bytes": 2399910
+      },
+      "output_sha256": [
+        "4817377cd091b3b484c1431eaf63458e076b436945de6057d63fe73a85a4da35",
+        "12db7d24d9f808a70e8ecedc4afc79707cfb5fea94e39de9c9312c250a6e8809"
+      ]
+    },
+    {
+      "label": "Icon sparse custom",
+      "asset": "image-draw-bot-icon.png",
+      "size": [
+        192,
+        192
+      ],
+      "palette_count": 70,
+      "settings": {
+        "gpu_mode": "CPU",
+        "color_rendering": "Perceptual match",
+        "color_fidelity": "Faithful",
+        "skip_white": true,
+        "custom_mode": "Custom colors first"
+      },
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 184.46567299997696,
+          "after_ms": 257.4260960000174
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 193.8276930000029,
+          "before_ms": 316.8831190000674
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 1125.1514210002824,
+          "after_ms": 350.0594890001594
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 914.614136000182,
+          "before_ms": 313.0007769996155
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 224.528384000223,
+          "after_ms": 266.3478659997054
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 449.0361410003061,
+          "before_ms": 414.8890550000033
+        }
+      ],
+      "before_median_ms": 314.94194799984143,
+      "after_median_ms": 308.2036774999324,
+      "reduction_percent": 2.139527790027018,
+      "allocations": {
+        "before_python_traced_peak_bytes": 7418820,
+        "after_python_traced_peak_bytes": 7418820
+      },
+      "output_sha256": [
+        "c160f47fc1a790391ace61eaf18537f1e3bbc5e95bcc65db2f7325924421c15c",
+        "a419ee782824c7f468569104e09794e372053f3db67e0a166354a7717326d0a1"
+      ]
+    },
+    {
+      "label": "Screenshot sparse custom",
+      "asset": "image-draw-bot-app-screenshot.webp",
+      "size": [
+        192,
+        105
+      ],
+      "palette_count": 70,
+      "settings": {
+        "gpu_mode": "CPU",
+        "color_rendering": "RGB nearest",
+        "color_fidelity": "Off",
+        "skip_white": true,
+        "custom_mode": "Custom colors first"
+      },
+      "samples": [
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 31.137795000176993,
+          "after_ms": 29.034794999915903
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 33.4990530000141,
+          "before_ms": 29.55955700008417
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 36.40239800006384,
+          "after_ms": 33.21781299973736
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 28.710830999898462,
+          "before_ms": 27.27677599978051
+        },
+        {
+          "order": [
+            "before",
+            "after"
+          ],
+          "before_ms": 30.61137900022004,
+          "after_ms": 19.712638999862975
+        },
+        {
+          "order": [
+            "after",
+            "before"
+          ],
+          "after_ms": 40.68161999975928,
+          "before_ms": 28.8990589997411
+        }
+      ],
+      "before_median_ms": 30.085468000152105,
+      "after_median_ms": 31.126303999826632,
+      "reduction_percent": -3.4595971705318584,
+      "allocations": {
+        "before_python_traced_peak_bytes": 2471196,
+        "after_python_traced_peak_bytes": 2471196
+      },
+      "output_sha256": [
+        "ec32ca697c2e988efd4f6177e6992832ab78ccc5f36ef37e7fb1f33f61f6432a",
+        "db2af86133891042e7f4cc69bae1cdee940ea88e9481839a9a04f98c6f991698"
+      ]
+    }
+  ],
+  "scope": "Whole public CPU palette mapper, exact outputs and metadata on every invocation. Balanced order; allocation probes separate from timed samples. Local shared Linux environment; no physical GPU, drawing-time or process-RSS claim."
+}

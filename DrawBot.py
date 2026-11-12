@@ -8209,26 +8209,53 @@ class DrawBotApp:
             self.status.set('Load an image before removing its background.')
             return False
         self.stop.clear()
-        source=self.original.copy()
-        self.status.set('Removing border-connected background…')
-        log_event(f'Background removal requested: size={source.size}.')
+        original=self.original
+        source=original.copy()
+        needs_undo=getattr(self,'background_removal_original',None) is None
+        transferred=False
+        source_released=False
+        def release_source(failure=None):
+            nonlocal source_released
+            if not transferred and not source_released:
+                source_released=True
+                from ImageOwnership import close_image
+                close_image(source,failure)
         def work():
+            nonlocal transferred
             from BackgroundRemoval import remove_background
-            with closing(source):
+            from BackgroundEdit import BackgroundEditResult
+            result=failure=None
+            try:
                 result=remove_background(source,mode='Auto',strength='Balanced',cancelled=self.stop.is_set)
-            if self.stop.is_set():
-                result.image.close()
-                raise InterruptedError()
-            self.events.put(('background_removed',result))
+                try:
+                    undo=source if needs_undo and not result.metadata.get('no_op_reason') else None
+                    event=BackgroundEditResult(result.image,result.metadata,original,undo)
+                except BaseException as failure:
+                    from ImageOwnership import close_image
+                    close_image(result.image,failure)
+                    raise
+                DrawBotApp._publish_image_result(self,'background_removed',event,event.image)
+                transferred=undo is not None
+            except BaseException as error:
+                failure=error
+                raise
+            finally:
+                release_source(failure)
         started=False
+        startup_failure=None
         try:
-            started=bool(self.begin_worker('background-remove',work,reset_stop=False,cleanup=source.close))
+            self.status.set('Removing border-connected background…')
+            log_event(f'Background removal requested: size={source.size}.')
+            started=bool(self.begin_worker('background-remove',work,reset_stop=False,cleanup=release_source))
             if not started and self.stop.is_set() and not self.closing and not self.activity:
                 try:self.status.set('Stopped.')
                 except (tk.TclError,RuntimeError,AttributeError):pass
             return started
+        except BaseException as error:
+            startup_failure=error
+            raise
         finally:
-            if not started:source.close()
+            if not started:release_source(startup_failure)
 
     def undo_background_removal(self):
         if self.activity or self.closing:return False
@@ -8263,7 +8290,7 @@ class DrawBotApp:
         if not path:return False
         if self.closing or self.activity or self.original is not source:return False
         self.stop.clear()
-        snapshot=source.copy();self.status.set('Saving PNG…')
+        snapshot=source.copy()
         def work():
             from BackgroundRemoval import png_export_ready
             from RuntimePaths import atomic_binary_writer
@@ -8275,6 +8302,7 @@ class DrawBotApp:
             self.events.put(('png_saved',path))
         started=False
         try:
+            self.status.set('Saving PNG…')
             started=bool(self.begin_worker('png-export',work,reset_stop=False,cleanup=snapshot.close))
             if not started and self.stop.is_set() and not self.closing and not self.activity:
                 try:self.status.set('Stopped.')
@@ -8340,10 +8368,7 @@ class DrawBotApp:
         from ImageUpscale import upscale_image
         def work():
             result=upscale_image(source,scale,method,self.stop.is_set)
-            if self.stop.is_set():
-                result.close()
-                raise InterruptedError()
-            self.events.put(('upscaled',(result,source)))
+            DrawBotApp._publish_image_result(self,'upscaled',(result,source),result)
         return bool(self.begin_worker('upscale',work))
 
     def undo_upscale(self):
@@ -8405,12 +8430,7 @@ class DrawBotApp:
         def work():
             from ClipboardImport import prepare_bitmap
             prepared=prepare_bitmap(content,cancelled=self.stop.is_set)
-            try:
-                if self.stop.is_set():raise InterruptedError()
-                self.events.put(('pasted',(prepared,action)))
-            except BaseException:
-                prepared.close()
-                raise
+            DrawBotApp._publish_image_result(self,'pasted',(prepared,action),prepared)
         return bool(self.begin_worker('load',work))
 
     def capture_screen(self):
@@ -8422,8 +8442,19 @@ class DrawBotApp:
             for second in (3,2,1):
                 self.events.put(('status',f'Capturing the drawing area in {second} s. Move this window aside.'))
                 if self.stop.wait(1):raise InterruptedError()
-            self.events.put(('screen',grab_area(area)))
+            captured=grab_area(area)
+            DrawBotApp._publish_image_result(self,'screen',captured,captured)
         self.begin_worker('screen',work)
+
+    def _publish_image_result(self,kind,value,image):
+        """Transfer an owned result only after the queue accepts it."""
+        try:
+            if self.stop.is_set() or self.closing:raise InterruptedError()
+            self.events.put((kind,value))
+        except BaseException as failure:
+            from ImageOwnership import close_image
+            close_image(image,failure)
+            raise
 
     def display_screen(self,image):
         if self.closing:
@@ -8655,12 +8686,11 @@ class DrawBotApp:
             try:
                 if self.stop.is_set():raise InterruptedError()
                 log_event(f'Image loaded: size={image.size} label={label!r}.')
-                self.events.put(('loaded',(image,label,action,bool(one_click_force))))
-            except BaseException:
-                # The decoder transfers its owned result only after enqueue.
-                # A late Stop or publication failure still belongs to us.
-                image.close()
+            except BaseException as failure:
+                from ImageOwnership import close_image
+                close_image(image,failure)
                 raise
+            DrawBotApp._publish_image_result(self,'loaded',(image,label,action,bool(one_click_force)),image)
         return bool(self.begin_worker('load',work))
 
     def _auto_preview_enabled(self):
@@ -9010,9 +9040,9 @@ class DrawBotApp:
                 # failures still belong to this worker, even with a traceback.
                 owner.close(published,failure)
         # Historic v1.0.10 status string kept for release-test visibility: Planning optimized preview.
-        self.status.set('Building preview…' if user_initiated else 'Planning lightweight auto preview…')
         started=False
         try:
+            self.status.set('Building preview…' if user_initiated else 'Planning lightweight auto preview…')
             # Both automatic and explicit work preserve Esc received during
             # options/snapshot preparation or native worker setup.
             started=bool(self.begin_worker('preview',work,reset_stop=False,cleanup=original.close))
@@ -11315,6 +11345,11 @@ class DrawBotApp:
         from PIL import Image
         retained={name:getattr(self,name,None) for name in
                   ('original','upscale_original','background_removal_original')}
+        if kind=='background_removed':
+            from BackgroundEdit import BackgroundEditResult
+            if isinstance(value,BackgroundEditResult):
+                value.release(keep=retained.values())
+                return
         if kind=='planned':
             publication=getattr(self,'_draw_plan_publication',None)
             if publication is not None and publication.reject(value):return
@@ -11820,7 +11855,11 @@ class DrawBotApp:
             self.needs_plan=True
         elif kind=='background_removed':
             from ImageFormatInfo import image_label
+            from BackgroundEdit import BackgroundEditResult
             result=value
+            if isinstance(result,BackgroundEditResult) and self.original is not result.source:
+                DrawBotApp._discard_worker_result(self,kind,value)
+                return
             image=getattr(result,'image',None);meta=getattr(result,'metadata',{}) or {}
             if image is None:
                 self.status.set('Background removal returned no image. Original preserved.')
@@ -11828,14 +11867,31 @@ class DrawBotApp:
                 reason=meta.get('no_op_reason')
                 if reason:
                     self.background_removal_meta=dict(meta)
-                    if image is not self.original:image.close()
+                    if isinstance(result,BackgroundEditResult):result.release()
+                    elif image is not self.original:image.close()
                     self.status.set(f'Background remover kept the original: {reason}.')
                     return
-                prepared=image if image.mode=='RGBA' else image.convert('RGBA')
-                DrawBotApp._cancel_browser_one_click(self,'source background changed')
-                if self.background_removal_original is None:
-                    self.background_removal_original=self.original.copy()
+                prepared=None
+                try:
+                    prepared=image if image.mode=='RGBA' else image.convert('RGBA')
+                    DrawBotApp._cancel_browser_one_click(self,'source background changed')
+                    if self.background_removal_original is None:
+                        # The worker's source was already a detached snapshot.
+                        # Reuse it for Undo instead of copying the same pixels
+                        # a second time on the UI thread after segmentation.
+                        self.background_removal_original=(result.undo_image
+                            if isinstance(result,BackgroundEditResult) and result.undo_image is not None
+                            else self.original.copy())
+                except BaseException as failure:
+                    if prepared is not None and prepared is not image:
+                        from ImageOwnership import close_image
+                        close_image(prepared,failure)
+                    if isinstance(result,BackgroundEditResult):
+                        result.release(keep=(self.original,self.background_removal_original),failure=failure)
+                    raise
                 self.original=prepared;self.background_removal_meta=dict(meta);self.plan=None
+                if isinstance(result,BackgroundEditResult):
+                    result.release(keep=(self.original,self.background_removal_original))
                 self._suppress_recovery=False
                 DrawBotApp._clear_source_time_feedback(self)
                 self.upscale_original=None

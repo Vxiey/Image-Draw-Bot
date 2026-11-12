@@ -111,14 +111,17 @@ class ImageCopyStopTests(unittest.TestCase):
                         worker.join(timeout=10)
                         self.assertFalse(worker.is_alive())
                 self.assertEqual(len(copies), 1)
-                with self.assertRaises(ValueError):
-                    copies[0].getpixel((0, 0))
+                if operation == 'remove_image_background' and moment == 'previous':
+                    self.assertEqual(copies[0].tobytes(), before)
+                else:
+                    with self.assertRaises(ValueError):
+                        copies[0].getpixel((0, 0))
                 self.assertEqual(source.tobytes(), before)
                 events = worker_fixture.ImageWorkerCleanupTests.events(app)
                 kinds = [kind for kind, _ in events]
                 self.assertNotIn('terminal_status', kinds)
-                # Undo's source.copy must run without the injection intended
-                # only for the initial request, just as it does in the UI.
+                # Deliver on the UI after the worker transfers its owned Undo
+                # snapshot; no second source copy is needed for this handoff.
                 with patch.object(DrawBotApp, '_clear_render_resume'):
                     for event in events:
                         DrawBotApp._handle_event(app, *event)

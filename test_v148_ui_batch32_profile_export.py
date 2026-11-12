@@ -83,6 +83,7 @@ class ProfileExportLifecycleTests(unittest.TestCase):
             ))
             info = context.enter_context(patch('tkinter.messagebox.showinfo'))
             error = context.enter_context(patch('tkinter.messagebox.showerror'))
+            context.enter_context(patch('tkinter.messagebox.askyesno', return_value=True))
             result = portability.export_profile_dialog(self.app)
         return result, chooser, info, error
 
