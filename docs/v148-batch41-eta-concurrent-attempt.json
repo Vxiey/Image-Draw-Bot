@@ -1,0 +1,29 @@
+{
+  "baseline": "fc3f927",
+  "scope": "Typed cold-path ETA averages and adjacent real planner/preview/cost contracts. No physical native timing claim.",
+  "modules": [
+    "test_v148_application_batch41_typed_eta",
+    "test_v148_ui_batch29_estimate",
+    "test_v148_ui_batch20_preview_estimate",
+    "test_v148_application_batch08_cost_summary",
+    "test_rc17_unified_execution_cost_eta"
+  ],
+  "result": {
+    "run": 35,
+    "failures": 1,
+    "errors": 0,
+    "skips": 0,
+    "elapsed_seconds": 34.5729
+  },
+  "owned_source_hashes_before": {
+    "DrawTimeEstimate.py": "1fad646ea95745db2428c2d91a6e62f2e0d0942b45ec848b194f58a848cedca8",
+    "ExecutionCostModel.py": "36c19b11a71f8c1c2b04cb70f4df287cbfb57c37f42ecb04c03a8902476f36e0",
+    "test_v148_application_batch41_typed_eta.py": "ab6412c16fa81b8310542cbf57dafd7b5d4590107eae2a40e12c9860ae80e6b2"
+  },
+  "owned_source_hashes_after": {
+    "DrawTimeEstimate.py": "1fad646ea95745db2428c2d91a6e62f2e0d0942b45ec848b194f58a848cedca8",
+    "ExecutionCostModel.py": "36c19b11a71f8c1c2b04cb70f4df287cbfb57c37f42ecb04c03a8902476f36e0",
+    "test_v148_application_batch41_typed_eta.py": "ab6412c16fa81b8310542cbf57dafd7b5d4590107eae2a40e12c9860ae80e6b2"
+  },
+  "output": "......F............................\n======================================================================\nFAIL: test_actual_native_projected_and_full_worker_cost_once_with_identical_final_estimate (test_v148_ui_batch29_estimate.PreviewSequenceTransferTests.test_actual_native_projected_and_full_worker_cost_once_with_identical_final_estimate) (area=(1100, 600), full=False)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"[repository]/test_v148_ui_batch29_estimate.py\", line 26, in test_actual_native_projected_and_full_worker_cost_once_with_identical_final_estimate\n    plan, done = self.build(app, full_detail=full)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"[repository]/test_v148_ui_batch20_preview_estimate.py\", line 105, in build\n    self.assertFalse(app.worker.is_alive(), 'Actual preview worker exceeded its fixture bound')\nAssertionError: True is not false : Actual preview worker exceeded its fixture bound\n\n----------------------------------------------------------------------\nRan 35 tests in 32.629s\n\nFAILED (failures=1)\n"
+}

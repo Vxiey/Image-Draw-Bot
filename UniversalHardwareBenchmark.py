@@ -19,6 +19,7 @@ import platform
 import statistics
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
@@ -687,6 +688,9 @@ def run_universal_hardware_benchmark(*, save: bool = True, path: Path | None = N
     cpu_composite=statistics.fmean([s.throughput_mp_s for s in cpu_large]) if cpu_large else 0.0
     result={
         "version":PROFILE_VERSION,
+        # A completed remeasurement owns fresh runtime evidence even if two
+        # small benchmark attempts finish within the same timestamp second.
+        "measurement_id":uuid.uuid4().hex,
         "created_at":int(time.time()),
         "elapsed_ms":round((time.perf_counter()-started)*1000.0,1),
         "hardware_signature":snapshot.get("hardware_signature"),

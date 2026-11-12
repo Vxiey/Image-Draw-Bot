@@ -6,24 +6,44 @@ Continue application-wide correctness, performance and security improvements, wi
 
 ## Current state
 
-The current reviewed source checkpoint contains **861/900 distinct implemented
-improvements, with 39 remaining**. Batch 40 adds one background Undo handoff,
-four rendering/detail groups, five runtime/numeric groups and five native-input
-or brush-calibration groups. All 846 earlier registry entries are preserved.
-Restored export confirmation, result publication, image lifetime and capture
-revalidation complete existing contracts with zero additional IDs.
+The current reviewed source checkpoint contains **869/900 distinct implemented
+improvements, with 31 remaining**. Batch 40 added 15 groups; batch 41 adds eight:
+typed ETA calibration, copy-free oriented upscale input, actual-cost Pixel time
+budgets, bounded Hybrid mask transitions, hardware-generation GPU evidence,
+executor-bound worker recommendations, delivery-specific timing history and
+brush-correct representative dry runs. All 861 preceding registry entries are
+preserved exactly. Tests, review completions and Tcl-fixture repairs add no IDs.
 
-The [application](v148-batch40-application.md),
+The [application](v148-batch41-application.md),
+[rendering](v148-batch41-rendering.md), [runtime](v148-batch41-runtime.md) and
+[native delivery](v148-batch41-delivery.md) ledgers document the behavior,
+historical negative evidence, exact controls and limitations. The combined
+[focused integration](v148-batch41-focused-integration.json) passed **47/47**
+methods with no failures, errors or skips and 970 unchanged Python hashes.
+
+Complete isolated discovery is pending at this checkpoint. The earlier batch40
+full attempt reached 4,663 reported methods without an assertion failure before
+aborting in Tcl; it is not a completed pass. Two preceding fixtures retained
+interpreter owners in captured exception frames. Their corrected creator-thread
+disposal passes the 21-method affected sequence and two subprocess ownership
+checks; no product GC policy, assertion, skip or timeout was weakened. See the
+[Tcl diagnostic](v148-batch40-tcl-abort.json) and
+[fixture evidence](v148-batch40-boundary-fixture.md). The separate first-runner
+main-guard defect remains in [its original diagnostic](v148-batch40-initial-runner.json).
+
+The previous published head has no completed Windows/Linux or CodeQL result.
+Each newly published head requires its own CI. Version 1.0.148 remains
+unreleased; work continues toward the revised 900 target.
+
+### Previously recorded batch40 checkpoint
+
+Batch40 contained **861/900, with 39 remaining**, adding A4001, R4001–R4004,
+P4001–P4005 and N4001–N4005. The [application](v148-batch40-application.md),
 [rendering](v148-batch40-rendering.md), [runtime](v148-batch40-runtime.md) and
-[native/calibration](v148-batch40-native.md) ledgers separate reproducible defects,
-exact output checks, measured work/allocation changes and limits. Their focused
-checks pass. Integrated full discovery is in progress at this source checkpoint;
-the temporary runner's first attempt was interrupted because its missing main
-guard recursively started discovery in spawned workers. That runner defect is
-recorded in [the diagnostic](v148-batch40-initial-runner.json). No successful
-full-suite or published-commit CI result is claimed yet.
-
-Version 1.0.148 remains unreleased. Work continues toward the reduced 900 target.
+[native/calibration](v148-batch40-native.md) ledgers retain their focused evidence.
+Export/publication, target revalidation and owned-image cleanup completed existing
+contracts without additional IDs. Its incomplete full-suite attempts are retained
+above and are not presented as successful gates.
 
 ### Previously recorded batch39 checkpoint
 

@@ -140,6 +140,16 @@ def recommended_workers(allocation: dict[str, Any], *, mode: str = "Auto", previ
     rec = recommendation or load_recommendation(signature=machine_signature(logical_cpus=logical, ram_mb=allocation.get("ram_budget_mb")))
     if not isinstance(rec, dict) or type(rec.get('recommended_workers')) is not int or rec['recommended_workers'] <= 0:
         rec = None
+    if rec is not None:
+        # Thread and process executor measurements are not interchangeable.
+        # Auto is intentionally the existing GUI-safe Threads policy. A record
+        # without executor evidence cannot choose workers for either engine.
+        requested_engine = str(allocation.get('cpu_engine', 'Auto'))
+        measured_engine = rec.get('recommended_engine')
+        requested_engine = 'Threads' if requested_engine == 'Auto' else requested_engine
+        measured_engine = 'Threads' if measured_engine == 'Auto' else measured_engine
+        if measured_engine not in ('Threads', 'Processes') or measured_engine != requested_engine:
+            rec = None
     if mode == "Benchmark recommendations" and rec and int(rec.get("recommended_workers", 0) or 0) > 0:
         return max(1, min(cap, int(rec["recommended_workers"]))), "saved per-machine benchmark"
     if rec and int(rec.get("recommended_workers", 0) or 0) > 0:

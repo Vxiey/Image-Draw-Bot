@@ -6,15 +6,15 @@ AMD/Intel/NVIDIA OpenCL and deterministic NumPy are peers behind one API.
 
 Safety/compatibility rules:
 - CPU/NumPy is always available and is the authoritative fallback.
-- A backend failure is quarantined only for that backend + workload for the
-  current process.  One bad OpenCL kernel never disables unrelated work.
+- A backend failure is quarantined for its backend, workload and measured
+  hardware generation. One bad OpenCL kernel never disables unrelated work.
 - Small jobs stay on CPU when the Step 22 crossover says transfers cost more.
 - User images are never persisted by this module; arrays exist only in memory.
 - No mouse, screen capture, network or telemetry is used here.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from contextlib import contextmanager
 from functools import wraps
 import math
@@ -39,8 +39,9 @@ WORKLOAD_PROFILE_ALIAS = {
 
 _LOCK = threading.RLock()
 _HEALTH_LOCK = threading.RLock()
-_FAILED: dict[tuple[str, str], str] = {}
-_OPENCL_CACHE: dict[str, tuple[Any, Any, Any, Any]] = {}
+_FAILED: dict[tuple, str] = {}
+_FAILED_LIMIT = 256
+_OPENCL_CACHE: dict[str | tuple, tuple[Any, Any, Any, Any]] = {}
 _OPENCL_IN_USE: dict[int, int] = {}
 
 
@@ -86,6 +87,24 @@ class HardwareProfileObservation:
 ProfileInput = dict[str, Any] | HardwareProfileObservation | None
 
 
+def _profile_generation(profile) -> tuple[str, str] | None:
+    hardware = profile.get('hardware_signature')
+    if not isinstance(hardware, str) or not hardware:
+        # Legacy explicit callers have no proven identity. Preserve their
+        # existing process-local quarantine instead of inventing a revision.
+        return None
+    revision = profile.get('measurement_id')
+    if not isinstance(revision, str) or not revision:
+        from RuntimePaths import is_finite_number
+        created = profile.get('created_at')
+        revision = f'legacy:{float(created):.17g}' if is_finite_number(created) else 'legacy'
+    return hardware, revision
+
+
+def _health_key(backend_id, workload, generation):
+    return (backend_id, workload) if generation is None else (backend_id, workload, generation)
+
+
 @dataclass(frozen=True)
 class RouteInfo:
     workload: str
@@ -98,9 +117,12 @@ class RouteInfo:
     pixels: int
     reason: str = ""
     fallback_reason: str = ""
+    _generation: tuple[str, str] | None = field(default=None, repr=False)
 
     def as_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        result = asdict(self)
+        result.pop('_generation')
+        return result
 
 
 def _cancel(cancelled: Callable[[], bool]) -> None:
@@ -243,14 +265,17 @@ def select_route(workload: str, *, pixels: int, gpu_mode: str = "Auto",
             _opencl_device_ids(backend_id)
     except ValueError:
         return _cpu_route(logical, px, f'invalid measured backend id: {backend_id}')
+    generation = _profile_generation(prof)
     with _HEALTH_LOCK:
-        failed = _FAILED.get((backend_id, logical)) or _FAILED.get((backend_id, mapped))
+        failed = (_FAILED.get(_health_key(backend_id, logical, generation))
+                  or _FAILED.get(_health_key(backend_id, mapped, generation)))
     if failed:
         return _cpu_route(logical, px, f"{backend_id} quarantined for {logical}: {failed}")
     return RouteInfo(
         logical, mapped, backend_id, str(pref.get("backend") or backend_id),
         str(pref.get("vendor") or "GPU"), str(pref.get("device") or "GPU"), True, px,
         reason=str(pref.get("reason") or "Step 22 measured preference"),
+        _generation=generation,
     )
 
 
@@ -264,7 +289,11 @@ def _mark_failed(route: RouteInfo, error: BaseException) -> RouteInfo:
         transient_memory=isinstance(error,MemoryError) or 'out of memory' in str(error).lower()
     if route.backend_id != "cpu:numpy" and not transient_memory:
         with _HEALTH_LOCK:
-            _FAILED[(route.backend_id, route.workload)] = message
+            key = _health_key(route.backend_id, route.workload, route._generation)
+            _FAILED.pop(key, None)
+            while len(_FAILED) >= _FAILED_LIMIT:
+                _FAILED.pop(next(iter(_FAILED)))
+            _FAILED[key] = message
     reason=(f"{route.backend_id} hit transient memory pressure and fell back for this call: {message}" if transient_memory else
             f"{route.backend_id} failed safely: {message}")
     return _cpu_route(route.workload, route.pixels, reason)
@@ -279,7 +308,8 @@ def reset_runtime_backend_health() -> None:
 
 def backend_health_snapshot() -> dict[str, str]:
     with _HEALTH_LOCK:
-        return {f"{backend}|{workload}": reason for (backend, workload), reason in _FAILED.items()}
+        return {'|'.join((key[0], key[1], *key[2])) if len(key) == 3
+                else '|'.join(key): reason for key, reason in _FAILED.items()}
 
 
 def _rgb01(array: np.ndarray) -> np.ndarray:
@@ -423,10 +453,30 @@ __kernel void ds_palette_kernel(
 """
 
 
-def _opencl_context(backend_id: str):
+def _opencl_cache_key(backend_id, generation):
+    return backend_id if generation is None else (backend_id, generation)
+
+
+def _opencl_cached_backend(key):
+    return key[0] if isinstance(key, tuple) else key
+
+
+def _retire_opencl_generations(backend_id, keep):
+    """Detach obsolete idle owners under the lock; caller drops them outside."""
+    retired = []
+    for key in list(_OPENCL_CACHE):
+        if key != keep and _opencl_cached_backend(key) == backend_id:
+            value = _OPENCL_CACHE[key]
+            if not _OPENCL_IN_USE.get(id(value), 0):
+                retired.append(_OPENCL_CACHE.pop(key))
+    return retired
+
+
+def _opencl_context(backend_id: str, *, generation=None):
+    key = _opencl_cache_key(backend_id, generation)
     with _LOCK:
-        if backend_id in _OPENCL_CACHE:
-            return _OPENCL_CACHE[backend_id]
+        if key in _OPENCL_CACHE:
+            return _OPENCL_CACHE[key]
         pidx, didx = _opencl_device_ids(backend_id)
         import pyopencl as cl
         platforms = list(cl.get_platforms())
@@ -437,17 +487,26 @@ def _opencl_context(backend_id: str):
         queue = cl.CommandQueue(ctx)
         program = cl.Program(ctx, _OPENCL_SOURCE).build(options=[])
         value = (cl, ctx, queue, program)
-        _OPENCL_CACHE[backend_id] = value
+        _OPENCL_CACHE[key] = value
         return value
 
 
 @contextmanager
-def _opencl_session(backend_id: str):
+def _opencl_session(route: RouteInfo | str):
     """Keep a cached context borrowed until this operation releases its work."""
-    with _LOCK:
-        value = _opencl_context(backend_id)
-        identity = id(value)
-        _OPENCL_IN_USE[identity] = _OPENCL_IN_USE.get(identity, 0) + 1
+    backend_id = route.backend_id if isinstance(route, RouteInfo) else route
+    generation = route._generation if isinstance(route, RouteInfo) else None
+    key = _opencl_cache_key(backend_id, generation)
+    retired = []
+    try:
+        with _LOCK:
+            retired = _retire_opencl_generations(backend_id, key)
+            value = (_opencl_context(backend_id) if generation is None else
+                     _opencl_context(backend_id, generation=generation))
+            identity = id(value)
+            _OPENCL_IN_USE[identity] = _OPENCL_IN_USE.get(identity, 0) + 1
+    finally:
+        retired.clear()
     try:
         yield value
     finally:
@@ -457,6 +516,13 @@ def _opencl_session(backend_id: str):
                 _OPENCL_IN_USE[identity] = remaining
             else:
                 _OPENCL_IN_USE.pop(identity)
+            # A newer context can coexist with an active old operation. Keep
+            # the most recently constructed generation when that old operation
+            # exits, rather than letting late completion retire the new owner.
+            keys = [item for item in _OPENCL_CACHE if _opencl_cached_backend(item) == backend_id]
+            retired = _retire_opencl_generations(backend_id, keys[-1] if keys else key)
+        retired.clear()
+        value = None
 
 
 def clear_idle_opencl_cache(*, cancelled=lambda: False):
@@ -587,7 +653,7 @@ def oklab_array(rgb: np.ndarray, *, gpu_mode: str = "Auto", profile: ProfileInpu
                 cp.cuda.Stream.null.synchronize(); host=cp.asnumpy(out).astype(np.float32,copy=False)
             return host, route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+            with _opencl_session(route) as (cl, ctx, queue, program):
                 mf=cl.mem_flags
                 host4=_float4_host(arr)
                 src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4)
@@ -633,7 +699,7 @@ def perceptual_pair(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: str =
                 cp.cuda.Stream.null.synchronize(); hs=cp.asnumpy(sl).astype(np.float32,copy=False);hd=cp.asnumpy(dl).astype(np.float32,copy=False);he=cp.asnumpy(de).astype(np.float32,copy=False)
             return hs,hd,he,route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+            with _opencl_session(route) as (cl, ctx, queue, program):
                 mf=cl.mem_flags
                 a4=_float4_host(src);b4=_float4_host(dst)
                 ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4)
@@ -667,7 +733,7 @@ def edge_magnitude(luminance: np.ndarray, *, gpu_mode: str = "Auto", profile: Pr
                 x=cp.asarray(lum,dtype=cp.float32);out=luminance_edges(x,xp=cp);cp.cuda.Stream.null.synchronize();host=cp.asnumpy(out).astype(np.float32,copy=False)
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+            with _opencl_session(route) as (cl, ctx, queue, program):
                 mf=cl.mem_flags
                 flat=np.ascontiguousarray(lum.reshape(-1),dtype=np.float32);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=flat);dst=cl.Buffer(ctx,mf.WRITE_ONLY,flat.nbytes);program.ds_edge_kernel(queue,(pixels,),None,src,dst,np.int32(w),np.int32(h));sink=np.empty_like(flat);cl.enqueue_copy(queue,sink,dst);queue.finish();return sink.reshape(h,w),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
@@ -691,7 +757,7 @@ def pixel_channel_error(src_rgb: np.ndarray, dst_rgb: np.ndarray, *, gpu_mode: s
                 aa=cp.asarray(a);bb=cp.asarray(b);out=cp.mean(cp.abs(aa-bb),axis=-1,dtype=cp.float32);cp.cuda.Stream.null.synchronize();host=cp.asnumpy(out).astype(np.float32,copy=False)
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+            with _opencl_session(route) as (cl, ctx, queue, program):
                 mf=cl.mem_flags;a4=_float4_host(a);b4=_float4_host(b);ba=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=a4);bb=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=b4);bo=cl.Buffer(ctx,mf.WRITE_ONLY,pixels*4);program.ds_absdiff_kernel(queue,(pixels,),None,ba,bb,bo,np.int32(pixels));sink=np.empty((pixels,),dtype=np.float32);cl.enqueue_copy(queue,sink,bo);queue.finish();return sink.reshape(a.shape[:-1]),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     return _run_accelerated(route, accelerated,
@@ -890,7 +956,7 @@ def palette_indices_rgba(image, palette: Sequence[Sequence[int]], candidate_indi
                     custom_first=custom_first, cancelled=cancelled)
             return (out,visible.astype(np.bool_,copy=False)),route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+            with _opencl_session(route) as (cl, ctx, queue, program):
                 mf=cl.mem_flags
                 # Reuse bounded buffers on AMD/Intel/NVIDIA OpenCL as well.
                 chunk = min(262144, max(1, 8_000_000 // len(candidates)))
@@ -966,7 +1032,7 @@ def pairwise_oklab_distance(colors: Sequence[Sequence[int]], *, gpu_mode: str="A
                 host=_pairwise_lab_distance(lab,xp=cp,cancelled=cancelled)
             return host,route.as_dict()
         if route.backend_id.startswith("opencl:"):
-            with _opencl_session(route.backend_id) as (cl, ctx, queue, program):
+            with _opencl_session(route) as (cl, ctx, queue, program):
                 mf=cl.mem_flags;host4=_float4_host(arr);src=cl.Buffer(ctx,mf.READ_ONLY|mf.COPY_HOST_PTR,hostbuf=host4);lab=cl.Buffer(ctx,mf.READ_WRITE,host4.nbytes);outb=cl.Buffer(ctx,mf.WRITE_ONLY,n*n*4);program.ds_oklab_kernel(queue,(n,),None,src,lab,np.int32(n));program.ds_pairwise_lab(queue,(n*n,),None,lab,outb,np.int32(n));sink=np.empty((n*n,),dtype=np.float32);cl.enqueue_copy(queue,sink,outb);queue.finish();return sink.reshape(n,n),route.as_dict()
         raise RuntimeError(f"unsupported backend {route.backend_id}")
     return _run_accelerated(route, accelerated,

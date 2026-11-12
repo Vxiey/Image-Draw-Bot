@@ -359,7 +359,9 @@ class RegionTopologyTests(unittest.TestCase):
                     plan = None
                     try:
                         with observe_topology() as (calls, _, boundaries, refs):
-                            plan = DrawBot.make_plan(source, (100, 100), timed_options())
+                            # Real delivery cost, including drag delay, now
+                            # determines which complete paths fit this timer.
+                            plan = DrawBot.make_plan(source, (100, 100), timed_options(delay=.05))
                         self.assertEqual(len(calls), 1 if reuse else 2)
                         self.assertEqual(len(budget_calls), 1)
                         original, result = budget_calls[0]

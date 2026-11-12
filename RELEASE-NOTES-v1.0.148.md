@@ -1,13 +1,26 @@
 # Image Draw Bot v1.0.148 — development release notes
 
 **This version has not been published.** The current reviewed checkpoint contains
-**861 distinct behavior improvements, with 39 remaining** toward the user's
-revised target of **900**. Batch 40 adds 15 distinct implementation groups;
-restored export/publication, image ownership and capture checks complete existing
-contracts without new IDs. Tests, documentation and version promotion do not
-increase the count. The [complete ledger](docs/IMPROVEMENTS-v1.0.148.md) maps every
-ID to implementation and evidence. Current integrated/CI status is kept in the
+**869 distinct behavior improvements, with 31 remaining** toward the user's
+revised target of **900**. Batches 40 and 41 add 23 distinct implementation groups.
+Tests, documentation, review corrections, existing-contract completions and
+Tcl-fixture disposal do not increase the count. The
+[complete ledger](docs/IMPROVEMENTS-v1.0.148.md) maps each ID to its evidence.
+Integrated and published-commit CI status is recorded in the
 [progress record](docs/v148-improvement-progress.md).
+
+## Batch 41: use the actual execution context
+
+- Learn ETA from the right operation types and the actual native delivery policy.
+- Keep all Pixel Accurate detail that fits the stateful execution-time budget.
+- Preserve inherited physical brush widths in representative dry runs.
+- Bind GPU context and failure evidence to the current hardware measurement.
+- Apply worker recommendations only to the measured executor.
+- Avoid redundant upscale source copies and repeated Hybrid mask-cell reads.
+
+The [47-method integration](docs/v148-batch41-focused-integration.json) passes
+without skips. Complete local discovery and current-head Windows execution are
+separate gates; no physical Paint/GPU or universal speed gain is claimed.
 
 ### Historical batch38 notes
 

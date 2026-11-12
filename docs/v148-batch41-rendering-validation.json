@@ -1,0 +1,279 @@
+{
+  "baseline": "fc3f927966d79c3f5d8cd04ea071c0670faa6ad0",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "numpy": "2.3.5",
+  "method": "Alternating A/B pairs after warmup; allocation tracing separately; existing sources only.",
+  "limitations": [
+    "Linux CPU measurements; no native Windows drawing-time or GPU claims.",
+    "Tracemalloc is Python-tracked peak allocation, not total RSS.",
+    "Pixel timing is a delivery-model prediction, not a measured deadline guarantee.",
+    "Complete hybrid planner has three timing pairs and no traced-allocation pass."
+  ],
+  "cases": [
+    {
+      "stage": "boolean-center-runs",
+      "source": "golden-regression/small-detail-preservation.png",
+      "size": [
+        360,
+        240
+      ],
+      "exact": true,
+      "sha256": "36f2af6e7c975e6e80f5e18b5a68b30f581b10111a92355e6d6a93120915d1c7",
+      "python_mask_reads": {
+        "before": 87215,
+        "after": 6
+      },
+      "pairs_seconds": {
+        "before": [
+          0.005654,
+          0.005914,
+          0.005843,
+          0.005858,
+          0.007109,
+          0.006559
+        ],
+        "after": [
+          0.000594,
+          0.000913,
+          0.001509,
+          0.000806,
+          0.00106,
+          0.000761
+        ]
+      },
+      "median_seconds": {
+        "before": 0.005886000000000001,
+        "after": 0.0008595
+      },
+      "tracemalloc_peak_bytes": {
+        "before": 112616,
+        "after": 156723
+      }
+    },
+    {
+      "stage": "complete-hybrid-builder",
+      "source": "golden-regression/small-detail-preservation.png",
+      "size": [
+        192,
+        128
+      ],
+      "exact": true,
+      "sha256": "59d70c4381a0928e1418055e504efdf54ec10f0bb165e8109af37c8e15df141d",
+      "paths": 381,
+      "pairs_seconds": {
+        "before": [
+          1.128229,
+          1.096804,
+          1.063949
+        ],
+        "after": [
+          1.474006,
+          1.035048,
+          1.020291
+        ]
+      },
+      "median_seconds": {
+        "before": 1.096804,
+        "after": 1.035048
+      }
+    },
+    {
+      "stage": "complete-hybrid-builder",
+      "source": "assets/image-draw-bot-icon.png",
+      "size": [
+        192,
+        192
+      ],
+      "exact": true,
+      "sha256": "97f706b21323497254c922a0144583f08e5121c26ad81d133e06bb1fdf757731",
+      "paths": 1070,
+      "pairs_seconds": {
+        "before": [
+          4.146428,
+          2.233762,
+          1.977208
+        ],
+        "after": [
+          2.515285,
+          2.641109,
+          4.541886
+        ]
+      },
+      "median_seconds": {
+        "before": 2.233762,
+        "after": 2.641109
+      }
+    },
+    {
+      "stage": "public-pixel-timer",
+      "source": "golden-regression/small-detail-preservation.png",
+      "size": [
+        96,
+        64
+      ],
+      "before": {
+        "paths": 105,
+        "pixel_accuracy_percent": 85.7259,
+        "protected_accuracy_percent": 78.8986,
+        "error_pixels": 2778,
+        "estimated_seconds": 7.6435,
+        "budget": {
+          "active": true,
+          "path_budget": 105,
+          "base_path_budget": 92,
+          "correction_reserve": 13,
+          "paths_omitted": 129,
+          "paths_per_second": 5.0,
+          "learned_speed": false,
+          "seconds": 27,
+          "reserve_seconds": 3.0,
+          "source": "progressive-accuracy-time-budget",
+          "phase_order": "original execution order",
+          "admission_priority": "fill -> mid detail -> protected cleanup -> fine detail"
+        }
+      },
+      "after": {
+        "paths": 221,
+        "pixel_accuracy_percent": 100.0,
+        "protected_accuracy_percent": 100.0,
+        "error_pixels": 0,
+        "estimated_seconds": 11.755,
+        "budget": {
+          "active": true,
+          "path_budget": null,
+          "base_path_budget": 221,
+          "correction_reserve": 0,
+          "paths_omitted": 0,
+          "paths_per_second": null,
+          "source": "progressive-execution-cost-budget",
+          "phase_order": "original execution order",
+          "admission_priority": "fill -> mid detail -> protected cleanup -> fine detail",
+          "admission_method": "phase shares with original path priority and bounded cost-aware refill",
+          "seconds": 30.0,
+          "render_budget_seconds": 26.55,
+          "fixed_overhead_seconds": 3.35,
+          "sequence_budget_seconds": 23.2,
+          "base_sequence_budget_seconds": 23.2,
+          "correction_reserve_seconds": 0.0,
+          "refilled_paths": 0,
+          "initial_sequence_seconds": 8.5309609487883,
+          "selected_sequence_seconds": 8.5309609487883,
+          "risk_adjusted_sequence_seconds": 8.5309609487883,
+          "cost_model_source": "deterministic profile model",
+          "exact_cost_guard": true,
+          "fixed_overhead_exceeds_budget": false
+        }
+      }
+    },
+    {
+      "stage": "public-pixel-timer",
+      "source": "golden-regression/red-bananas-texture.png",
+      "size": [
+        96,
+        64
+      ],
+      "before": {
+        "paths": 105,
+        "pixel_accuracy_percent": 89.6647,
+        "protected_accuracy_percent": 54.6046,
+        "error_pixels": 635,
+        "estimated_seconds": 7.1049999999999995,
+        "budget": {
+          "active": true,
+          "path_budget": 105,
+          "base_path_budget": 92,
+          "correction_reserve": 13,
+          "paths_omitted": 42,
+          "paths_per_second": 5.0,
+          "learned_speed": false,
+          "seconds": 27,
+          "reserve_seconds": 3.0,
+          "source": "progressive-accuracy-time-budget",
+          "phase_order": "original execution order",
+          "admission_priority": "fill -> mid detail -> protected cleanup -> fine detail"
+        }
+      },
+      "after": {
+        "paths": 134,
+        "pixel_accuracy_percent": 100.0,
+        "protected_accuracy_percent": 100.0,
+        "error_pixels": 0,
+        "estimated_seconds": 8.566,
+        "budget": {
+          "active": true,
+          "path_budget": null,
+          "base_path_budget": 134,
+          "correction_reserve": 0,
+          "paths_omitted": 0,
+          "paths_per_second": null,
+          "source": "progressive-execution-cost-budget",
+          "phase_order": "original execution order",
+          "admission_priority": "fill -> mid detail -> protected cleanup -> fine detail",
+          "admission_method": "phase shares with original path priority and bounded cost-aware refill",
+          "seconds": 30.0,
+          "render_budget_seconds": 26.55,
+          "fixed_overhead_seconds": 3.35,
+          "sequence_budget_seconds": 23.2,
+          "base_sequence_budget_seconds": 23.2,
+          "correction_reserve_seconds": 0.0,
+          "refilled_paths": 0,
+          "initial_sequence_seconds": 5.7107295025741935,
+          "selected_sequence_seconds": 5.7107295025741935,
+          "risk_adjusted_sequence_seconds": 5.7107295025741935,
+          "cost_model_source": "deterministic profile model",
+          "exact_cost_guard": true,
+          "fixed_overhead_exceeds_budget": false
+        }
+      }
+    }
+  ],
+  "regression_verification": {
+    "command": [
+      "python",
+      "-m",
+      "unittest",
+      "-q",
+      "test_pixel_accurate_v1086",
+      "test_pixel_accuracy_engine_v1088",
+      "test_pixel_performance_v1089",
+      "test_subject_focus_v1090",
+      "test_axis_region_hybrid_v10145",
+      "test_rc6_region_brush_packing",
+      "test_rc23_region_brush_roi",
+      "test_hybrid_cost_model_v2_v10140",
+      "test_v148_rendering_batch18_pack_scores",
+      "test_v148_rendering_batch22_detail_corrections",
+      "test_v148_rendering_batch25_progressive_order",
+      "test_v148_rendering_batch26_topology",
+      "test_v148_rendering_batch40_region_work",
+      "test_v148_rendering_batch41_pixel_budget",
+      "test_v148_rendering_batch41_mask_runs"
+    ],
+    "tests_run": 113,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "duration_seconds": 22.014,
+    "new_tests_run": 11,
+    "new_test_modules": [
+      "test_v148_rendering_batch41_pixel_budget",
+      "test_v148_rendering_batch41_mask_runs"
+    ],
+    "final_source_sha256": {
+      "AdaptiveRegionHybrid.py": "0a9cfcc9b047aa522790d4dda2fa1005599f02981d7fdc48702536d58d86c6a1",
+      "PixelAccuracyEngine.py": "bbe019a72ad7ccb347553b9efdfc1887b6392256ab7f13f416d4ae595b287007",
+      "DrawBot.py": "e2a3f58a3e24d77d66d44390b14f969ec1fafdc9b637c454d1b97674cd602cc7",
+      "test_v148_rendering_batch25_progressive_order.py": "b38aff4c6b7dd19aad88a6ec587d10d099e54de5569449a289b521ef320aa208",
+      "test_v148_rendering_batch26_topology.py": "1be1e2c8e28097b905f4df3f6e6f29a8c9ea7e18ee2ba94db25910da277f6afe",
+      "test_v148_rendering_batch41_mask_runs.py": "14897c7ecb4315c17ef5562e3a26814efafe41a826cded2f7e16f7b6fd344e48",
+      "test_v148_rendering_batch41_pixel_budget.py": "a5925b18e006b9d8657564b6b870030f3bc2f02cbfcc671b97f52df0d52576f7",
+      "benchmark_v148_rendering_batch41.py": "51bef19ffca4d50e4604ca012b0a57d84a9f4afdab08cac7535aa1e38d71f8e7"
+    },
+    "diff_check": "passed",
+    "notes": [
+      "First command used an incorrect unittest class selector; no product failure. Correct named class passed.",
+      "First timing pass overlapped application tests and was discarded; retained timing pass ran after their completion.",
+      "No complete application, physical Windows, CUDA or remote CI gate is claimed."
+    ]
+  }
+}

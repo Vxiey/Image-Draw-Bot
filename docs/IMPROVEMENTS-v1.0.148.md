@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 861 distinct behavior improvements are implemented, including the original 100-change baseline. The user reduced the target to **900** on 12 November 2026. **39 remain; 1.0.148 has not been published.** Batch 40 focused checks pass; integrated and published-commit gates are reported separately.
+**Development status:** 869 distinct behavior improvements are implemented, including the original 100-change baseline. The user reduced the target to **900** on 12 November 2026. **31 remain; 1.0.148 has not been published.** Batch 41 adds eight groups after the 15 batch40 groups. The combined 47-method focused integration passes; complete local and published-commit gates are reported separately.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 
@@ -270,3 +270,11 @@ ownership, capture revalidation and review corrections receive zero additional
 IDs. There are 39 further distinct improvements left before the requested target.
 The [progress record](v148-improvement-progress.md) distinguishes completed
 focused checks from integrated testing and the published commit's Windows gate.
+
+
+| Global IDs | Local IDs | Area | Count | Evidence |
+| --- | --- | --- | ---: | --- |
+| 862–863 | A4101–A4102 | Batch 41 typed ETA and upscale input | 2 | [Application ledger](v148-batch41-application.md); independent runtime/rendering and parent review. |
+| 864–865 | R4101–R4102 | Batch 41 actual Pixel budget and bounded Hybrid runs | 2 | [Rendering ledger](v148-batch41-rendering.md); independent runtime and parent review. |
+| 866–867 | P4101–P4102 | Batch 41 hardware-generation and executor evidence | 2 | [Runtime ledger](v148-batch41-runtime.md); independent application and parent review. |
+| 868–869 | N4101–N4102 | Batch 41 delivery timing and inherited dry-run brush | 2 | [Delivery ledger](v148-batch41-delivery.md); independent runtime review. |

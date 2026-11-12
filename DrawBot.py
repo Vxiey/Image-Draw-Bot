@@ -538,9 +538,13 @@ def _plan_log_text(plan):
                      f" sim={pixel_accuracy.get('simulation_backend','?')}")
         prog=pixel_accuracy.get('progressive_time_budget') or {}
         if prog.get('active'):
-            pixel_bits+=(f" progressive_budget={int(prog.get('base_path_budget',0) or 0)}/"
-                         f"{int(prog.get('path_budget',0) or 0)}"
-                         f" omitted={int(prog.get('paths_omitted',0) or 0)}")
+            if prog.get('exact_cost_guard'):
+                pixel_bits+=(f" progressive_budget={float(prog.get('risk_adjusted_sequence_seconds',0)):.3f}/"
+                             f"{float(prog.get('sequence_budget_seconds',0)):.3f}s")
+            else:
+                pixel_bits+=(f" progressive_budget={int(prog.get('base_path_budget',0) or 0)}/"
+                             f"{int(prog.get('path_budget',0) or 0)}")
+            pixel_bits+=f" omitted={int(prog.get('paths_omitted',0) or 0)}"
     detail_meta=options.get('adaptive_detail_meta') or {}
     detail_bits=''
     if detail_meta.get('adaptive_detail_effective') not in (None,'Off'):
@@ -1067,17 +1071,21 @@ def _make_plan(original, area, options, cancelled=lambda: False):
                     geometry_changed=bool(subject_brush_meta['trimmed_source_paths']),subject_mask_constrained=True)
                 stroke_plan['metadata']['adaptive_brush']=adaptive_brush['metadata']
             # v1.0.89 Block D: preserve the full Block-B plan, then optionally fit
-            # execution to a user timer by phase/importance only. CUDA performs the
-            # expensive brush simulation when available; corrections stay inside the
-            # same progressive path budget.
+            # execution to a user timer using the real delivery cost. CUDA performs
+            # the expensive brush simulation when available; corrections stay inside
+            # the same remaining execution-time budget.
             from PixelAccuracyEngine import (PixelScoreContext, refine_with_corrections, execution_groups_from_sequence,
                                              render_coverage_map, render_error_map, progressive_time_budget,
                                              progressive_accuracy_checkpoints)
+            from ExecutionCostModel import build_cost_model
+            pixel_time_model=(build_cost_model(options,(pixel_map.width,pixel_map.height),fitted)
+                              if options.get('time_budget_active') else None)
             progressive_budget=progressive_time_budget(
                 stroke_plan['execution_sequence'],active=bool(options.get('time_budget_active')),
                 seconds=int(options.get('time_budget_seconds') or options.get('max_seconds') or 600),
                 profile_key=str(options.get('profile_key') or ''),
-                correction_reserve_ratio=(0 if options.get('subject_focus','Off')!='Off' else .12))
+                correction_reserve_ratio=(0 if options.get('subject_focus','Off')!='Off' else .12),
+                cost_model=pixel_time_model,cancelled=cancelled)
             base_sequence=progressive_budget['execution_sequence']
             if subject_projection is not None:
                 from SubjectFocus import evaluate_native_subject_plan
@@ -1099,6 +1107,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
                     max_total_paths=(progressive_budget.get('path_budget') if progressive_budget.get('active') else None),
                     gpu_mode=options.get('gpu_mode','Auto'),gpu_vram=options.get('gpu_vram','Auto'),
                     gpu_performance=options.get('gpu_performance','High throughput'),cancelled=cancelled,
+                    cost_model=pixel_time_model,max_execution_seconds=progressive_budget.get('sequence_budget_seconds'),
                     score_context=_pixel_score_context,_region_topology=_pixel_topology)
             if _pixel_topology is not None:_pixel_topology.close()
             stroke_plan['execution_sequence']=accuracy_plan['execution_sequence']
@@ -10409,7 +10418,8 @@ class DrawBotApp:
                         log_event(f'Automatic canvas clear added {clear_seconds:.2f}s to final draw-time estimate.')
             if dry_run:
                 original_count=int(plan.get('count') or 0)
-                plan=sample_dry_run_plan(plan, execution_seconds=DRY_RUN_EXECUTION_SECONDS)
+                plan=sample_dry_run_plan(plan, execution_seconds=DRY_RUN_EXECUTION_SECONDS,
+                                         cancelled=self.stop.is_set)
                 publication.own(plan)
                 dm=plan.get('options') or {}
                 self.events.put(('status',f"Fast Dry run: sampling up to {int(dm.get('dry_run_sample_paths',plan.get('count',0))):,} representative paths from {original_count:,}. Cursor test budget {DRY_RUN_EXECUTION_SECONDS:.0f}s. Reaching the budget is a normal PASS if no safety check fails. No clicks."))

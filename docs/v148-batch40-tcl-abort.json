@@ -1,0 +1,9 @@
+{
+  "status": "aborted",
+  "scope": "Corrected main-guard full batch40 discovery attempt",
+  "last_reported_test": "test_publication_failure_closes_all_images_and_retains_the_primary_exception (test_v148_ui_batch39_preview_ownership.PreviewAttemptOwnershipTests.test_publication_failure_closes_all_images_and_retains_the_primary_exception) ... ",
+  "reported_test_lines": 4663,
+  "reported_assertion_failures_or_errors": 0,
+  "native_abort": "Tcl_AsyncDelete: async handler deleted by the wrong thread",
+  "result_limit": "No complete test result was produced. Root cause and subsequent correction are recorded separately; no successful whole-suite result is claimed."
+}

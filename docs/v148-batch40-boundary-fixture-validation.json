@@ -1,0 +1,52 @@
+{
+  "baseline": "fc3f927",
+  "classification": "zero-ID fixture lifetime completion; no product changes",
+  "root_cause": "Picker Mock call-argument tuples and retained delivered/picked exception frames held the real Tcl root after fixture cleanup. Later worker collection could dispose that interpreter on the wrong thread.",
+  "fix": "Direct native-boundary replacement avoids Mock call history; the boundary immediately releases its borrowed _owner argument. Actual exceptions and tracebacks remain intact.",
+  "historical_proof_scope": "Only historical select/probe_child fixture methods substituted in otherwise current fixture modules; retained real boundary frames prove owner leak before any worker-GC. Automatic GC stays enabled and every original Variable destructor runs.",
+  "historical_results": [
+    {
+      "mode": "selection",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 63, in <module>\nAssertionError: ('Picker fixture retained its Tcl owner', [0, 1, 2, 3, 4, 5])\n"
+    },
+    {
+      "mode": "saved-area",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 63, in <module>\nAssertionError: ('Picker fixture retained its Tcl owner', [3])\n"
+    }
+  ],
+  "modules": [
+    "test_v148_ui_batch37_boundary",
+    "test_v148_ui_batch38_saved_area",
+    "test_v148_ui_batch39_preview_ownership",
+    "test_v148_ui_batch40_boundary_fixture_ownership"
+  ],
+  "result": {
+    "run": 21,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "elapsed_seconds": 12.17
+  },
+  "owned_source_hashes_before": {
+    "test_v148_ui_batch37_boundary.py": "6c4bde2e2dc540ee6c0dbc4fac27089655c2c8248015492cde34907b62c77000",
+    "test_v148_ui_batch38_saved_area.py": "7ff1f45893c4603304096bd5ab8e14ddb54f7f8dcbd06d205b946a942061c52b",
+    "test_v148_ui_batch39_preview_ownership.py": "5cbd30395644406d4f8e9755eeb80a4416a735de29304108fc4615588e0ba395",
+    "test_v148_ui_batch40_boundary_fixture_ownership.py": "9e85e55daf203194d85a3131952041cbce080d14c5bdac875de44f1b3f5c99bd",
+    "test_v148_ui_batch16_plan_status.py": "7fec789b9866845d4355222fd39d6020ab8bdd73132414d0436969f78fd08cbb",
+    "DrawBot.py": "c65b3577256697f452f03d22cd2e2ead76783b78c2af21501caf40cc6ae9c0c4"
+  },
+  "owned_source_hashes_after": {
+    "test_v148_ui_batch37_boundary.py": "6c4bde2e2dc540ee6c0dbc4fac27089655c2c8248015492cde34907b62c77000",
+    "test_v148_ui_batch38_saved_area.py": "7ff1f45893c4603304096bd5ab8e14ddb54f7f8dcbd06d205b946a942061c52b",
+    "test_v148_ui_batch39_preview_ownership.py": "5cbd30395644406d4f8e9755eeb80a4416a735de29304108fc4615588e0ba395",
+    "test_v148_ui_batch40_boundary_fixture_ownership.py": "9e85e55daf203194d85a3131952041cbce080d14c5bdac875de44f1b3f5c99bd",
+    "test_v148_ui_batch16_plan_status.py": "7fec789b9866845d4355222fd39d6020ab8bdd73132414d0436969f78fd08cbb",
+    "DrawBot.py": "c65b3577256697f452f03d22cd2e2ead76783b78c2af21501caf40cc6ae9c0c4"
+  },
+  "output": "test_failed_native_probe_retains_existing_setup_and_closes_delivered_crop (test_v148_ui_batch37_boundary.BoundaryAdoptionTests.test_failed_native_probe_retains_existing_setup_and_closes_delivered_crop) ... ok\ntest_shutdown_during_native_probe_rejects_result_without_late_ui_feedback (test_v148_ui_batch37_boundary.BoundaryAdoptionTests.test_shutdown_during_native_probe_rejects_result_without_late_ui_feedback) ... ok\ntest_stop_during_native_target_probe_cannot_commit_generic_selection (test_v148_ui_batch37_boundary.BoundaryAdoptionTests.test_stop_during_native_target_probe_cannot_commit_generic_selection) ... ok\ntest_stop_inside_real_anchor_analysis_prevents_native_probe_and_publication (test_v148_ui_batch37_boundary.BoundaryAdoptionTests.test_stop_inside_real_anchor_analysis_prevents_native_probe_and_publication) ... ok\ntest_stop_inside_real_gartic_analysis_restores_prior_target_and_region (test_v148_ui_batch37_boundary.BoundaryAdoptionTests.test_stop_inside_real_gartic_analysis_restores_prior_target_and_region) ... ok\ntest_successful_selection_commits_settings_and_invalidates_previous_plan_and_safety (test_v148_ui_batch37_boundary.BoundaryAdoptionTests.test_successful_selection_commits_settings_and_invalidates_previous_plan_and_safety) ... ok\ntest_explicit_reuse_after_old_stop_accepts_current_target_and_retires_old_plan (test_v148_ui_batch38_saved_area.SavedAreaCancellationTests.test_explicit_reuse_after_old_stop_accepts_current_target_and_retires_old_plan) ... ok\ntest_failed_capture_rolls_back_browser_region_with_other_geometry (test_v148_ui_batch38_saved_area.SavedAreaCancellationTests.test_failed_capture_rolls_back_browser_region_with_other_geometry) ... ok\ntest_late_stop_during_browser_region_capture_cannot_publish_new_target (test_v148_ui_batch38_saved_area.SavedAreaCancellationTests.test_late_stop_during_browser_region_capture_cannot_publish_new_target) ... ok\ntest_screen_picker_forwards_stop_into_the_same_actual_helper (test_v148_ui_batch38_saved_area.SavedAreaCancellationTests.test_screen_picker_forwards_stop_into_the_same_actual_helper) ... ok\ntest_shutdown_reaps_saved_area_helper_without_late_ui_feedback (test_v148_ui_batch38_saved_area.SavedAreaCancellationTests.test_shutdown_reaps_saved_area_helper_without_late_ui_feedback) ... ok\ntest_stop_reaps_saved_area_helper_and_retains_previous_setup (test_v148_ui_batch38_saved_area.SavedAreaCancellationTests.test_stop_reaps_saved_area_helper_and_retains_previous_setup) ... ok\ntest_expired_full_preview_keeps_previous_ui_plan_and_publishes_no_replacement (test_v148_ui_batch39_preview_ownership.PreviewAttemptOwnershipTests.test_expired_full_preview_keeps_previous_ui_plan_and_publishes_no_replacement) ... ok\ntest_expired_return_closes_first_plan_before_the_real_fallback_starts (test_v148_ui_batch39_preview_ownership.PreviewAttemptOwnershipTests.test_expired_return_closes_first_plan_before_the_real_fallback_starts) ... ok\ntest_failed_publication_preserves_borrowed_options_and_previous_ui_plan (test_v148_ui_batch39_preview_ownership.PreviewAttemptOwnershipTests.test_failed_publication_preserves_borrowed_options_and_previous_ui_plan) ... ok\ntest_publication_failure_closes_all_images_and_retains_the_primary_exception (test_v148_ui_batch39_preview_ownership.PreviewAttemptOwnershipTests.test_publication_failure_closes_all_images_and_retains_the_primary_exception) ... ok\ntest_published_normal_and_full_preview_stay_open_through_real_ui_adoption (test_v148_ui_batch39_preview_ownership.PreviewAttemptOwnershipTests.test_published_normal_and_full_preview_stay_open_through_real_ui_adoption) ... ok\ntest_stop_or_close_at_real_planner_return_releases_result_and_stop_can_retry (test_v148_ui_batch39_preview_ownership.PreviewAttemptOwnershipTests.test_stop_or_close_at_real_planner_return_releases_result_and_stop_can_retry) ... ok\ntest_timeout_cleanup_error_is_visible_and_does_not_leave_other_images_open (test_v148_ui_batch39_preview_ownership.PreviewAttemptOwnershipTests.test_timeout_cleanup_error_is_visible_and_does_not_leave_other_images_open) ... ok\ntest_real_saved_area_helpers_release_tcl_before_worker_collection (test_v148_ui_batch40_boundary_fixture_ownership.BoundaryFixtureOwnershipTests.test_real_saved_area_helpers_release_tcl_before_worker_collection) ... ok\ntest_real_selection_errors_cannot_retain_the_fixture_interpreter (test_v148_ui_batch40_boundary_fixture_ownership.BoundaryFixtureOwnershipTests.test_real_selection_errors_cannot_retain_the_fixture_interpreter) ... ok\n\n----------------------------------------------------------------------\nRan 21 tests in 11.440s\n\nOK\n",
+  "full40_status": "Earlier full40 run aborted at batch39 publication regression with Tcl_AsyncDelete. This targeted verification does not replace the pending combined isolated whole-suite gate."
+}

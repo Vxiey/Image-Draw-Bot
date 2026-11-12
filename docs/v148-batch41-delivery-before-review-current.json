@@ -1,0 +1,40 @@
+{
+  "mode": "current",
+  "baseline": "fc3f927966d79c3f5d8cd04ea071c0670faa6ad0",
+  "scope": "Two isolated historical root modules with current shared dependencies; repeated assertions and completion work are not extra groups.",
+  "result": {
+    "run": 6,
+    "failure_records": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 0.9334277370003292
+  },
+  "failures": [],
+  "errors": [],
+  "tests": [
+    "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_distinct_actual_paint_schedules_learn_and_resume_independently",
+    "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_effective_aliases_share_history_but_wait_and_density_changes_do_not",
+    "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_same_scope_observes_different_delivery_rows_without_extra_disk_reads",
+    "test_v148_native_batch41_dry_sample"
+  ],
+  "source_hashes_before": {
+    "DrawTimeCalibration.py": "2d47f2e1dcde270011bbb8526197eb7a504f3237f8484d834e0d890de9708b09",
+    "FastDryRun.py": "8073f6d7da50b8357334d5ceea804bfd03b71f7451dedb9fc53be8ca243ce945",
+    "ExecutionCostModel.py": "36c19b11a71f8c1c2b04cb70f4df287cbfb57c37f42ecb04c03a8902476f36e0",
+    "DrawTimeEstimate.py": "1fad646ea95745db2428c2d91a6e62f2e0d0942b45ec848b194f58a848cedca8",
+    "DrawBot.py": "ceb345a8bd167d190cbe91abd92e99145de6373a49aa2ad593e75d10cc05e8b7",
+    "RenderResume.py": "2c548265cfc0e9b04fc7fbd84865b6f15348e28bb160bc7a693b4a01dfbcbe9a",
+    "test_v148_native_batch41_delivery_context.py": "748cca296d85d120332ce4639dfc32560ac2256a10524462ad7f05ea7648f775",
+    "test_v148_native_batch41_dry_sample.py": "8f7589372f9569fddace095a7b63a9e351eaa23b5c2356d2e3b8d83376a69656"
+  },
+  "source_hashes_after": {
+    "DrawTimeCalibration.py": "2d47f2e1dcde270011bbb8526197eb7a504f3237f8484d834e0d890de9708b09",
+    "FastDryRun.py": "8073f6d7da50b8357334d5ceea804bfd03b71f7451dedb9fc53be8ca243ce945",
+    "ExecutionCostModel.py": "36c19b11a71f8c1c2b04cb70f4df287cbfb57c37f42ecb04c03a8902476f36e0",
+    "DrawTimeEstimate.py": "1fad646ea95745db2428c2d91a6e62f2e0d0942b45ec848b194f58a848cedca8",
+    "DrawBot.py": "ceb345a8bd167d190cbe91abd92e99145de6373a49aa2ad593e75d10cc05e8b7",
+    "RenderResume.py": "2c548265cfc0e9b04fc7fbd84865b6f15348e28bb160bc7a693b4a01dfbcbe9a",
+    "test_v148_native_batch41_delivery_context.py": "748cca296d85d120332ce4639dfc32560ac2256a10524462ad7f05ea7648f775",
+    "test_v148_native_batch41_dry_sample.py": "8f7589372f9569fddace095a7b63a9e351eaa23b5c2356d2e3b8d83376a69656"
+  }
+}

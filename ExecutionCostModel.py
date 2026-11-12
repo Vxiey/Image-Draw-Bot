@@ -390,7 +390,15 @@ class ExecutionCostModel:
                       initial_brush: int | None = None,
                       include_color_verification: bool = False,
                       include_geometry: bool = True,
-                      cancelled=None) -> CostBreakdown:
+                      cancelled=None,
+                      path_cost_totals: dict[str, tuple[int, float]] | None = None) -> CostBreakdown:
+        """Cost the delivered order, optionally retaining totals by path type.
+
+        The optional caller-owned mapping receives ``(count, seconds)`` for
+        each path's declared operation type. It does not change the returned
+        breakdown or perform a second geometry pass. Callers should supply a
+        fresh mapping and discard it if this operation is interrupted.
+        """
         cursor = initial_cursor
         color = initial_color
         brush = initial_brush
@@ -456,6 +464,10 @@ class ExecutionCostModel:
                 totals["brush"] += self.switch_cost("brush_change"); totals["brush_n"] += 1
             if include_geometry:
                 piece = self.path_cost(path, cursor=cursor, brush_px=new_brush)
+                if path_cost_totals is not None:
+                    kind = str(entry.get('operation_type') or ('dot' if len(path) <= 1 else 'stroke'))
+                    count, seconds = path_cost_totals.get(kind, (0, 0.0))
+                    path_cost_totals[kind] = (count + 1, seconds + piece.total_seconds)
                 totals["drag"] += piece.drag_seconds
                 totals["travel"] += piece.travel_seconds
                 totals["press"] += piece.press_release_seconds

@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 900,
-  "implemented": 861,
+  "implemented": 869,
   "release_published": false,
-  "validation": "Batch 40 adds 15 independently reviewed behavior groups, preserving all 846 preceding entries: 861/900, 39 remaining. Application, rendering, runtime and native ledgers record actual regressions, historical comparisons, allocation/work observations and explicit limits. Export/publication, target revalidation, cleanup and Stop completions receive zero additional IDs. Full local discovery and exact published-head Windows/Linux CI are separate gates; version 1.0.148 remains unreleased.",
+  "validation": "Batch 41 adds eight independently reviewed behavior groups after the 15 batch40 groups: 869/900, 31 remaining. All 861 preceding entries remain unchanged. The combined 47-method focused integration passed with 970 unchanged Python source/test hashes. Complete local discovery and exact published-head Windows/Linux CI remain separate gates. Tcl-fixture disposal, review corrections, documentation and tests add no IDs. Version 1.0.148 remains unreleased.",
   "improvements": [
     {
       "id": 1,
@@ -6707,6 +6707,70 @@
       "batch": 40,
       "ledger": "v148-batch40-native.md",
       "description": "Crop browser brush-control neighborhoods before RGB conversion, avoiding a whole-screenshot RGB buffer. Preserve exact complete detection plans across RGB, RGBA, grayscale and palette inputs, candidate geometry and borrowed source pixels. Private patch cleanup completes existing ownership without another ID."
+    },
+    {
+      "id": 862,
+      "local_id": "A4101",
+      "area": "batch41-application",
+      "batch": 41,
+      "ledger": "v148-batch41-application.md",
+      "description": "Use exact cold-model path totals for each operation type when applying measured timing history. Preserve the complete sequence cost and reuse typed totals from the existing traversal, avoiding the former global average that distorted partial dot/line histories. Old or incompatible injected models retain bounded aggregate fallback."
+    },
+    {
+      "id": 863,
+      "local_id": "A4102",
+      "area": "batch41-application",
+      "batch": 41,
+      "ledger": "v148-batch41-application.md",
+      "description": "Borrow the already loaded source when EXIF orientation is identity during upscaling instead of making a redundant full-image transpose copy. Preserve exact pixels, modes, metadata, all nonidentity orientations, worker adoption and Undo; borrowed inputs remain open and unchanged on failure and Stop."
+    },
+    {
+      "id": 864,
+      "local_id": "R4101",
+      "area": "batch41-rendering",
+      "batch": 41,
+      "ledger": "v148-batch41-rendering.md",
+      "description": "Fit Pixel Accurate progressive rendering and correction work using the actual stateful execution cost model rather than a pixels-per-second proxy. Retain complete detail when its real estimated schedule fits, preserve inherited brush and operation order during necessary trimming, and include setup, tool, color, verification, cursor and correction costs in the final budget guard."
+    },
+    {
+      "id": 865,
+      "local_id": "R4102",
+      "area": "batch41-rendering",
+      "batch": 41,
+      "ledger": "v148-batch41-rendering.md",
+      "description": "Extract exact Hybrid center-mask runs with bounded boolean transition batches and seam carry for wide rows. Preserve row order, offsets, strides and whole-plan outputs while avoiding repeated Python cell reads. Extra temporary memory and mixed complete-plan timings are retained; no universal planning speedup is claimed."
+    },
+    {
+      "id": 866,
+      "local_id": "P4101",
+      "area": "batch41-runtime",
+      "batch": 41,
+      "ledger": "v148-batch41-runtime.md",
+      "description": "Bind GPU workload quarantine and OpenCL context ownership to the validated hardware signature and completed benchmark measurement identity. Preserve active older contexts until their borrowers finish, prevent late old failures from poisoning new measurements, bound failure history, and retain public route metadata compatibility."
+    },
+    {
+      "id": 867,
+      "local_id": "P4102",
+      "area": "batch41-runtime",
+      "batch": 41,
+      "ledger": "v148-batch41-runtime.md",
+      "description": "Apply a saved planner worker recommendation only to the effective executor that produced it. Threads and Auto share their established policy; mismatched or unidentified executor evidence takes the safe default while explicit workers, disabled scheduling, memory and preview caps remain authoritative."
+    },
+    {
+      "id": 868,
+      "local_id": "N4101",
+      "area": "batch41-native",
+      "batch": 41,
+      "ledger": "v148-batch41-delivery.md",
+      "description": "Separate measured draw-time histories by the effective native delivery policy, delays and interpolation schedule. Retain independent warm histories and selective reset, share truly equivalent delivery aliases, preserve bounded legacy records, and require explicit delivery proof before old-key rows can seed current estimates."
+    },
+    {
+      "id": 869,
+      "local_id": "N4102",
+      "area": "batch41-native",
+      "batch": 41,
+      "ledger": "v148-batch41-delivery.md",
+      "description": "Resolve the canonical execution brush state before selecting bounded representative dry-run paths, so omitted earlier operations cannot change the sampled physical width. Preserve order, repeated-entry state and source ownership. Empty-sample fallback, invalid-row handling and Stop complete this sampler contract without extra IDs."
     }
   ]
 }

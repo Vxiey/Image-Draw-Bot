@@ -84,6 +84,9 @@ class SavedAreaCancellationTests(unittest.TestCase):
 
         def picked(_owner, selected, failed, *, cancelled):
             nonlocal crop
+            # Preserve diagnostic errors without retaining the borrowed Tcl
+            # owner in their native-boundary frame after fixture cleanup.
+            del _owner
             crop = self.fixture.own(self.fixture.source.copy())
             try:
                 selected(boundary.NEW_BOX, crop)
@@ -94,7 +97,7 @@ class SavedAreaCancellationTests(unittest.TestCase):
         with patch.object(TargetCapture, 'BASE', directory), \
                 patch.object(TargetCapture, 'helper_command', return_value=command), \
                 patch.object(TargetCapture.subprocess, 'Popen', side_effect=spawn), \
-                patch('RegionPicker.select_region', side_effect=picked):
+                patch('RegionPicker.select_region', new=picked):
             interrupt_thread.start()
             try:
                 if select:

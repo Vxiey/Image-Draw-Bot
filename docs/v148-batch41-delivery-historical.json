@@ -1,0 +1,88 @@
+{
+  "mode": "historical",
+  "baseline": "fc3f927966d79c3f5d8cd04ea071c0670faa6ad0",
+  "scope": "Two isolated historical root modules with current shared dependencies; repeated assertions and completion work are not extra groups.",
+  "result": {
+    "run": 7,
+    "failure_records": 11,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 0.655422456999986
+  },
+  "failures": [
+    {
+      "test": "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_distinct_actual_paint_schedules_learn_and_resume_independently",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_delivery_context.py\", line 37, in test_distinct_actual_paint_schedules_learn_and_resume_independently\n    self.assertFalse(timing.correction_for(options, path=self.path)['learned'])\nAssertionError: True is not false\n"
+    },
+    {
+      "test": "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_effective_aliases_share_history_but_wait_and_density_changes_do_not",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_delivery_context.py\", line 55, in test_effective_aliases_share_history_but_wait_and_density_changes_do_not\n    self.assertFalse(timing.correction_for(dict(reliable, delay=.2), path=self.path)['learned'])\nAssertionError: True is not false\n"
+    },
+    {
+      "test": "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_same_scope_observes_different_delivery_rows_without_extra_disk_reads",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_delivery_context.py\", line 89, in test_same_scope_observes_different_delivery_rows_without_extra_disk_reads\n    self.assertEqual(timing.correction_for(auto, path=self.path)['ratio'], 1.1)\nAssertionError: 1.436 != 1.1\n"
+    },
+    {
+      "test": "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_skipped_color_changes_do_not_change_sampled_brushes_or_mutate_entries",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_dry_sample.py\", line 51, in test_skipped_color_changes_do_not_change_sampled_brushes_or_mutate_entries\n    self.assertEqual(actual, expected)\nAssertionError: Lists differ: [{'co[117 chars]px': 1}, {'color_index': 0, 'path': ((43, 44),[87 chars]: 2}] != [{'co[117 chars]px': 8}, {'color_index': 0, 'path': ((43, 44),[87 chars]: 2}]\n\nFirst differing element 1:\n{'color_index': 2, 'path': ((41, 43), (42, 43)), 'brush_px': 1}\n{'color_index': 2, 'path': ((41, 43), (42, 43)), 'brush_px': 8}\n\n  [{'brush_px': 1, 'color_index': 0, 'path': ((13, 51), (13, 52))},\n-  {'brush_px': 1, 'color_index': 2, 'path': ((41, 43), (42, 43))},\n?               ^\n\n+  {'brush_px': 8, 'color_index': 2, 'path': ((41, 43), (42, 43))},\n?               ^\n\n   {'brush_px': 2, 'color_index': 0, 'path': ((43, 44), (44, 44))},\n   {'brush_px': 2, 'color_index': 2, 'path': ((41, 43), (42, 43))}]\n"
+    },
+    {
+      "test": "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_discarded_path_with_same_color_still_supplies_its_brush",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_dry_sample.py\", line 65, in test_discarded_path_with_same_color_still_supplies_its_brush\n    self.assertEqual(list(execution_sequence_with_brushes(sampled)),\nAssertionError: Lists differ: [{'co[62 chars]'color_index': 0, 'path': ((41, 43), (42, 43)), 'brush_px': 1}] != [{'co[62 chars]'color_index': 0, 'path': ((41, 43), (42, 43)), 'brush_px': 8}]\n\nFirst differing element 1:\n{'color_index': 0, 'path': ((41, 43), (42, 43)), 'brush_px': 1}\n{'color_index': 0, 'path': ((41, 43), (42, 43)), 'brush_px': 8}\n\n  [{'brush_px': 1, 'color_index': 0, 'path': ((13, 51), (13, 52))},\n-  {'brush_px': 1, 'color_index': 0, 'path': ((41, 43), (42, 43))}]\n?               ^\n\n+  {'brush_px': 8, 'color_index': 0, 'path': ((41, 43), (42, 43))}]\n?               ^\n\n"
+    },
+    {
+      "test": "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_non_drawable_rows_cannot_change_inherited_native_brush_state (color='missing')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_dry_sample.py\", line 82, in test_non_drawable_rows_cannot_change_inherited_native_brush_state\n    self.assertEqual(sampled['count'], len(expected))\nAssertionError: 5 != 4\n"
+    },
+    {
+      "test": "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_non_drawable_rows_cannot_change_inherited_native_brush_state (color=None)",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_dry_sample.py\", line 82, in test_non_drawable_rows_cannot_change_inherited_native_brush_state\n    self.assertEqual(sampled['count'], len(expected))\nAssertionError: 5 != 4\n"
+    },
+    {
+      "test": "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_non_drawable_rows_cannot_change_inherited_native_brush_state (color='not-a-color')",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_dry_sample.py\", line 82, in test_non_drawable_rows_cannot_change_inherited_native_brush_state\n    self.assertEqual(sampled['count'], len(expected))\nAssertionError: 5 != 4\n"
+    },
+    {
+      "test": "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_non_drawable_rows_cannot_change_inherited_native_brush_state (color=inf)",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_dry_sample.py\", line 82, in test_non_drawable_rows_cannot_change_inherited_native_brush_state\n    self.assertEqual(sampled['count'], len(expected))\nAssertionError: 5 != 4\n"
+    },
+    {
+      "test": "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_zero_sample_cannot_revive_full_legacy_groups_in_real_executor (limit={'max_paths': 0})",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_dry_sample.py\", line 100, in test_zero_sample_cannot_revive_full_legacy_groups_in_real_executor\n    self.assertEqual(sampled['options']['runtime_path_counts']['processed'], 0)\nAssertionError: 5 != 0\n"
+    },
+    {
+      "test": "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_zero_sample_cannot_revive_full_legacy_groups_in_real_executor (limit={'max_colors': 0})",
+      "traceback": "Traceback (most recent call last):\n  File \"$REPO/test_v148_native_batch41_dry_sample.py\", line 100, in test_zero_sample_cannot_revive_full_legacy_groups_in_real_executor\n    self.assertEqual(sampled['options']['runtime_path_counts']['processed'], 0)\nAssertionError: 5 != 0\n"
+    }
+  ],
+  "errors": [],
+  "tests": [
+    "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_distinct_actual_paint_schedules_learn_and_resume_independently",
+    "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_effective_aliases_share_history_but_wait_and_density_changes_do_not",
+    "test_v148_native_batch41_delivery_context.DeliveryTimingContextTests.test_same_scope_observes_different_delivery_rows_without_extra_disk_reads",
+    "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_skipped_color_changes_do_not_change_sampled_brushes_or_mutate_entries",
+    "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_discarded_path_with_same_color_still_supplies_its_brush",
+    "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_non_drawable_rows_cannot_change_inherited_native_brush_state",
+    "test_v148_native_batch41_dry_sample.DrySampleBrushStateTests.test_zero_sample_cannot_revive_full_legacy_groups_in_real_executor"
+  ],
+  "source_hashes_before": {
+    "DrawTimeCalibration.py": "2d47f2e1dcde270011bbb8526197eb7a504f3237f8484d834e0d890de9708b09",
+    "FastDryRun.py": "7f93ac9bc2f78953531f34064d7a565f0c1e871b6815386ea71937534bbc40e8",
+    "ExecutionCostModel.py": "36c19b11a71f8c1c2b04cb70f4df287cbfb57c37f42ecb04c03a8902476f36e0",
+    "DrawTimeEstimate.py": "0254b7805df629cd06fbf689daa068c9dee5bf2237401c613b8d7268003191f5",
+    "DrawBot.py": "e2a3f58a3e24d77d66d44390b14f969ec1fafdc9b637c454d1b97674cd602cc7",
+    "RenderResume.py": "2c548265cfc0e9b04fc7fbd84865b6f15348e28bb160bc7a693b4a01dfbcbe9a",
+    "test_v148_native_batch41_delivery_context.py": "748cca296d85d120332ce4639dfc32560ac2256a10524462ad7f05ea7648f775",
+    "test_v148_native_batch41_dry_sample.py": "fc6b96ad3cdf02c24796bf920be2af5613b542cb35380c2c99f8dc0c94b78f18"
+  },
+  "source_hashes_after": {
+    "DrawTimeCalibration.py": "2d47f2e1dcde270011bbb8526197eb7a504f3237f8484d834e0d890de9708b09",
+    "FastDryRun.py": "7f93ac9bc2f78953531f34064d7a565f0c1e871b6815386ea71937534bbc40e8",
+    "ExecutionCostModel.py": "36c19b11a71f8c1c2b04cb70f4df287cbfb57c37f42ecb04c03a8902476f36e0",
+    "DrawTimeEstimate.py": "0254b7805df629cd06fbf689daa068c9dee5bf2237401c613b8d7268003191f5",
+    "DrawBot.py": "e2a3f58a3e24d77d66d44390b14f969ec1fafdc9b637c454d1b97674cd602cc7",
+    "RenderResume.py": "2c548265cfc0e9b04fc7fbd84865b6f15348e28bb160bc7a693b4a01dfbcbe9a",
+    "test_v148_native_batch41_delivery_context.py": "748cca296d85d120332ce4639dfc32560ac2256a10524462ad7f05ea7648f775",
+    "test_v148_native_batch41_dry_sample.py": "fc6b96ad3cdf02c24796bf920be2af5613b542cb35380c2c99f8dc0c94b78f18"
+  }
+}

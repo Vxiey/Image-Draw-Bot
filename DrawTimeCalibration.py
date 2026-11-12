@@ -8,6 +8,7 @@ materially different delivery setups.
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import time
 from contextlib import contextmanager
@@ -55,11 +56,7 @@ def _isolated_value(value):
 def _observed_profile(db, options, *, shared):
     item = None
     try:
-        item = db['profiles'].get(_key(options))
-        if not isinstance(item, dict):
-            item = db['profiles'].get(_v2_key(options))
-        if not isinstance(item, dict):
-            item = db['profiles'].get(_legacy_key(options))
+        item = _matching_profile(db, options)
         if not isinstance(item, dict):
             return None
         # A fresh reader already owns its nested JSON values. Only a shared
@@ -210,7 +207,7 @@ def _v2_key(options: dict[str, Any]) -> str:
     return f"{base}|tool={tool}|brush={brush}|color={workflow}"
 
 
-def _key(options: dict[str, Any]) -> str:
+def _v4_key(options: dict[str, Any]) -> str:
     base=_v2_key(options)
     mode=_token(options.get("drawing_mode") or options.get("mode"),"default")
     preset=_token(options.get("render_preset"),"manual")
@@ -218,6 +215,73 @@ def _key(options: dict[str, Any]) -> str:
     style=_token(options.get("render_style"),"auto")
     style_profile=_token(options.get("drawing_style_resolved") or options.get("drawing_style"),"auto")
     return f"{base}|mode={mode}|preset={preset}|quality={quality}|style={style}|drawing-style={style_profile}"
+
+
+def _delivery_signature(options: dict[str, Any]) -> str:
+    """Bind learned averages to the effective native delivery schedule.
+
+    UI aliases with the same resolved policy share a context. A different drag
+    backend, interpolation density or wait must not borrow its predecessor's
+    measured per-operation averages. This is a context-key extension; old rows
+    remain readable without being treated as verified policy data.
+    """
+    from Precision import effective_step
+    from SpeedOptimizer import normalize_speed, phase_delay
+    from StrokeDelivery import resolve_stroke_delivery, interpolation_step, brush_switch_delays
+
+    delivery = resolve_stroke_delivery(options)
+    try:
+        brush = max(1, int(options.get('brush_px') or 1))
+    except (TypeError, ValueError, OverflowError):
+        brush = 1
+    try:
+        delay = float(options.get('delay') or 0.0)
+    except (TypeError, ValueError, OverflowError):
+        delay = 0.0
+    delay = max(0.0, delay) if math.isfinite(delay) else 0.0
+    try:
+        speed = normalize_speed(options.get('speed', 'Balanced'))
+    except (TypeError, ValueError):
+        speed = 'Balanced'
+    step = interpolation_step(delivery.step_px, brush,
+                              pixel_accurate=bool(options.get('pixel_accurate')))
+    try:
+        step = effective_step(options.get('precision', 'High'), step)
+    except (TypeError, ValueError):
+        step = effective_step('High', step)
+    context = {
+        'schema': 1,
+        'backend': delivery.drag_backend,
+        'step': step,
+        'path_wait': max(delivery.min_path_delay, phase_delay(delay, speed, 'path')),
+        'travel_wait': max(.0005, phase_delay(delay, speed, 'travel')),
+        'boundary_wait': max(.0005, phase_delay(delay, speed, 'boundary')),
+        'press_settle': delivery.press_settle,
+        'release_settle': delivery.release_settle,
+        'palette_wait': max(delay, delivery.palette_click_delay),
+        'control_wait': max(delay, delivery.ui_control_delay),
+        'brush_waits': brush_switch_delays(delivery),
+    }
+    payload = json.dumps(context, sort_keys=True, separators=(',', ':'), allow_nan=False)
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:24]
+
+
+def _key(options: dict[str, Any]) -> str:
+    return f'{_v4_key(options)}|delivery={_delivery_signature(options)}'
+
+
+def _matching_profile(db, options):
+    signature = _delivery_signature(options)
+    item = db['profiles'].get(f'{_v4_key(options)}|delivery={signature}')
+    if isinstance(item, dict):
+        return item
+    # Old databases did not identify their input policy. Keep the historical
+    # rows, but only a row explicitly bound to this schedule can seed learning.
+    for key in (_v4_key(options), _v2_key(options), _legacy_key(options)):
+        item = db['profiles'].get(key)
+        if isinstance(item, dict) and item.get('delivery_signature') == signature:
+            return item
+    return None
 
 
 def _load_raw(path: Path, *, accept_legacy_version: bool = False) -> dict[str, Any]:
@@ -284,11 +348,7 @@ def load_profile(options: dict[str, Any], path: Path | None = None) -> dict[str,
     finally:
         observation = None
     _resolved, db = _ensure_profile_db(options, path)
-    item = db["profiles"].get(_key(options))
-    if not isinstance(item, dict):
-        item = db["profiles"].get(_v2_key(options))
-    if not isinstance(item, dict):
-        item = db["profiles"].get(_legacy_key(options))
+    item = _matching_profile(db, options)
     return dict(item) if isinstance(item, dict) else None
 
 
@@ -408,11 +468,7 @@ def record_sample(options: dict[str, Any], predicted_seconds: float, actual_seco
     with file_transaction(_resolved_path(options, path)):
         resolved, db = _ensure_profile_db(options, path)
         key = _key(options)
-        old = db["profiles"].get(key)
-        if not isinstance(old, dict):
-            old = db["profiles"].get(_v2_key(options))
-        if not isinstance(old, dict):
-            old = db["profiles"].get(_legacy_key(options)) if isinstance(db["profiles"].get(_legacy_key(options)), dict) else {}
+        old = _matching_profile(db, options) or {}
         samples = int(old.get("samples") or 0)
         old_ratio = float(old.get("ratio_ema") or ratio)
         old_mape = float(old.get("mape_ema", abs_pct))
@@ -425,6 +481,7 @@ def record_sample(options: dict[str, Any], predicted_seconds: float, actual_seco
         item = {
             "key": key,
             "profile_key": _profile(options),
+            "delivery_signature": _delivery_signature(options),
             "samples": samples + 1,
             "ratio_ema": round(max(.55, min(4.0, learned_ratio)), 6),
             "mape_ema": round(max(0.0, min(2.0, learned_mape)), 6),
@@ -440,7 +497,6 @@ def record_sample(options: dict[str, Any], predicted_seconds: float, actual_seco
             "operation_runtime_types": len(operation_runtime_ema),
             "updated_at": time.time(),
         }
-        db["profiles"].pop(_legacy_key(options), None)
         db["profiles"][key] = item
         resolved.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -471,10 +527,12 @@ def reset_profile(options: dict[str, Any], *, path: Path | None = None) -> dict[
                               _load_raw(FILE, accept_legacy_version=True)['profiles'].items()
                               if key.startswith(prefix)}
         key = _key(options)
+        v4 = _v4_key(options)
         v2 = _v2_key(options)
         legacy = _legacy_key(options)
-        existed = key in db["profiles"] or v2 in db["profiles"] or legacy in db["profiles"]
+        existed = any(candidate in db['profiles'] for candidate in (key, v4, v2, legacy))
         db["profiles"].pop(key, None)
+        db["profiles"].pop(v4, None)
         db["profiles"].pop(v2, None)
         db["profiles"].pop(legacy, None)
         with profile_reset_changes(_profile(options)) as speed_changes:

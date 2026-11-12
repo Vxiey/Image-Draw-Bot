@@ -179,7 +179,7 @@ class CalibrationScopeTests(unittest.TestCase):
                     last_operation_counts={'native': {'steps': [1, 2, {'extra': 3}]}},
                     extension={'nested': [1, {'saved': True}]})
 
-    def test_v4_v2_and_legacy_fallbacks_keep_all_context_dimensions_and_nested_isolation(self):
+    def test_policy_bound_legacy_fallbacks_keep_all_context_dimensions_and_nested_isolation(self):
         variants = [dict(self.options), *[dict(self.options, **change) for change in (
             {'effective_paint_tool': 'Brush'}, {'brush_px': 9}, {'use_region_fill_engine': True},
             {'custom_color_workflow': 'Adaptive exact'}, {'drawing_mode': 'Dots'},
@@ -189,11 +189,12 @@ class CalibrationScopeTests(unittest.TestCase):
                     for index, options in enumerate(variants)}
         v2 = dict(self.options, brush_px=7)
         legacy = dict(self.options, precision='Normal', brush_px=12)
-        profiles[timing._v2_key(v2)] = self.row(2.3)
-        profiles[timing._legacy_key(legacy)] = self.row(2.7)
+        profiles[timing._v2_key(v2)] = dict(self.row(2.3), delivery_signature=timing._delivery_signature(v2))
+        profiles[timing._legacy_key(legacy)] = dict(self.row(2.7), delivery_signature=timing._delivery_signature(legacy))
         self.write(profiles)
         all_options = [*variants, v2, legacy]
         expected = [timing.correction_for(options) for options in all_options]
+        self.assertEqual([row['ratio'] for row in expected[-2:]], [2.3, 2.7])
         with timing.planning_calibration_scope(), observed() as (_calls, ensured, read, valid):
             actual = [timing.correction_for(options) for options in all_options]
             self.assertEqual(actual, expected)
@@ -287,11 +288,14 @@ class CalibrationScopeTests(unittest.TestCase):
         with timing.planning_calibration_scope():
             self.assertFalse(timing.correction_for(self.options, path=self.path)['learned'])
             self.assertFalse(self.path.exists())
-            self.assertEqual(timing.correction_for(self.options)['ratio'], 1.7)
+            # Migration retains unbound history, but cannot certify a native
+            # delivery policy that the old record never stored.
+            self.assertFalse(timing.correction_for(self.options)['learned'])
             self.assertTrue(self.path.exists())
-            self.assertEqual(timing.correction_for(other)['ratio'], 2.4)
+            self.assertFalse(timing.correction_for(other)['learned'])
         self.assertEqual(timing.FILE.read_bytes(), legacy_bytes)
         self.assertEqual(set(timing.load_all(self.path)['profiles']), {timing._legacy_key(self.options)})
+        self.assertEqual(timing.load_all(self.path)['profiles'][timing._legacy_key(self.options)]['ratio_ema'], 1.7)
         self.assertEqual(set(timing.load_all(self.directory / 'skribbl.json')['profiles']),
                          {timing._legacy_key(other)})
 
@@ -305,7 +309,8 @@ class CalibrationScopeTests(unittest.TestCase):
                     self.path.write_text(contents, encoding='utf-8')
                 with timing.planning_calibration_scope(), observed() as (_calls, ensured, read, _valid):
                     first = timing.correction_for(self.options)
-                    self.write({timing._v2_key(self.options): self.row(1.6)}, version=2)
+                    self.write({timing._v2_key(self.options): dict(self.row(1.6),
+                        delivery_signature=timing._delivery_signature(self.options))}, version=2)
                     self.assertEqual(timing.correction_for(self.options), first)
                     self.assertFalse(first['learned'])
                     self.assertEqual((ensured.call_count, read.call_count),

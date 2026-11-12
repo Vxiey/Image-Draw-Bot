@@ -142,6 +142,9 @@ class BoundaryAdoptionTests(unittest.TestCase):
         failures = []
 
         def delivered(_owner, selected, failed, *, cancelled):
+            # Retained detector/native errors may keep this fixture frame.
+            # The OS boundary does not own the interpreter after delivery.
+            del _owner
             self.assertFalse(cancelled())
             try:
                 selected(NEW_BOX, self.crop)
@@ -149,7 +152,8 @@ class BoundaryAdoptionTests(unittest.TestCase):
                 failures.append(error)
                 failed(str(error))
 
-        with patch('RegionPicker.select_region', side_effect=delivered), \
+        # A Mock call history would itself retain the raw Tcl owner argument.
+        with patch('RegionPicker.select_region', new=delivered), \
                 patch('TargetCapture.capture_target_metadata_isolated',
                       side_effect=probe or (lambda *_a, **_k: dict(NEW_TARGET))) as native:
             DrawBot.DrawBotApp.set_boundary(app)

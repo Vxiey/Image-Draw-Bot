@@ -230,6 +230,7 @@ class UpscaleOwnershipTests(unittest.TestCase):
     def test_stop_after_orientation_prevents_larger_resize(self):
         from PIL import ImageOps
         source=Image.new('RGBA',(8,6),'red');stop=threading.Event();owned=[]
+        source.getexif()[274]=6  # Exercise the remaining owned orientation transform.
         transpose=ImageOps.exif_transpose
         def interrupted(image):
             result=transpose(image);owned.append(result);stop.set();return result
@@ -239,11 +240,13 @@ class UpscaleOwnershipTests(unittest.TestCase):
         with self.assertRaises(ValueError):owned[0].getpixel((0,0))
         self.assertEqual(source.getpixel((0,0)),(255,0,0,255))
 
-    def test_smooth_resize_failure_closes_owned_premultiplied_and_source(self):
+    def test_smooth_resize_failure_closes_owned_images_but_preserves_borrowed_source(self):
         source=Image.new('RGBA',(8,6),'red');images=[]
         convert=Image.Image.convert
         def traced(image,*args,**kwargs):
-            result=convert(image,*args,**kwargs);images.extend((image,result));return result
+            result=convert(image,*args,**kwargs)
+            if image is not source:images.append(image)
+            images.append(result);return result
         with patch.object(Image.Image,'convert',traced),patch.object(Image.Image,'resize',side_effect=RuntimeError('resample failed')):
             with self.assertRaisesRegex(RuntimeError,'resample failed'):upscale_image(source)
         for image in images:

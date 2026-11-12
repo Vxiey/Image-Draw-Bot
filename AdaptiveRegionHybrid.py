@@ -293,27 +293,75 @@ def _eroded_centers(target:np.ndarray,brush_px:int,*,cancelled=lambda:False) -> 
     return _square_footprint(target,brush_px,True,cancelled=cancelled)
 
 
-def _runs_from_mask(mask:np.ndarray,row_stride:int=1,row_offset:int=0,orientation:str="horizontal"):
+_MASK_RUN_BLOCK = 16_384
+
+
+def _runs_from_mask(mask:np.ndarray,row_stride:int=1,row_offset:int=0,orientation:str="horizontal",
+                    *,cancelled=lambda:False):
     """Return axis-aligned runs through a boolean centre mask.
 
     The mask contains only brush centres whose complete footprint is already
     proven to stay inside the source component.  Connecting consecutive true
     centres therefore remains safe for square browser brushes.
     """
-    view=mask if orientation!="vertical" else mask.T
-    h,w=view.shape;out=[]
-    stride=max(1,int(row_stride));offset=int(row_offset)%stride
-    for y in range(offset,h,stride):
-        row=view[y];x=0
-        while x<w:
-            if not row[x]:x+=1;continue
-            x0=x;x+=1
-            while x<w and row[x]:x+=1
+    view=padded=boundaries=None;out=[]
+    try:
+        _cancel(cancelled)
+        view=mask if orientation!="vertical" else mask.T
+        h,w=view.shape
+        stride=max(1,int(row_stride));offset=int(row_offset)%stride
+        def append(y,left,right):
             if orientation=="vertical":
-                out.append(((y,x0),(y,x-1)) if x-1!=x0 else ((y,x0),))
+                out.append(((y,left),(y,right)) if right!=left else ((y,left),))
             else:
-                out.append(((x0,y),(x-1,y)) if x-1!=x0 else ((x0,y),))
-    return out
+                out.append(((left,y),(right,y)) if right!=left else ((left,y),))
+        if w<=_MASK_RUN_BLOCK:
+            # Packing produces many small component ROIs. Group short rows in
+            # one bounded native search; a NumPy call per row costs more than
+            # the old scalar loop for those small masks.
+            block_rows=max(1,_MASK_RUN_BLOCK//(w+2))
+            for top in range(offset,h,stride*block_rows):
+                _cancel(cancelled)
+                bottom=min(h,top+stride*block_rows)
+                count=(bottom-top+stride-1)//stride
+                padded=np.empty((count,w+2),dtype=np.bool_)
+                padded[:,0]=padded[:,-1]=False
+                padded[:,1:-1]=view[top:bottom:stride,:]
+                boundaries=np.flatnonzero(padded[:,1:]!=padded[:,:-1])
+                for serial,(start,stop) in enumerate(zip(boundaries[::2],boundaries[1::2])):
+                    if serial%256==0:_cancel(cancelled)
+                    row,left=divmod(int(start),w+1)
+                    right=int(stop)-row*(w+1)-1
+                    append(top+row*stride,left,right)
+            _cancel(cancelled)
+            return out
+        for y in range(offset,h,stride):
+            _cancel(cancelled)
+            pending=None
+            for left in range(0,w,_MASK_RUN_BLOCK):
+                _cancel(cancelled)
+                right=min(w,left+_MASK_RUN_BLOCK)
+                # Boolean conversion retains the original truth-value contract
+                # without retaining a full numeric-mask copy. Each native
+                # transition search is bounded even for a very wide ROI.
+                padded=np.empty(right-left+2,dtype=np.bool_)
+                padded[0]=padded[-1]=False
+                padded[1:-1]=view[y,left:right]
+                boundaries=np.flatnonzero(padded[1:]!=padded[:-1])
+                for serial,(start,stop) in enumerate(zip(boundaries[::2],boundaries[1::2])):
+                    if serial%256==0:_cancel(cancelled)
+                    first,last=left+int(start),left+int(stop)-1
+                    if pending is not None:
+                        if first==pending[1]+1:
+                            pending=(pending[0],last)
+                            continue
+                        append(y,*pending)
+                    pending=(first,last)
+            if pending is not None:append(y,*pending)
+        _cancel(cancelled)
+        return out
+    finally:
+        view=padded=boundaries=out=None
 
 
 def _centers_touching_mask(mask:np.ndarray,brush_px:int,*,cancelled=lambda:False) -> np.ndarray:
@@ -376,7 +424,8 @@ def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:in
                 if stride not in stride_sets[orientation]:continue
                 for offset in offsets:
                     _cancel(cancelled)
-                    local_paths=_runs_from_mask(useful,row_stride=stride,row_offset=offset,orientation=orientation)
+                    local_paths=_runs_from_mask(useful,row_stride=stride,row_offset=offset,orientation=orientation,
+                                               cancelled=cancelled)
                     if not local_paths:continue
                     trial=np.zeros_like(target,dtype=np.bool_)
                     for path in local_paths:paint(trial,path)
@@ -405,7 +454,8 @@ def _candidate_paths_for_brush(target:np.ndarray,residual:np.ndarray,brush_px:in
     eligible=[row for row in candidates if row[0]>=gain_floor]
     best=min(eligible,key=lambda row:(row[1]/max(1,row[0]),row[1],row[2],-row[0],row[3],row[4],row[5]))
     _cancel(cancelled)
-    local_paths=_runs_from_mask(useful,row_stride=best[3],row_offset=best[5],orientation=best[4])
+    local_paths=_runs_from_mask(useful,row_stride=best[3],row_offset=best[5],orientation=best[4],
+                               cancelled=cancelled)
     painted=np.zeros_like(target,dtype=np.bool_)
     for path in local_paths:paint(painted,path)
     paths=_offset_paths(local_paths,origin)

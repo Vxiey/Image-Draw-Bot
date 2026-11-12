@@ -1,0 +1,14 @@
+{
+  "baseline": "fc3f927",
+  "scope": "Historical upscale_image body substituted in current module with current actual worker/asset regression; component proof, not an entire historical checkout gate.",
+  "source_function_sha256": "03bc5366fd98f34359e6cfe6b5c8bfe659ddf865a69722ee5bb26611cb950871",
+  "regression_sha256": "c427100751fa2911303dd712d93016fa22f88444546211171a5fde213d67bfb6",
+  "result": {
+    "run": 1,
+    "failures": 2,
+    "errors": 0,
+    "skips": 0,
+    "elapsed_seconds": 1.1456,
+    "output": "FF\n======================================================================\nFAIL: test_actual_worker_adoption_and_undo_avoid_the_imported_rgba_input_copy (test_v148_application_batch41_upscale_source.UpscaleSourceTests.test_actual_worker_adoption_and_undo_avoid_the_imported_rgba_input_copy) (method='Pixel art')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"[repository]/test_v148_application_batch41_upscale_source.py\", line 80, in test_actual_worker_adoption_and_undo_avoid_the_imported_rgba_input_copy\n    self.assertEqual(copies.call_count, 0, 'Already oriented input was duplicated before resizing')\nAssertionError: 1 != 0 : Already oriented input was duplicated before resizing\n\n======================================================================\nFAIL: test_actual_worker_adoption_and_undo_avoid_the_imported_rgba_input_copy (test_v148_application_batch41_upscale_source.UpscaleSourceTests.test_actual_worker_adoption_and_undo_avoid_the_imported_rgba_input_copy) (method='Smooth')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"[repository]/test_v148_application_batch41_upscale_source.py\", line 80, in test_actual_worker_adoption_and_undo_avoid_the_imported_rgba_input_copy\n    self.assertEqual(copies.call_count, 0, 'Already oriented input was duplicated before resizing')\nAssertionError: 1 != 0 : Already oriented input was duplicated before resizing\n\n----------------------------------------------------------------------\nRan 1 test in 0.338s\n\nFAILED (failures=2)\n"
+  }
+}

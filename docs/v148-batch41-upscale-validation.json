@@ -1,0 +1,44 @@
+{
+  "baseline": "fc3f927",
+  "modules": [
+    "test_v148_application_batch41_upscale_source",
+    "test_v148_image_batch03.UpscaleOwnershipTests",
+    "test_image_upscale",
+    "test_rc4_image_processing_integrity"
+  ],
+  "scope": "Actual worker adoption/Undo and exact complete-pipeline parity, Stop, borrowed-source and owned-temporary checks. Test durations are not performance claims.",
+  "result": {
+    "run": 23,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "elapsed_seconds": 0.5815,
+    "output": ".......................\n----------------------------------------------------------------------\nRan 23 tests in 0.576s\n\nOK\n"
+  },
+  "owned_source_hashes_before": {
+    "ImageUpscale.py": "0ed7dcdd9085adf0d218b0fa039307ad3c7fe7167d271321b2cee26af4f2e68d",
+    "test_v148_application_batch41_upscale_source.py": "c427100751fa2911303dd712d93016fa22f88444546211171a5fde213d67bfb6",
+    "test_v148_image_batch03.py": "056948d77c76936bdaf4bc01616905ee3f0dc9473659a6ad2c9b10574d995048"
+  },
+  "owned_source_hashes_after": {
+    "ImageUpscale.py": "0ed7dcdd9085adf0d218b0fa039307ad3c7fe7167d271321b2cee26af4f2e68d",
+    "test_v148_application_batch41_upscale_source.py": "c427100751fa2911303dd712d93016fa22f88444546211171a5fde213d67bfb6",
+    "test_v148_image_batch03.py": "056948d77c76936bdaf4bc01616905ee3f0dc9473659a6ad2c9b10574d995048"
+  },
+  "actual_caller_input_copy": {
+    "asset": "assets/image-draw-bot-icon.png",
+    "decoded_mode": "RGBA",
+    "size": [
+      512,
+      512
+    ],
+    "methods": [
+      "Pixel art",
+      "Smooth"
+    ],
+    "old_source_copies_per_call": 1,
+    "current_source_copies_per_call": 0,
+    "avoided_copy_payload_bytes": 1048576,
+    "limitation": "Avoided input-copy payload only; no peak RSS or speed claim. Controller/worker still own the original source and Undo uses it."
+  }
+}

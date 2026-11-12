@@ -44,7 +44,12 @@ def upscale_image(image,factor=2,method='Smooth',cancelled=lambda:False):
     try:
         with ExitStack() as temporary:
             own=lambda value:temporary.enter_context(closing(value))
-            source=own(ImageOps.exif_transpose(image))
+            # Import already normalizes orientation.  Pillow's no-op transpose
+            # still copies the full raster; borrow that input until resampling.
+            # Load first, as exif_transpose does, for formats that apply metadata
+            # while decoding.  Actual rotations retain their owned temporary.
+            image.load()
+            source=image if image.getexif().get(274,1)==1 else own(ImageOps.exif_transpose(image))
             if cancelled(): raise InterruptedError()
             if source.mode!='RGBA': source=own(source.convert('RGBA'))
             # Recompute after EXIF rotation; preserve orientation and alpha correctly.

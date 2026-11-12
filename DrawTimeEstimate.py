@@ -117,13 +117,45 @@ def _sequence_cost_signature(model, sequence, initial_brush):
     return pickle.dumps(inputs, protocol=5)
 
 
+def _accepts_path_cost_totals(model):
+    """Keep older/injected models callable without retrying a failed operation."""
+    from inspect import Parameter, signature
+    try:
+        parameters = signature(model.sequence_cost).parameters
+    except (TypeError, ValueError):
+        return False
+    named = parameters.get('path_cost_totals')
+    return ((named is not None and named.kind in
+             (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)) or
+            any(value.kind == Parameter.VAR_KEYWORD for value in parameters.values()))
+
+
+def _freeze_path_cost_totals(totals):
+    """Ignore absent/malformed optional evidence from a compatible older model."""
+    rows = []
+    for kind, value in totals.items():
+        if (type(kind) is not str or type(value) not in (tuple, list) or len(value) != 2 or
+                type(value[0]) is not int or value[0] < 1 or type(value[1]) not in (int, float)):
+            return ()
+        try:
+            if not math.isfinite(value[1]) or value[1] < 0:
+                return ()
+        except OverflowError:
+            return ()
+        rows.append((kind, value[0], value[1]))
+    return tuple(rows)
+
+
 def _cost_final_sequence(plan, model, sequence, initial_brush):
     owner = _preview_cost_owner()
-    signature = result = None
+    signature = result = path_totals = None
     try:
+        collect_types = _accepts_path_cost_totals(model)
         if owner is not None:
             try:
                 signature = _sequence_cost_signature(model, sequence, initial_brush)
+                if signature is not None:
+                    signature = (signature, collect_types)
             except (TypeError, ValueError, RecursionError, MemoryError):
                 # An unsupported/expensive seal must not prevent the original
                 # calculator from handling an otherwise valid public plan.
@@ -132,15 +164,20 @@ def _cost_final_sequence(plan, model, sequence, initial_brush):
                 result = owner.take(plan, signature)
                 if result is not None:
                     return result
-        result = model.sequence_cost(sequence, initial_brush=initial_brush,
-                                     include_color_verification=True)
+        path_totals = {}
+        kwargs = {'path_cost_totals': path_totals} if collect_types else {}
+        breakdown = model.sequence_cost(sequence, initial_brush=initial_brush,
+                                        include_color_verification=True, **kwargs)
+        # Transfer the typed evidence together with the exact breakdown. No
+        # mutable accumulator is retained by the preview's reuse boundary.
+        result = (breakdown, _freeze_path_cost_totals(path_totals))
         if owner is not None and not owner.consuming:
             owner.clear()
             if signature is not None:
                 owner.plan, owner.signature, owner.breakdown = plan, signature, result
         return result
     finally:
-        owner = signature = result = plan = model = sequence = None
+        owner = signature = result = path_totals = plan = model = sequence = None
 
 
 @dataclass(frozen=True)
@@ -294,15 +331,17 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
 
     try:initial_brush=max(1,int(options.get("brush_px",1) or 1))
     except Exception:initial_brush=1
-    breakdown=_cost_final_sequence(plan,model,sequence,initial_brush)
+    breakdown,path_cost_rows=_cost_final_sequence(plan,model,sequence,initial_brush)
+    path_cost_totals={kind:(count,seconds) for kind,count,seconds in path_cost_rows}
     sequence_seconds=max(0.0,float(breakdown.total_seconds or 0.0))
     total=sequence_seconds
 
-    path_rows=[];path_kinds=set();operation_counts={}
+    path_rows=[];path_counts={};operation_counts={}
     for row in sequence:
         operation=str(row.get("operation_type") or ("dot" if len(row.get("path") or ())<=1 else "stroke"))
         if row.get("path"):
-            path_rows.append(row);path_kinds.add(operation)
+            path_rows.append(row)
+            path_counts[operation]=path_counts.get(operation,0)+1
         operation_counts[operation]=operation_counts.get(operation,0)+1
 
     fill_regions=[row for row in (options.get("fill_regions") or plan.get("fill_regions") or ()) if isinstance(row,dict)]
@@ -367,7 +406,12 @@ def _sequence_operation_estimate(plan: dict[str,Any]) -> tuple[float,dict[str,An
                   max(0.0,float(breakdown.press_release_seconds))+max(0.0,float(breakdown.target_processing_seconds)))
     if path_rows:
         avg=path_seconds/max(1,len(path_rows))
-        for kind in path_kinds:model_average_seconds[str(kind)]=avg
+        complete=(path_counts.keys()==path_cost_totals.keys() and all(
+            path_cost_totals[kind][0]==count for kind,count in path_counts.items()))
+        for kind,count in path_counts.items():
+            # An older model can omit the optional accumulator. Keep its
+            # previous aggregate fallback, never invent missing typed evidence.
+            model_average_seconds[kind]=path_cost_totals[kind][1]/count if complete else avg
     custom_n=max(0,int(breakdown.custom_color_switches or 0))+fill_custom_n
     palette_n=max(0,int(breakdown.palette_switches or 0)-int(breakdown.custom_color_switches or 0))+fill_palette_n
     brush_n=max(0,int(breakdown.brush_switches or 0))

@@ -108,7 +108,10 @@ class ProgressivePaintOrderTests(unittest.TestCase):
             stack.enter_context(patch('DrawTimeCalibration.load_profile', return_value=None))
             stack.enter_context(patch.object(accuracy, 'progressive_time_budget', new=budget))
             settings = public_options(3)
-            settings.update(time_budget_mode='30 sec', unlimited_time=False)
+            # Real delivery cost now controls public admission. A slower native
+            # drag keeps this an actual trimmed-plan/order regression instead of
+            # depending on the old fixed five-paths-per-second cap.
+            settings.update(time_budget_mode='30 sec', unlimited_time=False, delay=.05)
             plan = make_plan(source, (100, 100), settings)
             stack.callback(close_plan, plan, source)
             original, result = observed[0]
@@ -118,8 +121,8 @@ class ProgressivePaintOrderTests(unittest.TestCase):
             order = {row['serial']: index for index, row in enumerate(original)}
             positions = [order[row['serial']] for row in selected]
             self.assertEqual(positions, sorted(positions))
-            self.assertEqual(Counter(row['phase'] for row in selected),
-                {'fill': 24, 'mid_detail': 17, 'cleanup': 40, 'fine_detail': 11})
+            self.assertTrue(any(row['phase']=='cleanup' for row in selected))
+            self.assertLessEqual(result['risk_adjusted_sequence_seconds'],result['base_sequence_budget_seconds']+1e-9)
             self.assertEqual(plan['execution_sequence'][:len(selected)], selected)
             self.assertEqual({row['brush_px'] for row in plan['execution_sequence']}, {3})
             self.assertEqual(source.tobytes(), source_bytes)

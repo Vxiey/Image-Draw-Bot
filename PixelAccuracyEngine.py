@@ -312,16 +312,187 @@ def simulate_strokes(pixel_map: PixelMap, execution_sequence: Sequence[dict], pa
     return SimulationResult(sim,counts,counts>0,error,metrics)
 
 
+def _pixel_transition_cost(model, entry, previous, *, initial_brush, cancelled, prepared=None):
+    """Price one retained path after its actual retained predecessor."""
+    if cancelled():raise InterruptedError()
+    cursor=tuple(previous['path'][-1]) if previous is not None else None
+    color=(previous['color_index'] if previous is not None and
+           str(previous.get('phase','details'))==str(entry.get('phase','details')) else None)
+    brush=previous['brush_px'] if previous is not None else initial_brush
+    cost=model.sequence_cost((entry,),initial_cursor=cursor,initial_color=color,initial_brush=brush,
+                             include_geometry=prepared is None,cancelled=cancelled)
+    return float(cost.total_seconds)+(prepared.seconds(cursor=cursor) if prepared is not None else 0.0)
+
+
+def _costed_progressive_budget(sequence, model, seconds, correction_reserve_ratio, cancelled):
+    """Fit complete original paths to the actual delivery model and paint order.
+
+    Phase shares choose which work survives. Linked neighbours price removal
+    and bounded refill without rescanning every retained path for each choice.
+    The complete stateful model remains the final acceptance gate.
+    """
+    from bisect import bisect_left
+    if cancelled():raise InterruptedError()
+    rows=prepared=previous=following=retained=costs=priority=None
+    positions=omitted=selected=row=entry=color_counts=phase_counts=None
+    try:
+        options=model.options
+        initial_brush=max(1,int(options.get('brush_px') or 1))
+        rows=[];brush=initial_brush
+        for entry in sequence:
+            if cancelled():raise InterruptedError()
+            if not entry.get('path'):continue
+            row=dict(entry)
+            brush=brush_for_entry(row,brush)
+            row['brush_px']=brush
+            rows.append(row)
+        def positive(value, fallback):
+            try:value=float(value)
+            except (TypeError,ValueError,OverflowError):return float(fallback)
+            return value if math.isfinite(value) and value>0 else float(fallback)
+        render_seconds=positive(options.get('deadline_render_budget_seconds'),max(0.0,float(seconds)))
+        fixed=float(model.fixed_overhead(active_colors=0).total_seconds)
+        clear=positive(options.get('canvas_clear_estimate_seconds'),0.0)
+        fixed+=clear
+        available=max(0.0,render_seconds-fixed)
+        ratio=float(correction_reserve_ratio)
+        if not math.isfinite(ratio):raise ValueError('Correction reserve must be finite.')
+        ratio=max(0.0,min(.25,ratio))
+        def exact(selected):
+            return model.sequence_cost(selected,initial_brush=initial_brush,
+                                       include_color_verification=True,cancelled=cancelled)
+        full=exact(rows)
+        full_risk=model.risk_adjusted_seconds(full.total_seconds)
+        reserve=0.0 if full_risk<=available+1e-9 else available*ratio
+        base_limit=max(0.0,available-reserve)
+        selected=rows
+        refilled=0
+        if base_limit<=0 and full_risk>available+1e-9:
+            selected=[]
+            checked=exact(())
+        elif full_risk>available+1e-9:
+            total=len(rows)
+            prepared=[]
+            for row in rows:
+                prepared.append(model.prepare_path_cost(row['path'],brush_px=row['brush_px'],cancelled=cancelled))
+            previous=[i-1 if i else None for i in range(total)]
+            following=[i+1 if i+1<total else None for i in range(total)]
+            retained=[True]*total
+            costs=[]
+            for i,row in enumerate(rows):
+                costs.append(_pixel_transition_cost(model,row,rows[i-1] if i else None,
+                    initial_brush=initial_brush,cancelled=cancelled,prepared=prepared[i]))
+            verify=bool(options.get('adaptive_color_verification') and not options.get('paint_current_color'))
+            verification=float(model.switch_cost('verification')) if verify else 0.0
+            color_counts={}
+            for row in rows:
+                color=row['color_index'];color_counts[color]=color_counts.get(color,0)+1
+            used=sum(costs)+len(color_counts)*verification
+            shares={'fill':.38,'mid_detail':.34,'cleanup':.16,'fine_detail':.12}
+            phase_counts={};priority=[]
+            for i,row in enumerate(rows):
+                if i%256==0 and cancelled():raise InterruptedError()
+                phase=str(row.get('phase') or '')
+                # Subject-first sequences keep their established cross-subject order;
+                # their namespaced phases are not regrouped into a different policy.
+                phase=phase if phase in shares else 'other'
+                phase_counts[phase]=phase_counts.get(phase,0)+1
+                priority.append((phase_counts[phase]/shares.get(phase,1.0),i))
+            priority.sort(reverse=True)
+            def remove(index):
+                nonlocal used
+                left,right=previous[index],following[index]
+                used-=costs[index]
+                if right is not None:
+                    replacement=_pixel_transition_cost(model,rows[right],rows[left] if left is not None else None,
+                        initial_brush=initial_brush,cancelled=cancelled,prepared=prepared[right])
+                    used+=replacement-costs[right];costs[right]=replacement
+                    previous[right]=left
+                if left is not None:following[left]=right
+                color=rows[index]['color_index'];color_counts[color]-=1
+                if color_counts[color]==0:used-=verification
+                retained[index]=False
+            for _rank,index in priority:
+                if cancelled():raise InterruptedError()
+                if model.risk_adjusted_seconds(used)<=base_limit+1e-9:break
+                remove(index)
+            positions=[i for i,keep in enumerate(retained) if keep]
+            # A costly final removal may leave room for cheaper omitted details.
+            # Refill a bounded high-priority set using exact neighbour deltas.
+            omitted=[i for _rank,i in reversed(priority) if not retained[i]]
+            for index in omitted[:64]:
+                if cancelled():raise InterruptedError()
+                slot=bisect_left(positions,index)
+                left=positions[slot-1] if slot else None
+                right=positions[slot] if slot<len(positions) else None
+                addition=_pixel_transition_cost(model,rows[index],rows[left] if left is not None else None,
+                    initial_brush=initial_brush,cancelled=cancelled,prepared=prepared[index])
+                right_cost=(0.0 if right is None else _pixel_transition_cost(model,rows[right],rows[index],
+                    initial_brush=initial_brush,cancelled=cancelled,prepared=prepared[right]))
+                color=rows[index]['color_index']
+                candidate=used+addition+(verification if not color_counts.get(color) else 0.0)
+                if right is not None:candidate+=right_cost-costs[right]
+                if model.risk_adjusted_seconds(candidate)>base_limit+1e-9:continue
+                used=candidate;costs[index]=addition;retained[index]=True
+                color_counts[color]=color_counts.get(color,0)+1
+                previous[index]=left;following[index]=right
+                if left is not None:following[left]=index
+                if right is not None:previous[right]=index;costs[right]=right_cost
+                positions.insert(slot,index);refilled+=1
+            selected=[rows[i] for i in positions]
+            # Different summation order can move a floating-point boundary. Always
+            # validate with the complete model rather than publishing the estimate.
+            checked=exact(selected)
+            for _rank,index in priority:
+                if model.risk_adjusted_seconds(checked.total_seconds)<=base_limit+1e-9:break
+                if retained[index]:
+                    remove(index)
+                    selected=[row for i,row in enumerate(rows) if retained[i]]
+                    checked=exact(selected)
+        else:
+            checked=full
+        if cancelled():raise InterruptedError()
+        return {'execution_sequence':selected,'active':True,'path_budget':None,
+            'base_path_budget':len(selected),'correction_reserve':0,
+            'paths_omitted':len(sequence)-len(selected),'paths_per_second':None,
+            'source':'progressive-execution-cost-budget','phase_order':'original execution order',
+            'admission_priority':'fill -> mid detail -> protected cleanup -> fine detail',
+            'admission_method':'phase shares with original path priority and bounded cost-aware refill',
+            'seconds':positive(options.get('deadline_total_seconds'),seconds),
+            'render_budget_seconds':render_seconds,'fixed_overhead_seconds':fixed,
+            'sequence_budget_seconds':available,'base_sequence_budget_seconds':base_limit,
+            'correction_reserve_seconds':reserve,'refilled_paths':refilled,
+            'initial_sequence_seconds':float(full.total_seconds),
+            'selected_sequence_seconds':float(checked.total_seconds),
+            'risk_adjusted_sequence_seconds':float(model.risk_adjusted_seconds(checked.total_seconds)),
+            'cost_model_source':model.source,'exact_cost_guard':True,
+            'fixed_overhead_exceeds_budget':fixed>render_seconds}
+    finally:
+        # Drop this frame's private row copies and prepared-path tables when
+        # Stop/failure tracebacks outlive the discarded planning operation.
+        rows=prepared=previous=following=retained=costs=priority=None
+        positions=omitted=selected=row=entry=color_counts=phase_counts=None
+
+
 def progressive_time_budget(execution_sequence: Sequence[dict], *, active: bool, seconds: int,
-                            profile_key: str = '', correction_reserve_ratio: float = .12) -> dict:
+                            profile_key: str = '', correction_reserve_ratio: float = .12,
+                            cost_model=None, cancelled=lambda: False) -> dict:
     """Choose a quality-first path subset without altering PixelMap geometry.
 
-    Real-Speed history is used only as a throughput estimate. Unlike the old
-    speed policy this function never reduces colours/resolution or simplifies
-    components. Protected cleanup receives a reserved slice before low-priority
-    fine detail when a timer is tight.
+    Public timed planning passes the delivery model, including UI transitions
+    and verification. Legacy callers without a model retain their throughput
+    estimate. Neither route reduces colours/resolution or simplifies components.
+    Protected cleanup receives a share before low-priority fine detail.
     """
-    sequence=[dict(e) for e in execution_sequence]
+    if cancelled():raise InterruptedError()
+    if active and cost_model is not None and len(execution_sequence):
+        return _costed_progressive_budget(execution_sequence,cost_model,seconds,
+                                         correction_reserve_ratio,cancelled)
+    sequence=[]
+    for index,entry in enumerate(execution_sequence):
+        if index%256==0 and cancelled():raise InterruptedError()
+        sequence.append(dict(entry))
+    if cancelled():raise InterruptedError()
     total=len(sequence)
     if not active or total<=0:
         return {'execution_sequence':sequence,'active':False,'path_budget':total,'base_path_budget':total,
@@ -602,6 +773,49 @@ def region_accuracy_scores(pixel_map: PixelMap, result: SimulationResult, *, max
         desired=simulated=covered=edge=protected=component_counts=None
 
 
+def _fit_correction_delivery(sequence, corrections, model, limit, *, cancelled):
+    """Admit appended corrections using their real retained delivery state."""
+    if model is None or limit is None:return corrections,None
+    limit=float(limit)
+    if not math.isfinite(limit) or limit<0:
+        raise ValueError('Correction execution budget must be finite and nonnegative.')
+    initial_brush=max(1,int(model.options.get('brush_px') or 1))
+    current=initial_brush;previous=None;colors=set()
+    for entry in sequence:
+        if cancelled():raise InterruptedError()
+        if not entry.get('path'):continue
+        current=brush_for_entry(entry,current)
+        previous=dict(entry,brush_px=current)
+        colors.add(entry['color_index'])
+    used=float(model.sequence_cost(sequence,initial_brush=initial_brush,
+        include_color_verification=True,cancelled=cancelled).total_seconds)
+    verify=bool(model.options.get('adaptive_color_verification') and not model.options.get('paint_current_color'))
+    verification=float(model.switch_cost('verification')) if verify else 0.0
+    selected=[];intended_brush=current
+    for entry in corrections:
+        if cancelled():raise InterruptedError()
+        if not entry.get('path'):continue
+        # Omitted proposals must not change a later inherited footprint.
+        intended_brush=brush_for_entry(entry,intended_brush)
+        row=dict(entry,brush_px=intended_brush)
+        cost=_pixel_transition_cost(model,row,previous,initial_brush=initial_brush,cancelled=cancelled)
+        if row['color_index'] not in colors:cost+=verification
+        if model.risk_adjusted_seconds(used+cost)>limit+1e-9:continue
+        selected.append(row);used+=cost;previous=row;current=row['brush_px'];colors.add(row['color_index'])
+    from itertools import chain
+    exact=model.sequence_cost(chain(sequence,selected),initial_brush=initial_brush,
+        include_color_verification=True,cancelled=cancelled)
+    while selected and model.risk_adjusted_seconds(exact.total_seconds)>limit+1e-9:
+        if cancelled():raise InterruptedError()
+        selected.pop()
+        exact=model.sequence_cost(chain(sequence,selected),initial_brush=initial_brush,
+            include_color_verification=True,cancelled=cancelled)
+    if cancelled():raise InterruptedError()
+    return selected,{'proposed_paths':len(corrections),'admitted_paths':len(selected),
+        'sequence_budget_seconds':limit,'sequence_seconds':float(exact.total_seconds),
+        'risk_adjusted_sequence_seconds':float(model.risk_adjusted_seconds(exact.total_seconds))}
+
+
 def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[dict], palette_rgb: Sequence[Sequence[int]], *,
                             brush_px: int = 1, max_passes: int = 2, min_improvement: float = .0001,
                             correction_brush_px: int | None = None,
@@ -609,6 +823,7 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
                             gpu_mode: str = "CPU",
                             gpu_vram: str = "Auto", gpu_performance: str = "High throughput",
                             score_context: PixelScoreContext | None = None,
+                            cost_model=None, max_execution_seconds: float | None = None,
                             cancelled=lambda: False, _region_topology=None) -> dict:
     """Simulate, score and append correction passes only while accuracy improves."""
     background_index=_white_background_index(palette_rgb)
@@ -621,7 +836,7 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
                              gpu_mode=gpu_mode,gpu_vram=gpu_vram,
                              gpu_performance=gpu_performance,score_context=score_context,cancelled=cancelled)
     initial=dict(current.metrics)
-    pass_meta=[];accepted_entries=[]
+    pass_meta=[];accepted_entries=[];deadline_meta=[]
 
     def simulate_candidate(corrections):
         if gpu_mode!='CPU':
@@ -647,6 +862,9 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
         corrections=_correction_runs(pixel_map,current,background_index,pass_number=pass_number,
             correction_brush_px=correction_brush_px,score_context=score_context,cancelled=cancelled)
         if remaining is not None:corrections=corrections[:remaining]
+        corrections,deadline=_fit_correction_delivery(sequence,corrections,cost_model,
+            max_execution_seconds,cancelled=cancelled)
+        if deadline is not None:deadline_meta.append(dict(deadline,pass_number=pass_number,stage='initial correction'))
         if not corrections:break
         candidate=simulate_candidate(corrections)
         proposed_paths=len(corrections)
@@ -665,6 +883,9 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
                 detail_stage='protected-detail span filtering'
                 safe_corrections=_detail_safe_corrections(pixel_map,current,corrections,desired,
                                                          max_paths=remaining,cancelled=cancelled)
+                safe_corrections,deadline=_fit_correction_delivery(sequence,safe_corrections,cost_model,
+                    max_execution_seconds,cancelled=cancelled)
+                if deadline is not None:deadline_meta.append(dict(deadline,pass_number=pass_number,stage='detail-safe retry'))
                 safe_paths=len(safe_corrections)
                 if safe_corrections:
                     # Release the rejected private raster before allocating the retry.
@@ -744,6 +965,9 @@ def refine_with_corrections(pixel_map: PixelMap, execution_sequence: Sequence[di
         'worst_region_accuracy_score':region_meta.get('minimum_score'),
         'correction_efficiency_floor':max(0.0,float(min_repaired_pixels_per_path)),**final,
     }
+    if cost_model is not None and max_execution_seconds is not None:
+        meta['correction_delivery_budget']={'sequence_budget_seconds':float(max_execution_seconds),
+                                           'attempts':deadline_meta}
     return {'execution_sequence':sequence,'correction_entries':accepted_entries,'simulation':current,'metadata':meta}
 
 def execution_groups_from_sequence(sequence: Sequence[dict], palette_count: int) -> list[list[Path]]:
