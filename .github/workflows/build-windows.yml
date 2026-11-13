@@ -1,7 +1,13 @@
-name: Build and publish Image Draw Bot Windows release
+name: Build, verify, and optionally publish Image Draw Bot Windows release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the verified release from main (explicit release approval required)'
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -13,10 +19,11 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
-  # Main, tag and manual runs can publish the same versioned draft. Serialize
-  # every publisher so --clobber cannot mix assets from independent builds.
+  # Pushes only build/verify. Publication requires an explicit manual request
+  # from main. Serialize runs so release assets cannot mix between publishers.
   group: image-draw-bot-release
   cancel-in-progress: false
   queue: max
@@ -41,7 +48,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt -r requirements-dev.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Source package hygiene gate
@@ -72,6 +79,12 @@ jobs:
         shell: pwsh
         run: |
           python build_release.py --installer --skip-tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate packaged GUI and native drag and drop
+        shell: pwsh
+        run: |
+          python -c "import subprocess; subprocess.run(['dist/ImageDrawBot/ImageDrawBot.exe', '--smoke-test'], check=True, timeout=90)"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Validate packaged release
@@ -131,8 +144,19 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Require passing CI for the exact release commit
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python ReleaseCandidateHardening.py --scope-gate
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python ReleaseCiGate.py --expected-commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Publish verified versioned release
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -168,7 +192,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }
 
       - name: Prepare one-time retirement of releases before v1.0.146-rc3
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/tags/v1.0.146-rc3'
+        if: github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

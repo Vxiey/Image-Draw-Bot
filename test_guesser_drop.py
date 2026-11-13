@@ -34,6 +34,10 @@ class DropTests(unittest.TestCase):
     def make_app(self):
         app=SimpleNamespace(activity=None,closing=False,root=SimpleNamespace(tk=tk.Tcl()),drop_mode=Value('Draw immediately'),palette_ready=True,corners=[(0,0),(10,10)],target_window=(123,(0,0,100,100)),status=Value(),loads=[])
         app.load_source=lambda *args,**kw:app.loads.append((args,kw))
+        # The load callback closes over app, so refcounting alone cannot retire
+        # its creator-thread Tcl interpreter. Detach it during test cleanup,
+        # before a later planning worker triggers cyclic collection.
+        self.addCleanup(setattr, app.root, 'tk', None)
         return app
     def test_braced_path_only_loads_image(self):
         with tempfile.TemporaryDirectory() as tmp:

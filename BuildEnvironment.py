@@ -188,11 +188,13 @@ def _verify_builder(python: Path, directory: Path, root: Path):
         ) from error
 
 
-def prepare_builder(root: Path, *, gpu=False) -> Builder:
+def prepare_builder(root: Path, *, gpu=False, include_tests=False) -> Builder:
     """Install only into the actual verified private builder, never the caller."""
     root = Path(root).resolve()
     require_build_workspace(root)
     requirement_names = ['requirements.txt', 'requirements-build.txt', 'requirements-gpu-universal.txt']
+    if include_tests:
+        requirement_names.append('requirements-dev.txt')
     if gpu:
         requirement_names.append('requirements-gpu-nvidia.txt')
     try:

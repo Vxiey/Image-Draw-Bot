@@ -1,15 +1,22 @@
 # Image Draw Bot v1.0.148 — development release notes
 
 **This version has not been published.** The current reviewed checkpoint contains
-**869 distinct behavior improvements, with 31 remaining** toward the user's
-revised target of **900**. Batches 40 and 41 add 23 distinct implementation groups.
+**886 distinct behavior improvements, with 14 remaining** toward the user's
+revised target of **900**. Batch 42 adds 17 groups after the 869-group batch41 checkpoint.
 Tests, documentation, review corrections, existing-contract completions and
 Tcl-fixture disposal do not increase the count. The
 [complete ledger](docs/IMPROVEMENTS-v1.0.148.md) maps each ID to its evidence.
 Integrated and published-commit CI status is recorded in the
 [progress record](docs/v148-improvement-progress.md).
 
-## Batch 41: use the actual execution context
+## Batch 42: preserve detail and execution safety
+
+The current checkpoint includes four application, seven rendering, two runtime
+and four native-input/resource groups. The [progress record](docs/v148-improvement-progress.md)
+links their implementation ledgers and separate verification results. Focused
+tests do not replace final full-suite, Windows and packaged-application gates.
+
+## Historical batch 41: use the actual execution context
 
 - Learn ETA from the right operation types and the actual native delivery policy.
 - Keep all Pixel Accurate detail that fits the stateful execution-time budget.

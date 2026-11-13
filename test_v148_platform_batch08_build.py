@@ -33,7 +33,7 @@ class BuildFixture:
         self.configuration = "global.index-url='https://build-user:build-secret@mirror.invalid/simple'\n"
         self.configuration += "global.proxy='http://proxy.invalid:8080'\nglobal.target='/external-target'\n"
         self.configuration += "install.user='true'\ninstall.prefix='/external-prefix'\n"
-        for name in ('requirements.txt', 'requirements-build.txt', 'requirements-gpu-universal.txt',
+        for name in ('requirements.txt', 'requirements-dev.txt', 'requirements-build.txt', 'requirements-gpu-universal.txt',
                      'requirements-gpu-nvidia.txt'):
             (self.root/name).write_text('test-dependency>=1\n', encoding='utf-8')
         (self.root/'version_info.txt').write_text(

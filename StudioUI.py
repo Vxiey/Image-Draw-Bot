@@ -99,7 +99,15 @@ class ToolTip:
 
 
 def tooltip(widget, text):
-    widget._image_draw_bot_tooltip = ToolTip(widget,text); return widget
+    existing = getattr(widget, '_image_draw_bot_tooltip', None)
+    if isinstance(existing, ToolTip) and existing.widget is widget:
+        # Keep the installed pointer/focus bindings on their original owner.
+        # Otherwise a help update leaves old timers and stale popups alive.
+        existing._leave()
+        existing.text = str(text)
+    else:
+        widget._image_draw_bot_tooltip = ToolTip(widget, text)
+    return widget
 
 
 def button(parent, text, command, primary=False, danger=False, **kwargs):

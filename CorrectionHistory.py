@@ -345,6 +345,11 @@ def record_correction_history(plan_or_options: dict[str, Any], *, actual_seconds
     entry = build_history_entry(plan if plan else options, actual_seconds=actual_seconds, created_at=created_at)
     if contains_image_data(entry):
         return {"recorded": False, "reason": "blocked unsafe image-data field", "profile_key": ctx["profile_key"]}
+    # Apply the reader's domain contract before appending or truncating history.
+    # Otherwise a rejected row could evict a valid entry and still report success.
+    if not _valid_entry(entry):
+        return {"recorded": False, "reason": "invalid correction-history metadata",
+                "profile_key": ctx["profile_key"]}
     with file_transaction(_resolved_path(options, path)):
         resolved, db = _load(options, path)
         entries = list(db.get("entries") or [])

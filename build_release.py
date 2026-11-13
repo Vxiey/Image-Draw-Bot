@@ -160,7 +160,7 @@ def _build_release(args, signing):
     # The ZIP writer validates its staging file before replacing the old ZIP.
     RELEASE.mkdir(exist_ok=True)
 
-    builder=prepare_builder(BASE,gpu=args.gpu)
+    builder=prepare_builder(BASE,gpu=args.gpu,include_tests=not args.skip_tests)
 
     if not args.skip_tests:
         run([str(builder.python), "-m", "unittest", "discover", "-v"],cwd=BASE,env=builder.source_environment())

@@ -71,12 +71,12 @@ class StorageMobileBatch02Tests(unittest.TestCase):
         original_resize = Image.Image.resize
         original_convert = Image.Image.convert
         original_new = Image.new
-        for mode in ('RGB', 'RGBA'):
-            with self.subTest(mode=mode):
+        for mode, failure in (('RGB', 'encode'), ('RGBA', 'resize'), ('RGBA', 'encode')):
+            with self.subTest(mode=mode, failure=failure):
                 source = Image.new(mode, (1700, 20), 'white')
                 owned = []
                 def resize(image, *args, **kwargs):
-                    if mode == 'RGBA':
+                    if failure == 'resize':
                         raise OSError('injected resize failure')
                     result = original_resize(image, *args, **kwargs)
                     if image is source:
@@ -84,7 +84,9 @@ class StorageMobileBatch02Tests(unittest.TestCase):
                     return result
                 def convert(image, *args, **kwargs):
                     result = original_convert(image, *args, **kwargs)
-                    if image is source or any(image is value for value in owned):
+                    # Pillow may allocate its own premultiplied-alpha temporaries
+                    # inside resize; only track buffers returned to our caller.
+                    if (image is source and mode != 'RGBA') or any(image is value for value in owned):
                         owned.append(result)
                     return result
                 def new(*args, **kwargs):
@@ -98,7 +100,12 @@ class StorageMobileBatch02Tests(unittest.TestCase):
                          patch.object(Image.Image, 'save', side_effect=OSError('injected encoding failure')):
                         with self.assertRaises(OSError):
                             mobile._image_png_bytes(source)
-                    self.assertGreaterEqual(len(owned), 4 if mode == 'RGB' else 1)
+                    if failure == 'resize':
+                        # RGBA now borrows the source until resize succeeds.
+                        # A failed resize must allocate no private full-size copy.
+                        self.assertEqual(owned, [])
+                    else:
+                        self.assertGreaterEqual(len(owned), 4 if mode == 'RGB' else 3)
                     for value in owned:
                         with self.assertRaises(ValueError):
                             value.getpixel((0, 0))

@@ -107,6 +107,12 @@ class RecoveryAfterBackgroundEditTests(unittest.TestCase):
             name, variable = self.variables.pop()
             setattr(app, name, None)
             del variable
+        # begin_worker creates this owner even when the task does not create
+        # native windows. Its root alias must not survive in controller cycles.
+        screen_window = getattr(app, 'screen_task_window', None)
+        if screen_window is not None:
+            screen_window.root = None
+        app.screen_task_window = None
         app.root = None
         self.root = None
 

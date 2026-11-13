@@ -121,7 +121,9 @@ class BottleneckFixesV10146Tests(unittest.TestCase):
         self.assertEqual(len(accepted),2)
         self.assertEqual(meta['fill_color_batches'],1)
         self.assertFalse(meta['per_region_tool_switch_double_charge'])
-        self.assertAlmostEqual(meta['fill_estimated_seconds'],1.04,places=2)
+        # Generic delivery resolves Fill + restore to 0.40 s per batch,
+        # matching the actual RegionFill execution model above.
+        self.assertAlmostEqual(meta['fill_estimated_seconds'],1.24,places=2)
 
     def test_estimator_prefers_final_execution_sequence(self):
         plan={

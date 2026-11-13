@@ -469,23 +469,60 @@ def validate_windows_release(release_dir: Path, *, app_version: str | None = Non
     return result
 
 
+def validate_release_scope(root: Path) -> dict:
+    """Publication-only gate; normal candidate builds may remain incomplete."""
+    from Version import APP_VERSION
+    path = Path(root) / 'docs' / 'v148-improvements.json'
+    try:
+        with path.open('rb') as stream:
+            raw = stream.read(4 * 1024 * 1024 + 1)
+        if len(raw) > 4 * 1024 * 1024:
+            raise ValueError('registry exceeds limit')
+        data = json.loads(raw)
+    except (OSError, ValueError, RecursionError) as error:
+        raise ReleaseGateError('Cannot verify the release scope registry.') from error
+    if not isinstance(data, dict) or data.get('version') != APP_VERSION:
+        raise ReleaseGateError('Release scope version does not match the application.')
+    # The owner set 900 distinct groups for v1.0.148. Lowering a JSON target
+    # must not silently bypass the agreed publication requirement.
+    if APP_VERSION != '1.0.148' or type(data.get('target')) is not int or data['target'] != 900:
+        raise ReleaseGateError('Release scope requires the reviewed 900-group v1.0.148 target.')
+    rows = data.get('improvements')
+    if not isinstance(rows, list):
+        raise ReleaseGateError('Release scope entries are missing.')
+    ids = []
+    for row in rows:
+        if (not isinstance(row, dict) or type(row.get('id')) is not int
+                or not isinstance(row.get('description'), str) or not row['description'].strip()
+                or not isinstance(row.get('ledger'), str) or not row['ledger'].strip()):
+            raise ReleaseGateError('Release scope contains malformed evidence entries.')
+        ids.append(row['id'])
+    if (type(data.get('implemented')) is not int or data['implemented'] != len(rows)
+            or sorted(ids) != list(range(1, 901))):
+        raise ReleaseGateError(f'Release scope incomplete or inconsistent: {len(rows)}/900 groups; publication blocked.')
+    return {'version': APP_VERSION, 'target': 900, 'implemented': 900, 'passed': True}
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
     parser = argparse.ArgumentParser(description="Image Draw Bot release-candidate gates")
     parser.add_argument("--source-gate", action="store_true")
+    parser.add_argument("--scope-gate", action="store_true", help="Require completed 900-group scope before publication")
     parser.add_argument("--release-dir")
     parser.add_argument("--gpu", action="store_true", help="Validate the optional CUDA ZIP release instead of the standard installer release")
     parser.add_argument("--soak-cycles", type=int, default=DEFAULT_SOAK_CYCLES)
     args = parser.parse_args(argv)
     if args.gpu and not args.release_dir:
         parser.error("--gpu requires --release-dir")
+    if args.scope_gate:
+        print(json.dumps(validate_release_scope(Path(__file__).resolve().parent), indent=2, sort_keys=True))
     if args.source_gate:
         report = run_source_release_gate(Path(__file__).resolve().parent, soak_cycles=args.soak_cycles)
         print(json.dumps(report.as_dict(), indent=2, sort_keys=True))
     if args.release_dir:
         print(json.dumps(validate_windows_release(Path(args.release_dir),require_installer=not args.gpu,gpu=args.gpu), indent=2, sort_keys=True))
-    if not args.source_gate and not args.release_dir:
-        parser.error("choose --source-gate and/or --release-dir")
+    if not args.source_gate and not args.release_dir and not args.scope_gate:
+        parser.error("choose --source-gate, --scope-gate and/or --release-dir")
     return 0
 
 

@@ -1,11 +1,6 @@
 name: Publish Image Draw Bot Wiki
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'docs/wiki/**'
-      - '.github/workflows/publish-wiki.yml'
 permissions:
   contents: write
 concurrency:

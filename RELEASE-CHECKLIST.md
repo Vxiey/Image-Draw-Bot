@@ -13,6 +13,7 @@
 4. Run tests:
 
    ```powershell
+   python -m pip install -r requirements.txt -r requirements-dev.txt
    python -m unittest discover -v
    python DrawBot.py --self-test
    ```
@@ -52,12 +53,17 @@
 
 ## GitHub release
 
-16. Create a tag matching the app version exactly:
+16. Confirm the owner has explicitly approved publication, all readiness work is
+    complete (the registry must contain all 900 distinct groups), and push/main
+    CI passed for the exact commit on `main`. A normal main/tag
+    push only builds and verifies artifacts; it does not publish a release.
 
-   ```powershell
-   git tag v1.0.148
-   git push origin v1.0.148
-   ```
+    In GitHub Actions, manually run **Build, verify, and optionally publish Image
+    Draw Bot Windows release** on `main` with **publish** enabled. The default is
+    disabled, so ordinary manual verification runs are also build-only. The
+    workflow verifies the exact commit and creates the version tag only during
+    this explicit publication path. If CI is still pending, publication stops;
+    rerun after CI passes. Do not create or move a tag to bypass that gate.
 
 17. Attach or verify:
    - portable ZIP
@@ -67,3 +73,9 @@
    - release manifest
 
 18. Add Authenticode signing before broad distribution when a code-signing certificate is available.
+
+## Wiki publication
+
+Wiki synchronization is manual-only through the Publish Image Draw Bot Wiki
+workflow. A code push does not publish Wiki changes. Obtain explicit approval
+before dispatching that separate publication workflow.

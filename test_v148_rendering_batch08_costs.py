@@ -182,10 +182,12 @@ class RetainedOperationCostTests(unittest.TestCase):
         from PixelAccuratePlanner import build_pixel_map
         from PixelStrokeEngine import build_pixel_stroke_plan
         palette = ((255, 255, 255), (200, 20, 30), (10, 90, 190))
-        with closing(Image.new('RGB', (48, 32), 'white')) as image:
+        # Leave enough interior area for a non-cleanup component after
+        # chromatic-boundary protection; small components are all cleanup.
+        with closing(Image.new('RGB', (96, 64), 'white')) as image:
             draw = ImageDraw.Draw(image)
-            draw.rectangle((4, 4, 32, 22), fill=palette[1])
-            draw.line((39, 3, 39, 28), fill=palette[1])
+            draw.rectangle((4, 4, 80, 54), fill=palette[1])
+            draw.line((87, 3, 87, 60), fill=palette[1])
             draw.rectangle((8, 8, 10, 10), fill=palette[2])
             pixel_map = build_pixel_map(image, palette, gpu_mode='CPU', skip_white=True)
             options = dict(brush_px=1, exact_color_available=True, adaptive_color_verification=True,

@@ -30,12 +30,15 @@ def _has_transparency(image):
                 return any(count and value < 255 for count, value in zip(image.histogram(), alpha.tobytes()))
     # RGB/greyscale transparency keys need decoded-pixel comparisons. Keep
     # conversion bounded and stop at the first visible transparency evidence.
-    rows = max(1, _ALPHA_SCAN_PIXELS // image.width)
+    columns = min(image.width, _ALPHA_SCAN_PIXELS)
+    rows = max(1, _ALPHA_SCAN_PIXELS // columns)
     for top in range(0, image.height, rows):
-        with closing(image.crop((0, top, image.width, min(image.height, top + rows)))) as part:
-            with closing(part.convert('RGBA')) as converted:
-                if converted.getextrema()[3][0] < 255:
-                    return True
+        for left in range(0, image.width, columns):
+            with closing(image.crop((left, top, min(image.width, left + columns),
+                                     min(image.height, top + rows)))) as part:
+                with closing(part.convert('RGBA')) as converted:
+                    if converted.getextrema()[3][0] < 255:
+                        return True
     return False
 
 

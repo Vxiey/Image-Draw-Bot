@@ -710,4 +710,13 @@ class KeyboardPreviewCanvas(_KeyboardFocusSupport, tk.Canvas):
 
     def destroy(self):
         self._keyboard_closed = True
-        super().destroy()
+        # Callbacks can retain the application and its Tcl variables. Release
+        # them on the owner thread instead of leaving cycles for worker GC.
+        try:
+            super().destroy()
+        finally:
+            # Preserve access during synchronous <Destroy> delivery.
+            for name in ('_get_preview_zoom', '_set_preview_zoom',
+                         '_step_preview_zoom', '_preview_pan_changed',
+                         '_preview_available'):
+                setattr(self, name, None)
