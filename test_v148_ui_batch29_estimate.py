@@ -104,8 +104,7 @@ class PreviewSequenceTransferTests(PreviewEstimateFixture):
                     # handle the explicit legacy control at its actual queue.
                     if change == 'no-sequence':
                         app.update_plan(user_initiated=True)
-                        app.worker.join(timeout=10)
-                        self.assertFalse(app.worker.is_alive())
+                        self.wait_for_preview_worker(app)
                         events = [app.events.get_nowait(), app.events.get_nowait()]
                         self.assertEqual([kind for kind, _ in events], ['planned', 'done'])
                         plan, done = events[0][1], events[1]
@@ -287,8 +286,7 @@ class PreviewSequenceTransferTests(PreviewEstimateFixture):
             return plan
         with patch.object(DrawBot, 'make_plan', new=stopped):
             app.update_plan(user_initiated=True)
-            app.worker.join(timeout=10)
-            self.assertFalse(app.worker.is_alive())
+            self.wait_for_preview_worker(app)
             kinds = []
             while not app.events.empty():
                 event = app.events.get_nowait()

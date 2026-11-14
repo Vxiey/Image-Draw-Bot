@@ -3,6 +3,12 @@ from copy import deepcopy
 from contextlib import contextmanager
 from pathlib import Path
 import queue
+import os
+import json
+import time
+import unittest
+import subprocess
+import sys
 import tempfile
 import threading
 from types import MethodType
@@ -59,7 +65,68 @@ def observe_estimates():
         yield records
 
 
+def run_preview_process(command, *, timeout=180, env=None, ready_file=None,
+                        startup_timeout=60):
+    """Reap a stuck child; optionally budget startup separately from its work."""
+    with subprocess.Popen(command, cwd=Path(__file__).resolve().parent,
+                          env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          text=True) as process:
+        try:
+            if ready_file is not None:
+                deadline = time.monotonic() + startup_timeout
+                while not Path(ready_file).exists():
+                    if process.poll() is not None:
+                        stdout, stderr = process.communicate()
+                        raise AssertionError('Preview child exited before ready: ' + stdout + stderr)
+                    if time.monotonic() >= deadline:
+                        raise subprocess.TimeoutExpired(command, startup_timeout)
+                    time.sleep(.01)
+            stdout, stderr = process.communicate(timeout=timeout)
+        except BaseException as exc:
+            process.kill()
+            process.communicate()
+            if isinstance(exc, subprocess.TimeoutExpired):
+                raise AssertionError('Isolated preview fixture exceeded its process bound') from exc
+            raise
+        if process.returncode:
+            raise AssertionError(stdout + stderr)
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def run_preview_case(test_id):
+    """Emit machine-readable skip status without hiding child failures."""
+    suite = unittest.defaultTestLoader.loadTestsFromName(test_id)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    print('IDB_PREVIEW_RESULT=' + json.dumps({'skipped': [reason for _, reason in result.skipped]}))
+    raise SystemExit(0 if result.wasSuccessful() else 1)
+
+
 class PreviewEstimateFixture(PlanStatusFixture):
+    def run(self, result=None):
+        test_id = self.id()
+        if test_id.startswith('__main__.'):
+            test_id = Path(sys.argv[0]).stem + test_id[len('__main__'):]
+        if os.environ.get('IDB_ISOLATED_PREVIEW_TEST') == test_id:
+            return super().run(result)
+        # No fixture setup or Tcl allocation takes place in this parent. Even
+        # an uncooperative worker dies with its child before failure is reported.
+        def isolated():
+            environment = dict(os.environ, IDB_ISOLATED_PREVIEW_TEST=test_id)
+            child = run_preview_process([
+                sys.executable, '-X', 'faulthandler', '-c',
+                'import sys; from test_v148_ui_batch20_preview_estimate import run_preview_case; '
+                'run_preview_case(sys.argv[1])', test_id], env=environment)
+            reports = [line.partition('=')[2] for line in child.stdout.splitlines()
+                       if line.startswith('IDB_PREVIEW_RESULT=')]
+            self.assertEqual(len(reports), 1, 'Child did not report its test outcome')
+            skipped = json.loads(reports[0])['skipped']
+            if skipped:
+                raise unittest.SkipTest('; '.join(skipped))
+        from unittest import FunctionTestCase
+        proxy = FunctionTestCase(isolated, description=test_id)
+        proxy.id = lambda: test_id
+        return proxy.run(result)
+
     def setUp(self):
         super().setUp()
         self.directory = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
@@ -99,11 +166,30 @@ class PreviewEstimateFixture(PlanStatusFixture):
         app.original = source
         return app
 
-    def build(self, app, *, full_detail=False, worker_timeout=10):
-        app.update_plan(user_initiated=True, full_detail=full_detail)
+    def wait_for_preview_worker(self, app, *, worker_timeout=60, stop_timeout=30):
+        # Projected geometry plus instrumentation can take over ten seconds on
+        # Windows CI. This is a completion bound, not a performance assertion.
         self.assertIsInstance(app.worker, threading.Thread)
         app.worker.join(timeout=worker_timeout)
-        self.assertFalse(app.worker.is_alive(), 'Actual preview worker exceeded its fixture bound')
+        if app.worker.is_alive():
+            # Do not let a failed subtest unwind planner patches or start the
+            # next worker while this one still borrows its Tcl-backed fixture.
+            app.stop.set()
+            app.paused.clear()
+            app.worker.join(timeout=stop_timeout)
+            if app.worker.is_alive():
+                # Never unwind mocks or close images while the worker borrows
+                # them. The isolated parent deadline terminates this process.
+                app.worker.join()
+            while not app.events.empty():
+                kind, payload = app.events.get_nowait()
+                if kind == 'planned':
+                    self.plans.append(payload)
+            self.fail('Actual preview worker exceeded its fixture bound')
+
+    def build(self, app, *, full_detail=False, worker_timeout=60):
+        app.update_plan(user_initiated=True, full_detail=full_detail)
+        self.wait_for_preview_worker(app, worker_timeout=worker_timeout)
         events = []
         while not app.events.empty():
             events.append(app.events.get_nowait())
