@@ -654,6 +654,13 @@ def _choose_component(comp,component_map,total_drawable,model,options,cancelled=
         candidates=[(model.sequence_cost(
             seq, initial_color=int(comp.color_index), initial_brush=default).total_seconds,
             len(paths),"safe-individual-runs",seq,paths,base_brush)]
+    # Do not buy speed by choosing sparse source centre-lines over a proven
+    # exact physical pack. Cost comparisons are meaningful within that quality
+    # class, not between full coverage and a cheaper partial drawing.
+    considered_candidates = candidates
+    if (options.get('render_preset') == 'Extra fast' and packed
+            and (projection is not None or base_brush > 1)):
+        candidates = [row for row in candidates if row[2] == 'region-brush-pack']
     best=min(candidates,key=lambda row:(row[0],row[1],row[2]))
     cost=max(.000001,float(best[0]))
     choice=RegionChoice(comp.component_id,comp.color_index,best[2],phase,comp.area,
@@ -670,7 +677,7 @@ def _choose_component(comp,component_map,total_drawable,model,options,cancelled=
                        f'native exact packing={choice.exact}; {pack_reason}')
     diagnostics={"component_id":comp.component_id,
         "verified_brush_sizes":list(map(int,verified)),"base_brush_px":int(base_brush),
-        "candidates":[{"method":c[2],"estimated_seconds":round(float(c[0]),6),"paths":int(c[1])} for c in candidates]}
+        "candidates":[{"method":c[2],"estimated_seconds":round(float(c[0]),6),"paths":int(c[1]),"admissible":c in candidates} for c in considered_candidates]}
     if packed:diagnostics["brush_packing"]={"used_brush_sizes":list(packed.get("used_brush_sizes") or ()),
         "packing":packed.get("packing") or (),"covered_pixels":int(packed.get("covered_pixels",0) or 0),
         "roi_bbox":packed.get("packing_roi_bbox"),

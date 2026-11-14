@@ -184,6 +184,20 @@ class PhysicalBrushProjectionTests(unittest.TestCase):
             self.assertEqual(np.count_nonzero(target>=0),8208)
             self.assertEqual(plan['options']['adaptive_hybrid_meta']['quality']['missing_pixels'],605)
 
+    def test_extra_fast_dense_fixed_brush_matches_recorded_native_delivery(self):
+        with ExitStack() as stack:
+            stack.enter_context(patch('DrawTimeCalibration.load_profile',return_value=None))
+            source=stack.enter_context(closing(Image.new('RGB',(200,200),'white')))
+            ImageDraw.Draw(source).rectangle((30,125,169,174),fill=(0,80,205))
+            area=(216,217);origin=(100,100)
+            plan,reference=self.public_plan(stack,source,area,origin,
+                render_preset='Extra fast', browser_brush_plan=None,
+                brush_px=1,canvas_guard_brush_px=1)
+            actual,_=replay_executor(plan,origin,area)
+            self.assert_report_matches_native_actions(plan,reference,actual,area)
+            self.assertLess(plan['options']['adaptive_hybrid_meta']['quality']['missing_pixels'],605)
+            self.assertIn('extra_fast_physical_sampling',plan['options'])
+
     def test_signed_letterbox_spill_is_scored_outside_the_fitted_image(self):
         for height,left_edge in ((200,150),(300,125)):
             with self.subTest(canvas_height=height),ExitStack() as stack:

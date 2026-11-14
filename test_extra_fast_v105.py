@@ -50,6 +50,8 @@ class ExtraFastTests(unittest.TestCase):
         self.assertFalse(plan['options'].get('background_fill_plan'))
         self.assertTrue(plan['options'].get('fill_regions'))
         self.assertGreater(plan['options']['extra_fast_meta']['fill_estimated_seconds'],0)
-        no_bucket=make_plan(self.image(),(900,800),dict(options,fill_tool_available=False))
+        with self.assertRaisesRegex(ValueError,'cannot cover'):
+            make_plan(self.image(),(900,800),dict(options,fill_tool_available=False))
+        no_bucket=make_plan(self.image(),(240,200),dict(options,fill_tool_available=False))
         self.assertFalse(no_bucket['options'].get('fill_regions'))
         self.assertGreater(no_bucket['count'],0)

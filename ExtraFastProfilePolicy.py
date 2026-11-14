@@ -315,3 +315,48 @@ def strategy_log_line(meta: dict[str, Any] | None) -> str:
         f"profile={meta.get('target_profile','?')} style={meta.get('drawing_style','?')} "
         f"engine={meta.get('engine_kind','?')} phases={phases or '?'} | ETA={meta.get('eta_model','?')}"
     )
+
+
+def ensure_physical_sampling(source_size, area, options):
+    """Bound source-grid spacing by the physical brush without enlarging memory caps."""
+    import math
+    out = dict(options)
+    sw, sh = map(int, source_size)
+    aw, ah = map(float, area)
+    if min(sw, sh, aw, ah) <= 0:
+        raise ValueError('Extra Fast needs positive source and target dimensions.')
+    scale = min(aw / sw, ah / sh)
+    fitted = (sw * scale, sh * scale)
+    from AdaptiveBrushEngine import verified_brush_sizes
+    default = max(1, int(out.get('brush_px') or 1))
+    verified, dynamic = verified_brush_sizes(str(out.get('profile_key') or ''), out.get('browser_brush_plan'), default)
+    # Verified multi-brush plans have a separate exact native packing proof.
+    # Forcing their smallest brush globally can reject a coarse grid that a
+    # calibrated wide brush covers exactly. Keep this density floor scoped to
+    # the reproduced fixed-brush/no-control failure.
+    if dynamic:
+        return out
+    brush = default
+    required = tuple(max(1, math.ceil(value / brush)) for value in fitted)
+    cap = max(1, int(out.get('planner_max_pixels') or 75000))
+    if required[0] * required[1] > cap:
+        raise ValueError('Extra Fast cannot cover this canvas with the selected brush within the planning limit. '
+                         'Use a smaller drawing area, a wider calibrated brush, or higher planning resolution.')
+    # prepare_image rounds the aspect-preserving dimensions. Use one common
+    # scale so neither rounded axis falls below the required density.
+    samples = max(fitted) * max(required[i] / fitted[i] for i in (0, 1))
+    out['planner_sample_limit'] = max(float(out.get('planner_sample_limit') or 0), samples)
+    # Reproduce prepare_image's bounded aspect-preserving grid, including its
+    # rounding repair. A thin image can require more cells than the simple
+    # independent-axis lower bound above.
+    sample_scale = min(out['planner_sample_limit'] / max(fitted), (cap / (fitted[0] * fitted[1])) ** .5, 1.)
+    actual = [max(1, round(value * sample_scale)) for value in fitted]
+    if actual[0] * actual[1] > cap:
+        axis = 0 if actual[0] >= actual[1] else 1
+        actual[axis] = max(1, min(actual[axis], cap // actual[1-axis]))
+    if any(actual[i] < required[i] for i in (0, 1)):
+        raise ValueError('Extra Fast cannot cover this canvas within the planning limit. '
+                         'Use a smaller drawing area, a wider calibrated brush, or higher planning resolution.')
+    out['extra_fast_physical_sampling'] = {'required_size': required, 'brush_px': brush,
+        'minimum_sample_limit': samples, 'pixel_limit': cap}
+    return out

@@ -71,7 +71,9 @@ class Step7ExtraFast2Tests(unittest.TestCase):
         self.assertEqual(plan['options']['region_fill_meta'].get('fallback_render_method'),'CONNECTED_SCANLINES')
 
     def test_no_fill_calibration_falls_back_to_connected_scanlines(self):
-        plan=make_plan(self._image(),(900,800),self._options(fill=False,dynamic=False))
+        with self.assertRaisesRegex(ValueError,'cannot cover'):
+            make_plan(self._image(),(900,800),self._options(fill=False,dynamic=False))
+        plan=make_plan(self._image(),(240,200),self._options(fill=False,dynamic=False))
         self.assertFalse(plan['options'].get('fill_regions'))
         meta=plan['options'].get('extra_fast_v2_meta') or {}
         self.assertTrue(meta.get('enabled'))

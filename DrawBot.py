@@ -818,6 +818,13 @@ def _make_plan(original, area, options, cancelled=lambda: False):
     # choose it explicitly. Safety/calibration fields are never weakened here.
     if is_quick_sketch(options):
         options = apply_quick_sketch_policy(options)
+    if options.get('_adaptive_hybrid_inner') and options.get('render_preset') == 'Extra fast':
+        # Source-integer centre lines must not be farther apart than the real
+        # fixed brush. A tiny analysis raster otherwise produces sparse stripes
+        # when projected onto a larger canvas, despite covering every source row.
+        from ExtraFastProfilePolicy import ensure_physical_sampling
+        source_size = original.size[::-1] if original.getexif().get(274, 1) in (5, 6, 7, 8) else original.size
+        options = ensure_physical_sampling(source_size, area, options)
     render_style = options.get('render_style', 'Auto')
 
     # Auto uses the portrait renderer for single-colour Paint sketches because
