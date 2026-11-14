@@ -48,7 +48,7 @@ class Step24AdaptiveDetailZoomTests(unittest.TestCase):
         execution = [[], []]
         ng, ne, ns, meta = add_detail_zoom_pass(
             src, work, ((255, 255, 255), (0, 0, 0)),
-            groups, execution, [], self.direct_options())
+            groups, execution, [], self.direct_options(), fitted=(64,64))
         self.assertTrue(meta['enabled'])
         self.assertEqual(meta['analysis_zoom'], '4x')
         self.assertFalse(meta['target_app_zoomed'])
@@ -70,7 +70,7 @@ class Step24AdaptiveDetailZoomTests(unittest.TestCase):
         seq = [{'color_index': 0, 'path': ((0, 0), (2, 0)), 'phase': 'major_coverage'}]
         _, _, out_seq, meta = add_detail_zoom_pass(
             src, work, ((255, 255, 255), (0, 0, 0)), base_groups, base_exec, seq,
-            self.direct_options(time_budget_active=True, time_budget_seconds=80))
+            self.direct_options(time_budget_active=True, time_budget_seconds=80), fitted=(64,64))
         self.assertTrue(meta['enabled'])
         self.assertTrue(meta['sequence_appended'])
         details = [e for e in out_seq if e.get('detail_zoom')]
@@ -110,7 +110,7 @@ class Step24AdaptiveDetailZoomTests(unittest.TestCase):
         self.assertEqual(overlay.size, (160,160))
         self.assertGreater(overlay.getbbox()[2], overlay.getbbox()[0])
 
-    def test_make_plan_integration_adds_detail_layer(self):
+    def test_make_plan_rejects_source_details_that_damage_native_output(self):
         im = Image.new('RGB',(256,256),'white')
         d = ImageDraw.Draw(im)
         d.rectangle((40,40,210,210), fill=(245,210,30))
@@ -129,10 +129,11 @@ class Step24AdaptiveDetailZoomTests(unittest.TestCase):
         }
         plan = make_plan(im,(64,64),opts)
         meta = plan['options'].get('detail_zoom_meta') or {}
-        self.assertTrue(meta.get('enabled'))
-        self.assertGreater(int(meta.get('detail_paths_added',0)),0)
-        self.assertIn('detail_zoom', plan.get('ui_previews',{}))
-        self.assertTrue(plan['path_stats'].get('detail_zoom_enabled'))
+        self.assertFalse(meta.get('enabled'))
+        self.assertEqual(meta.get('detail_paths_added'), 0)
+        self.assertGreater(meta['quality_gate']['rejected_paths'], 0)
+        self.assertFalse(plan['path_stats'].get('detail_zoom_enabled'))
+        self.assertFalse(any(row.get('detail_zoom') for row in plan['execution_sequence']))
         self.assertFalse(meta.get('target_app_zoomed'))
 
     def test_ui_and_build_hooks_exist(self):

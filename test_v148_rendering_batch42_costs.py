@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 import AdaptiveRegionHybrid as hybrid
 import Colors
@@ -186,64 +186,81 @@ class FillBatchAdmissionTests(PaletteOwner):
 
 
 class DetailZoomDeliveryTests(PaletteOwner):
+    @contextmanager
+    def physical_detail_fixture(self):
+        # Diagonal source detail is drawable with a 1px brush on the 64px target,
+        # but not by overwriting a whole pixel of the 16px analysis image.
+        with Image.new('RGB', (64, 64), 'white') as source, Image.new('RGB', (16, 16), 'white') as work:
+            draw = ImageDraw.Draw(source)
+            for y in range(2, 14, 3):
+                for x in range(2, 14, 3):
+                    draw.line((x * 4, y * 4, x * 4 + 3, y * 4 + 3), fill='black')
+            yield source, work
+
+    def physical_plan(self, source, work, **changes):
+        settings = zoom_options('4x', time_budget_active=True, brush_px=1,
+            skip_white=False, deadline_render_budget_seconds=8.)
+        settings.update(changes)
+        base = [{'color_index': 0, 'path': ((0, 0), (15, 0)), 'phase': 'major_coverage'}]
+        output = zoom.add_detail_zoom_pass(source, work, ((255, 255, 255), (0, 0, 0)),
+            [], [[base[0]['path']], []], base, settings, fitted=(64, 64))
+        return output, base, settings
+
     def test_shorter_legacy_diagnostic_groups_do_not_disable_real_detail_paths(self):
-        with Image.open(ROOT / 'golden-regression/small-detail-preservation.png') as source, ExitStack() as owned:
-            options = zoom_options('Off', time_budget_mode='Unlimited', unlimited_time=True)
-            plan = DrawBot.make_plan(source, (96, 64), options)
-            owned.callback(close_plan, plan, source)
-            settings = dict(plan['options'], detail_zoom='4x')
-            groups, _execution, sequence, metadata = zoom.add_detail_zoom_pass(source, plan['image'],
-                plan['colors'], [], plan['execution_groups'], plan['execution_sequence'], settings,
-                fitted=plan['fitted'])
+        with self.physical_detail_fixture() as (source, work):
+            (groups, _execution, sequence, metadata), _, _ = self.physical_plan(source, work, unlimited_time=True)
             self.assertEqual(groups, [])
             self.assertTrue(metadata['enabled'])
             self.assertTrue(any(row.get('detail_zoom') for row in sequence))
+            self.assertEqual(metadata['quality_gate']['rejected_paths'], 0)
 
     def test_late_optional_detail_fits_real_cost_without_changing_the_base_sequence(self):
-        with Image.open(ROOT / 'golden-regression/small-detail-preservation.png') as source, ExitStack() as owned:
+        with self.physical_detail_fixture() as (source, work):
             before = source.tobytes()
-            off = DrawBot.make_plan(source, (96, 64), zoom_options('Off'))
-            owned.callback(close_plan, off, source)
-            actual = DrawBot.make_plan(source, (96, 64), zoom_options('4x'))
-            owned.callback(close_plan, actual, source)
-            base = [row for row in actual['execution_sequence'] if not row.get('detail_zoom')]
-            details = [row for row in actual['execution_sequence'] if row.get('detail_zoom')]
-            self.assertEqual(base, off['execution_sequence'])
+            (_, _, sequence, metadata), expected_base, settings = self.physical_plan(source, work)
+            base = [row for row in sequence if not row.get('detail_zoom')]
+            details = [row for row in sequence if row.get('detail_zoom')]
+            self.assertEqual(base, expected_base)
             self.assertTrue(details)
             self.assertLess(len(details), 16)
-            metadata = actual['options']['detail_zoom_meta']
             budget = metadata['execution_budget']
             self.assertEqual(budget['proposed_paths'], 16)
             self.assertEqual(budget['admitted_paths'], len(details))
-            model = build_cost_model(actual['options'], actual['image'].size, actual['fitted'])
-            cost = model.sequence_cost(actual['execution_sequence'], initial_brush=1,
-                include_color_verification=True)
+            model = build_cost_model(settings, work.size, (64, 64))
+            cost = model.sequence_cost(sequence, initial_brush=1, include_color_verification=True)
             self.assertLessEqual(model.risk_adjusted_seconds(cost.total_seconds) + budget['fixed_overhead_seconds'],
                                  budget['render_budget_seconds'] + 1e-9)
             self.assertEqual(source.tobytes(), before)
 
     def test_exhausted_budget_keeps_base_objects_and_unlimited_keeps_all_proposals(self):
-        with Image.open(ROOT / 'golden-regression/small-detail-preservation.png') as source, ExitStack() as owned:
-            plan = DrawBot.make_plan(source, (96, 64), zoom_options('4x',
-                time_budget_mode='Unlimited', unlimited_time=True))
-            owned.callback(close_plan, plan, source)
-            self.assertNotIn('execution_budget', plan['options']['detail_zoom_meta'])
-            sequence = plan['execution_sequence']
-            base = [row for row in sequence if not row.get('detail_zoom')]
+        with self.physical_detail_fixture() as (source, work):
+            (_, _, sequence, metadata), base, settings = self.physical_plan(source, work, unlimited_time=True)
+            self.assertNotIn('execution_budget', metadata)
             proposals = [row for row in sequence if row.get('detail_zoom')]
             self.assertTrue(proposals)
             before = copy.deepcopy((base, proposals))
-            settings = dict(plan['options'], time_budget_active=True, unlimited_time=False,
-                deadline_render_budget_seconds=1.)
-            selected, metadata = zoom._fit_zoom_delivery(base, proposals, settings, plan['image'].size,
-                plan['fitted'], lambda: False)
+            settings.update(unlimited_time=False, deadline_render_budget_seconds=1.)
+            selected, metadata = zoom._fit_zoom_delivery(base, proposals, settings, work.size,
+                (64, 64), lambda: False)
             self.assertEqual(selected, [])
             self.assertEqual(metadata['sequence_budget_seconds'], 0.)
             self.assertEqual((base, proposals), before)
             selected, metadata = zoom._fit_zoom_delivery(base, proposals, dict(settings, unlimited_time=True),
-                plan['image'].size, plan['fitted'], lambda: False)
+                work.size, (64, 64), lambda: False)
             self.assertIs(selected, proposals)
             self.assertIsNone(metadata)
+
+    def test_golden_source_rejects_harmful_subpixel_detail_instead_of_spending_budget(self):
+        with Image.open(ROOT / 'golden-regression/small-detail-preservation.png') as source, ExitStack() as owned:
+            off = DrawBot.make_plan(source, (96, 64), zoom_options('Off'))
+            owned.callback(close_plan, off, source)
+            actual = DrawBot.make_plan(source, (96, 64), zoom_options('4x'))
+            owned.callback(close_plan, actual, source)
+            self.assertEqual(actual['execution_sequence'], off['execution_sequence'])
+            metadata = actual['options']['detail_zoom_meta']
+            self.assertFalse(metadata['enabled'])
+            self.assertGreater(metadata['quality_gate']['rejected_paths'], 0)
+            self.assertEqual(metadata['execution_budget']['admitted_paths'], 0)
 
     def test_preceding_fill_controls_and_color_selections_consume_optional_budget(self):
         with fill_source() as source, ExitStack() as owned:

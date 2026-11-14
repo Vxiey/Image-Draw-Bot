@@ -361,6 +361,124 @@ def _fit_zoom_delivery(sequence, proposals, options, source_size, fitted, cancel
     return selected,meta
 
 
+_QUALITY_MAX_PIXELS = 4_000_000
+
+
+def _quality_safe_zoom_proposals(original_source, sequence, proposals, palette,
+                                 options, work_size, fitted, cancelled):
+    """Admit only source-improving physical footprints, in execution order.
+
+    This uses the established square-brush simulation, not an actual-ink promise.
+    Every touched pixel must be no worse than before and at least one must improve.
+    This per-pixel monotonic rule also makes any budget-selected subsequence safe.
+    Unsupported fills and oversized targets fail closed rather than guess a base.
+    """
+    from AdaptiveBrushEngine import brush_for_entry
+    from CanvasGuard import CanvasSafetyStop
+    from PixelAccuracyEngine import _apply_path, _brush_extents
+    from PreviewSafety import build_preview_safety_plan, _canvas_size, _target_area
+
+    if cancelled():
+        raise InterruptedError()
+    fit_width, fit_height = map(int, fitted)
+    width, height = _canvas_size(options, fitted)
+    meta = {'model': 'guarded-native-square-footprint-source-rgb-error',
+            'proposed_paths': len(proposals), 'admitted_paths': 0,
+            'rejected_paths': len(proposals), 'native_size': (width, height)}
+    if any(float(value) != int(value) for value in fitted):
+        meta['reason'] = 'fractional fitted size is not proven for Detail Zoom'
+        return [], meta
+    if width < 1 or height < 1 or width * height > _QUALITY_MAX_PIXELS:
+        meta['reason'] = 'native quality simulation exceeds bounded pixel allowance'
+        return [], meta
+    if options.get('fill_regions') or (options.get('background_fill_plan') or {}).get('enabled'):
+        meta['reason'] = 'native fill baseline is not proven for Detail Zoom'
+        return [], meta
+    if not proposals:
+        meta['reason'] = 'no proposed detail paths'
+        return [], meta
+    offset = ((width - fit_width) / 2, (height - fit_height) / 2)
+    origin = _target_area(options, (width, height))[:2]
+    if any(value < 0 or value != int(value) for value in offset) or any(float(v) != int(v) for v in origin):
+        meta['reason'] = 'fractional canvas placement is not proven for Detail Zoom'
+        return [], meta
+    empty_groups = [[] for _ in palette]
+    def guarded(rows, initial_brush):
+        try:
+            safe = build_preview_safety_plan(work_size, fitted, empty_groups, empty_groups,
+                dict(options, brush_px=initial_brush), cancelled, execution_sequence=rows)
+        except CanvasSafetyStop:
+            return [], True
+        return safe.sequence or [], bool(safe.meta.get('stopped'))
+
+    source = sim = counts = mask = colors = hits = touched = region = target = old_error = new_error = None
+    try:
+        with closing(Image.fromarray(_visible_rgb(original_source, cancelled=cancelled), 'RGB')) as visible:
+            with closing(visible.resize((fit_width, fit_height), Image.Resampling.LANCZOS)) as target:
+                source = np.full((height, width, 3), 255, dtype=np.uint8)
+                ox, oy = map(int, offset)
+                source[oy:oy + fit_height, ox:ox + fit_width] = np.asarray(target, dtype=np.uint8)
+        # An unpainted canvas is white, even if white is absent from the palette.
+        colors = np.asarray(tuple(palette) + ((255, 255, 255),), dtype=np.int32)
+        sim = np.full((height, width), len(palette), dtype=np.int32)
+        counts = np.zeros((height, width), dtype=np.uint16)
+        brush = max(1, int(options.get('brush_px') or 1))
+        safe_base, stopped = guarded(sequence, brush)
+        if stopped:
+            meta['reason'] = 'base execution is stopped by CanvasGuard'
+            return [], meta
+        for entry in safe_base:
+            if cancelled():
+                raise InterruptedError()
+            path = entry.get('path') or ()
+            if not path:
+                continue
+            color = int(entry['color_index'])
+            if not 0 <= color < len(palette):
+                raise ValueError('Detail Zoom base color is outside the palette.')
+            brush = brush_for_entry(entry, brush)
+            _apply_path(sim, counts, color, path, brush, cancelled=cancelled)
+        admitted = []
+        for entry in proposals:
+            if cancelled():
+                raise InterruptedError()
+            brush = brush_for_entry(entry, brush)
+            fragments, stopped = guarded([dict(entry, brush_px=brush)], brush)
+            if stopped or not fragments:
+                continue
+            path = [point for fragment in fragments for point in fragment['path']]
+            before, after = _brush_extents(brush)
+            left = max(0, min(x for x, y in path) - before)
+            right = min(width - 1, max(x for x, y in path) + after)
+            top = max(0, min(y for x, y in path) - before)
+            bottom = min(height - 1, max(y for x, y in path) + after)
+            if left > right or top > bottom:
+                continue
+            mask = np.zeros((bottom - top + 1, right - left + 1), dtype=np.int32)
+            hits = np.zeros(mask.shape, dtype=np.uint16)
+            for fragment in fragments:
+                _apply_path(mask, hits, 1, [(x - left, y - top) for x, y in fragment['path']],
+                            brush, cancelled=cancelled)
+            touched = mask != 0
+            region = sim[top:bottom + 1, left:right + 1]
+            target = source[top:bottom + 1, left:right + 1][touched].astype(np.int32)
+            old_error = np.square(colors[region[touched]] - target).sum(axis=1)
+            color = int(entry['color_index'])
+            new_error = np.square(colors[color] - target).sum(axis=1)
+            if np.any(new_error > old_error) or not np.any(new_error < old_error):
+                continue
+            region[touched] = color
+            admitted.append(entry)
+        if cancelled():
+            raise InterruptedError()
+        meta.update(admitted_paths=len(admitted), rejected_paths=len(proposals) - len(admitted),
+                    reason=('every modeled footprint improves source error without worsening touched pixels'
+                            if admitted else 'no physical detail footprint safely improves the original source'))
+        return admitted, meta
+    finally:
+        source = sim = counts = mask = colors = hits = touched = region = target = old_error = new_error = None
+
+
 def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Image,
                          palette_rgb: Sequence[Sequence[int]], groups, execution_groups,
                          execution_sequence, options: dict, *, fitted=None, cancelled=lambda: False):
@@ -489,6 +607,8 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
             entry["deadline_phase"] = "important_details"
         proposals.append(entry)
 
+    proposals,quality_gate=_quality_safe_zoom_proposals(original_source,new_seq,proposals,palette,
+        options,(w,h),tuple(fitted) if fitted is not None else (w,h),cancelled)
     chosen,delivery_budget=_fit_zoom_delivery(new_seq,proposals,options,(w,h),
         tuple(fitted) if fitted is not None else (w,h),cancelled)
     appended = 0
@@ -512,8 +632,9 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
         detail_pixels += len(clean)
         drawn_cells.extend((x,y,float(score[y,x])) for x,y in clean)
 
-    rois = _roi_boxes(drawn_cells if delivery_budget is not None else accepted_cells, w, h, effective)
+    rois = _roi_boxes(drawn_cells, w, h, effective)
     meta = {
+        "quality_gate": quality_gate,
         "enabled": bool(appended), "requested": mode, "factor": int(effective),
         "analysis_zoom": f"{int(effective)}x", "target_app_zoomed": False,
         "target_zoom_policy": "internal-source-analysis-only",
@@ -531,9 +652,11 @@ def add_detail_zoom_pass(original_source: Image.Image, working_image: Image.Imag
         "working_size": (int(w), int(h)),
         "reason": "zoomed source regions added as bounded high-value detail paths" if appended else "no useful detail paths",
     }
+    if not proposals:
+        meta['reason']=quality_gate['reason']
     if delivery_budget is not None:
         meta['execution_budget']=delivery_budget
-        if not appended:meta['reason']='no optional detail fits the remaining execution budget'
+        if proposals and not appended:meta['reason']='no optional detail fits the remaining execution budget'
     if cancelled():
         raise InterruptedError()
     if not appended:

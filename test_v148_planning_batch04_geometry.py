@@ -66,7 +66,7 @@ class DetailPassDeliveryTests(unittest.TestCase):
                     skip_white=False, brush_px=1, color_fidelity='Faithful', color_rendering='Perceptual match',
                     profile_key='microsoft-paint', effective_paint_tool='Pencil', delay=.002, color_order=order)
                 new_groups, new_execution, sequence, meta = zoom.add_detail_zoom_pass(
-                    source, work, palette, groups, execution, [], options)
+                    source, work, palette, groups, execution, [], options, fitted=(64,64))
                 self.assertTrue(meta['enabled'])
                 self.assertTrue(meta['sequence_created_for_detail_pass'])
                 expected_base = [(ci, tuple(path)) for ci in order for path in execution[ci]]
