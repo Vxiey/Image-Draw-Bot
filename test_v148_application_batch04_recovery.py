@@ -47,7 +47,7 @@ class RecoveryWorkflowTests(unittest.TestCase):
         app.begin_worker=Mock(side_effect=begin)
         state={'profile':'Other drawing app','options':{},'has_image':True,'image_sha256':'a'*64}
         image=Image.new('RGBA',(2,2))
-        with patch('SessionRecovery.load_snapshot',return_value=state),patch('SessionRecovery.load_cached_image',return_value=image) as load,patch('DrawBot.messagebox.askyesno',return_value=True),patch('DrawBot.previous_run_unclean',return_value=True),patch.object(DrawBotApp,'_apply_recovery_snapshot') as restore:
+        with patch('SessionRecovery.load_snapshot',return_value=state),patch('SessionRecovery.load_cached_image',return_value=image) as load,patch('DrawBot.messagebox.askyesnocancel',return_value=True),patch('DrawBot.previous_run_unclean',return_value=True),patch.object(DrawBotApp,'_apply_recovery_snapshot') as restore:
             DrawBotApp.offer_safe_session_recovery(app)
             load.assert_not_called();restore.assert_not_called()
             app.begin_worker.assert_called_once();self.assertEqual(app.activity,'recovery-load')
@@ -62,7 +62,7 @@ class RecoveryWorkflowTests(unittest.TestCase):
     def test_dialog_result_cannot_replace_an_operation_started_while_modal(self):
         app=app_state();app.begin_worker=Mock()
         def answer(*args,**kwargs):app.activity='draw';return True
-        with patch('SessionRecovery.load_snapshot',return_value={'has_image':True}),patch('DrawBot.messagebox.askyesno',side_effect=answer),patch('SessionRecovery.load_cached_image') as load:
+        with patch('SessionRecovery.load_snapshot',return_value={'has_image':True}),patch('DrawBot.messagebox.askyesnocancel',side_effect=answer),patch('SessionRecovery.load_cached_image') as load:
             DrawBotApp.offer_safe_session_recovery(app)
         load.assert_not_called();app.begin_worker.assert_not_called()
 

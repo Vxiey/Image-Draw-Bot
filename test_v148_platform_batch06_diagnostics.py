@@ -120,13 +120,19 @@ class PerAccountDumpsTests(unittest.TestCase):
             folder = self.user / 'ImageDrawBot/dumps'
             self.assertTrue(folder.is_dir())
             (folder / 'ImageDrawBot.exe.123.dmp').write_bytes(b'synthetic dump inventory only')
+            (folder / 'customer-project-example.dmp').write_bytes(b'other local dump')
             local.enter_context(patch.object(diagnostics, 'data_dir', return_value=self.user / 'ImageDrawBot'))
             local.enter_context(patch.object(diagnostics, 'DIAGNOSTICS_DIR', self.user / 'diagnostics'))
             local.enter_context(patch.object(diagnostics, '_technical_info', return_value={'app': 'fixture'}))
             with zipfile.ZipFile(diagnostics.create_diagnostics_package()) as archive:
                 inventory = json.loads(archive.read('dump-files.json'))
                 self.assertFalse(inventory['memory_dumps_included'])
-                self.assertEqual(inventory['files'][0]['name'], 'ImageDrawBot.exe.123.dmp')
+                self.assertEqual(len(inventory['files']), 2)
+                self.assertEqual({item['name'] for item in inventory['files']},
+                                 {'dump-001.dmp', 'dump-002.dmp'})
+                self.assertNotIn('customer-project-example', archive.read('dump-files.json').decode())
+                self.assertEqual({item['bytes'] for item in inventory['files']},
+                                 {len(b'synthetic dump inventory only'), len(b'other local dump')})
                 self.assertFalse(any(name.endswith('.dmp') for name in archive.namelist()))
 
 

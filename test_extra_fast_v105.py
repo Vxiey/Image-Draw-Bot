@@ -42,14 +42,15 @@ class ExtraFastTests(unittest.TestCase):
     def test_full_plan_keeps_fallback_and_has_no_background_bucket(self):
         from DrawBot import make_plan
         options={'render_preset':'Extra fast','fill_tool_available':True,
+                 'fill_tool_actions':[('fill', (10, 10))], 'fill_restore_actions':[('brush', (20, 10))],
                  'detail':8,'delay':.01,'speed':'Balanced','precision':'High','lines':True,
                  'skip_white':True,'contrast':1.,'outline':False,'paint_current_color':False,
                  'brush_px':1,'max_seconds':180,'gpu_mode':'CPU','planning_resolution':'Standard'}
-        plan=make_plan(self.image(),(900,800),options)
+        plan=make_plan(self.image(),(240,200),options)
         self.assertTrue(plan['options']['extra_fast'])
         self.assertFalse(plan['options'].get('background_fill_plan'))
         self.assertTrue(plan['options'].get('fill_regions'))
-        self.assertGreater(plan['options']['extra_fast_meta']['fill_estimated_seconds'],0)
+        self.assertGreater(plan['options']['region_fill_meta']['estimated_time_saved_seconds'],0)
         with self.assertRaisesRegex(ValueError,'cannot cover'):
             make_plan(self.image(),(900,800),dict(options,fill_tool_available=False))
         no_bucket=make_plan(self.image(),(240,200),dict(options,fill_tool_available=False))

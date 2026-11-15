@@ -124,7 +124,7 @@ class RecoveryDialogIdentityTests(unittest.TestCase):
         def respond(*args, **kwargs):
             during_dialog()
             return answer
-        with patch('DrawBot.messagebox.askyesno', side_effect=respond) as dialog:
+        with patch('DrawBot.messagebox.askyesnocancel', side_effect=respond) as dialog:
             try:
                 DrawBotApp.offer_safe_session_recovery(self.app)
                 dialog.assert_called_once()
@@ -363,7 +363,7 @@ class RecoveryDialogIdentityTests(unittest.TestCase):
                         def respond(*args, **kwargs):
                             setattr(self.app, field, value)
                             return answer
-                        with patch('DrawBot.messagebox.askyesno', side_effect=respond) as dialog:
+                        with patch('DrawBot.messagebox.askyesnocancel', side_effect=respond) as dialog:
                             try:
                                 DrawBotApp.offer_safe_session_recovery(self.app)
                                 self.assertEqual(dialog.call_count, int(moment == 'during'))

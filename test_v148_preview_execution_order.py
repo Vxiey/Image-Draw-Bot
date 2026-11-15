@@ -161,6 +161,40 @@ class PreviewExecutionOrderTests(unittest.TestCase):
         self.assertEqual(plan['execution_sequence'], sequence)
         return plan
 
+    def test_preview_stops_at_same_fatal_stroke_as_native_execution(self):
+        from CanvasGuard import CanvasSafetyStop
+        from PreviewSafety import build_preview_safety_plan, draw_safe_paths
+
+        source = self.source((64, 64))
+        settings = self.options(brush_px=1, plan_palette_rgb=(BLACK,),
+                                edge_behavior='Hard Clip', color_order=[0])
+        plan = self.remember(DrawBot.finish_plan(
+            source, source.size, [[(10, 10, 10, 10)]], settings), source)
+        sequence = [
+            {'color_index': 0, 'path': ((10, 10),)},
+            {'color_index': 0, 'path': ((-10, 20),)},
+            {'color_index': 0, 'path': ((30, 30),)},
+        ]
+        plan['execution_sequence'] = sequence
+        native = self.source(source.size)
+        palette = [(10, 10)]
+        mouse = NativeRasterMouse(native, palette, (BLACK,), brush=1)
+        with self.assertRaises(CanvasSafetyStop):
+            DrawBot.execute_plan(plan, (*ORIGIN, *source.size), palette, mouse,
+                                 NoWait(), threading.Event(), lambda *args: None,
+                                 clock=lambda: 0)
+        self.assertEqual(native.getpixel((10, 10)), BLACK)
+        self.assertEqual(native.getpixel((30, 30)), (255, 255, 255))
+        self.assertFalse(mouse.held)
+
+        safety = build_preview_safety_plan(source.size, source.size, [[]],
+            None, settings, execution_sequence=sequence)
+        preview = self.source(source.size)
+        draw_safe_paths(ImageDraw.Draw(preview), safety, source.size,
+                        source.size, (BLACK,), 1)
+        self.assertTrue(safety.meta['stopped'])
+        np.testing.assert_array_equal(np.asarray(preview), np.asarray(native))
+
     def test_public_smart_batches_preserve_black_line_after_blue_base(self):
         source = self.source()
         draw = ImageDraw.Draw(source)

@@ -136,6 +136,26 @@ class PixelCenterFillTests(unittest.TestCase):
                         finally:
                             close_plan(plan, image)
 
+    def test_legacy_extra_fast_without_fill_actions_keeps_rectangle_scanlines(self):
+        from DrawBot import make_plan
+        with closing(fixture()) as image, patch('DrawTimeCalibration.load_profile', return_value=None):
+            plan = make_plan(image, image.size, fill_options(
+                fill_engine='Safe rectangles', fill_tool_actions=[]))
+            try:
+                self.assertFalse(plan['options'].get('adaptive_hybrid_meta', {}).get('enabled'))
+                self.assertFalse(plan['options'].get('fill_regions'))
+                with closing(Image.new('1', image.size)) as raster:
+                    draw = ImageDraw.Draw(raster)
+                    for path in plan['execution_groups'][plan['colors'].index(BLUE)]:
+                        if len(path) == 1:
+                            draw.point(path[0], fill=1)
+                        else:
+                            draw.line(path, fill=1, width=1)
+                    self.assertTrue(raster.getpixel((85, 60)))
+                    self.assertFalse(raster.getpixel((5, 5)))
+            finally:
+                close_plan(plan, image)
+
     def test_actual_transparent_hole_still_prevents_bucket_fill(self):
         from DrawBot import make_plan
         with closing(fixture()) as image:

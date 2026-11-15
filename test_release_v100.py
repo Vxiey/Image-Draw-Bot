@@ -37,10 +37,20 @@ class ReleaseTests(unittest.TestCase):
 
     def test_github_workflow_builds_and_publishes(self):
         text=(Path(__file__).resolve().parent/'.github'/'workflows'/'build-windows.yml').read_text(encoding='utf-8')
-        self.assertIn('actions/checkout@v7',text); self.assertIn('actions/setup-python@v7',text)
-        self.assertIn('actions/upload-artifact@v7',text); self.assertIn('python ReleasePackage.py --check',text); self.assertIn('ReleaseCandidateHardening.py --source-gate',text)
+        self.assertRegex(text, r'actions/checkout@[0-9a-f]{40} # v7'); self.assertRegex(text, r'actions/setup-python@[0-9a-f]{40} # v7')
+        self.assertRegex(text, r'actions/upload-artifact@[0-9a-f]{40} # v7'); self.assertIn('python ReleasePackage.py --check',text); self.assertIn('ReleaseCandidateHardening.py --source-gate',text)
         self.assertIn('gh release create',text); self.assertIn('--notes-file',text)
         self.assertIn("- 'Version.py'",text); self.assertIn("- '.github/release-build-trigger'",text)
+
+    def test_windows_release_pins_every_external_action(self):
+        import re
+        workflow = (Path(__file__).resolve().parent / '.github' / 'workflows' / 'build-windows.yml').read_text(encoding='utf-8')
+        external = re.findall(r'^\s*(?:-\s*)?uses:\s+([^\s#]+)', workflow, re.MULTILINE)
+        self.assertTrue(external)
+        for ref in external:
+            if ref.startswith('./'):
+                continue
+            self.assertRegex(ref, r'^[^@]+@[0-9a-f]{40}$')
 
     def test_runtime_safety_ui_present(self):
         text=(Path(__file__).resolve().parent/'StudioUI.py').read_text(encoding='utf-8')

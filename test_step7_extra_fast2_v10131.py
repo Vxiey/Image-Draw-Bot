@@ -58,17 +58,30 @@ class Step7ExtraFast2Tests(unittest.TestCase):
         im=Image.new('RGB',(240,180),'white');d=ImageDraw.Draw(im)
         d.rectangle((20,20,105,155),fill=(248,205,28))
         d.rectangle((130,20,220,155),fill=(213,45,38))
-        plan=make_plan(im,(900,800),self._options(fill=True,dynamic=True))
-        regions=plan['options'].get('fill_regions') or []
-        self.assertTrue(regions)
-        self.assertTrue(plan['options'].get('extra_fast_v2_meta',{}).get('color_pipeline_preserved'))
-        self.assertTrue(plan['options'].get('region_fill_meta',{}).get('dynamic_exact_supported'))
-        selectors=plan.get('color_selectors') or ()
-        for region in regions:
-            idx=int(region['color_index'])
-            self.assertGreaterEqual(idx,0);self.assertLess(idx,len(plan['colors']))
-            self.assertLess(idx,len(selectors))
-        self.assertEqual(plan['options']['region_fill_meta'].get('fallback_render_method'),'CONNECTED_SCANLINES')
+        # A calibrated tool can switch from the brush to Fill and back.
+        # Keep this fixture at source resolution to stay within the 1 px
+        # physical sampling limit; larger canvases need a calibrated wider brush.
+        options=dict(self._options(fill=True,dynamic=True),
+                     fill_tool_actions=[('fill',(10,10))],
+                     fill_restore_actions=[('brush',(20,10))])
+        for route in ('public','legacy'):
+            with self.subTest(route=route):
+                route_options=dict(options)
+                if route=='legacy':
+                    route_options['_adaptive_hybrid_inner']=True
+                plan=make_plan(im,(240,180),route_options)
+                regions=plan['options'].get('fill_regions') or []
+                self.assertTrue(regions)
+                self.assertTrue(plan['options'].get('extra_fast_v2_meta',{}).get('color_pipeline_preserved'))
+                fill_meta=plan['options'].get('region_fill_meta',{})
+                if route=='legacy':
+                    self.assertTrue(fill_meta.get('dynamic_exact_supported'))
+                selectors=plan.get('color_selectors') or ()
+                for region in regions:
+                    idx=int(region['color_index'])
+                    self.assertGreaterEqual(idx,0);self.assertLess(idx,len(plan['colors']))
+                    self.assertLess(idx,len(selectors))
+                self.assertEqual(fill_meta.get('fallback_render_method'),'CONNECTED_SCANLINES')
 
     def test_no_fill_calibration_falls_back_to_connected_scanlines(self):
         with self.assertRaisesRegex(ValueError,'cannot cover'):

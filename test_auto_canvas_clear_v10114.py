@@ -53,6 +53,16 @@ class AutoCanvasClearTests(unittest.TestCase):
         o.update(extra)
         return make_plan(Image.new('RGB',(8,4),'black'),(80,40),o)
 
+    def test_planner_execution_estimate_already_includes_clear_once(self):
+        without = self._plan('paint-shortcut', paint_profile=True,
+                             canvas_clear_estimate_seconds=0)
+        with_clear = self._plan('paint-shortcut', paint_profile=True)
+        self.assertAlmostEqual(with_clear['estimate'] - without['estimate'], .8)
+        self.assertAlmostEqual(with_clear['raw_execution_estimate_seconds'],
+                               with_clear['estimate'])
+        self.assertAlmostEqual(with_clear['options']['operation_timing_meta']
+                               ['canvas_clear_seconds'], .8)
+
     def test_paint_shortcut_runs_before_full_drawing(self):
         plan=self._plan('paint-shortcut',paint_profile=True)
         mouse=Mouse();kb=Keyboard()

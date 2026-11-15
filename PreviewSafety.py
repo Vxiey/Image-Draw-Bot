@@ -223,7 +223,9 @@ def build_preview_safety_plan(
             meta['source_outside_canvas'] += 1
             meta['stopped'] = True
             record_debug_event(meta, path_index, color_index, raw_canvas_points, exception=error)
-            continue
+            # A fatal canvas violation aborts native execution; unlike an
+            # ordinary edge skip, it must not leave later ink in the preview.
+            break
         meta[result.strategy] = int(meta.get(result.strategy, 0)) + 1
         record_debug_event(meta, path_index, color_index, raw_canvas_points, result)
         for subpath in result.subpaths:

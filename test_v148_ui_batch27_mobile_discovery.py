@@ -112,6 +112,41 @@ class MobileDiscoveryControllerTests(unittest.TestCase):
         self.until(lambda: getattr(app, 'mobile_preview_request', None) is None, app)
         return getattr(app, '_mobile_preview_dialog', None)
 
+    def test_decline_does_not_allocate_a_server_or_start_discovery(self):
+        app = self.configured_app()
+        with patch('DrawBot.messagebox.askyesno', return_value=False) as ask, \
+                patch('DrawBot.MobilePreviewServer') as server, \
+                patch.object(MobilePreviewDiscovery, 'submit') as submit:
+            app.show_mobile_preview()
+        server.assert_not_called()
+        submit.assert_not_called()
+        self.assertEqual(ask.call_args.kwargs['default'], 'no')
+        warning = ask.call_args.args[1]
+        for expected in ('Drawing Preview', 'Safety Map', 'unencrypted HTTP', 'original image'):
+            self.assertIn(expected, warning)
+
+    def test_modal_reentry_and_cancel_cannot_start_sharing(self):
+        app = self.configured_app()
+        def cancel_during_prompt(*args, **kwargs):
+            app.show_mobile_preview()
+            app._request_stop()
+            return True
+        with patch('DrawBot.messagebox.askyesno', side_effect=cancel_during_prompt) as ask, \
+                patch('DrawBot.MobilePreviewServer') as server:
+            app.show_mobile_preview()
+        ask.assert_called_once()
+        server.assert_not_called()
+
+    def test_closing_during_consent_cannot_start_sharing(self):
+        app = self.configured_app()
+        def close_during_prompt(*args, **kwargs):
+            app.closing = True
+            return True
+        with patch('DrawBot.messagebox.askyesno', side_effect=close_during_prompt), \
+                patch('DrawBot.MobilePreviewServer') as server:
+            app.show_mobile_preview()
+        server.assert_not_called()
+
     def test_stop_between_request_publication_and_submit_prevents_even_thread_start(self):
         app = self.configured_app()
         real_submit = MobilePreviewDiscovery.submit
@@ -368,6 +403,7 @@ class NativeMobileDiscoveryTests(unittest.TestCase):
         import RuntimePaths
         import SessionRecovery
         self.stack = self.enterContext(ExitStack())
+        self.stack.enter_context(patch('DrawBot.messagebox.askyesno', return_value=True))
         self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
         for name, path in (('RECOVERY_DIR', self.directory),
                 ('STATE_FILE', self.directory / 'recovery.json'),

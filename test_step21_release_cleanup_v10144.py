@@ -77,9 +77,9 @@ class Step21ReleaseCleanupTests(unittest.TestCase):
 
     def test_github_workflow_uses_release_hygiene_and_artifacts(self):
         workflow = (self.root / ".github" / "workflows" / "build-windows.yml").read_text(encoding="utf-8")
-        self.assertIn("actions/checkout@v7", workflow)
-        self.assertIn("actions/setup-python@v7", workflow)
-        self.assertIn("actions/upload-artifact@v7", workflow)
+        self.assertRegex(workflow, r"actions/checkout@[0-9a-f]{40} # v7")
+        self.assertRegex(workflow, r"actions/setup-python@[0-9a-f]{40} # v7")
+        self.assertRegex(workflow, r"actions/upload-artifact@[0-9a-f]{40} # v7")
         self.assertIn("python ReleasePackage.py --check", workflow)
         self.assertIn("ReleaseCandidateHardening.py --source-gate", workflow)
         self.assertIn("ImageDrawBot-*-Windows-x64.zip", workflow)

@@ -66,7 +66,7 @@ class SourceTimerTests(PlanStatusFixture):
         state = {'profile': app.game.get(), 'options': {}, 'has_image': image is not None}
         with patch('SessionRecovery.load_snapshot', return_value=state), \
                 patch('SessionRecovery.load_cached_image', return_value=image), \
-                patch('DrawBot.messagebox.askyesno', return_value=True), \
+                patch('DrawBot.messagebox.askyesnocancel', return_value=True), \
                 patch('DrawBot.previous_run_unclean', return_value=False):
             DrawBotApp.offer_safe_session_recovery(app)
             return self.worker_events(app, 'recovery_loaded')

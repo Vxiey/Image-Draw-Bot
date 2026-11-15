@@ -36,12 +36,12 @@ jobs:
       artifact-id: ${{ steps.release_artifact.outputs.artifact-id }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
           architecture: 'x64'
@@ -149,7 +149,7 @@ jobs:
       # source; future source changes must retain the pinned SHA-256 check.
       - name: Download pinned 1.0.148 test build
         if: steps.upgrade_candidate.outputs.required == 'True'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           artifact-ids: '14093456018'
           run-id: '43542884608'
@@ -167,7 +167,7 @@ jobs:
 
       - name: Upload workflow artifacts
         id: release_artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ImageDrawBot-${{ github.ref_name }}-Windows-x64
           path: |
@@ -188,12 +188,12 @@ jobs:
       actions: read
     steps:
       - name: Checkout exact release source
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
 
@@ -216,7 +216,7 @@ jobs:
           if ($env:BUILD_ARTIFACT_ID -notmatch '^[1-9][0-9]*$') { throw 'Missing build artifact ID.' }
 
       - name: Download this run's verified Windows build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           artifact-ids: ${{ needs.build-windows.outputs.artifact-id }}
           path: release
@@ -278,7 +278,7 @@ jobs:
 
       - name: Preserve release and tag retirement inventory
         if: env.RC3_CLEANUP_READY == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ImageDrawBot-v1.0.146-rc3-retirement-inventory
           path: |

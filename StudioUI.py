@@ -900,7 +900,7 @@ def build_ui(a, quality, speed):
         ('Inspect drawing area', 'Captures the selected canvas so you can verify its bounds.', 'Show screenshot', a.capture_screen),
         ('Record drawing area', 'Records up to 30 seconds as a GIF for debugging.', 'Record GIF', a.record_screen),
         ('Export preview', 'Exports the selected preview view as PNG.', 'Export view PNG', a.export_preview),
-        ('Mobile Preview', 'Serves Original, Drawing Preview and Safety Map to a phone on the same Wi-Fi/LAN. Opt-in and local-only.', 'Open Mobile', a.show_mobile_preview),
+        ('Mobile Preview', 'Shares Drawing Preview and Safety Map over unencrypted local Wi-Fi/LAN after confirmation. The original is not shared by default.', 'Open Mobile', a.show_mobile_preview),
         ('Diagnostics', 'Creates a sanitized ZIP with logs, system/GPU/resource information, settings summaries and calibration hashes. Source/recovery images are excluded.', 'Create diagnostics', a.collect_diagnostics),
         ('Safe recovery', 'Clears the local crash-recovery checkpoint. Recovery never restores Start authorization, target lock, preflight or dry-run passes.', 'Clear recovery', a.clear_recovery_snapshot),
         ('Windows crash dumps', 'Enables per-user .dmp capture for hard Python/Win32 crashes.', 'Enable .dmp', a.enable_crash_dumps)):

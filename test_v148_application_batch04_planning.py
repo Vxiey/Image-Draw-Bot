@@ -145,6 +145,58 @@ class WatchdogPolicyTests(unittest.TestCase):
                 finally:
                     for image in owned:image.close()
 
+    def test_actual_draw_worker_does_not_charge_planned_canvas_clear_twice(self):
+        import queue
+        import threading
+        from unittest.mock import Mock
+        import DrawBot as module
+        from test_v148_application_batch04_settings import Value
+        clock=[0.0];jobs=[];owned=[]
+        options={'planning_watchdog':'Off','planning_timeout_seconds':15,
+                 'paint_tool':'Use current tool','custom_color_workflow':'Calibrated palette',
+                 'background_fill':'Off','max_seconds':10,'auto_clear_canvas':True}
+        with Image.new('RGB',(20,20),'white') as original:
+            app=SimpleNamespace(activity=None,closing=False,original=original,
+                game=Value('Microsoft Paint'),corners=[(0,0),(20,20)],
+                preview_after=None,preview_render_after=None,status=Mock(),summary=Mock(),root=Mock(),
+                area=lambda:(0,0,20,20),options=lambda:dict(options),mouse=Mock(),
+                target_window=(1,(0,0,100,100)),_refresh_target_for_draw=lambda:(0,0,100,100),
+                stop=threading.Event(),paused=threading.Event(),events=queue.Queue(),
+                progress={},save_settings=lambda:True,keyboard=Mock(),
+                begin_worker=lambda kind,work,**_worker_options:jobs.append(work) or True)
+            def plan(image,area,resolved,cancelled):
+                owned.append(image)
+                clear=resolved['canvas_clear_estimate_seconds']
+                self.assertGreater(clear, 0)
+                # Mirrors make_plan's result: estimate already includes clear.
+                estimate=10-clear/2
+                return {'options':resolved,'count':1,'estimate':estimate,
+                        'raw_execution_estimate_seconds':estimate,
+                        'groups':[[(1,1,2,1)]]}
+            with ExitStack() as context:
+                context.enter_context(patch.object(module.time,'monotonic',side_effect=lambda:clock[0]))
+                context.enter_context(patch.object(module,'log_event'))
+                context.enter_context(patch.object(module,'bypasses_palette',return_value=True))
+                context.enter_context(patch.object(module,'resolve_image_custom_color_workflow',return_value={}))
+                context.enter_context(patch.object(module.DrawBotApp,'_disarm_full_draw'))
+                context.enter_context(patch.object(module.DrawBotApp,'_strict_safety_required',return_value=False))
+                context.enter_context(patch.object(module.DrawBotApp,'_run_browser_visual_preflight',return_value=(0,0,100,100)))
+                context.enter_context(patch('ScreenGuard.GuardedMouse'))
+                context.enter_context(patch('ScreenGuard.WindowMonitor'))
+                context.enter_context(patch.object(module,'make_plan',side_effect=plan))
+                execute=context.enter_context(patch.object(module,'execute_plan'))
+                context.enter_context(patch('SessionRecovery.clear_render_progress'))
+                try:
+                    module.DrawBotApp.draw(app,user_initiated=True,paint_prepared=True)
+                    self.assertEqual(len(jobs),1)
+                    jobs[0]()
+                    execute.assert_called_once()
+                    final_plan=execute.call_args.args[0]
+                    self.assertEqual(final_plan['estimate'],final_plan['raw_execution_estimate_seconds'])
+                    self.assertEqual(app.start_state_machine.state,'COMPLETED')
+                finally:
+                    for image in owned:image.close()
+
     def test_off_removes_automatic_timeout_but_dry_run_keeps_its_explicit_bound(self):
         from PlanningWatchdog import build_planning_attempts
         attempt,=build_planning_attempts({'planning_watchdog':'Off','planning_timeout_seconds':15})

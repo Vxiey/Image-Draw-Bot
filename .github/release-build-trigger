@@ -5,3 +5,7 @@ Requested: 2026-11-14
 Verify same-version upgrade from shared 1.0.148 test build.
 
 Verify 1.0.148 security hardening; build and validate without publication.
+
+Verify Extra Fast manual Fill fallback and canvas-clear time accounting.
+
+Verify the reviewed 1.0.148 replacement scope and combined release hardening; no publication.

@@ -745,15 +745,20 @@ def _make_plan(original, area, options, cancelled=lambda: False):
             and options.get('draw_quality') != 'Pixel Accurate'
             and not (options.get('paint_current_color') or options.get('outline') or options.get('erase_mode'))
             # A legacy/manual profile can claim Fill capability without carrying
-            # executable tool actions. Preserve the proven ExtraFast2 Fill route
-            # for that incomplete metadata case; regional hybrid owns all no-Fill
-            # runs (the user's failing Gartic case) and fully calibrated Fill runs.
+            # executable tool actions. Use ExtraFast2's stroke-only fallback
+            # in that case; regional hybrid owns no-Fill and calibrated Fill runs.
             and (not options.get('fill_tool_available') or bool(options.get('fill_tool_actions')))):
         from AdaptiveRegionHybrid import build_adaptive_hybrid_plan
         plan=build_adaptive_hybrid_plan(original,area,options,make_plan,finish_plan,cancelled)
         # The wrapper changes geometry and cost after its inner color planner
         # returns. Acceptance and a bounded rescue must use this actual result.
         return _finalize_auto_tuned_plan(plan,original,area,cancelled)
+    if options.get('extra_fast') and options.get('fill_tool_available') and not options.get('fill_tool_actions'):
+        # Execution has no way to switch to Fill. Never replace scanlines
+        # with a bucket operation that the runtime cannot execute.
+        options['fill_tool_available'] = False
+        options.pop('fill_regions', None)
+        options.pop('background_fill_plan', None)
     if options.get('outline') and options.get('sketch_detail')=='Auto':
         from AutoSketchBudget import choose_sketch
         return choose_sketch(original,area,options,make_plan,finish_plan,cancelled)
@@ -4941,9 +4946,13 @@ class DrawBotApp:
             log_event(f'Recovery snapshot could not be read: {error!r}');state=None
         if state:
             text=('Image Draw Bot did not close normally and a local recovery checkpoint is available.\n\n'
-                  'Recover the image/settings from the checkpoint? Drawing will remain completely DISARMED: target lock, small test, preflight, dry run and Start authorization are never restored.')
-            recover=messagebox.askyesno('Safe session recovery',text,parent=self.root)
+                  'The checkpoint can contain a local copy of the source image. Choose Yes to recover, No to delete the local checkpoint, or Cancel to keep it without restoring. Your original file is not deleted.\n\n'
+                  'Drawing remains DISARMED: target lock, small test, preflight, dry run and Start authorization are never restored.')
+            recover=messagebox.askyesnocancel('Safe session recovery',text,parent=self.root,default='cancel')
             if self.closing or self.activity:return
+            if recover is None:
+                self.status.set('Recovery postponed. The local checkpoint was kept.')
+                return
             changed='The current image or recovery checkpoint changed. Your current work was kept.'
             if getattr(self,'original',None) is not source:
                 self.status.set(changed);return
@@ -9255,6 +9264,8 @@ class DrawBotApp:
 
     def _cancel_mobile_preview_discovery(self, *, retire=False):
         """Release GUI-owned context on Tk; the resolver itself never joins."""
+        consent=getattr(self,'mobile_preview_start_consent',None)
+        if consent is not None:consent.set()
         request=getattr(self,'mobile_preview_request',None)
         if request is not None:request['cancel'].set()
         self.mobile_preview_request=None
@@ -9350,9 +9361,20 @@ class DrawBotApp:
 
     def show_mobile_preview(self):
         """Queue opt-in LAN discovery without blocking or borrowing drawing work."""
-        if self.closing:return
+        if self.closing or getattr(self,'mobile_preview_start_consent',None) is not None:return
+        consent=None
         try:
             server=getattr(self,'mobile_preview_server',None)
+            if server is None or not server.running:
+                consent=threading.Event()
+                self.mobile_preview_start_consent=consent
+                accepted=messagebox.askyesno('Share Mobile Preview over the local network?',
+                    'Drawing Preview and Safety Map images can reveal image content. '
+                    'They are sent over unencrypted HTTP to devices using your preview link. '
+                    'Use only a trusted private network and avoid sharing sensitive images. '
+                    'The original image is not shared by default. Start sharing?',
+                    default='no',parent=self.root)
+                if not accepted or self.closing or consent.is_set():return
             if server is None:
                 server=MobilePreviewServer();self.mobile_preview_server=server
             discovery=getattr(self,'mobile_preview_discovery',None)
@@ -9363,7 +9385,7 @@ class DrawBotApp:
             if previous is not None:previous['cancel'].set()
             panel=getattr(self,'_mobile_preview_dialog',None)
             if panel is not None and not panel.current():panel=None
-            request=dict(cancel=threading.Event(),server=server,
+            request=dict(cancel=consent if consent is not None else threading.Event(),server=server,
                 session=server.session_identity(),panel=panel)
             self.mobile_preview_request=request
             discovery.submit(request['cancel'])
@@ -9377,6 +9399,8 @@ class DrawBotApp:
             self.mobile_preview_status.set(message)
             if not self.activity:self.status.set(message)
             log_event(f'Mobile Preview discovery failed safely: {error!r}')
+        finally:
+            if consent is not None:self.mobile_preview_start_consent=None
 
     def export_preview(self):
         if self.activity or self.closing:return False
@@ -10419,20 +10443,8 @@ class DrawBotApp:
                 raise ValueError('Final planning did not produce a plan. Lower planning resolution or use a smaller target stroke count.')
             publication.own(plan)
             release_source_snapshot(plan,transfer=True)
-            if not test and not dry_run and plan.get('options',{}).get('auto_clear_canvas'):
-                add_clear=True
-                try:
-                    from RenderResume import resolve_resume as _resolve_clear_resume
-                    _clear_resume=_resolve_clear_resume(plan,(plan.get('options') or {}).get('render_resume_state'))
-                    add_clear=not bool(_clear_resume.get('compatible') and _clear_resume.get('prelude_complete'))
-                except Exception:
-                    add_clear=True
-                if add_clear:
-                    clear_seconds=max(0.0,float(plan.get('options',{}).get('canvas_clear_estimate_seconds',0.0) or 0.0))
-                    if clear_seconds:
-                        plan['estimate']=float(plan.get('estimate',0.0) or 0.0)+clear_seconds
-                        plan['options']['canvas_clear_estimate_included']=True
-                        log_event(f'Automatic canvas clear added {clear_seconds:.2f}s to final draw-time estimate.')
+            # make_plan already includes the planned canvas clear in the ETA.
+            # Do not add it again before evaluating the execution budget.
             if dry_run:
                 original_count=int(plan.get('count') or 0)
                 plan=sample_dry_run_plan(plan, execution_seconds=DRY_RUN_EXECUTION_SECONDS,
@@ -10535,6 +10547,8 @@ class DrawBotApp:
 
     def _request_stop(self):
         """Keyboard-thread-safe Stop: no Tk calls or resettable update token."""
+        consent=getattr(self,'mobile_preview_start_consent',None)
+        if consent is not None:consent.set()
         mobile=getattr(self,'mobile_preview_request',None)
         if mobile is not None:mobile['cancel'].set()
         discovery=getattr(self,'mobile_preview_discovery',None)

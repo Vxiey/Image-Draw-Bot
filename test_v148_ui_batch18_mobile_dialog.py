@@ -89,6 +89,7 @@ class MobileDialogWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch('DrawBot.messagebox.askyesno', return_value=True))
         self.tcl = tk.Tcl()
         self.tcl_thread = threading.get_ident()
         self.apps = []

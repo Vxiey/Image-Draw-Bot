@@ -1,9 +1,9 @@
 {
   "version": "1.0.148",
   "target": 900,
-  "implemented": 886,
+  "implemented": 900,
   "release_published": false,
-  "validation": "Batch 42 adds 17 independently reviewed behavior groups: 886/900, 14 remaining. All 869 preceding entries remain unchanged. New focused methods and adjacent application/rendering/runtime/native selections pass with one unavailable Windows boundary skip in native tests. The initial full41 discovery completed with 9 failures, 1 error and 86 skips; its six timeout methods pass unchanged in isolation, and four old fixture contracts are repaired without IDs. Those results do not replace final isolated complete discovery or exact published-head Windows/Linux CI. Delivery-context completion, tests, documentation and review repairs add no IDs. Version 1.0.148 remains unreleased.",
+  "validation": "Owner-authorized replacement scope: entries 887–900 document separately reviewed behavior changes, not a recovery of Batch 43. Historical entries 1–886 are unchanged. See the replacement ledger for focused evidence; exact-head full Linux/Windows CI, Windows upgrade and antivirus verdict remain separate and are not asserted here.",
   "improvements": [
     {
       "id": 1,
@@ -6907,6 +6907,104 @@
       "batch": 42,
       "ledger": "v148-batch42-native.md",
       "description": "Compare large recorded-frame pixel payloads in bounded full-width strips rather than exporting two complete image byte strings. Preserve exact modes, palette/transparency checks, required retained frames and the small-image fast path; measured slower static-frame timing is disclosed."
+    },
+    {
+      "id": 887,
+      "area": "reviewed-replacement-rendering",
+      "local_id": "REPL887",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Check Detail Zoom proposals against original-image error using real modeled brush footprints, keeping only improvements that do not worsen neighboring pixels."
+    },
+    {
+      "id": 888,
+      "area": "reviewed-replacement-rendering",
+      "local_id": "REPL888",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Use physical brush-aware sampling and prefer exact packing in explicitly selected fixed-brush Extra Fast."
+    },
+    {
+      "id": 889,
+      "area": "reviewed-replacement-rendering",
+      "local_id": "REPL889",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Keep legacy Extra Fast scanlines when a Fill action cannot actually be executed."
+    },
+    {
+      "id": 890,
+      "area": "reviewed-replacement-timing",
+      "local_id": "REPL890",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Charge canvas clearing once in the final draw budget, so it cannot falsely reject a job that fits."
+    },
+    {
+      "id": 891,
+      "area": "reviewed-replacement-input",
+      "local_id": "REPL891",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Limit web image imports to public HTTPS and verify connect destinations without inheriting proxy or credential settings."
+    },
+    {
+      "id": 892,
+      "area": "reviewed-replacement-input",
+      "local_id": "REPL892",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Reject raw UNC and device paths before image import opens or inspects them; mapped drives and reparse points are outside this policy."
+    },
+    {
+      "id": 893,
+      "area": "reviewed-replacement-updates",
+      "local_id": "REPL893",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Require separate explicit consent before update download and before installer launch; decline or cancellation must stop the action."
+    },
+    {
+      "id": 894,
+      "area": "reviewed-replacement-privacy",
+      "local_id": "REPL894",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Do not encode, queue or serve the source Original in Mobile Preview by default."
+    },
+    {
+      "id": 895,
+      "area": "reviewed-replacement-release",
+      "local_id": "REPL895",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Use read-only access for the Windows build and isolate write access to the manually gated publisher; revalidate the exact same-run artifact."
+    },
+    {
+      "id": 896,
+      "area": "reviewed-replacement-privacy",
+      "local_id": "REPL896",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Require explicit consent before Mobile Preview starts a LAN server or discovery; decline, closing and modal reentry must not start sharing."
+    },
+    {
+      "id": 897,
+      "area": "reviewed-replacement-recovery",
+      "local_id": "REPL897",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Keep the recovery checkpoint when the recovery prompt is dismissed without an explicit restore or discard decision."
+    },
+    {
+      "id": 898,
+      "area": "reviewed-replacement-preview",
+      "local_id": "REPL898",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Stop the preview at a fatal canvas error so its execution replay does not display strokes that native execution would never deliver."
+    },
+    {
+      "id": 899,
+      "area": "reviewed-replacement-release",
+      "local_id": "REPL899",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Pin Windows release workflow actions to immutable commit SHAs rather than mutable release tags."
+    },
+    {
+      "id": 900,
+      "area": "reviewed-replacement-privacy",
+      "local_id": "REPL900",
+      "ledger": "v148-replacement-ledger.md",
+      "description": "Use anonymous labels in diagnostics archives rather than exposing dump filenames or process IDs through the dump inventory (dump-files.json)."
     }
   ]
 }

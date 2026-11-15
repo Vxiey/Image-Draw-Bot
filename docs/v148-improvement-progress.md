@@ -4,9 +4,17 @@
 
 Continue application-wide correctness, performance and security improvements, with a target of **900 distinct improvements**, then release **1.0.148**. The user reduced the earlier 1,000 target on 12 November 2026. The 100 already reviewed and merged improvements form the starting point; formatting, tests, documentation and version bumps do not count as additional product improvements. Earlier checkpoint counts below retain their historical targets.
 
-## Current state
+## Replacement scope (15 November 2026)
 
-The current reviewed source checkpoint contains **886/900 distinct implemented
+The owner authorized verified replacements for the unrecovered final 14 changes.
+The [replacement ledger](v148-replacement-ledger.md) lists the separate behaviors
+for IDs 887–900. The original entries below remain historical checkpoints.
+This notice does not assert full final-head CI, Windows installation or a
+Defender verdict. Version 1.0.148 remains unreleased.
+
+## Historical checkpoint: Batch 42
+
+That reviewed source checkpoint contains **886/900 distinct implemented
 improvements, with 14 remaining**. Batch 42 adds 17 groups: four application,
 seven rendering, two runtime and four native-input/resource groups. All 869
 preceding registry entries are preserved exactly. Delivery-context follow-ups,

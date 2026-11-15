@@ -62,11 +62,24 @@ class RecoveryUiTests(unittest.TestCase):
         self.restore(app,{'profile':'Other drawing app','options':{},'has_image':True},loader)
         loader.assert_called_once_with(expected_sha256=None)
 
+    def test_dismissal_keeps_checkpoint_without_loading_or_deleting(self):
+        app = SimpleNamespace(closing=False, activity=None, root=Mock(), status=Mock(),
+                              begin_worker=Mock())
+        with patch('SessionRecovery.load_snapshot', return_value={'has_image': True}), \
+             patch('SessionRecovery.clear_snapshot_if_current') as clear, \
+             patch('DrawBot.messagebox.askyesnocancel', return_value=None) as dialog:
+            DrawBotApp.offer_safe_session_recovery(app)
+        app.begin_worker.assert_not_called()
+        clear.assert_not_called()
+        self.assertEqual(dialog.call_args.kwargs['default'], 'cancel')
+        self.assertIn('No to delete the local checkpoint', dialog.call_args.args[1])
+        app.status.set.assert_called_once_with('Recovery postponed. The local checkpoint was kept.')
+
     def test_declined_recovery_reports_cleanup_failure_without_restoring_or_escaping(self):
         app=SimpleNamespace(closing=False,activity=None,root=Mock(),status=Mock())
         with patch('SessionRecovery.load_snapshot',return_value={'has_image':True}), \
              patch('SessionRecovery.clear_snapshot',side_effect=OSError('cache is locked')), \
-             patch('DrawBot.messagebox.askyesno',return_value=False), \
+             patch('DrawBot.messagebox.askyesnocancel',return_value=False), \
              patch('DrawBot.messagebox.showwarning') as warning, \
              patch.object(DrawBotApp,'_apply_recovery_snapshot') as restore, \
              patch('DrawBot.log_event') as log:

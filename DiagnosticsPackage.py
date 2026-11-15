@@ -309,7 +309,7 @@ def create_diagnostics_package(context=None, *, cancelled=lambda: False) -> Path
         archive.writestr('README.txt',
             'Image Draw Bot diagnostics package.\n\n'
             'profile-summary-selection.json identifies the active profile by opaque keys in the settings/calibration summaries, when its files were available. '
-            'Privacy: source images, the local recovery image cache, clipboard contents and raw palette/tool screen coordinates are not included. '
+            'Privacy: source images, the local recovery image cache, clipboard contents and raw palette/tool screen coordinates are not included. Crash dump inventory uses anonymous labels and sizes, not local filenames. '
             'Logs are sanitized for user-home paths and credential-like strings.\n')
         log_dir=data_dir()/'logs'
         for name in ('ImageDrawBot-session.log','ImageDrawBot-session.log.1','ImageDrawBot-crash.log','ImageDrawBot-crash.log.1',
@@ -331,8 +331,9 @@ def create_diagnostics_package(context=None, *, cancelled=lambda: False) -> Path
                 except OSError:continue
                 if stat.S_ISREG(info.st_mode):
                     yield (info.st_mtime, dump.name, info.st_size)
-        inventory = [{'name':sanitize_text(name),'bytes':size}
-                     for _,name,size in nlargest(5, dump_candidates())] if dumps.is_dir() else []
+        recent_dumps = nlargest(5, dump_candidates()) if dumps.is_dir() else []
+        inventory = [{'name': f'dump-{index:03d}.dmp', 'bytes': size}
+                     for index, (_, _name, size) in enumerate(recent_dumps, 1)]
         archive.writestr('dump-files.json',json.dumps({'files':inventory,'memory_dumps_included':False},indent=2))
         _check_cancelled(cancelled)
     return path
