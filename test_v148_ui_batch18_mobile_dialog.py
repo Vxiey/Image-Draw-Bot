@@ -350,7 +350,8 @@ raise SystemExit(not result.wasSuccessful())
         self.assertFalse(ScalingTracker.update_loop_running)
         original_binding = root.bind_all('<Button-1>')
         with patch('MobilePreview.local_ipv4_addresses', return_value=['127.0.0.1']), \
-                patch('DrawBot.log_event'):
+                patch('DrawBot.log_event'), \
+                patch('DrawBot.messagebox.askyesno', return_value=True):
             panel = show_mobile_preview_ready(app)
             self.assertIsNotNone(panel)
             self.assertTrue(ScalingTracker.update_loop_running)
@@ -397,7 +398,8 @@ raise SystemExit(not result.wasSuccessful())
             setattr(app, name, tk.StringVar(root, value=''))
         self.addCleanup(app.stop_mobile_preview, quiet=True)
         with patch('MobilePreview.local_ipv4_addresses', return_value=['127.0.0.1']) as addresses, \
-                patch('DrawBot.log_event'), patch('webbrowser.open', return_value=True) as browser:
+                patch('DrawBot.log_event'), patch('webbrowser.open', return_value=True) as browser, \
+                patch('DrawBot.messagebox.askyesno', return_value=True):
             original_click_binding = root.bind_all('<Button-1>')
             first = show_mobile_preview_ready(app)
             root.update()
