@@ -132,6 +132,35 @@ jobs:
           Write-Host "Uninstaller exit code: $($uninstallProcess.ExitCode)"
           if ($uninstallProcess.ExitCode -ne 0) { throw "Silent uninstall failed: $($uninstallProcess.ExitCode)" }
 
+      - name: Identify 1.0.148 upgrade candidate
+        id: upgrade_candidate
+        shell: pwsh
+        run: |
+          $version = python -c "from Version import APP_VERSION; print(APP_VERSION)"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not detect the candidate version' }
+          "required=$($version -eq '1.0.148')" >> $env:GITHUB_OUTPUT
+
+      # Do not substitute an unverified download when the pinned artifact expires.
+      # Before expiry, preserve the exact Setup.exe through an approved, immutable
+      # source; future source changes must retain the pinned SHA-256 check.
+      - name: Download pinned 1.0.148 test build
+        if: steps.upgrade_candidate.outputs.required == 'True'
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: '14093456018'
+          run-id: '43542884608'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/idb-upgrade-baseline
+
+      - name: Verify same-version upgrade preserves profile settings
+        if: steps.upgrade_candidate.outputs.required == 'True'
+        shell: pwsh
+        run: |
+          ./.github/scripts/test-same-version-upgrade.ps1 `
+            -BaselineInstaller (Join-Path $env:RUNNER_TEMP 'idb-upgrade-baseline/ImageDrawBot-1.0.148-Windows-x64-Setup.exe') `
+            -CandidateInstaller 'release/ImageDrawBot-1.0.148-Windows-x64-Setup.exe' `
+            -CandidateExe 'dist/ImageDrawBot/ImageDrawBot.exe'
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
         with:
