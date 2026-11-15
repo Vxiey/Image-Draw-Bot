@@ -10725,22 +10725,10 @@ class DrawBotApp:
         def cancelled():
             return not DrawBotApp._update_request_current(self,request)
         def work():
-            from UpdateCenter import check_for_updates,download_installer
+            from UpdateCenter import check_for_updates
             if cancelled():raise InterruptedError('Update cancelled.')
             try:
                 result=check_for_updates(cancelled=cancelled)
-                if result.get('update_available'):
-                    asset=result.get('installer')
-                    if asset:
-                        previous_percent=[-1]
-                        def progress(done,total):
-                            if cancelled():raise InterruptedError('Update cancelled.')
-                            percent=round(done*100/total)
-                            if percent!=previous_percent[0]:
-                                previous_percent[0]=percent
-                                self.events.put(('update_progress',(request,f'Downloading {asset["version"]}: {percent}%')))
-                        result['installer_path']=download_installer(asset,cancelled=cancelled,progress=progress)
-                    else:result['message']='A newer release exists, but its verified Windows installer is not available yet. Try again later or open Releases.'
             except InterruptedError:raise
             except Exception as error:result={'error':str(error),'message':'Update failed. Nothing was installed. Try again.'}
             if cancelled():raise InterruptedError('Update cancelled.')
@@ -10750,12 +10738,75 @@ class DrawBotApp:
         try:
             if hasattr(self,'show_tools'):self.show_tools()
             self.update_summary.set('Checking GitHub Releases…')
-            self.update_detail.set('A newer Windows release will be downloaded, verified and opened in the installer.')
+            self.update_detail.set('Checking does not download or install a Windows release.')
             self.status.set('Checking Image Draw Bot releases on GitHub…')
             started=bool(self.begin_worker('update-check',work,reset_stop=False))
             return started
         finally:
             if not started:request.cancel()
+
+    def _offer_update_download(self,payload):
+        request=payload['request']
+        if not DrawBotApp._update_request_current(self,request,phase='checking'):
+            return False
+        if self.activity:
+            self.root.after(100,lambda:DrawBotApp._offer_update_download(self,payload));return False
+        if not request.begin_download_prompt():return False
+        asset=dict(payload['installer'])
+        version=asset['version']
+        if not messagebox.askyesno('Download update?',
+                f'Download Image Draw Bot {version} from Vxiey/Image-Draw-Bot on GitHub? '
+                'This will not run the installer.', default='no', parent=self.root):
+            request.cancel()
+            self.update_summary.set('Update download declined.')
+            return False
+        if (not DrawBotApp._update_request_current(self,request,phase='confirming-download') or
+                not request.begin_download()):return False
+        def cancelled():
+            return not DrawBotApp._update_request_current(self,request,phase='downloading')
+        def work():
+            from UpdateCenter import download_installer
+            previous_percent=[-1]
+            def progress(done,total):
+                if cancelled():raise InterruptedError('Update cancelled.')
+                percent=round(done*100/total)
+                if percent!=previous_percent[0]:
+                    previous_percent[0]=percent
+                    self.events.put(('update_progress',(request,f'Downloading {version}: {percent}%')))
+            try:
+                path=download_installer(asset,cancelled=cancelled,progress=progress)
+            except InterruptedError:raise
+            except Exception:
+                if not cancelled():self.events.put(('update_download_complete',{'request':request,'error':True}))
+                return
+            if not cancelled():
+                self.events.put(('update_download_complete',{'request':request,'installer':asset,'installer_path':path}))
+        started=False
+        try:
+            started=bool(self.begin_worker('update-download',work,reset_stop=False))
+            return started
+        finally:
+            if not started:request.cancel()
+
+    def _offer_update_install(self,payload):
+        request=payload['request']
+        if not DrawBotApp._update_request_current(self,request,phase='awaiting-install'):
+            return False
+        if self.activity:
+            self.root.after(100,lambda:DrawBotApp._offer_update_install(self,payload));return False
+        if not request.begin_install_prompt():return False
+        version=payload['installer']['version']
+        if not messagebox.askyesno('Install verified download?',
+                f'Install Image Draw Bot {version} from Vxiey/Image-Draw-Bot on GitHub? '
+                'The file matches the published SHA-256 checksum, but the Windows publisher '
+                'signature has not been verified. Installation may run silently and close this app.',
+                default='no',parent=self.root):
+            request.cancel()
+            self.update_summary.set('Installation declined. The downloaded installer was not run.')
+            return False
+        if (not DrawBotApp._update_request_current(self,request,phase='confirming-install') or
+                not request.approve_install()):return False
+        return DrawBotApp._install_checked_update(self,payload)
 
     def _install_checked_update(self,payload):
         request=payload.get('request') if isinstance(payload,dict) else None
@@ -11506,7 +11557,7 @@ class DrawBotApp:
         elif kind=='update_progress':
             if not isinstance(value,tuple) or len(value)!=2:return
             request,text=value
-            if DrawBotApp._update_request_current(self,request,phase='checking'):
+            if DrawBotApp._update_request_current(self,request,phase='downloading'):
                 self.update_summary.set(str(text))
         elif kind=='update_installer_started':
             if (not isinstance(value,UpdateRequest) or
@@ -11515,11 +11566,23 @@ class DrawBotApp:
             self.update_request=None
             self.status.set('Installer started. Closing Image Draw Bot to complete the update.')
             self.close()
+        elif kind=='update_download_complete':
+            payload=value if isinstance(value,dict) else {}
+            request=payload.get('request')
+            if not DrawBotApp._update_request_current(self,request,phase='downloading'):return
+            if payload.get('error'):
+                request.cancel()
+                self.update_summary.set('Update download failed. Nothing was installed.')
+                return
+            if not request.downloaded():return
+            self.update_summary.set('Update downloaded and SHA-256 verified. Waiting for install approval.')
+            self.root.after(100,lambda:DrawBotApp._offer_update_install(self,payload))
         elif kind=='update_check_complete':
             payload=value if isinstance(value,dict) else {}
             request=payload.get('request')
             if not DrawBotApp._update_request_current(self,request,phase='checking'):return
-            if not (request.ready() if payload.get('installer_path') else request.finish_check()):return
+            has_offer=bool(payload.get('update_available') and payload.get('installer') and not payload.get('error'))
+            if not has_offer and not request.finish_check():return
             action=getattr(self,'update_download_button',None)
             if action is not None:
                 action.configure(text='Open GitHub Releases')
@@ -11534,9 +11597,8 @@ class DrawBotApp:
             release_name=str(payload.get('release_name') or '').strip()
             extra=f' · {release_name}' if release_name and release_name not in latest else ''
             self.update_detail.set(f'Current: {APP_VERSION} · Latest: {latest}{extra} · Updates from official GitHub Releases.')
-            if payload.get('installer_path'):
-                self.update_summary.set(f'Version {latest} downloaded and SHA-256 verified. Opening installer…')
-                self.root.after(100,lambda:DrawBotApp._install_checked_update(self,payload))
+            if has_offer:
+                self.root.after(100,lambda:DrawBotApp._offer_update_download(self,payload))
             elif payload.get('update_available'):
                 self.status.set(str(payload.get('message') or f'Image Draw Bot {latest} is available.'))
             else:

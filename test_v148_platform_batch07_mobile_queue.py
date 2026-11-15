@@ -13,7 +13,7 @@ import MobilePreviewQueue as queue
 
 class MobileQueueTests(unittest.TestCase):
     def server(self):
-        server = mobile.MobilePreviewServer()
+        server = mobile.MobilePreviewServer(include_original=True)
         server._server = Mock()
         server._token = 'test-session'
         self.addCleanup(server.stop)
@@ -240,7 +240,7 @@ class MobileQueueTests(unittest.TestCase):
         self.assertFalse(server.running)
 
     def test_same_server_restart_uses_one_encoder_and_rejects_previous_session_frame(self):
-        server = mobile.MobilePreviewServer()
+        server = mobile.MobilePreviewServer(include_original=True)
         self.addCleanup(server.stop)
         first, second = self.image('red'), self.image('blue')
         with patch.object(mobile, 'local_ipv4_addresses', return_value=['127.0.0.1']):

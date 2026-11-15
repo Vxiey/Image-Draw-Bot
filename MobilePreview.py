@@ -162,7 +162,9 @@ class MobilePreviewState:
 class MobilePreviewServer:
     """Small local HTTP server with in-memory Image Draw Bot preview images."""
 
-    def __init__(self):
+    def __init__(self, *, include_original: bool = False):
+        # The desktop app never opts in: raw originals stay on this PC.
+        self._include_original = include_original is True
         self._lock = threading.RLock()
         self._images: Dict[str, Optional[bytes]] = {'original': None, 'preview': None, 'safety': None}
         self._revision = 0
@@ -202,7 +204,7 @@ class MobilePreviewServer:
             self._encoded_identities = None
         self._image_queue.discard_before(ticket)
         encoded = {
-            'original': _image_png_bytes(original),
+            'original': _image_png_bytes(original) if self._include_original else None,
             'preview': _image_png_bytes(preview),
             'safety': _image_png_bytes(safety),
         }
@@ -251,7 +253,8 @@ class MobilePreviewServer:
         buffers are additional. False means stopped, superseded or unchanged.
         """
         from MobilePreviewQueue import ImageRequest, capture_snapshots, image_identities, same_images
-        images = {'original': original, 'preview': preview, 'safety': safety}
+        images = {'original': original if self._include_original else None,
+                  'preview': preview, 'safety': safety}
         # Capture is serialized, but session cancellation never takes this lock.
         with self._image_queue.submission_lock:
             with self._lock:
@@ -453,6 +456,8 @@ class MobilePreviewServer:
                             'available': {name: data is not None for name, data in owner._images.items()},
                         }
                         response = (200, 'application/json; charset=utf-8', json.dumps(payload).encode('utf-8'))
+                    elif rest == 'original.png' and not owner._include_original:
+                        response = (404, 'text/plain; charset=utf-8', b'Not found')
                     elif rest.endswith('.png'):
                         data = owner._images.get(rest[:-4])
                         if data is None:
@@ -514,6 +519,7 @@ class MobilePreviewServer:
 
     def _html(self, token: str | None = None) -> str:
         token = self.token if token is None else token
+        original_tab = '<button data-view="original">Original</button>' if self._include_original else ''
         return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark"><title>Image Draw Bot Mobile Preview</title>
@@ -529,9 +535,9 @@ img{{display:block;max-width:100%;max-height:78vh;object-fit:contain;border-radi
 footer{{padding:0 16px 24px;color:var(--muted);font-size:11px;line-height:1.5}}
 </style></head><body>
 <header><h1>Image Draw Bot · Mobile Preview</h1><div class="sub" id="status">Connected locally · waiting for preview…</div></header>
-<div class="tabs"><button data-view="preview" class="active">Drawing preview</button><button data-view="original">Original</button><button data-view="safety">Safety map</button></div>
+<div class="tabs"><button data-view="preview" class="active">Drawing preview</button>{original_tab}<button data-view="safety">Safety map</button></div>
 <main><div class="viewer"><img id="image" alt="Image Draw Bot preview"><div class="empty" id="empty" hidden>Preview not available yet. Build a preview in Image Draw Bot.</div></div></main>
-<footer>Local-network preview only. This page contains no cloud scripts, analytics or telemetry. Keep the PC and phone on the same Wi-Fi/LAN.</footer>
+<footer>Local-network preview only. This page contains no cloud scripts, analytics or telemetry. Images are sent over unencrypted HTTP. Only use a trusted private network and do not share sensitive images.</footer>
 <script>
 const token={json.dumps(token)}; let view='preview', revision=-1, available={{}}; const img=document.getElementById('image'), empty=document.getElementById('empty'), status=document.getElementById('status');
 function loadImage(){{if(available[view]!==true){{img.hidden=true;img.removeAttribute('src');empty.hidden=false;return;}}img.alt=view==='original'?'Original image':view==='safety'?'Drawing safety map':'Planned drawing preview';img.src=`/${{token}}/${{view}}.png?v=${{revision}}`; img.hidden=false; empty.hidden=true;}}

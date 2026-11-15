@@ -31,6 +31,12 @@ class CanvasDropSource:
     kind: str  # 'file', 'url' or bounded 'data' image URI
 
 
+def _is_network_or_device_path(value: str) -> bool:
+    # UNC and Windows device/extended namespaces start with two separators,
+    # including mixed separators accepted by Windows.
+    return str(value).replace(chr(92), '/').startswith('//')
+
+
 def _file_uri_to_path(value: str) -> str | None:
     try:
         parsed = urlparse(value)
@@ -39,14 +45,14 @@ def _file_uri_to_path(value: str) -> str | None:
     if parsed.scheme.lower() != 'file':
         return None
     path = unquote(parsed.path or '')
-    # file:///C:/... -> C:/... on Windows. UNC keeps //host/share.
+    # file:///C:/... -> C:/... on Windows; network authorities are not local.
     if parsed.netloc and parsed.netloc.casefold() != 'localhost':
-        path = f'//{parsed.netloc}{path}'
+        return None
     elif len(path) >= 3 and path[0] == '/' and path[2] == ':':
         path = path[1:]
     if any(ord(char) < 32 or ord(char) == 127 for char in path):
         return None
-    return path or None
+    return path if path and not _is_network_or_device_path(path) else None
 
 
 def _host_is_or_subdomain(host: str, domain: str) -> bool:
@@ -392,8 +398,12 @@ def parse_canvas_drop(raw_data: object, *, split_items=()) -> CanvasDropSource:
         if candidate[:16].lower().startswith(('http://', 'https://', 'data:image/')) or _is_html(candidate):
             continue
         file_path = _file_uri_to_path(candidate)
-        if file_path:
+        if candidate.lower().startswith('file:'):
+            if not file_path:
+                continue
             candidate = file_path
+        if _is_network_or_device_path(candidate):
+            continue
         try:
             path = Path(candidate)
             exists = path.is_file()

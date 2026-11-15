@@ -14,7 +14,7 @@ import MobilePreview as mobile
 
 class MobileMaintenanceTests(unittest.TestCase):
     def server(self):
-        result=mobile.MobilePreviewServer()
+        result=mobile.MobilePreviewServer(include_original=True)
         self.addCleanup(result.stop)
         return result
 
@@ -178,7 +178,7 @@ const context={document,AbortController,Date,JSON,Object,String,Boolean,Error,
 @unittest.skipUnless(shutil.which('node'),'Node is used only to exercise the embedded browser script')
 class MobileBrowserTests(unittest.TestCase):
     def run_browser(self,mode):
-        source=mobile.MobilePreviewServer()._html('session-token').split('<script>',1)[1].split('</script>',1)[0]
+        source=mobile.MobilePreviewServer(include_original=True)._html('session-token').split('<script>',1)[1].split('</script>',1)[0]
         result=subprocess.run([shutil.which('node'),'-e',_BROWSER_HARNESS.replace('__MODE__',json.dumps(mode))],
                               input=source,text=True,capture_output=True,timeout=5,check=True)
         return json.loads(result.stdout)

@@ -49,7 +49,7 @@ class MobileEncoderTests(unittest.TestCase):
         return image
 
     def server(self):
-        server = mobile.MobilePreviewServer()
+        server = mobile.MobilePreviewServer(include_original=True)
         server._server = Mock()  # Only the unneeded HTTP listener is replaced.
         self.addCleanup(server.stop)
         self.addCleanup(lambda: self.assertTrue(server._image_queue.wait_idle(5)))

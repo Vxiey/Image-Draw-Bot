@@ -18,7 +18,7 @@ on:
       - '.github/release-build-trigger'
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 concurrency:
@@ -32,9 +32,13 @@ jobs:
   build-windows:
     runs-on: windows-latest
     timeout-minutes: 60
+    outputs:
+      artifact-id: ${{ steps.release_artifact.outputs.artifact-id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -162,6 +166,7 @@ jobs:
             -CandidateExe 'dist/ImageDrawBot/ImageDrawBot.exe'
 
       - name: Upload workflow artifacts
+        id: release_artifact
         uses: actions/upload-artifact@v7
         with:
           name: ImageDrawBot-${{ github.ref_name }}-Windows-x64
@@ -173,6 +178,25 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  publish-windows:
+    needs: build-windows
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout exact release source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
       - name: Require passing CI for the exact release commit
         if: github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'
         shell: pwsh
@@ -182,6 +206,25 @@ jobs:
           python ReleaseCandidateHardening.py --scope-gate
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python ReleaseCiGate.py --expected-commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Require an exact artifact ID
+        shell: pwsh
+        env:
+          BUILD_ARTIFACT_ID: ${{ needs.build-windows.outputs.artifact-id }}
+        run: |
+          if ($env:BUILD_ARTIFACT_ID -notmatch '^[1-9][0-9]*$') { throw 'Missing build artifact ID.' }
+
+      - name: Download this run's verified Windows build
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ needs.build-windows.outputs.artifact-id }}
+          path: release
+
+      - name: Revalidate downloaded release files
+        shell: pwsh
+        run: |
+          python ReleaseCandidateHardening.py --release-dir release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish verified versioned release

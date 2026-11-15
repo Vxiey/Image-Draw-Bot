@@ -13,7 +13,7 @@ from MobilePreview import MobilePreviewServer
 
 class MobilePreviewSecurityTests(unittest.TestCase):
     def make_server(self):
-        server = MobilePreviewServer()
+        server = MobilePreviewServer(include_original=True)
         self.addCleanup(server.stop)
         return server
 
@@ -25,6 +25,26 @@ class MobilePreviewSecurityTests(unittest.TestCase):
             return response.status, response.read()
         finally:
             connection.close()
+
+    def test_original_is_never_encoded_or_served_by_default(self):
+        server = MobilePreviewServer()
+        self.addCleanup(server.stop)
+        state = server.start(addresses=[])
+        with Image.new("RGB", (8, 8), "red") as original, Image.new("RGB", (8, 8), "blue") as preview:
+            with patch.object(MobilePreview, "_image_png_bytes", wraps=MobilePreview._image_png_bytes) as encode:
+                server.update_images(original=original, preview=preview)
+                self.assertFalse(any(call.args == (original,) for call in encode.call_args_list))
+            self.assertTrue(server.queue_images(original=original, preview=preview))
+        prefix = f"/{state.token}/"
+        status, document = self.request(state, prefix)
+        self.assertEqual(status, 200)
+        self.assertNotIn(b'data-view="original"', document)
+        self.assertIn(b'unencrypted HTTP', document)
+        status, body = self.request(state, prefix + "status.json")
+        self.assertEqual(status, 200)
+        self.assertFalse(json.loads(body)["available"]["original"])
+        self.assertEqual(self.request(state, prefix + "original.png")[0], 404)
+        self.assertIsNone(server._images["original"])
 
     def pending_connection(self, server):
         accepted = threading.Event()

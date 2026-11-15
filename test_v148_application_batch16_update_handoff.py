@@ -95,6 +95,7 @@ class DeferredUpdateHandoffTests(unittest.TestCase):
             }))
         self.download = self.stack.enter_context(patch(
             'UpdateCenter.download_installer', return_value='unused-verified-installer.exe'))
+        self.prompt = self.stack.enter_context(patch('DrawBot.messagebox.askyesno', return_value=True))
         self.launch = self.stack.enter_context(patch('UpdateCenter.launch_installer'))
 
     def drain(self):
@@ -114,6 +115,10 @@ class DeferredUpdateHandoffTests(unittest.TestCase):
         self.app.worker.run()
         if not deliver:
             return before
+        self.drain()
+        download = (set(self.root.jobs) - before).pop()
+        self.root.run(download)
+        self.app.worker.run()
         self.drain()
         self.assertIsNone(self.app.activity)
         pending = set(self.root.jobs) - before
@@ -339,9 +344,12 @@ class DeferredUpdateHandoffTests(unittest.TestCase):
         self.assertTrue(self.app.check_for_updates())
         request = self.app.update_request
         self.app.worker.run()
+        self.drain()
+        self.root.run((set(self.root.jobs) - before).pop())
+        self.app.worker.run()
         events = self.drain()
         self.assertTrue(request.is_cancelled())
-        self.assertNotIn('update_check_complete', [kind for kind, value in events])
+        self.assertNotIn('update_download_complete', [kind for kind, value in events])
         self.assertEqual(set(self.root.jobs), before)
         self.assert_no_install_or_close()
 
@@ -361,11 +369,58 @@ class DeferredUpdateHandoffTests(unittest.TestCase):
         self.assertIs(self.app.update_request, current)
         self.app.worker.run()
         self.drain()
+        download = (set(self.root.jobs) - before_jobs).pop()
+        self.root.run(download)
+        self.app.worker.run()
+        self.drain()
         newer = (set(self.root.jobs) - before_jobs).pop()
         self.run_handoff(older)
         self.assert_no_install_or_close()
         self.run_handoff(newer)
         self.assertEqual((self.launch.call_count, self.app.close.call_count), (1, 1))
+
+    def test_declined_download_never_transfers_or_launches(self):
+        self.prompt.return_value = False
+        before = set(self.root.jobs)
+        self.assertTrue(self.app.check_for_updates())
+        self.app.worker.run()
+        self.drain()
+        self.download.assert_not_called()
+        self.assertFalse(self.root.run((set(self.root.jobs) - before).pop()))
+        self.prompt.assert_called_once()
+        self.download.assert_not_called()
+        self.assert_no_install_or_close()
+
+    def test_declined_install_does_not_launch_verified_download(self):
+        self.prompt.side_effect = [True, False]
+        token = self.begin_completed_check()
+        self.download.assert_called_once()
+        self.assertFalse(self.root.run(token))
+        self.assertEqual(self.prompt.call_count, 2)
+        self.assertIn('signature has not been verified', self.prompt.call_args.args[1])
+        self.assert_no_install_or_close()
+
+    def test_escape_during_download_prompt_does_not_download(self):
+        def stop_then_accept(*args, **kwargs):
+            self.keyboard.callbacks['esc']()
+            return True
+        self.prompt.side_effect = stop_then_accept
+        before = set(self.root.jobs)
+        self.assertTrue(self.app.check_for_updates())
+        self.app.worker.run()
+        self.drain()
+        self.assertFalse(self.root.run((set(self.root.jobs) - before).pop()))
+        self.download.assert_not_called()
+        self.assert_no_install_or_close()
+
+    def test_escape_during_install_prompt_does_not_launch(self):
+        token = self.begin_completed_check()
+        def stop_then_accept(*args, **kwargs):
+            self.keyboard.callbacks['esc']()
+            return True
+        self.prompt.side_effect = stop_then_accept
+        self.assertFalse(self.root.run(token))
+        self.assert_no_install_or_close()
 
     def test_actual_shutdown_revokes_pending_handoff(self):
         token = self.begin_completed_check()

@@ -57,7 +57,7 @@ class MobileSnapshotTests(unittest.TestCase):
 
     def test_shared_source_uses_one_snapshot_and_one_png_for_multiple_views(self):
         source = Image.new('RGBA', (40, 30), (20, 50, 80, 120))
-        server = mobile.MobilePreviewServer()
+        server = mobile.MobilePreviewServer(include_original=True)
         server._server = Mock()
         try:
             encode = mobile._image_png_bytes
@@ -79,7 +79,7 @@ class MobileSnapshotTests(unittest.TestCase):
             source.close()
 
     def test_real_32_mib_budget_bounds_both_active_and_pending_requests(self):
-        server = mobile.MobilePreviewServer()
+        server = mobile.MobilePreviewServer(include_original=True)
         server._server = Mock()
         entered, release = threading.Event(), threading.Event()
         encode = mobile._image_png_bytes
@@ -176,7 +176,7 @@ class MobileSnapshotTests(unittest.TestCase):
             large.close()
 
     def test_source_identity_cache_does_not_keep_full_resolution_caller_images_alive(self):
-        server = mobile.MobilePreviewServer()
+        server = mobile.MobilePreviewServer(include_original=True)
         server._server = Mock()
         source = Image.new('RGB', (40, 30), 'red')
         reference = weakref.ref(source)
@@ -193,7 +193,7 @@ class MobileSnapshotTests(unittest.TestCase):
             server.stop()
 
     def test_stopped_server_neither_copies_nor_encodes_borrowed_sources(self):
-        server = mobile.MobilePreviewServer()
+        server = mobile.MobilePreviewServer(include_original=True)
         source = Image.new('RGB', (10, 10), 'red')
         try:
             with patch.object(Image.Image, 'copy', side_effect=AssertionError('copy')), \

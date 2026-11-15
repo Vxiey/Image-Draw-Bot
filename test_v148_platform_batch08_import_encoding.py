@@ -58,11 +58,9 @@ class IdentityTransferTests(unittest.TestCase):
 
     @contextmanager
     def transport(self, adapter):
-        initialize = requests.Session.__init__
-        def mount(session):
-            initialize(session)
+        def mount(session, **_):
             session.mount('https://', adapter)
-        with patch.object(requests.Session,'__init__',mount):
+        with patch.object(imports, '_mount_public_image_adapter', mount):
             yield
 
     def test_many_empty_gzip_members_are_rejected_without_consuming_any_wire_body(self):

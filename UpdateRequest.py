@@ -39,6 +39,21 @@ class UpdateRequest:
     def ready(self):
         return self._advance('checking', 'ready')
 
+    def begin_download_prompt(self):
+        return self._advance('checking', 'confirming-download')
+
+    def begin_download(self):
+        return self._advance('confirming-download', 'downloading')
+
+    def downloaded(self):
+        return self._advance('downloading', 'awaiting-install')
+
+    def begin_install_prompt(self):
+        return self._advance('awaiting-install', 'confirming-install')
+
+    def approve_install(self):
+        return self._advance('confirming-install', 'ready')
+
     def finish_check(self):
         return self._advance('checking', 'finished')
 

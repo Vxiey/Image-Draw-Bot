@@ -99,15 +99,11 @@ class ImageRedirectTests(unittest.TestCase):
 
     @contextmanager
     def transport(self, adapter):
-        initialize = requests.Session.__init__
-
-        def initialize_with_adapter(session):
-            initialize(session)
+        def mount(session, **_):
             session.mount('https://', adapter)
-            session.mount('http://', adapter)
 
-        # Keep actual Session.send, hooks, auth, cookies and redirect resolution.
-        with patch.object(requests.Session, '__init__', initialize_with_adapter):
+        # Keep actual Session.send, hooks, cookies and redirects without network.
+        with patch.object(imports, '_mount_public_image_adapter', mount):
             yield adapter
 
     def read(self, url='https://images.invalid/start', **kwargs):
@@ -146,39 +142,23 @@ class ImageRedirectTests(unittest.TestCase):
                 return 307, {'Location': '//other.invalid/final'}, b'redirect'
             return 200, {'Content-Type': 'image/png'}, self.png
 
-        # Requests' existing cookie matching treats a userinfo URL differently;
-        # exercise ordinary cookie URLs and explicit URL credentials separately.
-        for credentials in (False, True):
-            with self.subTest(credentials=credentials):
-                adapter = RecordingAdapter(route)
-                prefix = 'fixture-user:fixture-password@' if credentials else ''
-                with self.transport(adapter):
-                    self.read(f'https://{prefix}images.invalid/start')
-                first, same_origin, other_origin = adapter.requests
-                if credentials:
-                    self.assertIn('Authorization', first.headers)
-                    self.assertEqual(same_origin.headers.get('Authorization'), first.headers['Authorization'])
-                else:
-                    self.assertEqual(same_origin.headers.get('Cookie'), 'image_access=one')
-                self.assertNotIn('Authorization', other_origin.headers)
-                self.assertNotIn('Cookie', other_origin.headers)
-                self.assertTrue(all(response.raw.closed for response in adapter.responses))
-
-    def test_proxy_tls_timeouts_and_legitimate_local_http_redirect_remain_supported(self):
-        adapter = RecordingAdapter(self.one_redirect(location='http://127.0.0.1/final'))
-        environment = {'HTTPS_PROXY': 'http://proxy.invalid:8080', 'HTTP_PROXY': 'http://proxy.invalid:8080',
-                       'NO_PROXY': '', 'https_proxy': '', 'http_proxy': '', 'no_proxy': ''}
-        # Lowercase nonempty values win on some platforms, so give both cases
-        # the same controlled proxy instead of relying on the runner's settings.
-        environment['https_proxy'] = environment['http_proxy'] = 'http://proxy.invalid:8080'
-        with patch.dict(os.environ, environment), self.transport(adapter):
+        adapter = RecordingAdapter(route)
+        with self.transport(adapter):
             self.read()
-        self.assertEqual(adapter.requests[1].url, 'http://127.0.0.1/final')
+        first, same_origin, other_origin = adapter.requests
+        self.assertNotIn('Authorization', first.headers)
+        self.assertEqual(same_origin.headers.get('Cookie'), 'image_access=one')
+        self.assertNotIn('Cookie', other_origin.headers)
+
+    def test_transport_ignores_environment_proxy(self):
+        adapter = RecordingAdapter(self.one_redirect())
+        with patch.dict(os.environ, {'HTTPS_PROXY': 'http://proxy.invalid:8080'}), self.transport(adapter):
+            self.read()
         for options in adapter.options:
             self.assertEqual(options['timeout'], (10, 15))
             self.assertTrue(options['verify'])
             self.assertTrue(options['stream'])
-            self.assertIn('http://proxy.invalid:8080', options['proxies'].values())
+            self.assertFalse(options['proxies'])
 
     def test_invalid_scheme_or_oversized_redirect_is_rejected_before_adapter_send(self):
         destinations = ('file:///not-an-image.png', 'ftp://images.invalid/final',

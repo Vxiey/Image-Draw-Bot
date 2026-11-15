@@ -5,9 +5,12 @@ from numbers import Integral
 import base64
 import binascii
 import os
+import ipaddress
+import socket
 import stat
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -111,12 +114,78 @@ def _network_chunks(response):
         yield from response.iter_content(_BLOCK_BYTES)
 
 
+def _public_image_address(value):
+    address = ipaddress.ip_address(value)
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            address = address.ipv4_mapped
+        elif address.sixtofour is not None or address.teredo is not None or address.scope_id:
+            return False
+    return address.is_global and not address.is_multicast and not address.is_reserved
+
+
+def _safe_image_url(value):
+    from CanvasDropPayload import _is_http_url
+    if not isinstance(value, str) or len(value) > _MAX_URL_CHARACTERS or not _is_http_url(value):
+        return False
+    parsed = urlsplit(value)
+    return parsed.scheme.lower() == 'https' and parsed.username is None and parsed.password is None
+
+
+def _mount_public_image_adapter(session, *, cancelled, deadline):
+    from requests.adapters import HTTPAdapter
+    from urllib3.connection import HTTPSConnection
+    from urllib3.connectionpool import HTTPSConnectionPool
+    from urllib3.exceptions import HTTPError
+
+    class PublicImageConnection(HTTPSConnection):
+        def _new_conn(self):
+            # Filter DNS answers immediately before connecting and pass the
+            # checked numeric address to urllib3. Restore the original hostname
+            # before TLS: SNI and certificate verification still use the URL.
+            host = self._dns_host
+            _check(cancelled, deadline)
+            answers = socket.getaddrinfo(host, self.port, type=socket.SOCK_STREAM)
+            _check(cancelled, deadline)
+            candidates = list(dict.fromkeys(
+                address[0] for family, _, _, _, address in answers
+                if family in (socket.AF_INET, socket.AF_INET6) and _public_image_address(address[0])
+            ))
+            if not candidates:
+                raise ValueError('Image URLs must resolve to a public HTTPS server.')
+            connect_timeout = self.timeout
+            try:
+                last_error = None
+                for address in candidates:
+                    _check(cancelled, deadline)
+                    self._dns_host = address
+                    remaining = max(0.001, deadline - time.monotonic())
+                    self.timeout = min(connect_timeout, remaining) if connect_timeout is not None else remaining
+                    try:
+                        return super()._new_conn()
+                    except (HTTPError, OSError) as error:
+                        last_error = error
+                raise last_error
+            finally:
+                self._dns_host = host
+                self.timeout = connect_timeout
+
+    class PublicImagePool(HTTPSConnectionPool):
+        ConnectionCls = PublicImageConnection
+
+    class PublicImageAdapter(HTTPAdapter):
+        def init_poolmanager(self, *args, **kwargs):
+            super().init_poolmanager(*args, **kwargs)
+            self.poolmanager.pool_classes_by_scheme = {'https': PublicImagePool}
+
+    session.mount('https://', PublicImageAdapter())
+
+
 def _download(stream,url,limit,cancelled):
     import requests
     from urllib3.exceptions import HTTPError
-    from CanvasDropPayload import _is_http_url
-    if len(url)>_MAX_URL_CHARACTERS or not _is_http_url(url):
-        raise ValueError('Choose a valid direct image URL.')
+    if not _safe_image_url(url):
+        raise ValueError('Choose a public HTTPS image URL without embedded credentials.')
     deadline=time.monotonic()+_DOWNLOAD_SECONDS
     response=None
 
@@ -127,11 +196,13 @@ def _download(stream,url,limit,cancelled):
             # prepared destination and observe Stop before another connection.
             _check(cancelled,deadline)
             destination=prepared.url
-            if not isinstance(destination,str) or len(destination)>_MAX_URL_CHARACTERS or not _is_http_url(destination):
+            if not _safe_image_url(destination):
                 raise ValueError('The image server redirected to an invalid image URL.')
             return super().send(prepared,**options)
 
     session=ImportSession()
+    session.trust_env=False
+    _mount_public_image_adapter(session, cancelled=cancelled, deadline=deadline)
 
     def close_safely(resource):
         if resource is not None:
@@ -273,8 +344,11 @@ def read_image(source,cancelled=lambda:False,*,max_download_bytes=20*1024*1024,
         elif prefix.startswith(('http://','https://')):
             _download(snapshot,raw,max_download_bytes,cancelled)
         elif '://' in raw:
-            raise ValueError('The image URL must start with https:// or http://.')
+            raise ValueError('The image URL must start with https://.')
         else:
+            from CanvasDropPayload import _is_network_or_device_path
+            if _is_network_or_device_path(raw):
+                raise ValueError('Copy images from network shares to a local folder before importing.')
             chunks=_local_chunks(Path(raw),max_source_bytes,cancelled)
             try:
                 _write_chunks(snapshot,chunks,max_source_bytes,cancelled)

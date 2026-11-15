@@ -3,3 +3,5 @@ Source: b49dcd9a83de341135d755966ae0ed88207cf66f
 Requested: 2026-11-14
 
 Verify same-version upgrade from shared 1.0.148 test build.
+
+Verify 1.0.148 security hardening; build and validate without publication.
