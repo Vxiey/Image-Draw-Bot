@@ -4,6 +4,7 @@ import json
 import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import unittest
 from unittest.mock import Mock, patch
@@ -179,8 +180,15 @@ const context={document,AbortController,Date,JSON,Object,String,Boolean,Error,
 class MobileBrowserTests(unittest.TestCase):
     def run_browser(self,mode):
         source=mobile.MobilePreviewServer(include_original=True)._html('session-token').split('<script>',1)[1].split('</script>',1)[0]
-        result=subprocess.run([shutil.which('node'),'-e',_BROWSER_HARNESS.replace('__MODE__',json.dumps(mode))],
-                              input=source,text=True,capture_output=True,timeout=5,check=True)
+        # Feed Node a regular file. Its process-start deadline is separate
+        # from the virtual timers that check the browser's reconnect behavior.
+        with tempfile.TemporaryFile() as script:
+            script.write(source.encode('utf-8'))
+            script.seek(0)
+            result = subprocess.run(
+                [shutil.which('node'), '-e', _BROWSER_HARNESS.replace('__MODE__', json.dumps(mode))],
+                stdin=script, text=True, encoding='utf-8', capture_output=True, timeout=30, check=True,
+            )
         return json.loads(result.stdout)
 
     def test_empty_preview_shows_waiting_without_requesting_missing_images(self):

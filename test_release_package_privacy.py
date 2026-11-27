@@ -15,7 +15,7 @@ class SourceArchivePrivacyTests(unittest.TestCase):
         # A header crossing the scan chunk boundary must still be recognised.
         private_pem = b"x" * 65529 + b"\n-----BEGIN PRIVATE KEY-----\n"
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / "source"
+            root = Path(temp).resolve() / "source"
             for name in (*REQUIRED_RELEASE_FILES, *private_files, "docs/ca.pem"):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
