@@ -1,6 +1,6 @@
 # Image Draw Bot v1.0.148 — improvement ledger
 
-**Development status:** 886 distinct behavior improvements are implemented, including the original 100-change baseline. The user reduced the target to **900** on 12 November 2026. **14 remain; 1.0.148 has not been published.** Batch 42 adds 17 groups after the 869-group batch41 checkpoint. The [current progress record](v148-improvement-progress.md) separates focused-test evidence from final full-suite, Windows and published-commit gates.
+The [registry](v148-improvements.json) contains 900 distinct improvements. Batch 42 covers IDs through 886, and the [replacement ledger](v148-replacement-ledger.md) documents IDs 887–900. Earlier counts below describe individual development checkpoints. The [release notes](../RELEASE-NOTES-v1.0.148.md) summarize the user-facing changes.
 
 The count excludes tests, assertions, documentation, version changes, formatting and repeated implementations of the same correction. Each batch ledger explains the prior behavior, the runtime change and its regression evidence. Review-driven corrections within a new change retain its existing ID.
 

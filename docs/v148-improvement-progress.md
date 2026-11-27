@@ -9,8 +9,7 @@ Continue application-wide correctness, performance and security improvements, wi
 The owner authorized verified replacements for the unrecovered final 14 changes.
 The [replacement ledger](v148-replacement-ledger.md) lists the separate behaviors
 for IDs 887–900. The original entries below remain historical checkpoints.
-This notice does not assert full final-head CI, Windows installation or a
-Defender verdict. Version 1.0.148 remains unreleased.
+For the final version, see the [release notes](../RELEASE-NOTES-v1.0.148.md) and the [Windows release](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.148).
 
 ## Historical checkpoint: Batch 42
 

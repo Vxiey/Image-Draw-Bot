@@ -94,15 +94,26 @@ jobs:
       - name: Validate packaged release
         shell: pwsh
         run: |
-          python ReleaseCandidateHardening.py --release-dir release
+          python ReleaseCandidateHardening.py --release-dir release --strict-inventory
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Read the verified source version
+        id: release_version
+        shell: pwsh
+        run: |
+          $version = python -c "from Version import APP_VERSION; print(APP_VERSION)"
+          if ($LASTEXITCODE -ne 0 -or $version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-(?:rc[0-9]+|beta))?$') {
+            throw 'The checkout must identify a valid release version.'
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Validate silent installer round-trip
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $setup = Get-ChildItem release/ImageDrawBot-*-Windows-x64-Setup.exe | Select-Object -First 1
-          if (-not $setup) { throw 'Setup.exe was not produced' }
+          $setup = Get-Item -LiteralPath "release/ImageDrawBot-${env:RELEASE_VERSION}-Windows-x64-Setup.exe"
 
           $installDir = Join-Path $env:RUNNER_TEMP 'ImageDrawBot-release-install'
           if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
@@ -136,19 +147,11 @@ jobs:
           Write-Host "Uninstaller exit code: $($uninstallProcess.ExitCode)"
           if ($uninstallProcess.ExitCode -ne 0) { throw "Silent uninstall failed: $($uninstallProcess.ExitCode)" }
 
-      - name: Identify 1.0.148 upgrade candidate
-        id: upgrade_candidate
-        shell: pwsh
-        run: |
-          $version = python -c "from Version import APP_VERSION; print(APP_VERSION)"
-          if ($LASTEXITCODE -ne 0) { throw 'Could not detect the candidate version' }
-          "required=$($version -eq '1.0.148')" >> $env:GITHUB_OUTPUT
-
       # Do not substitute an unverified download when the pinned artifact expires.
       # Before expiry, preserve the exact Setup.exe through an approved, immutable
       # source; future source changes must retain the pinned SHA-256 check.
       - name: Download pinned 1.0.148 test build
-        if: steps.upgrade_candidate.outputs.required == 'True'
+        if: steps.release_version.outputs.version == '1.0.148'
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           artifact-ids: '14093456018'
@@ -157,7 +160,7 @@ jobs:
           path: ${{ runner.temp }}/idb-upgrade-baseline
 
       - name: Verify same-version upgrade preserves profile settings
-        if: steps.upgrade_candidate.outputs.required == 'True'
+        if: steps.release_version.outputs.version == '1.0.148'
         shell: pwsh
         run: |
           ./.github/scripts/test-same-version-upgrade.ps1 `
@@ -171,10 +174,10 @@ jobs:
         with:
           name: ImageDrawBot-${{ github.ref_name }}-Windows-x64
           path: |
-            release/ImageDrawBot-*-Windows-x64.zip
-            release/ImageDrawBot-*-Windows-x64-Setup.exe
-            release/ImageDrawBot-*-SHA256.txt
-            release/ImageDrawBot-*-manifest.json
+            release/ImageDrawBot-${{ steps.release_version.outputs.version }}-Windows-x64.zip
+            release/ImageDrawBot-${{ steps.release_version.outputs.version }}-Windows-x64-Setup.exe
+            release/ImageDrawBot-${{ steps.release_version.outputs.version }}-SHA256.txt
+            release/ImageDrawBot-${{ steps.release_version.outputs.version }}-manifest.json
           if-no-files-found: error
           retention-days: 30
 
@@ -224,7 +227,7 @@ jobs:
       - name: Revalidate downloaded release files
         shell: pwsh
         run: |
-          python ReleaseCandidateHardening.py --release-dir release
+          python ReleaseCandidateHardening.py --release-dir release --strict-inventory
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish verified versioned release
@@ -234,6 +237,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = python -c "from Version import APP_VERSION; print(APP_VERSION)"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the release version from the checkout.' }
           $tag = "v$version"
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $tag) { throw 'Tag does not match build version' }
           $existing = gh release view $tag --json isDraft,targetCommitish 2>$null
@@ -256,10 +260,16 @@ jobs:
             gh release create $tag --verify-tag --target $env:GITHUB_SHA --draft --title "Image Draw Bot $tag" --notes-file $notes @flags
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release draft' }
           }
-          gh release upload $tag --clobber release/ImageDrawBot-*-Windows-x64.zip release/ImageDrawBot-*-Windows-x64-Setup.exe release/ImageDrawBot-*-SHA256.txt release/ImageDrawBot-*-manifest.json
+          $assets = @(
+            "release/ImageDrawBot-$version-Windows-x64.zip"
+            "release/ImageDrawBot-$version-Windows-x64-Setup.exe"
+            "release/ImageDrawBot-$version-SHA256.txt"
+            "release/ImageDrawBot-$version-manifest.json"
+          )
+          gh release upload $tag --clobber @assets
           if ($LASTEXITCODE -ne 0) { throw 'Could not upload verified release assets' }
-          python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA
-          if ($LASTEXITCODE -ne 0) { throw 'Release tag changed before publication' }
+          python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA --verify-draft-assets @assets
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag, draft or uploaded assets failed verification' }
           gh release edit $tag --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }
 

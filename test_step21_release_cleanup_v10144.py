@@ -82,8 +82,8 @@ class Step21ReleaseCleanupTests(unittest.TestCase):
         self.assertRegex(workflow, r"actions/upload-artifact@[0-9a-f]{40} # v7")
         self.assertIn("python ReleasePackage.py --check", workflow)
         self.assertIn("ReleaseCandidateHardening.py --source-gate", workflow)
-        self.assertIn("ImageDrawBot-*-Windows-x64.zip", workflow)
-        self.assertIn("ImageDrawBot-*-manifest.json", workflow)
+        self.assertIn("ImageDrawBot-${{ steps.release_version.outputs.version }}-Windows-x64.zip", workflow)
+        self.assertIn("ImageDrawBot-${{ steps.release_version.outputs.version }}-manifest.json", workflow)
         self.assertIn("--notes-file", workflow)
 
     def test_step22_roadmap_rolls_forward_after_implementation(self):

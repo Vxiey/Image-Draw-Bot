@@ -65,6 +65,29 @@ class ReleasePublicationOptInTests(unittest.TestCase):
         self.assertIn('    branches:\n      - main\n', text)
         self.assertIn("    tags:\n      - 'v*'\n", text)
 
+    def test_install_and_both_uploads_select_only_the_verified_version(self):
+        text = WORKFLOW.read_text()
+        version = step(text, 'Read the verified source version')
+        self.assertIn('from Version import APP_VERSION', version)
+        self.assertIn('"version=$version" >> $env:GITHUB_OUTPUT', version)
+        install = step(text, 'Validate silent installer round-trip')
+        token = '${{ steps.release_version.outputs.version }}'
+        self.assertIn('RELEASE_VERSION: ' + token, install)
+        self.assertIn('Get-Item -LiteralPath "release/ImageDrawBot-${env:RELEASE_VERSION}-Windows-x64-Setup.exe"', install)
+        self.assertNotIn('Select-Object -First', install)
+        for name in ('Validate packaged release', 'Revalidate downloaded release files'):
+            self.assertIn('ReleaseCandidateHardening.py --release-dir release --strict-inventory', step(text, name))
+
+        suffixes = ('Windows-x64.zip', 'Windows-x64-Setup.exe', 'SHA256.txt', 'manifest.json')
+        upload = step(text, 'Upload workflow artifacts')
+        paths = re.findall(r'^            (release/.+)$', upload, re.MULTILINE)
+        self.assertCountEqual(paths, [f'release/ImageDrawBot-{token}-{suffix}' for suffix in suffixes])
+        publish = step(text, 'Publish verified versioned release')
+        self.assertIn('from Version import APP_VERSION', publish)
+        paths = re.findall(r'^            "(release/.+)"$', publish, re.MULTILINE)
+        self.assertCountEqual(paths, [f'release/ImageDrawBot-$version-{suffix}' for suffix in suffixes])
+        self.assertIn('gh release upload $tag --clobber @assets', publish)
+
 
 if __name__ == '__main__':
     unittest.main()

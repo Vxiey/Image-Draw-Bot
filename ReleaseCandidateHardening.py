@@ -454,8 +454,29 @@ def validate_manifest(path: Path, *, app_version: str, expected_files: Iterable[
     return data
 
 
+def _verify_release_inventory(release: Path, expected: set[str]) -> None:
+    """Require a single publishable artifact set in a build or download directory."""
+    info = release.lstat()
+    if not stat.S_ISDIR(info.st_mode) or getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ReleaseGateError('Release inventory requires an ordinary directory.')
+    found = set()
+    for entry in release.iterdir():
+        # publish_release retains its cross-process lock beside the artifacts.
+        if entry.name not in expected and entry.name != '.release-publication.lock':
+            raise ReleaseGateError(f'Unexpected entry in release inventory: {entry.name!r}')
+        info = entry.lstat()
+        if (not stat.S_ISREG(info.st_mode)
+                or getattr(info, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+            raise ReleaseGateError(f'Release inventory entry must be a regular file: {entry.name!r}')
+        found.add(entry.name)
+    missing = expected - found
+    if missing:
+        raise ReleaseGateError('Release inventory is missing: ' + ', '.join(sorted(missing)))
+
+
 def validate_windows_release(release_dir: Path, *, app_version: str | None = None,
-                             require_installer: bool = True, gpu: bool = False) -> dict:
+                             require_installer: bool = True, gpu: bool = False,
+                             strict_inventory: bool = False) -> dict:
     if gpu and require_installer:
         raise ReleaseGateError("CUDA releases are ZIP-only and cannot require an installer.")
     from Version import APP_VERSION, FILE_VERSION, BUILD_CHANNEL
@@ -467,11 +488,14 @@ def validate_windows_release(release_dir: Path, *, app_version: str | None = Non
     checksum_path = release / f"ImageDrawBot-{app_version}-SHA256.txt"
     manifest_path = release / f"ImageDrawBot-{app_version}-manifest.json"
 
-    result = {"zip": validate_windows_zip(zip_path)}
     expected = [zip_path.name]
     if require_installer:
-        result["installer"] = validate_installer(setup_path, app_version=app_version)
         expected.append(setup_path.name)
+    if strict_inventory:
+        _verify_release_inventory(release, {*expected, checksum_path.name, manifest_path.name})
+    result = {"zip": validate_windows_zip(zip_path)}
+    if require_installer:
+        result["installer"] = validate_installer(setup_path, app_version=app_version)
     result["checksums"] = verify_checksum_file(checksum_path, base_dir=release, expected_files=expected)
     result["manifest"] = validate_manifest(manifest_path, app_version=app_version, expected_files=expected,
                                            file_version=FILE_VERSION, channel=BUILD_CHANNEL, base_dir=release)
@@ -518,18 +542,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-gate", action="store_true")
     parser.add_argument("--scope-gate", action="store_true", help="Require completed 900-group scope before publication")
     parser.add_argument("--release-dir")
+    parser.add_argument("--strict-inventory", action="store_true",
+                        help="Require exactly this variant's files in the release directory")
     parser.add_argument("--gpu", action="store_true", help="Validate the optional CUDA ZIP release instead of the standard installer release")
     parser.add_argument("--soak-cycles", type=int, default=DEFAULT_SOAK_CYCLES)
     args = parser.parse_args(argv)
     if args.gpu and not args.release_dir:
         parser.error("--gpu requires --release-dir")
+    if args.strict_inventory and not args.release_dir:
+        parser.error("--strict-inventory requires --release-dir")
     if args.scope_gate:
         print(json.dumps(validate_release_scope(Path(__file__).resolve().parent), indent=2, sort_keys=True))
     if args.source_gate:
         report = run_source_release_gate(Path(__file__).resolve().parent, soak_cycles=args.soak_cycles)
         print(json.dumps(report.as_dict(), indent=2, sort_keys=True))
     if args.release_dir:
-        print(json.dumps(validate_windows_release(Path(args.release_dir),require_installer=not args.gpu,gpu=args.gpu), indent=2, sort_keys=True))
+        result = validate_windows_release(Path(args.release_dir), require_installer=not args.gpu,
+                                          gpu=args.gpu, strict_inventory=args.strict_inventory)
+        print(json.dumps(result, indent=2, sort_keys=True))
     if not args.source_gate and not args.release_dir and not args.scope_gate:
         parser.error("choose --source-gate, --scope-gate and/or --release-dir")
     return 0

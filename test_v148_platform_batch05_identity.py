@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -162,7 +163,7 @@ class ReleaseWorkflowPublicationTests(unittest.TestCase):
         first = text.index('python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA --create-missing-tag')
         create = text.index('gh release create $tag --verify-tag')
         upload = text.index('gh release upload $tag')
-        second = text.index('python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA\n', upload)
+        second = text.index('python ReleaseIdentity.py --tag $tag --expected-commit $env:GITHUB_SHA --verify-draft-assets @assets', upload)
         publish = text.index('gh release edit $tag --draft=false')
         self.assertLess(first, create)
         self.assertLess(create, upload)
@@ -185,6 +186,51 @@ class ReleaseWorkflowPublicationTests(unittest.TestCase):
         self.assertEqual(len(keys), 1, 'main/tag publishers must hold the same workflow mutex')
         self.assertEqual(fields['cancel-in-progress'].strip(), 'false')
         self.assertEqual(fields['queue'].strip(), 'max', 'a third request must not replace the sole pending publication')
+
+
+class DraftAssetVerificationTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.paths = []
+        assets = []
+        for suffix in ('Windows-x64.zip', 'Windows-x64-Setup.exe', 'SHA256.txt', 'manifest.json'):
+            path = Path(self.directory.name) / ('ImageDrawBot-1.0.148-' + suffix)
+            content = path.name.encode()
+            path.write_bytes(content)
+            self.paths.append(path)
+            assets.append(dict(name=path.name, state='uploaded', size=len(content),
+                               digest='sha256:' + hashlib.sha256(content).hexdigest()))
+        self.release = dict(tagName=TAG, targetCommitish=COMMIT, isDraft=True, assets=assets)
+
+    def verify(self, release):
+        def read(arguments, **options):
+            self.assertEqual(arguments, ['gh', 'release', 'view', TAG, '--repo', 'github.com/' + identity.REPOSITORY,
+                                         '--json', 'tagName,targetCommitish,isDraft,assets'])
+            return SimpleNamespace(returncode=0, stdout=json.dumps(release))
+        return identity.verify_draft_assets(TAG, COMMIT, self.paths, run=read)
+
+    def test_exact_hosted_draft_matches_all_local_bytes_independent_of_order(self):
+        self.release['assets'].reverse()
+        self.assertEqual(self.verify(self.release), {'verified_draft_assets': 4})
+
+    def test_rejects_changed_ownership_inventory_or_bytes(self):
+        for key, value in (('tagName', 'v0.0.1'), ('isDraft', False), ('targetCommitish', OTHER)):
+            with self.subTest(key=key), self.assertRaises(identity.ReleaseIdentityError):
+                self.verify(dict(self.release, **{key: value}))
+        assets = self.release['assets']
+        for replacement in (assets[:-1], [*assets, assets[0]], [assets[0], *assets[:-1]],
+                            [dict(assets[0], name='unexpected.exe'), *assets[1:]]):
+            with self.assertRaises(identity.ReleaseIdentityError):
+                self.verify(dict(self.release, assets=replacement))
+        for key, value in (('state', 'starter'), ('digest', None), ('digest', 'sha256:' + '0' * 64),
+                           ('size', 1), ('size', True)):
+            with self.subTest(key=key, value=value), self.assertRaises(identity.ReleaseIdentityError):
+                self.verify(dict(self.release, assets=[dict(assets[0], **{key:value}), *assets[1:]]))
+        # A stale (same-length) local sidecar is also detected.
+        self.paths[-1].write_bytes(b'x' * self.paths[-1].stat().st_size)
+        with self.assertRaises(identity.ReleaseIdentityError):
+            self.verify(self.release)
 
 
 if __name__ == '__main__':

@@ -143,6 +143,30 @@ class ReleaseVariantTests(unittest.TestCase):
             with self.assertRaisesRegex(hardening.ReleaseGateError, 'Windows ZIP is missing'):
                 hardening.main(['--release-dir', str(release)])
 
+    def test_strict_inventory_checks_exact_publishable_set_for_each_variant(self):
+        for gpu, installer in ((False, True), (False, False), (True, False)):
+            with self.subTest(gpu=gpu, installer=installer), tempfile.TemporaryDirectory() as temporary:
+                release, _ = self.build_fixture(Path(temporary), gpu=gpu, installer=installer)
+                options = dict(gpu=gpu, require_installer=installer)
+                hardening.validate_windows_release(release, **options, strict_inventory=True)
+                stale = release / 'ImageDrawBot-0.0.1-Windows-x64.zip'
+                stale.write_bytes(b'previous build')
+                hardening.validate_windows_release(release, **options)
+                with self.assertRaisesRegex(hardening.ReleaseGateError, 'Unexpected entry'):
+                    hardening.validate_windows_release(release, **options, strict_inventory=True)
+                self.assertEqual(stale.read_bytes(), b'previous build')
+
+    def test_strict_inventory_checks_metadata_type_before_reading_and_requires_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            release, _ = self.build_fixture(Path(temporary), installer=True)
+            manifest = release / f'ImageDrawBot-{APP_VERSION}-manifest.json'
+            manifest.unlink()
+            with self.assertRaisesRegex(hardening.ReleaseGateError, 'inventory is missing'):
+                hardening.main(['--release-dir', str(release), '--strict-inventory'])
+            manifest.mkdir()
+            with self.assertRaisesRegex(hardening.ReleaseGateError, 'must be a regular file'):
+                hardening.main(['--release-dir', str(release), '--strict-inventory'])
+
     def test_standalone_gpu_flag_requires_a_release_directory(self):
         with patch('sys.stderr', new_callable=StringIO) as error_output:
             with self.assertRaises(SystemExit) as caught:

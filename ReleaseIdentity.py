@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import re
 import subprocess
 from urllib.parse import quote
@@ -141,14 +142,57 @@ def ensure_release_tag(tag, expected_commit, *, create_missing=False, api=None):
     return {'repository': REPOSITORY, 'tag': tag, 'commit': actual, 'created': created}
 
 
+def verify_draft_assets(tag, expected_commit, paths, *, run=subprocess.run):
+    """Compare GitHub's draft metadata to the four files provided to release upload."""
+    from ReleasePackage import sha256
+    tag, expected_commit = _validate_inputs(tag, expected_commit)
+    paths = tuple(map(Path, paths))
+    expected = {path.name: path for path in paths}
+    if len(paths) != 4 or len(expected) != 4:
+        raise ReleaseIdentityError('Publication requires four distinct local release files.')
+    try:
+        result = run(['gh', 'release', 'view', tag, '--repo', 'github.com/' + REPOSITORY,
+                      '--json', 'tagName,targetCommitish,isDraft,assets'],
+                     capture_output=True, text=True, encoding='utf-8', timeout=60, check=False)
+        if result.returncode or len(result.stdout) > 1024 * 1024:
+            raise ReleaseIdentityError('Could not read a bounded draft release inventory.')
+        release = json.loads(result.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError, RecursionError) as error:
+        raise ReleaseIdentityError('Could not read valid GitHub draft metadata.') from error
+    if (not isinstance(release, dict) or release.get('isDraft') is not True
+            or release.get('tagName') != tag or release.get('targetCommitish') != expected_commit):
+        raise ReleaseIdentityError('The draft no longer matches the release tag and build commit.')
+    assets = release.get('assets')
+    if not isinstance(assets, list) or len(assets) != len(expected):
+        raise ReleaseIdentityError('The draft must contain exactly the four verified release assets.')
+    for asset in assets:
+        name = asset.get('name') if isinstance(asset, dict) else None
+        path = expected.pop(name, None) if isinstance(name, str) else None
+        if path is None or asset.get('state') != 'uploaded':
+            raise ReleaseIdentityError('The draft contains an unexpected, duplicate or incomplete asset.')
+        try:
+            size = path.stat().st_size
+            if (type(asset.get('size')) is not int or size <= 0 or asset['size'] != size
+                    or asset.get('digest') != 'sha256:' + sha256(path)):
+                raise ReleaseIdentityError(f'The uploaded size or SHA-256 differs for {name}.')
+        except OSError as error:
+            raise ReleaseIdentityError(f'Cannot verify the local bytes for {name}.') from error
+    return {'verified_draft_assets': len(assets)}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tag', required=True)
     parser.add_argument('--expected-commit', required=True)
-    parser.add_argument('--create-missing-tag', action='store_true', help='Explicitly create a missing ref at the build commit; never change an existing ref.')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--create-missing-tag', action='store_true', help='Explicitly create a missing ref at the build commit; never change an existing ref.')
+    mode.add_argument('--verify-draft-assets', nargs=4, type=Path, metavar='FILE',
+                      help='Require the GitHub draft to contain exactly these uploaded files with matching SHA-256.')
     args = parser.parse_args(argv)
     try:
         result = ensure_release_tag(args.tag, args.expected_commit, create_missing=args.create_missing_tag)
+        if args.verify_draft_assets:
+            result.update(verify_draft_assets(args.tag, args.expected_commit, args.verify_draft_assets))
     except ReleaseIdentityError as error:
         parser.exit(1, f'Release identity check failed: {error}\n')
     print(json.dumps(result, sort_keys=True))

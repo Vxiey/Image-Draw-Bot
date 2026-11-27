@@ -1,14 +1,6 @@
-# Image Draw Bot v1.0.148 — Development in progress
+# Image Draw Bot v1.0.148
 
-- Current batch42 checkpoint: **886 of the revised 900 distinct improvements, 14 remaining**. Adds four application, seven rendering, two runtime and four native-input/resource groups. [Current ledgers and verification status](docs/v148-improvement-progress.md). Version 1.0.148 remains in development; final full-suite, Windows and packaged-application gates are separate.
-- Historical batch41 checkpoint: **869 of the revised 900 distinct improvements, 31 remaining**. Apply typed timing evidence, retain Pixel detail that fits the actual execution budget, preserve inherited dry-run brush widths, and bind hardware/worker evidence to its real context. Background, native-input and memory improvements from batch40 are included. [Current ledgers and verification status](docs/v148-improvement-progress.md). Version 1.0.148 remains in development.
-- Historical batch38 checkpoint: **844 distinct improvements, 156 remaining**. One opaque Auto-count preparation group is new; profile publication/identity, target-probe cancellation, image ownership and Extra Fast cost reuse complete existing contracts. [Implementation and measured evidence](docs/v148-batch38-lifecycle-and-planning.md); [validation](docs/v148-batch38-validation.json). Version 1.0.148 remains unreleased, and merge/release require explicit approval.
-- The saved batch12 checkpoint records 779 behavior improvements: the 100-change merged baseline and 679 further changes on the development branch. The target at that checkpoint was 1,000; 1.0.148 has not been published.
-- Resumed maintenance adds faster 2-opt route search and bounded Windows verification: **781 total, 219 remaining**. Preview/brush completions, package exclusions, version updates and documentation add no duplicate IDs.
-- The work covers color/GPU processing, drawing geometry and budgets, target calibration, image import, previews, keyboard controls, persistence, recovery, native input and release packaging. The [complete progress ledger](docs/IMPROVEMENTS-v1.0.148.md) maps the recorded changes to implementation and regression evidence.
-- Saved checkpoint `4704a94d` passed 3,626 local tests (45 platform/hardware skips), all four Windows/Linux and dependency CI jobs, and all seven commit checks. Windows self-test, bundle validation and packaged native drag-and-drop also passed; exact run links are in the [resume audit](docs/v148-improvement-progress.md#resume-audit--7-november-2026).
-- The resumed work completes final-preview color/brush ordering and preserves the real brush width in explicit Pixel Art and Line Art. Their new validation is separate from the saved checkpoint and does not add duplicate improvement IDs.
-- See [development release notes](RELEASE-NOTES-v1.0.148.md) and [available downloads](README.md#download-image-draw-bot-for-windows). The latest published build remains the 1.0.146-rc3 prerelease.
+Pixel Accurate can show missed details side by side and prioritize post-draw corrections within a time limit. This version includes the 900 registered improvements across drawing, calibration, performance and reliability. See the [release notes](RELEASE-NOTES-v1.0.148.md) and [Windows downloads](README.md#download-image-draw-bot-for-windows).
 
 # Image Draw Bot v1.0.146-rc3 — Security & Windows Packaging
 

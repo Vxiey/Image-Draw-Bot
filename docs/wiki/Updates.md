@@ -1,6 +1,6 @@
 # Updates and release history
 
-Current published release: [v1.0.145-rc5](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.145-rc5). Picture colors receive a bounded perceptual refinement pass, and matching avoids the standard-palette brightness bias. The separate Smart custom palette / exact color button has been removed. Use the existing Custom color palette for picture, then Build preview. Saving with + and 750 ms pauses remains.
+Version 1.0.148 adds a side-by-side review of missed Pixel Accurate details and per-profile correction time limits. See the [release notes](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.148) for the Windows downloads and changes.
 
 ## Update the installed app
 
