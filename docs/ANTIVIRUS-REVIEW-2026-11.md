@@ -214,3 +214,30 @@ obfuscation is added to suppress a detector.
 See [the original 100 v1.0.148 improvements](100-IMPROVEMENTS-v1.0.148.md) for the remaining
 changes and regression evidence. Only analysis of the exact new installer and
 application hashes can determine whether vendors still flag those artifacts.
+
+## Source review on 27 November 2026
+
+The mouse and window-monitor backends, app identity setup and cursor lookup now
+load their Windows libraries through the shared System32 loader. The two
+backends keep separate ctypes function signatures so one cannot change the
+other's ABI. A successful CUDA self-test also avoids vendor hardware discovery
+and its optional external process. See Microsoft's guidance on [loading Windows
+libraries securely](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-security).
+
+Recovery reads only the PNG format written by the app. It checks the open
+file's type and size before hashing or decoding it. The source and Windows
+package checks cover common credential paths and PEM private-key blocks.
+Windows packages include the five required golden-regression files at their
+runtime paths. Local files added alongside them are excluded from that resource
+directory.
+
+CI and wiki jobs now pin their actions to upstream commits and avoid leaving
+checkout credentials in the worktree. Thirteen one-off workflows from the
+1.0.145 release-candidate series had retained write access to main after their
+patches landed. They have been retired. See [GitHub's Actions security
+guidance](https://docs.github.com/en/actions/reference/security/secure-use).
+
+The historical reports above still apply to their listed hashes. This review
+did not submit a new binary to VirusTotal or identify a vendor signature behind
+any of the past verdicts. VirusTotal explains how to [request review from the
+detecting vendor](https://docs.virustotal.com/docs/false-positive).

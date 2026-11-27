@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 from ctypes import wintypes
+from WindowsSystem import private_system_library
 
 LONG = ctypes.c_int32
 DWORD = ctypes.c_uint32
@@ -63,7 +64,7 @@ class WindowsMouse:
         if sys.platform != 'win32':
             raise OSError('Mouse control requires Windows.')
 
-        self.api = ctypes.WinDLL('user32', use_last_error=True)
+        self.api = private_system_library('user32.dll', use_last_error=True)
         self._native_input_lock = threading.RLock()
         self.held = False
         # Input is opt-in. Merely creating Image Draw Bot or switching profiles can

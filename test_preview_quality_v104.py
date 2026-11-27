@@ -1,9 +1,29 @@
 import unittest
 from unittest.mock import patch
+from contextlib import closing
+from pathlib import Path
 from PIL import Image
 from PreviewQuality import full_preview_options,viewport_image
 
 class PreviewQualityTests(unittest.TestCase):
+    def test_opaque_keyed_and_alpha_assets_match_white_compositing(self):
+        assets = Path(__file__).with_name('assets')
+        for name, keyed in (('image-draw-bot-app-screenshot.webp', False),
+                            ('image-draw-bot-app-screenshot.webp', True),
+                            ('image-draw-bot-icon.png', False)):
+            with self.subTest(name=name, keyed=keyed), Image.open(assets / name) as source:
+                if keyed:
+                    source.info['transparency'] = source.getpixel((0, 0))
+                with closing(source.convert('RGBA')) as rgba, \
+                        closing(Image.new('RGBA', source.size, 'white')) as background:
+                    background.alpha_composite(rgba)
+                    result, _ = viewport_image(source, source.size, zoom=1)
+                    with closing(result), closing(background.convert('RGB')) as expected:
+                        self.assertEqual(result.mode, 'RGB')
+                        self.assertEqual(result.info, {})
+                        self.assertEqual(result.tobytes(), expected.tobytes())
+                source.getpixel((0, 0))
+
     def test_options_preserve_quality_and_time(self):
         original={'ram_budget_mb':1024,'color_layers':'All','max_seconds':90,'detail':1}
         result=full_preview_options(original,(1200,800))

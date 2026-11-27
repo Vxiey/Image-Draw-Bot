@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import stat
 import tempfile
 import threading
 import time
@@ -424,18 +425,26 @@ def load_cached_image(expected_sha256=_CURRENT_IMAGE, *, cancelled=lambda: False
             if not _valid_digest(expected_sha256):
                 return None
             path, digest = _image_path(expected_sha256), expected_sha256
-        if path is None or not path.is_file() or path.stat().st_size > MAX_CACHED_IMAGE_BYTES:
+        if path is None:
             return None
-        # Hash and decode the same open file so a concurrent replacement cannot
-        # change the pixels after identity verification.
-        with path.open('rb') as stream, warnings.catch_warnings():
+
+        def open_reader(name, flags):
+            # A substituted FIFO must not block opening on platforms with FIFOs.
+            return os.open(name, flags | getattr(os, 'O_NONBLOCK', 0))
+
+        # Validate, hash and decode the same file, including for legacy caches
+        # without a digest. Recovery writers have always produced PNG.
+        with open(path, 'rb', opener=open_reader) as stream, warnings.catch_warnings():
+            metadata = os.fstat(stream.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_CACHED_IMAGE_BYTES:
+                return None
             warnings.simplefilter('error', Image.DecompressionBombWarning)
             if digest is not None:
                 actual = _stream_digest(stream,cancelled=cancelled)
                 if actual != digest:
                     return None
                 stream.seek(0)
-            with Image.open(stream) as image:
+            with Image.open(stream, formats=('PNG',)) as image:
                 if image.width < 1 or image.height < 1 or image.width * image.height > MAX_CACHED_IMAGE_PIXELS:
                     return None
                 if cancelled():raise InterruptedError('Recovery loading cancelled.')

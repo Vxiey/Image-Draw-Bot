@@ -4,6 +4,7 @@ import logging
 import tkinter as tk
 
 from RuntimePaths import resource_path
+from WindowsSystem import load_system_library
 
 APP_USER_MODEL_ID = 'Vxiey.ImageDrawBot'
 ICON_PNG = 'assets/image-draw-bot-icon.png'
@@ -16,7 +17,7 @@ def set_windows_app_id():
         return
     try:
         import ctypes
-        setter = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID
+        setter = load_system_library('shell32.dll')['SetCurrentProcessExplicitAppUserModelID']
         setter.argtypes = [ctypes.c_wchar_p]
         setter.restype = ctypes.c_int32
         result = setter(APP_USER_MODEL_ID)
@@ -85,7 +86,7 @@ def configure_root(root):
         return root
     try:
         from PIL import Image, ImageTk
-        with Image.open(resource_path(ICON_PNG)) as image:
+        with Image.open(resource_path(ICON_PNG), formats=('PNG',)) as image:
             root._image_draw_bot_icons = tuple(
                 ImageTk.PhotoImage(image.resize((n,n), Image.Resampling.LANCZOS), master=root)
                 for n in (16,32,48,64,128,256))
@@ -165,6 +166,6 @@ def header_image(size=42):
     """Use the same high-resolution master for both CustomTkinter themes/DPI."""
     import customtkinter as ctk
     from PIL import Image
-    with Image.open(resource_path(ICON_PNG)) as source:
+    with Image.open(resource_path(ICON_PNG), formats=('PNG',)) as source:
         image = source.convert('RGBA')
     return ctk.CTkImage(light_image=image, dark_image=image, size=(size,size))

@@ -15,6 +15,15 @@ import tempfile
 from Version import APP_VERSION, FILE_VERSION
 from BuildEnvironment import (BuildEnvironmentError, Builder, build_workspace,
                               prepare_builder, require_build_workspace)
+from ReleasePackage import _is_link, is_credential_path, is_private_pem_file
+
+
+# The source-run regression directory is writable. Only these shipped
+# fixtures belong in the Windows app; their runtime paths are relative to it.
+GOLDEN_FIXTURE_FILES = (
+    'manifest.json', 'dominant-hue-four-color.png', 'red-bananas-texture.png',
+    'small-detail-preservation.png', 'yellow-banana-hue-guard.png',
+)
 
 
 def documentation_data(base: Path) -> list[tuple[Path, str]]:
@@ -24,10 +33,7 @@ def documentation_data(base: Path) -> list[tuple[Path, str]]:
     data = []
     if not docs.exists():
         return data
-    def is_link(path):
-        info = path.lstat()
-        return stat.S_ISLNK(info.st_mode) or getattr(info, 'st_reparse_tag', 0) in (0xA0000003, 0xA000000C)
-    if docs.exists() and is_link(docs):
+    if _is_link(docs):
         raise ValueError('Bundled documentation must not be a linked directory.')
     def walk_error(error):
         raise error
@@ -35,10 +41,11 @@ def documentation_data(base: Path) -> list[tuple[Path, str]]:
         current = Path(current)
         directories[:] = sorted(name for name in directories
             if tuple(part.casefold() for part in (current / name).relative_to(docs).parts[:2]) != ('history', 'archives')
-            and not is_link(current / name))
+            and not is_credential_path(name) and not _is_link(current / name))
         for name in sorted(filenames):
             source = current / name
-            if not is_link(source) and stat.S_ISREG(source.stat().st_mode):
+            if (not is_credential_path(name) and not _is_link(source)
+                    and stat.S_ISREG(source.stat().st_mode) and not is_private_pem_file(source)):
                 data.append((source, source.parent.relative_to(base).as_posix()))
     return data
 
@@ -156,7 +163,6 @@ def build_application(base: Path, builder: Builder, *, onefile=False, gpu_build=
         '--add-data', str(base / 'STEP-23-UNIVERSAL-GPU-ACCELERATION.md') + ';.',
         '--add-data', str(base / 'STEP-24-ADAPTIVE-DETAIL-ZOOM.md') + ';.',
         '--add-data', str(base / 'STEP-25-QUICK-SKETCH-FILL-CONTOUR.md') + ';.',
-        '--add-data', str(base / 'golden-regression') + ';golden-regression',
         '--hidden-import', 'PreviewSafety',
         '--hidden-import', 'ResourceAllocation',
         '--hidden-import', 'ResourceScheduler',
@@ -279,7 +285,7 @@ def build_application(base: Path, builder: Builder, *, onefile=False, gpu_build=
         'STEP-18-RELEASE-STABILITY-HARDENING.md', 'RELEASE-NOTES-Step19-Step20-Profile-Polish-UX-Wizard.md',
         'STEP-20-BEGINNER-SETUP-WIZARD.md', 'STEP-19-FINAL-PROFILE-POLISH.md',
         'STEP-21-BUILD-PUBLISHER-GITHUB-RELEASE.md', 'RELEASE-NOTES-Step21-Build-Publisher-GitHub-Release.md',
-        'GITHUB-RELEASE-TEMPLATE.md', 'ROADMAP-STEP22-PLUS.md', 'golden-regression', 'README-INDEX.md',
+        'GITHUB-RELEASE-TEMPLATE.md', 'ROADMAP-STEP22-PLUS.md', 'README-INDEX.md',
         'VERSION-HISTORY.md', 'RELEASE-NOTES-v1.0.90-beta.md', 'RELEASE-NOTES-v1.0.90-Adaptive-Brush.md',
         'RELEASE-NOTES-v1.0.91-beta.md', 'RELEASE-NOTES-v1.0.92-beta.md', 'RELEASE-NOTES-v1.0.93-beta.md',
         'RELEASE-NOTES-v1.0.94-beta.md', 'RELEASE-NOTES-v1.0.103-beta.md', 'RELEASE-NOTES-v1.0.124-beta.md',
@@ -296,8 +302,17 @@ def build_application(base: Path, builder: Builder, *, onefile=False, gpu_build=
     ]
     for name in optional_data:
         source = base / name
-        if source.exists():
+        if source.is_file() and not _is_link(source):
             command.extend(['--add-data', str(source) + ';.'])
+
+    fixtures = base / 'golden-regression'
+    if fixtures.exists() and _is_link(fixtures):
+        raise ValueError('Bundled regression fixtures must not be a linked directory.')
+    for name in GOLDEN_FIXTURE_FILES:
+        source = fixtures / name
+        if source.exists() and (_is_link(source) or not source.is_file()):
+            raise ValueError(f'Bundled regression fixture must be a regular file: {name}')
+        command.extend(['--add-data', str(source) + ';golden-regression'])
 
     # Stage filtered help as one tree: per-file arguments can exceed Windows'
     # command-line limit in a long checkout path. The docs destination also

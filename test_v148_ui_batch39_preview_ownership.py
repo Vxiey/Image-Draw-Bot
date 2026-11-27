@@ -146,6 +146,23 @@ class PreviewAttemptOwnershipTests(PlanStatusFixture):
                 self.assertIs(app.original, source)
                 self.assertEqual(source.tobytes(), pixels)
 
+    def test_explicit_preview_retires_debounced_auto_preview(self):
+        app = self.app()
+        app.preview_mode.set('Auto light')
+        self.assertTrue(app._maybe_auto_preview())
+        first = app.preview_after
+        self.assertTrue(app._maybe_auto_preview())
+        latest = app.preview_after
+        app.root.history[first]()
+        self.assertEqual(app.preview_after, latest)
+        self.assertIsNone(app.worker)
+        plans, events = self.build(app, full_detail=True)
+        self.assertNotIn(latest, app.root.jobs)
+        self.deliver(app, events)
+        app.root.history[latest]()
+        self.assertIsNone(app.worker)
+        self.assertIs(app.plan, plans[0])
+
     def test_expired_return_closes_first_plan_before_the_real_fallback_starts(self):
         app = self.app()
         pixels = app.original.tobytes()
@@ -197,9 +214,22 @@ class PreviewAttemptOwnershipTests(PlanStatusFixture):
         self.assertEqual([kind for kind, _ in events], ['preview_timeout', 'done'])
         self.assert_closed_plan(plans[0])
         self.deliver(app, events)
+        self.assertIn('exceeded its time limit', app.summary.get())
         self.assertIs(app.plan, previous)
         self.assertEqual([image.tobytes() for image in plan_images(previous)], previous_pixels)
         self.assertEqual(app.original.tobytes(), source_pixels)
+
+    def test_timeout_notification_cannot_overwrite_changed_or_stopped_preview(self):
+        app = self.app()
+        for generation, stopped in ((app.preview_generation - 1, False), (app.preview_generation, True)):
+            with self.subTest(generation=generation, stopped=stopped):
+                if stopped:
+                    DrawBot.DrawBotApp._request_stop(app)
+                labels = (app.status, app.summary, app.draw_time_text)
+                for label in labels:
+                    label.set('Current result')
+                app._handle_event('preview_timeout', generation)
+                self.assertEqual([label.get() for label in labels], ['Current result'] * 3)
 
     def test_stop_or_close_at_real_planner_return_releases_result_and_stop_can_retry(self):
         for closing in (False, True):

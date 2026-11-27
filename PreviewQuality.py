@@ -1,6 +1,6 @@
 """Bounded native-resolution planning and viewport-only image rendering."""
 from PIL import Image
-from contextlib import closing
+from contextlib import ExitStack
 import math
 from numbers import Integral
 from typing import NamedTuple
@@ -84,9 +84,23 @@ def viewport_geometry(image_size,size,zoom=0,pan=(0,0)):
 
 def viewport_image(image,size,zoom=0,pan=(0,0)):
     geometry=viewport_geometry(image.size,size,zoom,pan)
-    with closing(image.resize(geometry.target,Image.Resampling.NEAREST if geometry.scale>=1 else Image.Resampling.LANCZOS,
-                              box=geometry.box)) as resized:
-        with closing(resized.convert('RGBA')) as crop:
-            with closing(Image.new('RGBA',geometry.target,'white')) as out:
-                out.alpha_composite(crop)
-                return out.convert('RGB'),geometry.scale
+    resampling=Image.Resampling.NEAREST if geometry.scale>=1 else Image.Resampling.LANCZOS
+    with ExitStack() as temporaries:
+        resized=image.resize(geometry.target,resampling,box=geometry.box)
+        if resized.mode=='RGB' and 'transparency' not in resized.info:
+            # The resize is already an independent, display-ready bitmap.
+            resized.info.clear()
+            return resized,geometry.scale
+        temporaries.callback(resized.close)
+        rgba=resized
+        if resized.mode!='RGBA':
+            rgba=resized.convert('RGBA')
+            temporaries.callback(rgba.close)
+        # Composite against the opaque background directly in the output mode.
+        out=Image.new('RGB',geometry.target,'white')
+        try:
+            out.paste(rgba,(0,0),rgba)
+        except BaseException:
+            out.close()
+            raise
+        return out,geometry.scale

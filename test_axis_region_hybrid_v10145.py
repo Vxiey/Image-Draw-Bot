@@ -1,5 +1,7 @@
 import unittest
 import random
+from pathlib import Path
+import numpy as np
 from PIL import Image,ImageDraw
 from AxisRegionPlanner import horizontal_components,regional_axis_variants,mask_horizontal_runs,verticalize_horizontal_runs
 from GarticSketchPaths import trace_contours
@@ -22,6 +24,58 @@ def raster_paths(paths,size=(128,128)):
 
 
 class AxisRegionHybridTests(unittest.TestCase):
+    def test_normalization_stops_before_reading_input_and_between_batches(self):
+        class CountingRuns:
+            consumed = 0
+
+            def __len__(self):
+                return 4096
+
+            def __iter__(self):
+                for y in range(len(self)):
+                    self.consumed += 1
+                    yield (0, y, 4, y)
+
+        for plan in (horizontal_components, regional_axis_variants, verticalize_horizontal_runs):
+            with self.subTest(planner=plan.__name__):
+                strokes = CountingRuns()
+                with self.assertRaises(InterruptedError):
+                    plan(strokes, cancelled=lambda: True)
+                self.assertEqual(strokes.consumed, 0)
+                with self.assertRaises(InterruptedError):
+                    plan(strokes, cancelled=lambda: strokes.consumed >= 1)
+                self.assertLessEqual(strokes.consumed, 512)
+
+    def test_horizontal_runs_preserve_row_edges_and_order_across_tiles(self):
+        fixture = Path(__file__).parent / 'golden-regression' / 'small-detail-preservation.png'
+        with Image.open(fixture) as source, source.convert('L') as grayscale:
+            ink = np.asarray(grayscale) < 128
+        for mask in (ink, ink[::-1, ::-2], ink[:, :1], ink[:, :0], ink[:0]):
+            with self.subTest(shape=mask.shape):
+                expected = []
+                for y, row in enumerate(mask):
+                    start = None
+                    for x, pixel in enumerate(row):
+                        if pixel and start is None:
+                            start = x
+                        elif not pixel and start is not None:
+                            expected.append((start, y, x - 1, y))
+                            start = None
+                    if start is not None:
+                        expected.append((start, y, len(row) - 1, y))
+                self.assertEqual(mask_horizontal_runs(mask), expected)
+
+        checks = iter((False, False, True))
+        with self.assertRaises(InterruptedError):
+            mask_horizontal_runs(ink, cancelled=lambda: next(checks))
+
+    def test_vertical_run_budget_accepts_exact_limit_and_rejects_partial_results(self):
+        strokes = [(-5, 1, 84, 1), (-5, 2, -5, 2), (-5, 3, 84, 3)]
+        expected = verticalize_horizontal_runs(strokes)
+        self.assertEqual(len(expected), 179)
+        self.assertEqual(verticalize_horizontal_runs(strokes, max_runs=179), expected)
+        self.assertIsNone(verticalize_horizontal_runs(strokes, max_runs=178))
+
     def test_connected_regions_get_lossless_mixed_axis_candidate(self):
         runs=[]
         runs.extend((5,y,50,y) for y in range(5,10))

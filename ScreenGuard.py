@@ -7,6 +7,7 @@ from contextlib import contextmanager, nullcontext
 from ctypes import wintypes
 
 from DpiSupport import get_window_dpi_info
+from WindowsSystem import private_system_library
 
 
 def _screen_point(point):
@@ -135,7 +136,7 @@ class WindowMonitor:
     def __init__(self):
         # Explicit signatures reduce the chance of ctypes using an incorrect
         # default integer ABI on 64-bit Windows.
-        self.api=ctypes.WinDLL('user32', use_last_error=True)
+        self.api = private_system_library('user32.dll', use_last_error=True)
         self.api.WindowFromPoint.argtypes=[wintypes.POINT]
         self.api.WindowFromPoint.restype=wintypes.HWND
         self.api.GetAncestor.argtypes=[wintypes.HWND,wintypes.UINT]

@@ -8780,7 +8780,13 @@ class DrawBotApp:
             log_event(f'Preview auto-start blocked by Manual mode. reason={reason!r}')
             return False
         DrawBotApp._cancel_after_attr(self,'preview_after')
-        try:self.preview_after=self.root.after(delay,lambda:self.update_plan(user_initiated=False,reason=reason))
+        def run_scheduled():
+            if self.preview_after != token:return
+            self.preview_after=None
+            self.update_plan(user_initiated=False,reason=reason)
+        try:
+            token=self.root.after(delay,run_scheduled)
+            self.preview_after=token
         except (tk.TclError,RuntimeError):self.preview_after=None;return False
         log_event(f'Auto preview scheduled: reason={reason!r} delay={delay}ms.')
         return True
@@ -8901,7 +8907,7 @@ class DrawBotApp:
         return self.update_plan(user_initiated=True,reason='full-detail-preview',full_detail=True)
 
     def update_plan(self, user_initiated=False, reason='automatic',full_detail=False):
-        self.preview_after=None
+        DrawBotApp._cancel_after_attr(self,'preview_after')
         if not DrawBotApp._profile_action_ready(self):
             return
         stop=getattr(self,'stop',None)
@@ -8919,7 +8925,6 @@ class DrawBotApp:
         # Clear the old signal here, never again at the worker handoff.
         if user_initiated:self.stop.clear()
         target_area=self.area()[2:] if len(self.corners)==2 else (640,400)
-        preview_area=preview_area_for(target_area)
         try:
             # Preview generation is pure image planning. It must not require or
             # resolve screen-coordinate tool calibration. Tool actions are built
@@ -9039,7 +9044,7 @@ class DrawBotApp:
                     raise InterruptedError()
                 elapsed=time.monotonic()-started
                 log_event(f'Preview planning abandoned safely after {elapsed:.1f}s. target={tuple(map(int,target_area))} preview={preview_area}')
-                self.events.put(('preview_timeout',(tuple(map(int,target_area)),preview_area)))
+                self.events.put(('preview_timeout',generation))
                 return
             plan['target_area']=tuple(map(int,target_area))
             plan['preview_area']=tuple(map(int,preview_area))
@@ -12064,7 +12069,8 @@ class DrawBotApp:
             # schedules automatic planning. Explicit drawing continuations win.
             self.needs_plan=True
         elif kind=='preview_timeout':
-            target,preview=value
+            if (self.closing or (stop is not None and stop.is_set()) or
+                    value!=getattr(self,'preview_generation',0)):return
             self.summary.set('Preview calculation exceeded its time limit. The previous preview is retained. Try the normal Build preview or a smaller drawing area.')
             try:self.draw_time_text.set('Preview timed out before an estimate could be updated.')
             except (tk.TclError,AttributeError):pass

@@ -268,21 +268,38 @@ def _norm_device_name(name: str) -> str:
     return " ".join(text.split())
 
 
+def _pci_address(value: str) -> tuple[int, ...] | None:
+    # lspci may omit domain zero; nvidia-smi prints an eight-digit domain.
+    match = re.fullmatch(r"(?:([0-9a-f]{1,8}):)?([0-9a-f]{2}):([0-9a-f]{2})\.([0-7])",
+                         value.strip(), re.IGNORECASE | re.ASCII)
+    if not match:
+        return None
+    return tuple(int(part or "0", 16) for part in match.groups())
+
+
 def _merge_devices(generic: list[GpuDevice], nvidia: tuple[NvidiaGpu, ...]) -> list[GpuDevice]:
     merged = list(generic)
     used: set[int] = set()
     for ngpu in nvidia:
         best_index = None
         nname = _norm_device_name(ngpu.name)
-        for idx, device in enumerate(merged):
+        address = _pci_address(ngpu.bus_id)
+        # Match only original discovery rows. An appended SMI-only device is
+        # already accounted for, even if the next card has the same model.
+        for idx, device in enumerate(generic):
             if idx in used or device.vendor != "NVIDIA":
+                continue
+            native_address = _pci_address(device.bus_id)
+            if address is not None and native_address is not None:
+                if address == native_address:
+                    best_index = idx
+                    break
                 continue
             dname = _norm_device_name(device.name)
             # A model prefix is not an identity: RTX 4080 and RTX 4080 SUPER,
             # for example, must never exchange their memory/driver metadata.
-            if nname and dname and nname.replace(" ", "") == dname.replace(" ", ""):
+            if best_index is None and nname and dname and nname.replace(" ", "") == dname.replace(" ", ""):
                 best_index = idx
-                break
         original = merged[best_index] if best_index is not None else None
         replacement = GpuDevice(
             ngpu.index if ngpu.index is not None else (original.index if original else None),
@@ -377,7 +394,6 @@ def cupy_smoke_test() -> tuple[bool, str]:
     CUDA_DEVICE_ORDER can reorder/hide devices. Read each tested device's name
     from that same CUDA runtime instead of borrowing another API's identity.
     """
-    gpu = best_nvidia_gpu(refresh=True)
     from GpuResourceCache import used_cuda_device
     try:
         import cupy as cp
@@ -415,6 +431,9 @@ def cupy_smoke_test() -> tuple[bool, str]:
     except InterruptedError:
         raise
     except Exception as exc:
+        # Vendor discovery can launch nvidia-smi. Only the diagnostic fallback
+        # needs it; a successful runtime probe already identified its device.
+        gpu = best_nvidia_gpu()
         prefix = f"{gpu.name} detected, but " if gpu is not None else ""
         return False, f"{prefix}CUDA/CuPy smoke test failed: {type(exc).__name__}: {exc}"
 

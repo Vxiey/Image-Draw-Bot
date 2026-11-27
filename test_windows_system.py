@@ -41,6 +41,51 @@ class WindowsSystemTests(unittest.TestCase):
                 windows.load_system_library('shcore')
             free.assert_called_once_with(123)
 
+    def test_input_backends_use_independent_function_caches_on_one_trusted_handle(self):
+        from ScreenGuard import WindowMonitor
+        from WindowsMouse import WindowsMouse
+
+        def wrap(name, *, handle, winmode, use_last_error):
+            self.assertIsNone(name)
+            self.assertEqual((handle, winmode, use_last_error), (123, 0x800, True))
+            return mock.Mock(_handle=handle)
+
+        with mock.patch.object(windows.sys, 'platform', 'win32'), \
+                mock.patch('_ctypes.LoadLibrary', return_value=123, create=True) as native, \
+                mock.patch('_ctypes.FreeLibrary', create=True), \
+                mock.patch.object(ctypes, 'WinDLL', side_effect=wrap, create=True):
+            mouse = WindowsMouse()
+            monitor = WindowMonitor()
+            shared = windows.load_system_library('user32.dll', use_last_error=True)
+            native.assert_called_once_with('user32.dll', 0x800)
+            self.assertIsNot(mouse.api, shared)
+            self.assertIsNot(monitor.api, shared)
+            self.assertIsNot(mouse.api, monitor.api)
+            self.assertFalse(mouse.input_armed)
+
+    def test_branding_and_drop_cursor_bind_private_symbols_on_trusted_modules(self):
+        from ctypes import wintypes
+        import AppBranding
+        from SmartDropInCanvas import cursor_position
+
+        def read_position(pointer):
+            point = ctypes.cast(pointer, ctypes.POINTER(wintypes.POINT)).contents
+            point.x, point.y = -10, 25
+            return 1
+
+        get_cursor = mock.Mock(side_effect=read_position)
+        set_app_id = mock.Mock(return_value=0)
+        with mock.patch.object(windows, 'load_system_library',
+                               return_value={'GetCursorPos': get_cursor}) as user32, \
+                mock.patch.object(AppBranding, 'load_system_library',
+                                  return_value={'SetCurrentProcessExplicitAppUserModelID': set_app_id}) as shell32, \
+                mock.patch.object(windows.sys, 'platform', 'win32'):
+            self.assertEqual(cursor_position(), (-10, 25))
+            AppBranding.set_windows_app_id()
+        user32.assert_called_once_with('user32.dll')
+        shell32.assert_called_once_with('shell32.dll')
+        set_app_id.assert_called_once_with(AppBranding.APP_USER_MODEL_ID)
+
     def test_paths_and_alternate_streams_are_rejected_before_loading(self):
         with mock.patch.object(windows, '_load_system_library') as native:
             for name in ('', '../shcore.dll', r'C:\temp\shcore.dll', 'shcore.dll:extra',

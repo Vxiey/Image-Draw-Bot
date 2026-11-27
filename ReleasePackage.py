@@ -26,6 +26,13 @@ from RuntimePaths import atomic_write_text
 
 ROOT_PREFIX = "Image-Draw-Bot"
 
+CREDENTIAL_DIR_NAMES = {".aws", ".gnupg", ".ssh", ".kube"}
+CREDENTIAL_FILE_NAMES = {
+    ".env", ".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc",
+    "pip.conf", "pip.ini", "id_dsa", "id_ecdsa", "id_ed25519", "id_rsa",
+}
+CREDENTIAL_FILE_SUFFIXES = (".key", ".p8", ".p12", ".pfx", ".ppk", ".jks")
+
 EXCLUDED_DIR_NAMES = {
     ".git",
     ".hg",
@@ -50,7 +57,7 @@ EXCLUDED_DIR_NAMES = {
     "picture-palettes",
     "recovery",
     "updates",
-}
+} | CREDENTIAL_DIR_NAMES
 
 EXCLUDED_FILE_SUFFIXES = {
     ".pyc",
@@ -83,7 +90,7 @@ RUNTIME_FILE_PATTERNS = (
 )
 
 OUTPUT_DIR_NAMES = {"build", "dist", "release"}
-NON_FATAL_EXCLUDED_DIR_NAMES = set(EXCLUDED_DIR_NAMES)
+NON_FATAL_EXCLUDED_DIR_NAMES = EXCLUDED_DIR_NAMES - CREDENTIAL_DIR_NAMES
 
 EXCLUDED_PREFIXES = (
     "ImageDrawBot-Safety-",
@@ -178,6 +185,39 @@ def _parts(rel: PurePosixPath) -> tuple[str, ...]:
     return tuple(part.casefold() for part in rel.parts if part not in ("", "."))
 
 
+def is_credential_path(relative_path: str | PurePosixPath) -> bool:
+    parts = _parts(PurePosixPath(relative_path))
+    if not parts:
+        return False
+    name = parts[-1]
+    return (any(part in CREDENTIAL_DIR_NAMES for part in parts)
+            or name in CREDENTIAL_FILE_NAMES or name.startswith(".env.")
+            or name.endswith(CREDENTIAL_FILE_SUFFIXES))
+
+
+def pem_contains_private_key(stream) -> bool:
+    # A PEM can contain both public certificates and a private key. Search
+    # bounded chunks, including a header split across consecutive reads.
+    markers = (b'-----BEGIN PRIVATE KEY-----', b'-----BEGIN ENCRYPTED PRIVATE KEY-----',
+               b'-----BEGIN RSA PRIVATE KEY-----', b'-----BEGIN EC PRIVATE KEY-----',
+               b'-----BEGIN DSA PRIVATE KEY-----', b'-----BEGIN OPENSSH PRIVATE KEY-----')
+    overlap = max(map(len, markers)) - 1
+    tail = b''
+    while chunk := stream.read(64 * 1024):
+        data = tail + chunk
+        if any(marker in data for marker in markers):
+            return True
+        tail = data[-overlap:]
+    return False
+
+
+def is_private_pem_file(path: Path) -> bool:
+    if path.suffix.casefold() != '.pem' or _is_link(path) or not path.is_file():
+        return False
+    with path.open('rb') as stream:
+        return pem_contains_private_key(stream)
+
+
 def _is_runtime_file(parts: tuple[str, ...]) -> bool:
     if len(parts) != 1:
         return False
@@ -195,6 +235,8 @@ def _is_integration_maintenance_file(parts: tuple[str, ...]) -> bool:
 
 
 def is_forbidden_path(relative_path: str | PurePosixPath) -> bool:
+    if is_credential_path(relative_path):
+        return True
     rel = PurePosixPath(relative_path)
     parts = _parts(rel)
     if _is_runtime_file(parts):
@@ -262,7 +304,7 @@ def iter_release_files(root: Path) -> Iterable[Path]:
             rel = path.relative_to(root).as_posix()
             if rel_dir and any(part.casefold() in EXCLUDED_DIR_NAMES for part in PurePosixPath(rel).parts[:-1]):
                 continue
-            if is_forbidden_path(rel):
+            if is_forbidden_path(rel) or is_private_pem_file(path):
                 continue
             yield path
 
@@ -294,7 +336,7 @@ def validate_release_tree(root: Path, *, allow_output_dirs: bool = False) -> Rel
                 forbidden.append(rel + "/")
         for filename in files:
             rel = PurePosixPath(rel_current, filename).as_posix() if rel_current else filename
-            if is_forbidden_path(rel):
+            if is_forbidden_path(rel) or is_private_pem_file(current_path / filename):
                 if is_nonfatal_excluded_path(rel):
                     continue
                 forbidden.append(rel)

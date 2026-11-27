@@ -26,6 +26,36 @@ def response(data,headers=None,*,reader=False):
 
 
 class ImageImportTests(unittest.TestCase):
+    def test_existing_rgb_screenshot_converts_without_copying_the_source(self):
+        source = Path(__file__).parent / 'assets' / 'image-draw-bot-app-screenshot.webp'
+        with Image.open(source) as image, image.convert('RGBA') as expected:
+            with patch.object(Image.Image, 'copy', side_effect=AssertionError('redundant pixel copy')):
+                with imports.read_image(source) as actual:
+                    self.assertEqual(actual.mode, expected.mode)
+                    self.assertEqual(actual.size, expected.size)
+                    self.assertEqual(actual.tobytes(), expected.tobytes())
+                    self.assertEqual(actual.info['draw_studio_format'], 'WEBP')
+
+    def test_stop_after_orienting_rgb_skips_conversion_and_closes_the_decoder(self):
+        source = Path(__file__).parent / 'assets' / 'image-draw-bot-app-screenshot.webp'
+        stopped = threading.Event()
+        decoders = []
+        transpose = ImageOps.exif_transpose
+
+        def finish_orientation(image, *, in_place):
+            self.assertTrue(in_place)
+            transpose(image, in_place=in_place)
+            decoders.append(image)
+            stopped.set()
+
+        with patch.object(ImageOps, 'exif_transpose', side_effect=finish_orientation), \
+                patch.object(Image.Image, 'convert') as convert:
+            with self.assertRaises(InterruptedError):
+                imports.read_image(source, cancelled=stopped.is_set)
+            convert.assert_not_called()
+        with self.assertRaises(ValueError):
+            decoders[0].getpixel((0, 0))
+
     def test_precancelled_import_does_not_open_source_or_allocate_snapshot(self):
         with patch.object(imports.tempfile,'SpooledTemporaryFile') as spool,patch('requests.Session.get') as request:
             for source in ('missing.png','https://example.test/image.png','data:image/png;base64,YQ=='):

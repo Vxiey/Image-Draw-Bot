@@ -17,6 +17,8 @@ import stat
 import zipfile
 from typing import Iterable
 
+from ReleasePackage import is_credential_path, pem_contains_private_key
+
 EXPECTED_REPOSITORY = "Vxiey/Image-Draw-Bot"
 RELEASE_GATE_SCHEMA = 1
 DEFAULT_SOAK_CYCLES = 5000
@@ -260,6 +262,8 @@ def run_source_release_gate(root: Path, *, app_version: str | None = None,
 def _forbidden_archive_name(name: str) -> bool:
     lowered = name.lower().replace("\\", "/")
     base = lowered.rsplit("/", 1)[-1]
+    if is_credential_path(lowered):
+        return True
     # Documentation used to recursively include obsolete source releases.
     # Reject both the old flattened and the corrected docs/ runtime layout.
     if "/history/archives/" in lowered:
@@ -336,6 +340,11 @@ def validate_windows_zip(path: Path) -> dict:
         leaked = [name for name in names if _forbidden_archive_name(name)]
         if leaked:
             raise ReleaseGateError("Runtime/source-only files leaked into Windows ZIP: " + ", ".join(leaked[:8]))
+        for name in names:
+            if name.casefold().endswith('.pem'):
+                with archive.open(name) as stream:
+                    if pem_contains_private_key(stream):
+                        raise ReleaseGateError(f'Windows ZIP contains a private key: {name}')
         with archive.open(exe_name) as executable:
             if executable.read(2) != b"MZ":
                 raise ReleaseGateError("Packaged ImageDrawBot.exe is not a PE executable")

@@ -60,8 +60,9 @@ class CudaReadinessTests(unittest.TestCase):
         cp = ProbeCuda(("partial", "good"))
         # An SMI ordinal/name must not override this runtime's visible ordering.
         with mock.patch.dict(sys.modules, {"cupy": cp}), \
-             mock.patch.object(hardware, "best_nvidia_gpu", return_value=hardware.NvidiaGpu(7, "Hidden SMI GPU")):
+             mock.patch.object(hardware, "best_nvidia_gpu") as vendor_probe:
             ok, message = hardware.cupy_smoke_test()
+        vendor_probe.assert_not_called()
         self.assertTrue(ok)
         self.assertEqual(cp.attempts, [0, 1])
         self.assertEqual(message, "CUDA ready on Visible 1")

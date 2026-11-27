@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path, PurePosixPath
@@ -88,6 +89,34 @@ class BuildDocumentationDataTests(unittest.TestCase):
     def test_missing_optional_documentation_is_supported(self):
         with tempfile.TemporaryDirectory() as temporary:
             self.assertEqual(build_exe.documentation_data(Path(temporary)), [])
+
+    def test_local_credentials_cannot_be_staged_as_help(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, content in (
+                ('docs/.env.local', b'fixture'), ('docs/.AWS/credentials', b'fixture'),
+                ('docs/development/key.PFX', b'fixture'),
+                ('docs/test.pem', b'-----BEGIN PRIVATE KEY-----'),
+                ('docs/public.pem', b'-----BEGIN CERTIFICATE-----'),
+            ):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            self.assertEqual(build_exe.documentation_data(root), [(root / 'docs/public.pem', 'docs')])
+
+    def test_golden_fixtures_are_selected_once_at_their_documented_runtime_location(self):
+        manifest_path = Path(__file__).with_name('golden-regression') / 'manifest.json'
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        expected = {'manifest.json', *(case['file'] for case in manifest['cases'])}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            directory = root / 'golden-regression'
+            directory.mkdir()
+            (directory / 'local-export.txt').write_text('private local data', encoding='utf-8')
+            command, _ = self.build_command(root)
+            arguments = [command[i + 1] for i, value in enumerate(command) if value == '--add-data']
+            golden = [entry for entry in arguments if entry.startswith(str(directory.resolve()))]
+            self.assertCountEqual(golden, [f"{directory.resolve() / name};golden-regression" for name in expected])
 
     def test_build_passes_filtered_help_files_at_their_runtime_paths(self):
         with tempfile.TemporaryDirectory() as temporary:

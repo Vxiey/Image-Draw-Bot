@@ -4,10 +4,53 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from ReleasePackage import REQUIRED_RELEASE_FILES, create_source_archive, validate_release_tree
+from ReleaseCandidateHardening import ReleaseGateError, validate_windows_zip
+from ReleasePackage import REQUIRED_RELEASE_FILES, create_source_archive, iter_release_files, validate_release_tree
 
 
 class SourceArchivePrivacyTests(unittest.TestCase):
+    def test_source_packaging_blocks_local_credentials_and_keeps_public_certificates(self):
+        private_files = ("docs/.EnV.production", "keys/signing.PFX", "nested/.netrc",
+                         "nested/.ssh/config", "nested/local.PEM", "tools/pip.ini")
+        # A header crossing the scan chunk boundary must still be recognised.
+        private_pem = b"x" * 65529 + b"\n-----BEGIN PRIVATE KEY-----\n"
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "source"
+            for name in (*REQUIRED_RELEASE_FILES, *private_files, "docs/ca.pem"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(private_pem if name.endswith(".PEM") else b"fixture")
+            files = {path.relative_to(root).as_posix() for path in iter_release_files(root)}
+            self.assertTrue(files.isdisjoint(private_files))
+            self.assertIn("docs/ca.pem", files)
+            report = validate_release_tree(root)
+            self.assertEqual(set(report.forbidden_paths),
+                             set(private_files) - {"nested/.ssh/config"} | {"nested/.ssh/"})
+            previous = Path(temp) / "release.zip"
+            previous.write_bytes(b"previous release")
+            with self.assertRaises(ValueError):
+                create_source_archive(root, previous)
+            self.assertEqual(previous.read_bytes(), b"previous release")
+
+    def test_windows_package_gate_rejects_credentials_and_permits_public_ca_bundles(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "release.zip"
+            for name, contents, allowed in (
+                ("certifi/cacert.pem", b"-----BEGIN CERTIFICATE-----", True),
+                ("local/settings/.env", b"fixture", False),
+                ("docs/developer.P12", b"fixture", False),
+                ("docs/combined.PEM", b"public certificate\n-----BEGIN EC PRIVATE KEY-----", False),
+            ):
+                with self.subTest(name=name):
+                    with zipfile.ZipFile(path, "w") as archive:
+                        archive.writestr("ImageDrawBot/ImageDrawBot.exe", b"MZfixture")
+                        archive.writestr("ImageDrawBot/_internal/" + name, contents)
+                    if allowed:
+                        self.assertEqual(validate_windows_zip(path)["integrity"], "PASS")
+                    else:
+                        with self.assertRaises(ReleaseGateError):
+                            validate_windows_zip(path)
+
     def test_source_archive_excludes_runtime_state_and_keeps_shipped_fixtures(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "source"

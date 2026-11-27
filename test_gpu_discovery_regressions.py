@@ -78,6 +78,26 @@ class GpuDiscoveryRegressionTests(unittest.TestCase):
         self.assertEqual(rows[0].bus_id, "native-id")
         self.assertEqual(rows[0].pnp_device_id, "existing-pnp")
 
+    def test_same_model_smi_only_devices_are_kept_when_dxgi_has_no_rows(self):
+        gpus = [gh.NvidiaGpu(i, "RTX 5080", bus_id=f"{i + 1:02x}:00.0") for i in range(3)]
+        with mock.patch.object(gh.os, "name", "nt"), \
+             mock.patch.object(gh, "_detect_all_with_windows", return_value=[]), \
+             mock.patch.object(gh, "_detect_with_nvidia_smi", return_value=gpus):
+            rows = gh.detect_gpus(refresh=True)
+        self.assertEqual([(row.index, row.bus_id) for row in rows],
+                         [(card.index, card.bus_id) for card in gpus])
+
+    def test_same_model_enrichment_matches_physical_bus_when_order_differs(self):
+        generic = [gh.GpuDevice(i, "NVIDIA RTX 5080", bus_id=address, vendor="NVIDIA",
+                                pnp_device_id=f"adapter-{i}")
+                   for i, address in enumerate(("01:00.0", "0000:03:00.0"))]
+        smi = tuple(gh.NvidiaGpu(i, "NVIDIA RTX 5080", bus_id=address)
+                    for i, address in enumerate(("00000000:03:00.0", "00000000:04:00.0")))
+        rows = gh._merge_devices(generic, smi)
+        self.assertEqual([(row.bus_id, row.pnp_device_id) for row in rows],
+                         [("01:00.0", "adapter-0"), ("00000000:03:00.0", "adapter-1"),
+                          ("00000000:04:00.0", "")])
+
     def test_smi_csv_handles_quoted_names_and_unavailable_numeric_fields(self):
         output = ('0, "NVIDIA Device, Revision X", 16384, 591.74, 0000:01:00.0\n'
                   'nan, NVIDIA Broken, 100, 1, 0000:02:00.0\n'

@@ -11,3 +11,5 @@ Verify Extra Fast manual Fill fallback and canvas-clear time accounting.
 Verify the reviewed 1.0.148 replacement scope and combined release hardening; no publication.
 
 Verify Windows regression fixtures without publication.
+
+Verify Windows input bindings, preview planning, recovery and package contents.

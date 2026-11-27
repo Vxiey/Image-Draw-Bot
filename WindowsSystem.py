@@ -45,6 +45,18 @@ def _load_system_library(name: str, use_last_error: bool):
         raise
 
 
+def private_system_library(name: str, *, use_last_error: bool = False):
+    """Share the trusted module handle, with a separate ctypes function cache.
+
+    ctypes stores argtypes/restype on each resolved function. Input and
+    window-monitor backends bind their own structure types, so changing one
+    backend's signatures must not affect another consumer of the same DLL.
+    """
+    library = load_system_library(name, use_last_error=use_last_error)
+    return ctypes.WinDLL(None, handle=library._handle, winmode=LOAD_LIBRARY_SEARCH_SYSTEM32,
+                         use_last_error=use_last_error)
+
+
 class _MemoryStatusEx(ctypes.Structure):
     _fields_ = [('dwLength', ctypes.c_uint32), ('dwMemoryLoad', ctypes.c_uint32)] + [
         (name, ctypes.c_uint64) for name in (

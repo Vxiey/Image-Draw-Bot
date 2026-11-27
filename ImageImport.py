@@ -370,16 +370,25 @@ def read_image(source,cancelled=lambda:False,*,max_download_bytes=20*1024*1024,
                 _check_source_size(image.width,image.height,max_source_pixels)
                 _check(cancelled)
                 detected=image.format or 'Unknown'
-                oriented=ImageOps.exif_transpose(image)
-                oriented.info.pop('draw_studio_color_managed',None)
-                oriented.info.pop('draw_studio_bit_depth',None)
-                from SourcePixelDepth import UNSIGNED_16BIT_MODES
-                if oriented.info.get('icc_profile') or oriented.mode in UNSIGNED_16BIT_MODES:
-                    from ImageColorManagement import srgb_source
-                    with closing(oriented):result=srgb_source(oriented,cancelled=cancelled)
-                elif oriented.mode=='RGBA':result=oriented
+                # Some decoders populate metadata and the final mode during load.
+                image.load()
+                _check(cancelled)
+                image.info.pop('draw_studio_color_managed', None)
+                image.info.pop('draw_studio_bit_depth', None)
+                if image.mode == 'RGBA' and not image.info.get('icc_profile'):
+                    # The returned RGBA pixels must outlive the decoder and snapshot.
+                    result = ImageOps.exif_transpose(image)
                 else:
-                    with closing(oriented):result=oriented.convert('RGBA')
+                    # This decoder is privately owned. Orient it before conversion
+                    # without allocating an additional full-size source copy.
+                    ImageOps.exif_transpose(image, in_place=True)
+                    _check(cancelled)
+                    from SourcePixelDepth import UNSIGNED_16BIT_MODES
+                    if image.info.get('icc_profile') or image.mode in UNSIGNED_16BIT_MODES:
+                        from ImageColorManagement import srgb_source
+                        result = srgb_source(image, cancelled=cancelled)
+                    else:
+                        result = image.convert('RGBA')
                 _check(cancelled)
                 result.info['draw_studio_format']=detected
                 return result

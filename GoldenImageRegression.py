@@ -208,10 +208,10 @@ def load_golden_image(case: GoldenCase, directory: str | Path | None = None) -> 
     root = Path(directory) if directory is not None else DEFAULT_OUTPUT_DIR
     path = root / _case_filename(case)
     if path.is_file():
-        with closing(Image.open(path)) as image:return image.convert('RGBA')
+        with closing(Image.open(path, formats=('PNG',))) as image:return image.convert('RGBA')
     packaged = resource_path("golden-regression") / _case_filename(case)
     if packaged.is_file():
-        with closing(Image.open(packaged)) as image:return image.convert('RGBA')
+        with closing(Image.open(packaged, formats=('PNG',))) as image:return image.convert('RGBA')
     with closing(case.factory()) as image:return image.convert('RGBA')
 
 

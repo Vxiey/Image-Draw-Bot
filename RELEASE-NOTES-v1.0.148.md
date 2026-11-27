@@ -9,6 +9,13 @@ Tcl-fixture disposal do not increase the count. The
 Integrated and published-commit CI status is recorded in the
 [progress record](docs/v148-improvement-progress.md).
 
+## November maintenance
+
+- Extra Fast extracts horizontal runs in bounded row tiles and discards regional alternatives that cannot meet the existing acceptance criteria. The ordered paths and cost-model inputs are preserved.
+- An explicit preview cancels its pending automatic preview. Late timeouts from older jobs no longer replace the current status. The viewport and file importer avoid full-size intermediate pixel copies where possible.
+- GPU discovery distinguishes identical models on different PCI buses. A successful CUDA self-test can finish without starting vendor hardware discovery.
+- Windows input and window monitoring use the System32 loader. Session recovery only decodes PNG. Source and Windows package checks cover common local credential files and private signing keys. Details are in the [antivirus review](docs/ANTIVIRUS-REVIEW-2026-11.md#source-review-on-27-november-2026).
+
 ## Batch 42: preserve detail and execution safety
 
 The current checkpoint includes four application, seven rendering, two runtime

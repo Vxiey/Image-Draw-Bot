@@ -1,6 +1,10 @@
 import base64
+import hashlib
 import json
 import multiprocessing
+import os
+import subprocess
+import sys
 import tempfile
 import tracemalloc
 import unittest
@@ -154,6 +158,38 @@ class SessionRecoveryIntegrityTests(unittest.TestCase):
             self.assertIsNone(SR.load_cached_image())
         with patch.object(SR, 'MAX_CACHED_IMAGE_BYTES', 1):
             self.assertIsNone(SR.load_cached_image())
+
+    def test_only_png_caches_are_restored_even_with_a_matching_digest(self):
+        assets = Path(__file__).parent / 'assets'
+        for name, valid in (('image-draw-bot-app-screenshot.webp', False),
+                            ('paint-tools-reference.png', True)):
+            data = (assets / name).read_bytes()
+            digest = hashlib.sha256(data).hexdigest()
+            SR.IMAGE_FILE.write_bytes(data)
+            SR._image_path(digest).write_bytes(data)
+            for expected in (None, digest):
+                with self.subTest(asset=name, legacy=expected is None):
+                    restored = SR.load_cached_image(expected_sha256=expected)
+                    if valid:
+                        self.assertIsNotNone(restored)
+                        with restored:
+                            self.assertEqual(restored.mode, 'RGBA')
+                    else:
+                        self.assertIsNone(restored)
+
+    @unittest.skipUnless(hasattr(os, 'mkfifo'), 'Requires POSIX named pipes')
+    def test_fifo_cache_returns_without_waiting_for_a_writer(self):
+        os.mkfifo(SR.IMAGE_FILE)
+        # A blocking open would never reach the regular-file check. Keep that
+        # regression bounded even when the FIFO has no writer.
+        subprocess.run(
+            [sys.executable, '-c',
+             'from pathlib import Path; import sys, SessionRecovery as sr; '
+             'sr.IMAGE_FILE = Path(sys.argv[1]); '
+             'sys.exit(sr.load_cached_image(expected_sha256=None) is not None)',
+             str(SR.IMAGE_FILE)],
+            cwd=Path(__file__).parent, check=True, timeout=10,
+        )
 
     def test_selected_legacy_snapshot_cannot_load_newly_published_image(self):
         Image.new('RGBA', (7, 5), 'red').save(SR.IMAGE_FILE)

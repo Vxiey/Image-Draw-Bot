@@ -177,7 +177,7 @@ def _detect_visible_canvas(white, *, toolbar_end, w, h, scale, screen_origin, ra
 @lru_cache(maxsize=1)
 def _reference_templates():
     templates={}
-    with Image.open(resource_path('assets/paint-tools-reference.png')) as raw:
+    with Image.open(resource_path('assets/paint-tools-reference.png'), formats=('PNG',)) as raw:
         reference=raw.convert('RGB')
     try:
         for name,rx,ry in (('Pencil',268,88),('Fill',308,88),('Eraser',268,128)):

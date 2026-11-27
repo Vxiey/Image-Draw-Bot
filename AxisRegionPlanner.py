@@ -22,6 +22,17 @@ def _norm_horizontal(stroke: Sequence[int]) -> Segment:
     return x0, y0, x1, y0
 
 
+def _normalized_runs(strokes, cancelled) -> list[Segment]:
+    if cancelled():
+        raise InterruptedError()
+    runs = []
+    for count, stroke in enumerate(strokes, 1):
+        runs.append(_norm_horizontal(stroke))
+        if count % 512 == 0 and cancelled():
+            raise InterruptedError()
+    return runs
+
+
 def _bbox(runs: Sequence[Segment]) -> tuple[int, int, int, int]:
     return (
         min(r[0] for r in runs), min(r[1] for r in runs),
@@ -38,7 +49,10 @@ def horizontal_components(strokes: Sequence[Sequence[int]], *, adjacency: int = 
     neighbours and is useful for classifying sketch components; it does *not*
     permit any diagonal gap bridge in the produced execution paths.
     """
-    runs = [_norm_horizontal(s) for s in strokes]
+    return _horizontal_components(_normalized_runs(strokes, cancelled), adjacency, cancelled)
+
+
+def _horizontal_components(runs: list[Segment], adjacency: int, cancelled) -> list[dict]:
     count = len(runs)
     if not count:
         return []
@@ -126,8 +140,8 @@ def horizontal_components(strokes: Sequence[Sequence[int]], *, adjacency: int = 
             previous_end = x1 if previous_end is None else max(previous_end, x1)
 
     out = []
+    # Buckets and their members were inserted in source-index order.
     for root, indices in buckets.items():
-        indices.sort()
         component_runs = tuple(runs[i] for i in indices)
         x0, y0, x1, y1 = _bbox(component_runs)
         pixels = pixel_counts[root]
@@ -139,18 +153,22 @@ def horizontal_components(strokes: Sequence[Sequence[int]], *, adjacency: int = 
             "height": y1 - y0 + 1,
             "pixels": int(pixels),
         })
-    out.sort(key=lambda item: item["indices"][0])
     return out
 
 
 def verticalize_horizontal_runs(strokes: Sequence[Sequence[int]], *,
                                 cancelled=lambda: False,
-                                max_area: int = 1_048_576) -> tuple[Segment, ...] | None:
+                                max_area: int = 1_048_576,
+                                max_runs: int | None = None) -> tuple[Segment, ...] | None:
     """Return exact vertical runs for the same pixels, or ``None`` if too costly."""
-    if not strokes:
+    runs = _normalized_runs(strokes, cancelled)
+    if not runs:
         return tuple()
-    runs = [_norm_horizontal(s) for s in strokes]
-    x0, y0, x1, y1 = _bbox(runs)
+    return _verticalize_runs(runs, _bbox(runs), cancelled, max_area, max_runs)
+
+
+def _verticalize_runs(runs, bbox, cancelled, max_area, max_runs):
+    x0, y0, x1, y1 = bbox
     width, height = x1 - x0 + 1, y1 - y0 + 1
     if width <= 0 or height <= 0 or width * height > max(1, int(max_area)):
         return None
@@ -168,6 +186,8 @@ def verticalize_horizontal_runs(strokes: Sequence[Sequence[int]], *,
             raise InterruptedError()
         transitions = np.diff(mask[:, start_x:start_x + 64], axis=0).T
         columns, starts = np.nonzero(transitions == 1)
+        if max_runs is not None and len(result) + len(starts) > max_runs:
+            return None
         _, ends = np.nonzero(transitions == -1)
         result.extend((int(x + start_x + x0), int(a + y0),
                        int(x + start_x + x0), int(b - 1 + y0))
@@ -185,39 +205,34 @@ def regional_axis_variants(strokes: Sequence[Sequence[int]], *, cancelled=lambda
     combines regions whose vertical representation is no larger in raw runs.
     """
     if len(strokes) < 6:
+        if cancelled():
+            raise InterruptedError()
         return []
     try:
-        runs = [_norm_horizontal(s) for s in strokes]
+        runs = _normalized_runs(strokes, cancelled)
     except ValueError:
         return []
-    components = horizontal_components(runs, adjacency=0, cancelled=cancelled)
+    components = _horizontal_components(runs, adjacency=0, cancelled=cancelled)
     eligible = []
     for comp in components:
         if cancelled():
             raise InterruptedError()
         if len(comp["runs"]) < 3 or comp["width"] < 2 or comp["height"] < 2:
             continue
-        vertical = verticalize_horizontal_runs(comp["runs"], cancelled=cancelled, max_area=max_area)
+        original_n = len(comp["runs"])
+        aspect = comp["height"] / max(1.0, float(comp["width"]))
+        # A connected region occupies every column of its bounding box. Tall
+        # regions may expand modestly; other regions need a 20% reduction.
+        # Use these existing acceptance limits before allocating vertical runs.
+        max_vertical = (original_n + max(4, original_n // 4) if aspect >= 1.25
+                        else original_n * 4 // 5)
+        if comp["width"] > max_vertical:
+            continue
+        vertical = _verticalize_runs(comp["runs"], comp["bbox"], cancelled, max_area, max_vertical)
         if vertical is None or not vertical:
             continue
-        original_n = len(comp["runs"])
         vertical_n = len(vertical)
-        # Keep planning work bounded. A modestly larger raw representation can
-        # still win after continuous-path joining/travel ordering, but huge
-        # expansions cannot plausibly help Extra Fast.
-        if vertical_n > original_n + max(4, int(original_n * .25)):
-            continue
         gain = original_n - vertical_n
-        aspect = comp["height"] / max(1.0, float(comp["width"]))
-        # Preserve the established horizontal baseline for near-square/wide
-        # regions unless vertical rasterization removes a meaningful number of
-        # source-run boundaries. This avoids axis churn for a 60x59 rectangle
-        # merely because vertical happens to contain one fewer raw run, while
-        # still allowing tall regions and genuinely cheaper irregular regions.
-        clearly_vertical = aspect >= 1.25
-        meaningful_reduction = vertical_n * 5 <= original_n * 4
-        if not clearly_vertical and not meaningful_reduction:
-            continue
         eligible.append((gain, aspect, comp, vertical))
     if not eligible:
         return []
@@ -259,32 +274,41 @@ def regional_axis_variants(strokes: Sequence[Sequence[int]], *, cancelled=lambda
             "raw_run_delta": int(raw_delta),
         }))
 
-    # Deduplicate equivalent run sets while preserving the cheap-first order.
-    seen = set()
-    unique = []
-    for candidate, meta in variants:
-        key = tuple(candidate)
-        if key in seen or key == tuple(runs):
-            continue
-        seen.add(key)
-        unique.append((candidate, meta))
-    return unique
+    # Each chosen component spans at least two connected rows, so replacing it
+    # introduces a vertical segment unique to that component. Every variant
+    # above replaces a different set of components and is therefore distinct.
+    return variants
 
 
 def mask_horizontal_runs(mask, *, cancelled=lambda: False) -> list[Segment]:
     """Convert a 2-D boolean mask to exact horizontal runs."""
+    if cancelled():
+        raise InterruptedError()
     arr = np.asarray(mask, dtype=bool)
     if arr.ndim != 2:
         raise ValueError("mask must be two-dimensional")
     runs: list[Segment] = []
-    for y in range(arr.shape[0]):
-        if y % 128 == 0 and cancelled():
+    height, width = arr.shape
+    if not arr.size:
+        return runs
+    # One boundary at each end of every run, including ink touching a row
+    # edge. Limit the temporary boundary map and indices to a tile of rows.
+    stride = width + 1
+    tile_height = min(height, 64, max(1, 65_536 // stride))
+    edges = np.empty((tile_height, stride), dtype=bool)
+    for y in range(0, height, tile_height):
+        if cancelled():
             raise InterruptedError()
-        xs = np.flatnonzero(arr[y])
-        if xs.size == 0:
-            continue
-        breaks = np.flatnonzero(np.diff(xs) > 1)
-        starts = np.r_[0, breaks + 1]
-        ends = np.r_[breaks, xs.size - 1]
-        runs.extend((int(xs[a]), int(y), int(xs[b]), int(y)) for a, b in zip(starts, ends))
+        rows = arr[y:y + tile_height]
+        tile = edges[:len(rows)]
+        tile[:, 0] = rows[:, 0]
+        tile[:, -1] = rows[:, -1]
+        np.not_equal(rows[:, 1:], rows[:, :-1], out=tile[:, 1:-1])
+        bounds = np.flatnonzero(tile)
+        row_offsets, starts = np.divmod(bounds[::2], stride)
+        ends = bounds[1::2] % stride - 1
+        # Share the row coordinate among its strokes, including y > 256.
+        tile_rows = list(range(y, y + len(rows)))
+        ys = [tile_rows[index] for index in row_offsets.tolist()]
+        runs.extend(zip(starts.tolist(), ys, ends.tolist(), ys))
     return runs

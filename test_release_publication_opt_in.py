@@ -1,5 +1,6 @@
 """A main/tag push verifies artifacts but never publishes a release implicitly."""
 from pathlib import Path
+import re
 import unittest
 
 
@@ -13,6 +14,18 @@ def step(text, name):
 
 
 class ReleasePublicationOptInTests(unittest.TestCase):
+    def test_current_ci_and_publishing_actions_are_pinned_and_checkout_drops_credentials(self):
+        for filename in ('ci.yml', 'build-windows.yml', 'publish-wiki.yml'):
+            text = WORKFLOW.with_name(filename).read_text()
+            steps = re.split(r'^      - ', text, flags=re.MULTILINE)[1:]
+            uses = [s for s in steps if re.search(r'^\s*uses:', s, re.MULTILINE)]
+            self.assertTrue(uses, filename)
+            for action in uses:
+                with self.subTest(workflow=filename, step=action.splitlines()[0]):
+                    self.assertRegex(action, r'(?m)^\s*uses: [\w.-]+/[\w.-]+@[0-9a-f]{40}(?:\s*#.*)?$')
+                    if 'uses: actions/checkout@' in action:
+                        self.assertRegex(action, r'(?m)^          persist-credentials: false$')
+
     def test_publish_input_is_boolean_and_defaults_to_build_only(self):
         text = WORKFLOW.read_text()
         dispatch = text.split('  workflow_dispatch:\n', 1)[1].split('  push:\n', 1)[0]

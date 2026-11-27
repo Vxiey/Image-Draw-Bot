@@ -290,10 +290,15 @@ def cursor_position() -> tuple[int, int] | None:
     try:
         import ctypes
         from ctypes import wintypes
+        from WindowsSystem import load_system_library
+
+        get_cursor = load_system_library('user32.dll')['GetCursorPos']
+        get_cursor.argtypes = [ctypes.POINTER(wintypes.POINT)]
+        get_cursor.restype = wintypes.BOOL
         point = wintypes.POINT()
-        if ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+        if get_cursor(ctypes.byref(point)):
             return int(point.x), int(point.y)
-    except Exception:
+    except (AttributeError, OSError):
         pass
     return None
 
