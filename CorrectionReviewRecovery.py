@@ -148,7 +148,7 @@ def _compact_correction(corr: dict[str, Any]) -> dict[str, Any]:
     keys = (
         "enabled", "safe", "reason", "correction_paths", "selected_correction_pixels", "missing_pixels",
         "wrong_color_pixels", "corrected_colors", "estimated_seconds", "executed_paths", "executed_colors",
-        "budget_seconds", "selection_policy", "predicted_error_reduction_percent", "execution_seconds",
+        "delivery_interrupted", "budget_seconds", "selection_policy", "predicted_error_reduction_percent", "execution_seconds",
         "stopped_early", "post_correction_visual_accuracy_percent", "post_correction_actual_coverage_percent",
         "post_correction_trust", "post_correction_confidence_percent", "stores_image_data",
     )
@@ -204,6 +204,11 @@ def build_correction_review_state(options: dict[str, Any] | None, *, can_snapsho
         reason = str(post.get("reason") or corr.get("reason") or "safe canvas snapshot was unavailable")
         summary = "Image Draw Bot could not score the final canvas, so it did not trust automatic correction decisions."
         next_step = "Inspect the canvas manually. Use full retry only after re-running the safety chain."
+    elif corr.get('delivery_interrupted') is True:
+        state = "manual_review_required"; tone = "danger"; title = "Correction interrupted"
+        reason = str(corr.get('reason') or 'Correction input stopped.')
+        summary = f"{executed}/{planned} correction paths completed. The current canvas needs a fresh score."
+        next_step = "Inspect the target and use Re-check result before another correction."
     elif low_trust or blank or unexpected or not corr_safe:
         state = "manual_review_required"; tone = "danger"; title = "Manual review required"
         reason = ("post-correction verification was not trusted" if after_untrusted else

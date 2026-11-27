@@ -1,8 +1,9 @@
 """Bounded native-resolution planning and viewport-only image rendering."""
 from PIL import Image
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 import math
 from numbers import Integral
+import struct
 from typing import NamedTuple
 
 from ResourceAllocation import resolve_cpu_workers
@@ -76,17 +77,44 @@ def viewport_geometry(image_size,size,zoom=0,pan=(0,0)):
     cx=min(iw-sw/2,max(sw/2,iw/2+float(pan[0])))
     cy=min(ih-sh/2,max(sh/2,ih/2+float(pan[1])))
     box=(cx-sw/2,cy-sh/2,cx+sw/2,cy+sh/2)
-    # Resize the source region directly; convert only the bounded result.
-    # In Fit mode this also avoids an RGBA copy of a huge original image.
     target=(max(1,min(w,round(sw*scale))),max(1,min(h,round(sh*scale))))
     return ViewportGeometry(scale,(cx-iw/2,cy-ih/2),box,target)
 
 
+def _resize_viewport(image, geometry):
+    resampling = Image.Resampling.NEAREST if geometry.scale >= 1 else Image.Resampling.LANCZOS
+    box = geometry.box
+    if (resampling == Image.Resampling.LANCZOS and image.mode in ('RGBA', 'LA')
+            and box != (0, 0, *image.size)):
+        # Pillow premultiplies the entire straight-alpha input even for a boxed
+        # resize. Preserve the same native float coordinates and enough source
+        # pixels for the three-lobe Lanczos filter on each side of the viewport.
+        left, top, right, bottom = struct.unpack('4f', struct.pack('4f', *box))
+        support_x = 3 * max(1, (right - left) / geometry.target[0])
+        support_y = 3 * max(1, (bottom - top) / geometry.target[1])
+        x0 = max(0, math.floor(left - support_x))
+        y0 = max(0, math.floor(top - support_y))
+        x1 = min(image.width, math.ceil(right + support_x))
+        y1 = min(image.height, math.ceil(bottom + support_y))
+        # Pillow 13 chooses its first filter axis from the input dimensions.
+        # Changing that axis would change rounding between the two passes.
+        def vertical_first(width, height):
+            delta = height - geometry.target[1]
+            return delta > 0 and delta > 2 * (width - geometry.target[0])
+        # Both the crop and its premultiplied copy are live during resampling.
+        width, height = x1 - x0, y1 - y0
+        if (2 * width * height < image.width * image.height
+                and vertical_first(width, height) == vertical_first(*image.size)):
+            with closing(image.crop((x0, y0, x1, y1))) as region:
+                local_box = (left - x0, top - y0, right - x0, bottom - y0)
+                return region.resize(geometry.target, resampling, box=local_box)
+    return image.resize(geometry.target, resampling, box=box)
+
+
 def viewport_image(image,size,zoom=0,pan=(0,0)):
     geometry=viewport_geometry(image.size,size,zoom,pan)
-    resampling=Image.Resampling.NEAREST if geometry.scale>=1 else Image.Resampling.LANCZOS
     with ExitStack() as temporaries:
-        resized=image.resize(geometry.target,resampling,box=geometry.box)
+        resized=_resize_viewport(image,geometry)
         if resized.mode=='RGB' and 'transparency' not in resized.info:
             # The resize is already an independent, display-ready bitmap.
             resized.info.clear()

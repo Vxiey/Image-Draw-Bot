@@ -136,6 +136,42 @@ class CorrectionRetryTests(unittest.TestCase):
         self.assertEqual(history['delta']['visual_accuracy_delta'],0,
                          'a skipped retry must not claim the original drawing improved by 68 points')
 
+    def test_failed_mouse_up_stops_delivery_and_preserves_only_finished_paths(self):
+        from CorrectionHistory import build_history_entry
+
+        retry = build_correction_retry_plan(self.base())
+        self.correction.return_value = {'enabled':True, 'safe':True,
+            'execution_groups':[[((0,0),(1,0)), ((0,1),(1,1)), ((0,0),(1,0))], []],
+            'color_order':[0], 'correction_paths':3}
+        mouse = SnapshotMouse([])
+        release = mouse.release
+        rejected = []
+        def fail_second_release():
+            if mouse.held and mouse.actions.count(('press',)) == 2 and not rejected:
+                rejected.append(True)
+                raise OSError('driver rejected mouse-up')
+            release()
+        mouse.release = fail_second_release
+        with self.assertRaisesRegex(OSError, 'driver rejected mouse-up'):
+            self.execute(retry, mouse)
+
+        opts = retry['options']
+        self.assertFalse(mouse.held)
+        self.assertEqual(mouse.actions.count(('press',)), 2)
+        self.assertEqual(mouse.snapshot_calls, 2)
+        self.assertFalse(opts['runtime_safety_report']['completed'])
+        partial = opts['post_draw_correction_meta']
+        self.assertFalse(partial['safe'])
+        self.assertEqual((partial['executed_paths'],partial['executed_colors']), (1,1))
+        self.assertTrue(partial['delivery_interrupted'])
+        self.assertTrue(partial['stopped_early'])
+        self.assertEqual(opts['correction_review_meta']['state'], 'manual_review_required')
+        self.assertFalse(opts['correction_review_meta']['actions']['retry_correction_only']['enabled'])
+        history = build_history_entry(retry)
+        self.assertEqual(history['correction']['executed_paths'], 1)
+        self.assertTrue(history['before'])
+        self.assertEqual((history['after'],history['delta']), ({},{}))
+
     def test_failed_fresh_capture_cannot_reuse_previous_verified_result(self):
         retry=build_correction_retry_plan(self.base())
         self.score.return_value=None

@@ -240,7 +240,8 @@ def _after_from_options(options: dict[str, Any], correction: dict[str, Any]) -> 
             "visual_accuracy_percent": correction.get("post_correction_visual_accuracy_percent"),
             "actual_coverage_percent": correction.get("post_correction_actual_coverage_percent"),
         })
-    if correction.get('budget_seconds') is not None:
+    if correction.get('delivery_interrupted') is True or correction.get('budget_seconds') is not None:
+        # An interrupted pass may already have changed the canvas without a final score.
         # A budgeted pass publishes its own recheck above. On capture failure
         # the generic post_draw_accuracy_meta can still describe the first frame.
         return {}
@@ -314,11 +315,13 @@ def build_history_entry(plan_or_options: dict[str, Any], *, actual_seconds: floa
     if not before:
         before = compact_result_metrics(_as_dict(options.get("pre_correction_accuracy_meta")))
     post = _as_dict(options.get("post_draw_accuracy_meta"))
-    correction = compact_correction_metrics(_as_dict(options.get("post_draw_correction_meta")))
+    raw_correction = _as_dict(options.get("post_draw_correction_meta"))
+    correction = compact_correction_metrics(raw_correction)
     if not before:
         before = compact_result_metrics(post)
-    after = _after_from_options(options, _as_dict(options.get("post_draw_correction_meta")))
-    if (not after and correction.get('budget_seconds') is None
+    after = _after_from_options(options, raw_correction)
+    if (not after and not raw_correction.get('delivery_interrupted')
+            and correction.get('budget_seconds') is None
             and _state(correction) in {"skipped", "skipped-clean", "blocked", "planned-not-executed"}):
         after = dict(before)
 

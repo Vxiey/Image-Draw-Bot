@@ -2510,6 +2510,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         pass
 
     correction_deadline = None
+    correction_delivery_interrupted = False
 
     def wait(seconds):
         deadline=deadline_box[0]
@@ -3774,7 +3775,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
 
         def run_post_draw_correction_pass(initial_meta):
             """Step 14: one bounded safe correction pass after real-result scoring."""
-            nonlocal correction_deadline, edge_mode
+            nonlocal correction_deadline, correction_delivery_interrupted, edge_mode
             if dry_run or stop.is_set() or not hasattr(mouse,'snapshot_canvas'):
                 return None
             if plan['options'].get('post_draw_correction_budget_seconds') == 0:
@@ -3885,15 +3886,24 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                                 executed+=1;executed_color_indices.add(index)
                 except CorrectionBudgetReached:
                     stopped_early=True
+                except Exception as error:
+                    # Input may already have changed the canvas. A failed native
+                    # release, selection or verification is a stopped drawing.
+                    correction_delivery_interrupted = True
+                    compact.update(safe=False, delivery_interrupted=True,
+                                   reason=f'Correction delivery stopped ({type(error).__name__}). Re-check the canvas.')
+                    raise
                 finally:
                     correction_deadline = None
                     edge_mode = previous_edge_mode
-                    compact['execution_seconds'] = round(max(0.0, clock() - delivery_start), 4)
-                executed_colors=len(executed_color_indices)
-                compact.update({'executed_paths':executed,'executed_colors':executed_colors,'stopped_early':bool(stopped_early)})
-                plan['options']['post_draw_correction_meta']=compact
-                publish_correction_review()
-                plan['options']['_post_draw_correction_ran']=True
+                    executed_colors=len(executed_color_indices)
+                    compact.update(execution_seconds=round(max(0.0, clock()-delivery_start), 4),
+                                   executed_paths=executed, executed_colors=executed_colors,
+                                   stopped_early=stopped_early or correction_delivery_interrupted)
+                    plan['options']['post_draw_correction_meta']=compact
+                    plan['options']['_post_draw_correction_ran']=True
+                    if not correction_delivery_interrupted:
+                        publish_correction_review()
                 report('status',f"Post-draw correction completed: {executed}/{int(correction.get('correction_paths',0))} path(s) across {executed_colors} color(s).")
                 # Re-score after correction.  The new metrics replace the first
                 # snapshot for Auto Tuner feedback, but only compact numbers are kept.
@@ -3915,6 +3925,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             except InterruptedError:
                 raise
             except Exception as error:
+                if correction_delivery_interrupted:
+                    raise
                 meta={'enabled':False,'safe':True,'reason':str(error)[:240],'stores_image_data':False,'capture_pixels_persisted':False,'image_pixels_persisted':False}
                 plan['options']['post_draw_correction_meta']=meta
                 publish_correction_review()
@@ -4334,6 +4346,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         # prevent mouse-up or disarming after an interrupted operation.
         from StabilityRC import safe_release_and_disarm
         safe_release_and_disarm(mouse,dry_run=dry_run,logger=log_event)
+        if correction_delivery_interrupted:
+            publish_correction_review()
         if visual_previous_snapshot is not None:
             try:visual_previous_snapshot.close()
             except Exception as close_error:log_event(f'Visual snapshot cleanup failed: {close_error!r}')
@@ -4413,7 +4427,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                         f"result={feedback_meta.get('result_visual_percent')} ({feedback_meta.get('result_source')}).")
             except Exception as feedback_error:
                 log_event(f'Auto Tuner feedback save skipped: {feedback_error!r}')
-        if (not dry_run) and speed_measure_completed and execution_measure_started is not None:
+        if (not dry_run) and (speed_measure_completed or correction_delivery_interrupted) and execution_measure_started is not None:
             try:
                 from CorrectionHistory import record_correction_history
                 _actual_history=max(.001,(execution_measure_completed_at or clock())-execution_measure_started)
@@ -6286,15 +6300,15 @@ class DrawBotApp:
                              checkpoint=None)
             finally:
                 DrawBotApp._publish_runtime_safety_report(self,runtime_request,retry_plan['options'])
-            try:
-                base_plan['options']['post_draw_before_correction_accuracy_meta'] = retry_plan['options'].get('post_draw_before_correction_accuracy_meta')
-                base_plan['options']['post_draw_accuracy_meta'] = retry_plan['options'].get('post_draw_accuracy_meta', base_plan.get('options', {}).get('post_draw_accuracy_meta'))
-                base_plan['options']['post_draw_correction_meta'] = retry_plan['options'].get('post_draw_correction_meta', base_plan.get('options', {}).get('post_draw_correction_meta'))
-                base_plan['options']['correction_review_meta'] = retry_plan['options'].get('correction_review_meta', base_plan.get('options', {}).get('correction_review_meta'))
-                base_plan['options']['correction_history_meta'] = retry_plan['options'].get('correction_history_meta', base_plan.get('options', {}).get('correction_history_meta'))
-            except Exception:
-                pass
-            self.events.put(('correction_review', (base_plan.get('options') or {}).get('correction_review_meta') or {}))
+                # Publish only observations from this attempt. Preflight failures
+                # never produced new correction metadata. A stopped native pass did.
+                if ('post_draw_correction_meta' in retry_plan['options'] or
+                        'post_draw_accuracy_meta' in retry_plan['options']):
+                    for name in ('post_draw_before_correction_accuracy_meta', 'post_draw_accuracy_meta',
+                                 'post_draw_correction_meta', 'correction_review_meta', 'correction_history_meta'):
+                        if name in retry_plan['options']:
+                            base_plan['options'][name] = retry_plan['options'][name]
+                    self.events.put(('correction_review', base_plan['options'].get('correction_review_meta') or {}))
         accepted=False
         try:
             accepted=bool(self.begin_worker('draw',work,reset_stop=False))

@@ -3,9 +3,57 @@ from unittest.mock import patch
 from contextlib import closing
 from pathlib import Path
 from PIL import Image
-from PreviewQuality import full_preview_options,viewport_image
+from PreviewQuality import full_preview_options,viewport_geometry,viewport_image
 
 class PreviewQualityTests(unittest.TestCase):
+    def test_panning_downsampled_alpha_premultiplies_only_a_filter_padded_window(self):
+        asset = Path(__file__).with_name('assets') / 'image-draw-bot-app-screenshot.png'
+        with Image.open(asset) as rgba, closing(rgba.convert('LA')) as grey:
+            for source in (rgba, grey):
+                for size, zoom, pan, expect_window in (
+                        ((160, 112), .5, (330.125, -105.25), True),
+                        ((230, 180), .375, (-750, 300), True),
+                        # A narrow view would reverse Pillow's horizontal/vertical
+                        # filtering order if the same ROI optimization were used.
+                        ((25, 127), .845113026089916, (-210.72052355633718, 228.35043715258485), None),
+                        ((160, 112), 0, (0, 0), False)):
+                    with self.subTest(mode=source.mode, size=size, zoom=zoom):
+                        observed = []
+                        convert = Image.Image.convert
+                        def measure(image, mode, *args, **kwargs):
+                            if mode in ('RGBa', 'La'):
+                                observed.append(image.size)
+                            return convert(image, mode, *args, **kwargs)
+                        with patch.object(Image.Image, 'convert', measure):
+                            actual, _ = viewport_image(source, size, zoom, pan)
+                        self.assertEqual(len(observed), 1)
+                        if expect_window:
+                            self.assertLess(2 * observed[0][0] * observed[0][1], source.width * source.height)
+                        elif expect_window is False:
+                            self.assertEqual(observed[0], source.size)
+                        geometry = viewport_geometry(source.size, size, zoom, pan)
+                        with closing(actual), closing(source.resize(geometry.target, Image.Resampling.LANCZOS,
+                                box=geometry.box)) as reference, closing(reference.convert('RGBA')) as layer, \
+                                closing(Image.new('RGB', geometry.target, 'white')) as expected:
+                            expected.paste(layer, (0, 0), layer)
+                            self.assertEqual(actual.tobytes(), expected.tobytes())
+
+    def test_failed_alpha_resample_closes_the_window_and_preserves_the_source(self):
+        asset = Path(__file__).with_name('assets') / 'image-draw-bot-icon.png'
+        with Image.open(asset) as source:
+            source.load()
+            windows = []
+            def fail(image, *_args, **_kwargs):
+                windows.append(image)
+                raise MemoryError('Unable to premultiply')
+            with patch.object(Image.Image, 'convert', fail), self.assertRaises(MemoryError):
+                viewport_image(source, (42, 36), .5, (40, -10))
+            self.assertEqual(len(windows), 1)
+            self.assertIsNot(windows[0], source)
+            with self.assertRaises(ValueError):
+                windows[0].getpixel((0, 0))
+            source.getpixel((0, 0))
+
     def test_opaque_keyed_and_alpha_assets_match_white_compositing(self):
         assets = Path(__file__).with_name('assets')
         for name, keyed in (('image-draw-bot-app-screenshot.webp', False),
