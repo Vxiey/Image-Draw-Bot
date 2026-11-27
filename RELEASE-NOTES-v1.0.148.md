@@ -11,6 +11,9 @@ Integrated and published-commit CI status is recorded in the
 
 ## November maintenance
 
+- Pixel Accurate preview now lists up to three protected detail regions with missing or incorrectly colored pixels. Select one to inspect the palette target and the final simulation side by side at the same scale.
+- Correction Review supports per-profile input budgets of 5, 10, or 20 seconds, plus Auto and Off. Timed corrections rank safe paths by predicted color-error reduction per second and release a held mouse button when the time limit is detected. The review distinguishes predicted gain from a measured result.
+
 - Extra Fast extracts horizontal runs in bounded row tiles and discards regional alternatives that cannot meet the existing acceptance criteria. The ordered paths and cost-model inputs are preserved.
 - An explicit preview cancels its pending automatic preview. Late timeouts from older jobs no longer replace the current status. The viewport and file importer avoid full-size intermediate pixel copies where possible.
 - GPU discovery distinguishes identical models on different PCI buses. A successful CUDA self-test can finish without starting vendor hardware discovery.

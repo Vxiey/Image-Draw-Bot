@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -7,6 +8,7 @@ from PIL import Image
 
 from CorrectionReviewRecovery import build_correction_review_state
 from PostDrawCorrectionPass import _limit_mask, _runs_from_mask, build_post_draw_correction_plan, correction_needed
+from Precision import CanvasTransform
 from SafeCanvasSnapshotScoring import (crop_fitted_canvas, score_final_canvas_snapshot,
                                       trusted_snapshot_evidence, validated_comparison_size)
 
@@ -17,6 +19,38 @@ def evidence(**overrides):
 
 
 class SnapshotEvidenceBatch02Tests(unittest.TestCase):
+    def test_odd_letterbox_crop_starts_at_the_delivered_pixel_on_both_monitors(self):
+        fixture = Path(__file__).parent / 'tests/fixtures/paint-light-ribbon.png'
+        with Image.open(fixture) as snapshot:
+            for dpi_scale in (1, 2):
+                width, height = (dimension // dpi_scale for dimension in snapshot.size)
+                fitted = (width - 9, height - 5)
+                for origin in ((0, 0), (-1000, -300)):
+                    with self.subTest(scale=dpi_scale, origin=origin):
+                        transform = CanvasTransform(*fitted, fitted, origin[0] + 4.5, origin[1] + 2.5)
+                        x0, y0 = transform.point(0, 0)
+                        x1, y1 = transform.point(fitted[0] - 1, fitted[1] - 1)
+                        crop, geometry = crop_fitted_canvas(snapshot, area=(*origin, width, height), fitted=fitted)
+                        with crop:
+                            expected = ((x0 - origin[0]) * dpi_scale, (y0 - origin[1]) * dpi_scale,
+                                        (x1 + 1 - origin[0]) * dpi_scale, (y1 + 1 - origin[1]) * dpi_scale)
+                            self.assertEqual(geometry['crop_box'], expected)
+                            self.assertEqual(crop.size, tuple(d * dpi_scale for d in fitted))
+
+    def test_single_pixel_brush_proves_identity_on_both_fitted_axes(self):
+        fixture = Path(__file__).parent / 'tests/fixtures/paint-light-ribbon.png'
+        with Image.open(fixture) as ribbon, ribbon.crop((756, 24, 768, 36)) as ink, \
+                ribbon.crop((0, 12, 12, 24)) as background:
+            for fitted, expected_radius in (((12, 12), 0), ((12, 24), 2), ((24, 12), 2)):
+                with self.subTest(fitted=fitted):
+                    plan = build_post_draw_correction_plan(original_source=ink, actual_canvas=background,
+                        comparison_size=ink.size, fitted=fitted, palette_rgb=[(0, 0, 0)],
+                        post_draw_meta=evidence(), max_area_fraction=1, options={'gpu_mode': 'CPU',
+                            'brush_px': 1, 'post_draw_correction_budget_seconds': 20})
+                    self.assertTrue(plan['enabled'], plan['reason'])
+                    self.assertEqual(plan['correction_footprint_radius'], expected_radius)
+                    self.assertEqual(plan['selected_correction_pixels'], (12 - 2 * expected_radius) ** 2)
+
     def test_explicit_negative_or_malformed_evidence_cannot_be_promoted_by_label(self):
         base = evidence()
         for changes in ({'available': False}, {'trusted': False}, {'trusted': 'false'},

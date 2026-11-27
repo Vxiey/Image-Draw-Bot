@@ -77,6 +77,31 @@ def base_plan(**updates):
 
 
 class Step16CorrectionHistoryTests(unittest.TestCase):
+    def test_budget_history_distinguishes_planned_gain_from_measured_outcome(self):
+        plan = base_plan()
+        corr = plan['options']['post_draw_correction_meta']
+        corr.update(budget_seconds=5, estimated_seconds=3.25, execution_seconds=4.5,
+                    predicted_error_reduction_percent=27.5)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'history.json'
+            self.assertTrue(record_correction_history(plan, path=path)['recorded'])
+            history = load_correction_history(plan['options'], path=path)
+        row = history['entries'][0]
+        self.assertEqual(row['execution_seconds'], 4.5)
+        self.assertEqual(row['estimated_seconds'], 3.25)
+        self.assertEqual(row['visual_accuracy_delta'], 10.5)
+        text = format_correction_history(history)
+        self.assertIn('correction budget 5s', text)
+        self.assertIn('input 4.50s', text)
+        self.assertIn('predicted candidate error reduction 27.5%', text)
+
+        del corr['post_correction_visual_accuracy_percent'], corr['post_correction_actual_coverage_percent']
+        for executed in (0, 1):
+            corr['executed_paths'] = executed
+            entry = build_history_entry(plan)
+            self.assertEqual(entry['after'], {})
+            self.assertNotIn('visual_accuracy_delta', entry['delta'])
+
     def test_build_entry_contains_before_after_delta_without_image_data(self):
         entry = build_history_entry(base_plan(), actual_seconds=63.2, created_at=123.0)
         self.assertEqual(entry['state'], 'corrected-partial')

@@ -9,6 +9,7 @@ profile isolation rules still apply.
 """
 from __future__ import annotations
 from contextlib import closing
+from dataclasses import dataclass
 
 from typing import Any, Callable, Sequence
 from numbers import Integral
@@ -18,6 +19,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 from AccuracyEvaluator import _srgb_to_oklab, normalize_source
+from AxisRegionPlanner import mask_horizontal_runs
 from ContinuousPaths import build_execution_paths
 from SafeCanvasSnapshotScoring import crop_fitted_canvas, trusted_snapshot_evidence, validated_comparison_size
 
@@ -172,35 +174,141 @@ def _limit_mask(mask: np.ndarray, score: np.ndarray, *, max_pixels: int, max_fra
 
 
 def _runs_from_mask(mask: np.ndarray, cancelled=lambda: False) -> list[tuple[int, int, int, int]]:
-    rows, cols = np.nonzero(np.asarray(mask, dtype=bool))
-    if len(rows) == 0:
-        return []
-    out: list[tuple[int, int, int, int]] = []
-    # Rows from np.nonzero are sorted; scan per row without allocating Python
-    # objects per pixel in the main analysis phase.
-    start = 0
-    while start < len(rows):
-        if cancelled():
-            raise InterruptedError()
-        y = int(rows[start])
-        end = start + 1
-        while end < len(rows) and int(rows[end]) == y:
-            if end % 4096 == 0 and cancelled():
+    return mask_horizontal_runs(mask, cancelled=cancelled)
+
+
+@dataclass
+class _CorrectionPath:
+    color: int
+    path: tuple
+    pixels: np.ndarray
+    gain: float
+    cost: Any
+
+
+def _rank_correction_paths(execution_groups, wanted, gain_by_pixel, model, options, radius,
+                           max_paths, seconds_available, cancelled):
+    """Greedily insert paths at colour-batch tails, pricing the actual return order."""
+    from RasterIdentity import canonical_pixels_from_paths
+
+    height, width = wanted.shape
+    candidates = []
+    setup_costs = {}
+    verified = set(options.get('post_draw_correction_verified_colors') or ())
+    verify = (options.get('adaptive_color_verification') or
+              options.get('strict_color_verification', True))
+    for color, paths in enumerate(execution_groups):
+        if not paths:
+            continue
+        setup_costs[color] = sum(model.color_selection_cost(color))
+        if verify and color not in verified:
+            setup_costs[color] += model.switch_cost('verification')
+        for path in paths:
+            if cancelled():
                 raise InterruptedError()
-            end += 1
-        xs = cols[start:end]
-        if len(xs):
-            x0 = int(xs[0]); prev = int(xs[0])
-            for raw in xs[1:]:
-                x = int(raw)
-                if x == prev + 1:
-                    prev = x
-                else:
-                    out.append((x0, y, prev, y))
-                    x0 = prev = x
-            out.append((x0, y, prev, y))
-        start = end
-    return out
+            # A serpentine run can retrace its own connector; price all of its
+            # travel but credit each centre pixel exactly once.
+            points = canonical_pixels_from_paths((path,))
+            if not points or any(not (0 <= x < width and 0 <= y < height)
+                                 for x, y in points):
+                continue
+            pixels = np.array(sorted(y * width + x for x, y in points), dtype=np.intp)
+            if not np.all(wanted.flat[pixels] == color):
+                continue
+            gain = math.fsum(gain_by_pixel[int(i)] for i in pixels)
+            cost = model.prepare_path_cost(path, cancelled=cancelled)
+            candidates.append(_CorrectionPath(color, path, pixels, gain, cost))
+
+    batches = {}
+    # For a candidate selected into an earlier colour batch, its end becomes
+    # the cursor for the following batch's first path. Reprice just that leg.
+    next_batch = {}
+    blocked = np.full(wanted.shape, -1, dtype=np.int32) if radius else None
+    spent = 0.0
+    chosen = 0
+    while candidates and chosen < max_paths:
+        allowed = seconds_available()
+        if spent >= allowed:
+            break
+        best = None
+        best_ratio = -1.0
+        last_color = next(reversed(batches), None)
+        for i, candidate in enumerate(candidates):
+            if i % 128 == 0 and cancelled():
+                raise InterruptedError()
+            color = candidate.color
+            previous_batch = batches.get(color) or batches.get(last_color)
+            cursor = previous_batch[-1].path[-1] if previous_batch else None
+            increment = candidate.cost.seconds(cursor=cursor)
+            if color not in batches:
+                increment += setup_costs[color]
+            elif color in next_batch:
+                following = batches[next_batch[color]][0].cost
+                increment += (following.seconds(cursor=candidate.path[-1]) -
+                              following.seconds(cursor=cursor))
+            ratio = candidate.gain / max(1e-12, increment)
+            # Equal ratios retain palette index then original path order.
+            if spent + increment <= allowed and ratio > best_ratio:
+                best = i, increment
+                best_ratio = ratio
+        if best is None:
+            break
+        index, increment = best
+        candidate = candidates.pop(index)
+        color = candidate.color
+        if blocked is not None:
+            owners = blocked.flat[candidate.pixels]
+            if np.any((owners != -1) & (owners != color)):
+                # Drop all conflicts with the current accepted set together.
+                # Otherwise each of thousands of rejected paths could trigger
+                # another complete scan without changing the selected plan.
+                compatible = []
+                for i, pending in enumerate(candidates):
+                    if i % 128 == 0 and cancelled():
+                        raise InterruptedError()
+                    existing = blocked.flat[pending.pixels]
+                    if np.all((existing == -1) | (existing == pending.color)):
+                        compatible.append(pending)
+                candidates = compatible
+                continue
+            # Two conservative brush envelopes with radius r can intersect
+            # when their centres are at most 2r apart on both axes.
+            reach = radius * 2
+            for i, pixel in enumerate(candidate.pixels):
+                if i % 128 == 0 and cancelled():
+                    raise InterruptedError()
+                y, x = divmod(int(pixel), width)
+                region = blocked[max(0, y-reach):y+reach+1, max(0, x-reach):x+reach+1]
+                # -2 means multiple colours exclude this centre.
+                region[:] = np.where((region == -1) | (region == color), color, -2)
+        if color not in batches:
+            if last_color is not None:
+                next_batch[last_color] = color
+            batches[color] = []
+        batches[color].append(candidate)
+        spent += increment
+        chosen += 1
+
+    # Planning time can consume deadline headroom. Price the final sequence in
+    # delivery order and retain only the prefix that still fits its allowance.
+    allowed = seconds_available()
+    result = [[] for _ in execution_groups]
+    coverage = np.zeros_like(wanted, dtype=bool)
+    gain = spent = 0.0
+    cursor = None
+    for color, batch in batches.items():
+        for n, candidate in enumerate(batch):
+            if cancelled():
+                raise InterruptedError()
+            cost = candidate.cost.seconds(cursor=cursor) + (setup_costs[color] if n == 0 else 0.0)
+            if spent + cost > allowed:
+                return result, coverage, gain, spent, list(batches)
+            result[color].append(candidate.path)
+            coverage.flat[candidate.pixels] = True
+            gain += candidate.gain
+            spent += cost
+            cursor = candidate.path[-1]
+    return result, coverage, gain, spent, list(batches)
 
 
 def _build_post_draw_correction_plan(*, original_source: Image.Image,
@@ -240,6 +348,20 @@ def _build_post_draw_correction_plan(*, original_source: Image.Image,
         fraction = float(max_area_fraction)
         if not math.isfinite(fraction) or not 0 <= fraction <= 1:
             raise ValueError('Correction area fraction must be between zero and one.')
+        requested_budget = options.get('post_draw_correction_budget_seconds')
+        budget = None
+        if requested_budget is not None:
+            if (isinstance(requested_budget, bool)
+                    or not isinstance(requested_budget, (int, float))
+                    or not math.isfinite(requested_budget) or requested_budget < 0):
+                raise ValueError('Correction budget must be a finite non-negative number of seconds.')
+            budget = float(requested_budget)
+            if budget == 0:
+                return {"enabled": False, "safe": True, "reason": "correction time budget is zero",
+                        "stores_image_data": False, "budget_seconds": 0.0}
+            # Bound the greedy search even for manually edited large profile limits.
+            max_paths = min(max_paths, DEFAULT_MAX_PATHS)
+            max_pixels = min(max_pixels, DEFAULT_MAX_PIXELS)
         palette = _palette_tuple(palette_rgb)
     except (TypeError, ValueError, OverflowError) as error:
         return {"enabled": False, "safe": False, "reason": str(error), "stores_image_data": False}
@@ -373,7 +495,12 @@ def _build_post_draw_correction_plan(*, original_source: Image.Image,
         return {"enabled":False,"safe":False,"reason":"invalid correction brush geometry","stores_image_data":False}
     brush=max(1.0,brush)
     scale=min(scales[0]/size[0],scales[1]/size[1])
-    radius=0 if brush==1 and scale==1 else int(math.ceil((brush/2+1)/scale))
+    # A single-pixel proof requires identity on both axes, including the
+    # actual capture. With an anisotropic fit the smaller scale can still be 1.
+    native_capture = (actual_canvas.size == size if isinstance(actual_canvas, Image.Image)
+                      else isinstance(snapshot, Image.Image) and snapshot.size == geometry.get('selected_area_size'))
+    exact_grid = tuple(scales) == size and native_capture
+    radius=0 if brush==1 and exact_grid else int(math.ceil((brush/2+1)/scale))
     if radius>31:
         return {"enabled":False,"safe":True,"reason":"correction brush footprint exceeds bounded verifier","stores_image_data":False}
     rejected_footprint=0
@@ -413,81 +540,87 @@ def _build_post_draw_correction_plan(*, original_source: Image.Image,
     total_paths = sum(len(g) for g in execution_groups)
     color_order = [idx for _, idx in sorted(color_errors, reverse=True) if idx < len(execution_groups) and execution_groups[idx]]
 
-    if total_paths > int(max_paths):
-        # Cap per path deterministically, preserving colours with higher average
-        # error first.  Paths inside a colour stay in scanline order.
-        keep_left = int(max_paths)
-        capped = [[] for _ in palette]
-        for idx in color_order:
-            if keep_left <= 0:
-                break
-            paths = list(execution_groups[idx])
-            take = min(len(paths), keep_left)
-            capped[idx] = paths[:take]
-            keep_left -= take
-        execution_groups = capped
-        groups = [[] for _ in palette]
-        # Groups are not executed when execution_groups are present; expose only a
-        # compact run count for diagnostics after path capping.
-        total_paths = sum(len(g) for g in execution_groups)
-        capped_flag = True
+    ranking_meta = {}
+    if budget is not None:
+        from ExecutionCostModel import build_cost_model
+        model = build_cost_model(dict(options, _execution_scale_x=scales[0] / size[0],
+                                      _execution_scale_y=scales[1] / size[1]), size, scales)
+        def seconds_available():
+            if usable_deadline_seconds is None:
+                return budget
+            remaining = float(usable_deadline_seconds) - float(elapsed_seconds) - (monotonic() - started)
+            return min(budget, max(0.0, (remaining - 0.50) * 0.80))
+        gain_by_pixel = dict(zip(np.flatnonzero(selected_flat).tolist(), gains.tolist()))
+        baseline_error = float(np.sum(before_error[limited_mask], dtype=np.float64))
+        original_paths = total_paths
+        execution_groups, limited_mask, gain, estimated_seconds, color_order = _rank_correction_paths(
+            execution_groups, wanted, gain_by_pixel, model, options, radius, max_paths,
+            seconds_available, cancelled)
+        color_order = [i for i in color_order if execution_groups[i]]
+        total_paths = sum(len(execution_groups[i]) for i in color_order)
+        ranking_meta = {'selection_policy': 'quality_gain_per_second', 'budget_seconds': budget,
+                        'predicted_error_reduction': gain,
+                        'predicted_error_reduction_percent': min(100.0, 100.0 * gain / baseline_error) if baseline_error else 0.0}
+        if not total_paths:
+            return {"enabled": False, "safe": True,
+                    "reason": "no safe correction path fits the remaining time and quality constraints",
+                    "stores_image_data": False, **ranking_meta}
+        seconds_per_path = estimated_seconds / total_paths
+        capped_flag = total_paths < original_paths
+        if capped_flag:
+            groups = [[] for _ in palette]
     else:
-        capped_flag = False
+        if total_paths <= 0:
+            return {"enabled": False, "safe": True, "reason": "no improving correction paths survived quality/brush guards and caps", "stores_image_data": False,
+                    "rejected_non_improving_pixels":rejected_non_improving,"rejected_brush_footprint_pixels":rejected_footprint}
 
-    if total_paths <= 0:
-        return {"enabled": False, "safe": True, "reason": "no improving correction paths survived quality/brush guards and caps", "stores_image_data": False,
-                "rejected_non_improving_pixels":rejected_non_improving,"rejected_brush_footprint_pixels":rejected_footprint}
-
-    seconds_per_path = _float(estimated_seconds_per_path, None)
-    if estimated_seconds_per_path is not None and seconds_per_path is None:
-        return {"enabled": False, "safe": False, "reason": "correction path timing must be finite and positive", "stores_image_data": False}
-    if seconds_per_path is None:
-        seconds_per_path = _float((options.get("draw_time_estimate") or {}).get("seconds_per_path"), None) if isinstance(options.get("draw_time_estimate"), dict) else None
-    if seconds_per_path is None:
-        seconds_per_path = 0.055 if str(options.get("speed", "Balanced")).lower() == "fast" else 0.085
-    if seconds_per_path <= 0:
-        return {"enabled": False, "safe": False, "reason": "correction path timing must be positive", "stores_image_data": False}
-    estimated_seconds = total_paths * float(seconds_per_path)
-    if usable_deadline_seconds is not None and elapsed_seconds is not None:
-        remaining = max(0.0, float(usable_deadline_seconds) - float(elapsed_seconds) - (monotonic()-started))
-        # Leave at least half a second for release/final safety and never consume
-        # more than 80% of the verified leftover budget.
-        allowed = max(0.0, (remaining - 0.50) * 0.80)
-        if allowed < 1.0:
-            return {"enabled": False, "safe": True, "reason": "insufficient leftover budget after final safety reserve", "stores_image_data": False}
-        if estimated_seconds > allowed:
-            path_cap = min(total_paths, int(math.floor(allowed / seconds_per_path)))
-            if path_cap <= 0:
+        seconds_per_path = _float(estimated_seconds_per_path, None)
+        if estimated_seconds_per_path is not None and seconds_per_path is None:
+            return {"enabled": False, "safe": False, "reason": "correction path timing must be finite and positive", "stores_image_data": False}
+        if seconds_per_path is None:
+            seconds_per_path = _float((options.get("draw_time_estimate") or {}).get("seconds_per_path"), None) if isinstance(options.get("draw_time_estimate"), dict) else None
+        if seconds_per_path is None:
+            seconds_per_path = 0.055 if str(options.get("speed", "Balanced")).lower() == "fast" else 0.085
+        if seconds_per_path <= 0:
+            return {"enabled": False, "safe": False, "reason": "correction path timing must be positive", "stores_image_data": False}
+        path_limit = min(max_paths, total_paths)
+        if usable_deadline_seconds is not None and elapsed_seconds is not None:
+            remaining = float(usable_deadline_seconds) - float(elapsed_seconds) - (monotonic() - started)
+            allowed = max(0.0, (remaining - 0.50) * 0.80)
+            if allowed < 1.0:
+                return {"enabled": False, "safe": True, "reason": "insufficient leftover budget after final safety reserve", "stores_image_data": False}
+            if path_limit * seconds_per_path > allowed:
+                path_limit = min(path_limit, int(math.floor(allowed / seconds_per_path)))
+            if path_limit <= 0:
                 return {"enabled": False, "safe": True, "reason": "no correction path fits the verified leftover budget", "stores_image_data": False}
-            keep_left = path_cap
+
+        estimated_seconds = path_limit * seconds_per_path
+        capped_flag = path_limit < total_paths
+        total_paths = path_limit
+        if capped_flag:
+            # Legacy callers retain the highest-average-error colours first and
+            # keep their scanline order within both the time and path caps.
             capped = [[] for _ in palette]
             for idx in color_order:
-                if keep_left <= 0:
+                if path_limit == 0:
                     break
-                paths = list(execution_groups[idx])
-                take = min(len(paths), keep_left)
-                capped[idx] = paths[:take]
-                keep_left -= take
+                capped[idx] = execution_groups[idx][:path_limit]
+                path_limit -= len(capped[idx])
             execution_groups = capped
-            total_paths = sum(len(g) for g in execution_groups)
-            estimated_seconds = total_paths * float(seconds_per_path)
-            capped_flag = True
-
-    color_order = [i for i in color_order if execution_groups[i]]
-    if capped_flag:
-        from RasterIdentity import rasterize_segment
-        covered = np.zeros_like(limited_mask)
-        for index in color_order:
-            for path in execution_groups[index]:
-                if cancelled():raise InterruptedError()
-                if len(path) == 1:
-                    x, y = path[0]
-                    covered[y, x] = True
-                for a, b in zip(path, path[1:]):
-                    for x, y in rasterize_segment((*a, *b)):
+            color_order = [i for i in color_order if execution_groups[i]]
+            from RasterIdentity import rasterize_segment
+            covered = np.zeros_like(limited_mask)
+            for index in color_order:
+                for path in execution_groups[index]:
+                    if cancelled():raise InterruptedError()
+                    if len(path) == 1:
+                        x, y = path[0]
                         covered[y, x] = True
-        limited_mask &= covered
-        groups = [[] for _ in palette]
+                    for a, b in zip(path, path[1:]):
+                        for x, y in rasterize_segment((*a, *b)):
+                            covered[y, x] = True
+            limited_mask &= covered
+            groups = [[] for _ in palette]
     selected_pixels = int(np.count_nonzero(limited_mask))
     selected_ratio = 100.0*selected_pixels/max(1, raw_pixels)
     if cancelled():raise InterruptedError()
@@ -496,6 +629,7 @@ def _build_post_draw_correction_plan(*, original_source: Image.Image,
         "enabled": True,
         "safe": True,
         "reason": needed_reason,
+        **ranking_meta,
         "version": 1,
         "method": "bounded source-relative correction from in-memory final canvas snapshot",
         "stores_image_data": False,
@@ -520,7 +654,7 @@ def _build_post_draw_correction_plan(*, original_source: Image.Image,
         "palette_rgb": tuple(tuple(map(int, c)) for c in palette),
         "groups": groups,
         "execution_groups": execution_groups,
-        "estimated_seconds": round(float(estimated_seconds), 3),
+        "estimated_seconds": estimated_seconds if budget is not None else round(float(estimated_seconds), 3),
         "seconds_per_path": round(float(seconds_per_path), 5),
         "capped": bool(capped_flag),
         "max_paths": int(max_paths),
@@ -577,6 +711,7 @@ def compact_correction_meta(correction: dict[str, Any]) -> dict[str, Any]:
         "max_area_fraction", "executed_paths", "executed_colors", "stopped_early",
         "post_correction_visual_accuracy_percent", "post_correction_actual_coverage_percent",
         "post_correction_trust", "post_correction_confidence_percent",
-        "acceleration_routes",
+        "acceleration_routes", "selection_policy", "budget_seconds",
+        "predicted_error_reduction", "predicted_error_reduction_percent",
     )
     return {k: correction.get(k) for k in keep if k in correction}

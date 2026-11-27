@@ -63,6 +63,67 @@ class CorrectionRetryTests(unittest.TestCase):
         self.execute(retry)
         self.assertEqual(self.correction.call_args.kwargs['estimated_seconds_per_path'],.01)
 
+    def test_unlimited_retry_with_explicit_budget_uses_valid_evidence_and_local_verification(self):
+        retry = build_correction_retry_plan(self.base())
+        retry['options'].update(post_draw_correction_budget_seconds=10,
+                                post_draw_correction_verified_colors=(0,1))
+        self.execute(retry)
+        request = self.correction.call_args.kwargs
+        self.assertIsNone(request['usable_deadline_seconds'])
+        self.assertIsNone(request['elapsed_seconds'])
+        self.assertEqual(request['options']['post_draw_correction_budget_seconds'], 10)
+        self.assertEqual(request['options']['post_draw_correction_verified_colors'], ())
+
+    def test_disabled_retry_never_starts_target_preflight_capture_or_input(self):
+        retry = build_correction_retry_plan(self.base())
+        retry['options']['post_draw_correction_budget_seconds'] = 0
+        mouse = self.execute(retry)
+        self.assertEqual(mouse.snapshot_calls, 0)
+        self.assertEqual(mouse.actions, [])
+        self.score.assert_not_called()
+        self.correction.assert_not_called()
+
+    def test_correction_budget_expiring_in_native_move_cannot_click_or_start_next_color(self):
+        retry = build_correction_retry_plan(self.base())
+        retry['options']['post_draw_correction_budget_seconds'] = 5
+        self.correction.return_value = {'enabled': True, 'safe': True,
+            'execution_groups': [[((0,0),(1,0))], [((1,1),(1,2))]], 'color_order': [0,1],
+            'correction_paths': 2, 'selected_correction_pixels': 4}
+        now = [0.0]
+        mouse = SnapshotMouse([])
+        def slow_palette_move(x, y):
+            mouse.actions.append(('move', x, y))
+            now[0] += 5
+        mouse.move = slow_palette_move
+        app.execute_plan(retry, (100,100,20,20), [(10,10),(20,10)], mouse,
+                         NoWait(), threading.Event(), lambda *args: None, clock=lambda: now[0])
+        result = retry['options']['post_draw_correction_meta']
+        self.assertTrue(result['stopped_early'])
+        self.assertEqual(result['execution_seconds'], 5)
+        self.assertEqual(result['executed_paths'], 0)
+        self.assertEqual(mouse.actions, [('move', 10, 10), ('release',)])
+
+    def test_expired_budget_releases_partial_stroke_and_does_not_relocate_edge_paths(self):
+        retry = build_correction_retry_plan(self.base())
+        retry['options'].update(post_draw_correction_budget_seconds=10, edge_behavior='Adaptive Clip')
+        self.correction.return_value = {'enabled': True, 'safe': True,
+            'execution_groups': [[((0,0),(1,0)), ((0,1),(1,1))], []], 'color_order': [0],
+            'correction_paths': 2, 'selected_correction_pixels': 4}
+        now = [0.0]
+        mouse = SnapshotMouse([])
+        press = mouse.press
+        def slow_press():
+            press()
+            now[0] = 10.0
+        mouse.press = slow_press
+        with patch.object(app, 'apply_edge_behavior', wraps=app.apply_edge_behavior) as edges:
+            app.execute_plan(retry, (100,100,20,20), [(10,10),(20,10)], mouse,
+                             NoWait(), threading.Event(), lambda *args: None, clock=lambda: now[0])
+        self.assertTrue(retry['options']['post_draw_correction_meta']['stopped_early'])
+        self.assertEqual(sum(action[0] == 'press' for action in mouse.actions), 1)
+        self.assertFalse(mouse.held)
+        self.assertEqual({call.kwargs['behavior'] for call in edges.call_args_list}, {'Hard Clip'})
+
     def test_each_retry_records_its_own_fresh_before_result(self):
         base=self.base();retry=build_correction_retry_plan(base)
         self.execute(retry)
@@ -103,6 +164,34 @@ class CorrectionRetryTests(unittest.TestCase):
         base=self.base();base['count']=0
         retry=build_correction_retry_plan(base);self.execute(retry)
         self.assertIsNone(self.correction.call_args.kwargs['estimated_seconds_per_path'])
+
+    def test_correction_uses_each_colors_own_selector_and_prices_the_actual_plan(self):
+        from test_paint_color_recovery_v10124 import Keyboard
+
+        for order in ([0, 1], [1, 0]):
+            with self.subTest(order=order):
+                retry = build_correction_retry_plan(self.base())
+                selectors = (retry['color_selectors'][0], {
+                    'kind':'custom', 'rgb':(0,180,0), 'prefer_numeric':True, 'require_exact':True})
+                retry['color_selectors'] = selectors
+                retry['options'].update(
+                    profile_name='Microsoft Paint', color_selectors=(),
+                    exact_color_actions={'OpenCustomColor':(1,1), 'ConfirmColor':(2,2),
+                                         'RedField':(3,3), 'GreenField':(4,4), 'BlueField':(5,5)})
+                self.correction.return_value = {'enabled':True, 'safe':True, 'correction_paths':2,
+                    'execution_groups':[[((0,0),(1,0))], [((0,1),(1,1))]], 'color_order':order}
+                mouse = SnapshotMouse([])
+                mouse.calibrated_modal_click = lambda point: mouse.actions.append(('modal', *point))
+                keyboard = Keyboard()
+                app.execute_plan(retry, (100,100,20,20), [(10,10),(20,10)], mouse,
+                                 NoWait(), threading.Event(), lambda *args: None,
+                                 clock=lambda: 0, keyboard=keyboard)
+                self.assertEqual([value for kind, value in keyboard.actions if kind == 'write'],
+                                 ['0', '180', '0'])
+                self.assertEqual(mouse.actions.count(('modal', 2, 2)), 1)
+                self.assertEqual(mouse.actions.count(('move', 10, 10)), 1)
+                self.assertEqual(retry['options']['post_draw_correction_meta']['executed_paths'], 2)
+                self.assertEqual(self.correction.call_args.kwargs['options']['color_selectors'], selectors)
 
     def test_enabled_retry_verifies_fresh_color_before_painting_corrections(self):
         for adaptive in (False,True):

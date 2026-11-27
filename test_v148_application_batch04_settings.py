@@ -35,6 +35,21 @@ class LocalSettingsTests(unittest.TestCase):
         self.path.write_text(json.dumps(data),encoding='utf-8')
         with patch('DrawBot.log_event'):return DrawBotApp.read_settings(self.app)
 
+    def test_correction_budget_round_trip_is_profile_scoped_with_legacy_auto_default(self):
+        from ProfileIsolation import capture_defaults, reset_settings
+        from ProfilePortability import sanitize_settings, ProfilePortabilityError
+        self.app.correction_budget.set('Auto')
+        capture_defaults(self.app)
+        self.assertTrue(self.load({'correction_budget':'10 s'}))
+        self.assertEqual(self.app.correction_budget.get(), '10 s')
+        self.assertEqual(DrawBotApp._settings_data(self.app)['correction_budget'], '10 s')
+        self.assertEqual(sanitize_settings({'correction_budget':'10 s'})['correction_budget'], '10 s')
+        with self.assertRaises(ProfilePortabilityError):
+            sanitize_settings({'correction_budget':'a minute'})
+        reset_settings(self.app)
+        self.assertTrue(self.load({'quality':'Balanced'}))
+        self.assertEqual(self.app.correction_budget.get(), 'Auto')
+
     def test_corrupt_fields_do_not_abort_unrelated_valid_settings(self):
         self.assertTrue(self.load({'quality':[],'contrast':10**400,'speed':'Fast',
                                    'outline':True,'corners':[[1,1],[1,20]]}))

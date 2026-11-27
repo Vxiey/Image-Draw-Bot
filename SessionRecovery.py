@@ -50,7 +50,7 @@ _OPTION_KEYS = {
     "edge_behavior", "sketch_detail", "read_gartic_timer", "render_preset",
     "adaptive_deadline_renderer", "deadline_safety_reserve", "use_region_fill_engine",
     "fill_aggressiveness", "quick_sketch_style", "quick_sketch_fill_preference",
-    "hybrid_mode", "gartic_opacity", "preview_detail_level",
+    "hybrid_mode", "gartic_opacity", "preview_detail_level", "correction_budget",
 }
 RECOVERABLE_OPTION_KEYS = frozenset(_OPTION_KEYS)
 

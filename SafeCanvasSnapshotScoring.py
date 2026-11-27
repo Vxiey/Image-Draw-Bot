@@ -188,12 +188,21 @@ def crop_fitted_canvas(snapshot: Image.Image, *, area: tuple[int, int, int, int]
         raise ValueError('Snapshot canvas geometry must be finite, positive, and fit the selected area.')
     scale_x = float(snapshot.width) / aw
     scale_y = float(snapshot.height) / ah
-    inset_x = (aw - fw) * 0.5
-    inset_y = (ah - fh) * 0.5
-    x0 = max(0, int(round(inset_x * scale_x)))
-    y0 = max(0, int(round(inset_y * scale_y)))
-    x1 = min(snapshot.width, int(round((inset_x + fw) * scale_x)))
-    y1 = min(snapshot.height, int(round((inset_y + fh) * scale_y)))
+    # The pointer targets physical pixels. Snap the fitted frame to that grid
+    # first, with the same positive half-tie direction as CanvasTransform,
+    # then convert its half-open bounds to capture pixels.
+    def nearest_pixel(value):
+        base = math.floor(value)
+        return base + int(value - base >= 0.5)
+
+    def capture_bounds(extent, fitted_extent, capture_extent, scale):
+        inset = (extent - fitted_extent) * 0.5
+        first = nearest_pixel(inset)
+        end = nearest_pixel(inset + fitted_extent)
+        return max(0, nearest_pixel(first * scale)), min(capture_extent, nearest_pixel(end * scale))
+
+    x0, x1 = capture_bounds(aw, fw, snapshot.width, scale_x)
+    y0, y1 = capture_bounds(ah, fh, snapshot.height, scale_y)
     if x1 <= x0 or y1 <= y0:
         raise ValueError("fitted canvas crop is empty")
     geometry_ok = (x1 - x0) >= 2 and (y1 - y0) >= 2 and 0.25 <= scale_x / max(1e-9, scale_y) <= 4.0

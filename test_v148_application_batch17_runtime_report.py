@@ -274,12 +274,16 @@ class RuntimeReportApplicationTests(unittest.TestCase):
 
     def test_retry_publishes_its_own_report_without_replacing_base_report(self):
         base = self.prepare_retry()
+        base['options']['post_draw_correction_budget_seconds'] = 20
+        self.app.correction_budget = Value('5 s')
         self.app.retry_post_draw_correction()
         self.assertIsNotNone(self.app.worker, self.app.status.get())
         self.app.worker.run()
         self.drain()
         self.assertEqual(len(self.executions), 1)
         current = self.executions[0]['options']['runtime_safety_report']
+        self.assertEqual(self.executions[0]['options']['post_draw_correction_budget_seconds'], 5)
+        self.assertEqual(base['options']['post_draw_correction_budget_seconds'], 20)
         self.assertTrue(current['completed'])
         self.assertEqual(current['counts']['drawn'], 0)
         self.assertIs(base['options']['runtime_safety_report'], self.history)

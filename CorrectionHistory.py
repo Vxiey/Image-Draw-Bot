@@ -99,6 +99,14 @@ def _valid_entry(entry) -> bool:
         value = entry.get(key)
         if value is not None and (not is_finite_number(value) or value < 0):
             return False
+    correction = entry.get('correction', {})
+    for key in ('budget_seconds', 'estimated_seconds', 'execution_seconds', 'predicted_error_reduction_percent'):
+        value = correction.get(key)
+        if value is not None and (not is_finite_number(value) or value < 0):
+            return False
+    predicted = correction.get('predicted_error_reduction_percent')
+    if predicted is not None and predicted > 100:
+        return False
     return True
 
 
@@ -208,6 +216,9 @@ def compact_correction_metrics(correction: dict[str, Any] | None) -> dict[str, A
         "missing_pixels": _int(correction.get("missing_pixels"), 0),
         "wrong_color_pixels": _int(correction.get("wrong_color_pixels"), 0),
         "estimated_seconds": _num(correction.get("estimated_seconds")),
+        "budget_seconds": _num(correction.get("budget_seconds")),
+        "execution_seconds": _num(correction.get("execution_seconds")),
+        "predicted_error_reduction_percent": _num(correction.get("predicted_error_reduction_percent")),
         "stopped_early": bool(correction.get("stopped_early")),
         "capped": bool(correction.get("capped")),
         "post_correction_trust": correction.get("post_correction_trust"),
@@ -229,8 +240,11 @@ def _after_from_options(options: dict[str, Any], correction: dict[str, Any]) -> 
             "visual_accuracy_percent": correction.get("post_correction_visual_accuracy_percent"),
             "actual_coverage_percent": correction.get("post_correction_actual_coverage_percent"),
         })
-    # If a correction pass ran and Step 13 re-scored afterwards, DrawBot stores
-    # the post-correction metrics as post_draw_accuracy_meta.
+    if correction.get('budget_seconds') is not None:
+        # A budgeted pass publishes its own recheck above. On capture failure
+        # the generic post_draw_accuracy_meta can still describe the first frame.
+        return {}
+    # Legacy callers publish the second observation as post_draw_accuracy_meta.
     if _int(correction.get("executed_paths"), 0) > 0:
         return compact_result_metrics(_as_dict(options.get("post_draw_accuracy_meta")))
     return {}
@@ -304,7 +318,8 @@ def build_history_entry(plan_or_options: dict[str, Any], *, actual_seconds: floa
     if not before:
         before = compact_result_metrics(post)
     after = _after_from_options(options, _as_dict(options.get("post_draw_correction_meta")))
-    if not after and _state(correction) in {"skipped", "skipped-clean", "blocked", "planned-not-executed"}:
+    if (not after and correction.get('budget_seconds') is None
+            and _state(correction) in {"skipped", "skipped-clean", "blocked", "planned-not-executed"}):
         after = dict(before)
 
     created = time.time() if created_at is None else created_at
@@ -442,6 +457,10 @@ def compact_history_entry(entry: dict[str, Any]) -> dict[str, Any]:
         "selected_correction_pixels": corr.get("selected_correction_pixels"),
         "reason": corr.get("reason"),
     }
+    if corr.get('budget_seconds') is not None:
+        for key in ('budget_seconds', 'execution_seconds', 'estimated_seconds', 'predicted_error_reduction_percent'):
+            if is_finite_number(corr.get(key)):
+                result[key] = corr[key]
     if entry.get('operation') == 'read-only-verification':
         result['operation'] = 'read-only-verification'
         result['reason'] = entry.get('reason')
@@ -523,6 +542,12 @@ def format_correction_history(history: dict[str, Any] | None, *, max_entries: in
             parts.append(f"coverage {float(coverage_delta):+.1f} pp")
         if paths is not None or planned is not None:
             parts.append(f"paths {int(paths or 0)}/{int(planned or 0)}")
+        if item.get('budget_seconds') is not None:
+            parts.append(f"correction budget {item['budget_seconds']:g}s")
+            if item.get('execution_seconds') is not None:
+                parts.append(f"input {item['execution_seconds']:.2f}s")
+            if item.get('predicted_error_reduction_percent') is not None:
+                parts.append(f"predicted candidate error reduction {item['predicted_error_reduction_percent']:.1f}%")
         lines.append("- " + " · ".join(parts))
     lines.append("Privacy: compact metrics only; no screenshots, crops, hashes or pixels are saved.")
     return "\n".join(lines)

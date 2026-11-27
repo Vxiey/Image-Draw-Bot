@@ -7,6 +7,8 @@
 3. Compare the original, reduced-color target and simulated result in the available preview views.
 4. After changing the image, canvas, palette, mode or quality, build again before judging the new settings.
 
+When Pixel Accurate finds missing or incorrectly colored pixels in a protected detail, **Missed details** appears under the preview. Choose a region to compare the quantized target with the final simulation at the same location and scale. Up to three regions are available. Opening a region uses the existing plan and takes no action on the target canvas.
+
 ## Interpreting problems
 
 | What you see | What to check |

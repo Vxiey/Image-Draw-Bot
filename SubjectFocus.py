@@ -443,6 +443,17 @@ def evaluate_native_subject_plan(pixel_map, sequence, palette_rgb, projection, *
     regions=metadata.get('region_accuracy') or {}
     for region in regions.get('worst_regions') or ():
         x0,y0,x1,y1=region['bbox'];region['bbox']=(x0+origin[0],y0+origin[1],x1+origin[0],y1+origin[1])
+    zooms = regions.get('preview_detail_regions')
+    if zooms is not None:
+        # Zooms crop the fitted source/preview. Invert the exact native cell
+        # lookup, including the ROI origin and any fractional letterboxing.
+        zooms['size'] = projection.source_size
+        for row in zooms['regions']:
+            x0, y0, x1, y1 = row['bbox']
+            row['bbox'] = (int(projection.x_source[origin[0] + x0]),
+                           int(projection.y_source[origin[1] + y0]),
+                           int(projection.x_source[origin[0] + x1 - 1]) + 1,
+                           int(projection.y_source[origin[1] + y1 - 1]) + 1)
     regions['coordinate_space']='physical canvas pixels'
     retained=set()
     with ExitStack() as owned:

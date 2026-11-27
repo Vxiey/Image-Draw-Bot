@@ -17,6 +17,29 @@ from test_v148_rendering_batch10_physical import desired_native_labels, replay_e
 
 
 class NativeSubjectFootprintTests(unittest.TestCase):
+    def test_detail_zoom_inverts_native_roi_and_fractional_letterbox_to_source(self):
+        indices=np.full((6,8),-1,np.int16)
+        indices[2:5,3:7]=1
+        detail=np.zeros(indices.shape,bool)
+        detail[3,5]=True
+        pixel_map=pixelmap_from_index(indices,protected=detail)
+        projection=NativeBrushProjection((8,6),(16,12),dict(
+            _planning_canvas_size=(19,15),planner_max_pixels=300,corners=((-14,-11),(5,4))))
+        scored=SubjectFocus.evaluate_native_subject_plan(pixel_map,[],((255,255,255),BLUE),projection)
+        try:
+            meta=scored['metadata']['region_accuracy']
+            self.assertEqual(meta['coordinate_space'],'physical canvas pixels')
+            zooms=meta['preview_detail_regions']
+            self.assertEqual(zooms['size'],(8,6))
+            self.assertEqual(len(zooms['regions']),1)
+            row=zooms['regions'][0]
+            self.assertEqual(row['bbox'],(5,3,6,4))
+            self.assertEqual(row['protected_error_pixels'],4)
+            self.assertEqual(row['missing_pixels'],48)
+        finally:
+            scored['coverage_preview'].close()
+            scored['error_preview'].close()
+
     def public_plan(self, stack, origin, area, **changes):
         source=stack.enter_context(closing(Image.new('RGB',(64,64),BLUE)))
         captured=[];original=SubjectFocus.focused_stroke_plan

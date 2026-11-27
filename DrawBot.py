@@ -2472,6 +2472,13 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
     When dry_run=True the same path is simulated with cursor moves only.
     No native click, press or release call is made.
     """
+    if (plan['options'].get('correction_only_retry') is True and
+            plan['options'].get('post_draw_correction_budget_seconds') == 0):
+        plan['options']['post_draw_correction_meta'] = {
+            'enabled': False, 'safe': True, 'budget_seconds': 0,
+            'reason': 'Correction time is Off.', 'stores_image_data': False}
+        report('status', 'Correction time is Off.')
+        return
     # Real drawing uses a hard deadline from function entry. Fast Dry run is
     # different: its 12-second budget applies only to the actual cursor
     # simulation after target activation/countdown, not to preflight/setup time.
@@ -2499,8 +2506,17 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         item=runtime_operation_stats.setdefault(key,{'count':0,'total_seconds':0.0})
         item['count']+=max(1,int(count or 1))
         item['total_seconds']+=max(0.0,float(elapsed or 0.0))
+    class CorrectionBudgetReached(InterruptedError):
+        pass
+
+    correction_deadline = None
+
     def wait(seconds):
         deadline=deadline_box[0]
+        if correction_deadline is not None:
+            if stop.is_set():raise InterruptedError()
+            if clock() >= correction_deadline:raise CorrectionBudgetReached()
+            seconds = min(seconds, max(0.0, correction_deadline - clock()))
         if deadline is not None and clock()>=deadline:
             if dry_run:
                 raise DryRunBudgetComplete('Dry run time budget completed normally.')
@@ -2510,6 +2526,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
             timeout=min(timeout,max(0.0,deadline-clock()))
         if stop.wait(timeout):
             raise InterruptedError()
+        if correction_deadline is not None and clock() >= correction_deadline:
+            raise CorrectionBudgetReached()
         if deadline is not None and clock()>=deadline:
             if dry_run:
                 raise DryRunBudgetComplete('Dry run time budget completed normally.')
@@ -3754,9 +3772,12 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 log_event(f'Step 15 correction review refresh skipped safely: {review_error!r}')
                 return {}
 
-        def run_post_draw_correction_pass(initial_meta, actual_elapsed):
+        def run_post_draw_correction_pass(initial_meta):
             """Step 14: one bounded safe correction pass after real-result scoring."""
+            nonlocal correction_deadline, edge_mode
             if dry_run or stop.is_set() or not hasattr(mouse,'snapshot_canvas'):
+                return None
+            if plan['options'].get('post_draw_correction_budget_seconds') == 0:
                 return None
             if bool(plan['options'].get('_post_draw_correction_ran')):
                 return None
@@ -3770,7 +3791,7 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                 gates=acceptance.get('gates') if isinstance(acceptance.get('gates'),dict) else {}
                 usable=acceptance.get('usable_deadline_seconds')
                 visual_gate=gates.get('visual_accuracy_min_percent')
-                elapsed=max(.001,float(actual_elapsed or 0.0))
+                elapsed=max(.001, clock()-execution_measure_started)
                 if usable is None and not plan['options'].get('unlimited_time'):
                     usable=plan['options'].get('max_seconds')
                 if usable is not None and float(usable)-elapsed < 1.25:
@@ -3805,8 +3826,12 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     original_source=source, palette_rgb=plan.get('colors') or (),
                     post_draw_meta=initial_meta if isinstance(initial_meta,dict) else plan['options'].get('post_draw_accuracy_meta'),
                     snapshot=snapshot, area=area, fitted=(fw,fh), comparison_size=compare_size,
-                    simulated_final=simulated, quantized_target=quantized, options={**plan['options'], 'brush_px':current_execution_brush},
-                    usable_deadline_seconds=None if usable is None else float(usable), elapsed_seconds=elapsed,
+                    simulated_final=simulated, quantized_target=quantized,
+                    options={**plan['options'], 'brush_px':current_execution_brush,
+                             'color_selectors':plan.get('color_selectors') or (),
+                             'post_draw_correction_verified_colors':tuple(verified_colors)},
+                    usable_deadline_seconds=None if usable is None else float(usable),
+                    elapsed_seconds=None if usable is None else max(0.0,clock()-execution_measure_started),
                     visual_gate_percent=visual_gate, estimated_seconds_per_path=per_path,
                     max_paths=int(plan['options'].get('post_draw_correction_max_paths',120) or 120),
                     max_pixels=int(plan['options'].get('post_draw_correction_max_pixels',6000) or 6000),
@@ -3828,31 +3853,42 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
                     return compact
                 report('status',f"Post-draw correction pass: {int(correction.get('correction_paths',0))} bounded path(s), {int(correction.get('selected_correction_pixels',0))} pixel(s), no image data saved.")
                 executed=0;executed_color_indices=set();selected_index=None;selected_method=None;stopped_early=False
-                for index in color_order:
-                    if stop.is_set():
-                        stopped_early=True;break
-                    # Keep deadline reserve strict: correction is opportunistic and
-                    # must never consume the app/game safety margin.
-                    if usable is not None and clock()-execution_measure_started >= max(0.0,float(usable)-0.45):
-                        stopped_early=True;break
-                    pause_guard()
-                    if selected_index!=index:
-                        selected_method=select(index,selected_method);selected_index=index
-                    for item in execution_groups[index]:
-                        if stop.is_set():
-                            stopped_early=True;break
-                        if usable is not None and clock()-execution_measure_started >= max(0.0,float(usable)-0.45):
-                            stopped_early=True;break
-                        adaptive=plan['options'].get('adaptive_color_verification',False)
-                        if index not in verified_colors and adaptive:
-                            selected_method=verify_color_batch(index,item,True,selected_method,len(executed_color_indices)+1,len(color_order))
-                        correction_result=draw_path_item(index,item,smart_group=True,
-                            verify_color=(index not in verified_colors and not adaptive and plan['options'].get('strict_color_verification',True)),
-                            count_progress=False)
-                        if not (isinstance(correction_result,dict) and correction_result.get('skipped') is True):
-                            executed+=1;executed_color_indices.add(index)
-                    if stopped_early:
-                        break
+                delivery_start = clock()
+                requested = plan['options'].get('post_draw_correction_budget_seconds')
+                if type(requested) in (int, float) and requested > 0:
+                    correction_deadline = delivery_start + requested
+                if usable is not None:
+                    reserve_deadline = execution_measure_started + max(0.0, float(usable) - .45)
+                    correction_deadline = (reserve_deadline if correction_deadline is None
+                                           else min(correction_deadline, reserve_deadline))
+                previous_edge_mode = edge_mode
+                try:
+                    # Each correction and its color probe may only paint the
+                    # approved footprint; moving it onto a nearby edge is unsafe.
+                    edge_mode = 'Hard Clip'
+                    for index in color_order:
+                        wait(0)
+                        pause_guard()
+                        wait(0)
+                        if selected_index!=index:
+                            selected_method=select(index);selected_index=index
+                        for item in execution_groups[index]:
+                            wait(0)
+                            adaptive=plan['options'].get('adaptive_color_verification',False)
+                            if index not in verified_colors and adaptive:
+                                selected_method=verify_color_batch(index,item,True,selected_method,len(executed_color_indices)+1,len(color_order))
+                            wait(0)
+                            correction_result=draw_path_item(index,item,smart_group=True,
+                                verify_color=(index not in verified_colors and not adaptive and plan['options'].get('strict_color_verification',True)),
+                                count_progress=False)
+                            if not (isinstance(correction_result,dict) and correction_result.get('skipped') is True):
+                                executed+=1;executed_color_indices.add(index)
+                except CorrectionBudgetReached:
+                    stopped_early=True
+                finally:
+                    correction_deadline = None
+                    edge_mode = previous_edge_mode
+                    compact['execution_seconds'] = round(max(0.0, clock() - delivery_start), 4)
                 executed_colors=len(executed_color_indices)
                 compact.update({'executed_paths':executed,'executed_colors':executed_colors,'stopped_early':bool(stopped_early)})
                 plan['options']['post_draw_correction_meta']=compact
@@ -4254,8 +4290,8 @@ def execute_plan(plan, area, palette, mouse, stop, paused, report, clock=time.mo
         if (not dry_run) and execution_measure_started is not None:
             _initial_elapsed=max(.001,execution_measure_completed_at-execution_measure_started)
             _initial_post_meta=capture_post_draw_accuracy(_initial_elapsed)
-            _correction_meta=run_post_draw_correction_pass(_initial_post_meta,_initial_elapsed)
-            if isinstance(_correction_meta,dict) and int(_correction_meta.get('executed_paths',0) or 0)>0:
+            _correction_meta=run_post_draw_correction_pass(_initial_post_meta)
+            if isinstance(_correction_meta,dict) and (_correction_meta.get('executed_paths') or _correction_meta.get('execution_seconds')):
                 execution_measure_completed_at=clock()
         actual_draw_seconds=None
         if (not dry_run) and execution_measure_started is not None:
@@ -4615,6 +4651,7 @@ class DrawBotApp:
         self.total_draw_time_text = tk.StringVar(value='Total draw time: —')
         self.preview_diagnostics_text = tk.StringVar(value='Preview diagnostics appear after Build preview.')
         self.correction_review_text = tk.StringVar(value='Correction Review: no completed real drawing yet.')
+        self.correction_budget = tk.StringVar(value='Auto')
         self.correction_review_meta = {}
         self.correction_history_meta = {}
         self.benchmark_suite_text = tk.StringVar(value='Benchmark suite has not been run on this profile.')
@@ -5999,6 +6036,9 @@ class DrawBotApp:
             from CorrectionReviewRecovery import build_correction_review_state, format_correction_review
             opts = (self.plan or {}).get('options', {}) if isinstance(getattr(self, 'plan', None), dict) else {}
             can_snapshot, strict_ready, unlocked = DrawBotApp._correction_review_context(self)
+            if opts and hasattr(self, 'correction_budget'):
+                from ProfileIsolation import CORRECTION_BUDGET_CHOICES
+                opts = dict(opts, post_draw_correction_budget_seconds=CORRECTION_BUDGET_CHOICES[self.correction_budget.get()])
             state = build_correction_review_state(opts, can_snapshot=can_snapshot,
                                                   strict_safety_ready=strict_ready,
                                                   full_start_unlocked=unlocked)
@@ -6036,6 +6076,14 @@ class DrawBotApp:
             except Exception:
                 pass
             return {}
+
+    def correction_budget_changed(self, _selection):
+        # This only affects the next correction. Keep the completed plan as
+        # evidence for retry and update its actions without scheduling a preview.
+        if getattr(self, 'profile_change_in_progress', False):return
+        self.save_settings()
+        self.refresh_correction_review_ui()
+        self._schedule_recovery_checkpoint()
 
     def show_correction_review(self):
         if self.activity or self.closing:
@@ -6221,6 +6269,11 @@ class DrawBotApp:
         base_plan = self.plan
         from CorrectionReviewRecovery import build_correction_retry_plan
         retry_plan=build_correction_retry_plan(base_plan)
+        if hasattr(self, 'correction_budget'):
+            from ProfileIsolation import CORRECTION_BUDGET_CHOICES
+            # A retry uses the selection in the review card now, even when the
+            # completed drawing was planned with a different limit.
+            retry_plan['options']['post_draw_correction_budget_seconds'] = CORRECTION_BUDGET_CHOICES[self.correction_budget.get()]
         self._disarm_full_draw('correction-only retry accepted', update_text=True)
         self.paused.clear(); self.progress['value'] = 0; self.save_settings()
         runtime_request=DrawBotApp._begin_runtime_safety_request(self,'correction-only retry')
@@ -7500,6 +7553,9 @@ class DrawBotApp:
             _set('speed',speed)
         except ValueError:
             pass
+        from ProfileIsolation import CORRECTION_BUDGET_CHOICES
+        if hasattr(self,'correction_budget') and data.get('correction_budget') in CORRECTION_BUDGET_CHOICES:
+            _set('correction_budget', data['correction_budget'])
         precision=data.get('precision','High')
         if hasattr(self,'precision') and precision in ('Normal','High','Ultra'):_set('precision',precision)
         if data.get('mode') in DRAWING_MODES:_set('mode',data['mode'])
@@ -7670,6 +7726,7 @@ class DrawBotApp:
         from ProfileIsolation import extra_settings
         data['profile_extras']=extra_settings(self)
         if hasattr(self,'gartic_opacity'):data['gartic_opacity']=self.gartic_opacity.get()
+        if hasattr(self,'correction_budget'):data['correction_budget']=self.correction_budget.get()
         return data
 
     def options(self):
@@ -7907,6 +7964,9 @@ class DrawBotApp:
                 'paint_tool':selected_tool,'effective_paint_tool':effective_paint_tool,'tool_actions':[],'fill_tool_available':fill_available,'fill_tool_actions':[],'fill_restore_actions':[]}
         result['use_region_fill_engine']=use_region_fill_engine
         result['fill_aggressiveness']=fill_aggressiveness
+        if hasattr(self, 'correction_budget'):
+            from ProfileIsolation import CORRECTION_BUDGET_CHOICES
+            result['post_draw_correction_budget_seconds'] = CORRECTION_BUDGET_CHOICES[self.correction_budget.get()]
         if 'exact_color_limit_profile_ceiling' in _effective_policy:
             result['exact_color_limit_profile_ceiling']=_effective_policy['exact_color_limit_profile_ceiling']
         from PicturePalettePlanning import active_picture_palette
@@ -8743,6 +8803,8 @@ class DrawBotApp:
     def _clear_plan_feedback(self):
         """Invalidate projections and diagnostics, leaving runtime timers alone."""
         if self.closing:return
+        review=getattr(self,'detail_review',None)
+        if review is not None:review.clear()
         for name,text in (
                 ('draw_time_text','Estimated draw time appears after Build preview.'),
                 ('preview_diagnostics_text','Preview diagnostics appear after Build preview.')):
@@ -8905,6 +8967,14 @@ class DrawBotApp:
 
     def request_full_preview(self):
         return self.update_plan(user_initiated=True,reason='full-detail-preview',full_detail=True)
+
+    def _current_detail_review_plan(self):
+        plan=self.plan
+        if (not self.closing and not self.stop.is_set() and isinstance(plan,dict) and
+                plan.get('preview_generation')==self.preview_generation and
+                getattr(self,'_stopped_detail_generation',None)!=self.preview_generation):
+            return plan
+        return None
 
     def update_plan(self, user_initiated=False, reason='automatic',full_detail=False):
         DrawBotApp._cancel_after_attr(self,'preview_after')
@@ -10552,6 +10622,7 @@ class DrawBotApp:
 
     def _request_stop(self):
         """Keyboard-thread-safe Stop: no Tk calls or resettable update token."""
+        self._stopped_detail_generation=getattr(self,'preview_generation',None)
         consent=getattr(self,'mobile_preview_start_consent',None)
         if consent is not None:consent.set()
         mobile=getattr(self,'mobile_preview_request',None)
@@ -10568,6 +10639,8 @@ class DrawBotApp:
 
     def cancel(self):
         DrawBotApp._request_stop(self)
+        review=getattr(self,'detail_review',None)
+        if review is not None and not self.closing:review.clear()
         self.paint_start_request=None
         # Emergency stop also revokes native mouse permission immediately.
         DrawBotApp._close_smart_drop_overlay(self,'cancel/stop pressed')
@@ -12091,6 +12164,8 @@ class DrawBotApp:
             if publication is not None and publication.owns(value) and not publication.adopt(value):
                 return
             self.plan=value
+            review=getattr(self,'detail_review',None)
+            if review is not None:review.publish(DrawBotApp._current_detail_review_plan(self))
             self.preview_dirty_reason=''
             self._sync_mobile_preview()
             estimate=max(0,float(value['estimate']));unit=f'{estimate/60:.1f} min' if estimate>=60 else f'{estimate:.0f} s'
@@ -12577,6 +12652,9 @@ class DrawBotApp:
 
     def poll(self):
         self.poll_after=None
+        review=getattr(self,'detail_review',None)
+        if review is not None and not self.closing and DrawBotApp._current_detail_review_plan(self) is None:
+            review.clear()
         DrawBotApp._poll_mobile_preview_discovery(self)
         processed=0
         started=time.monotonic()

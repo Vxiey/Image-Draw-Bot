@@ -21,7 +21,7 @@ def validated_settings(data, *, strict=False):
     boundary excludes containers/coercible booleans/oversized scalar values so
     one corrupt field cannot abort unrelated valid local settings.
     """
-    from ProfileIsolation import SETTING_NAMES, EXTRA_DEFAULTS
+    from ProfileIsolation import SETTING_NAMES, EXTRA_DEFAULTS, CORRECTION_BUDGET_CHOICES
     from StabilityRC import migrate_settings
     if not isinstance(data,dict):
         raise ValueError('Settings must be a JSON object.')
@@ -34,6 +34,8 @@ def validated_settings(data, *, strict=False):
         valid=True
         if name in BOOLEAN_SETTINGS:
             valid=type(value) is bool
+        elif name=='correction_budget':
+            valid=isinstance(value,str) and value in CORRECTION_BUDGET_CHOICES
         elif name=='contrast':
             try:valid=type(value) in (int,float) and math.isfinite(value) and .5<=value<=2
             except OverflowError:valid=False

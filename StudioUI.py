@@ -211,7 +211,7 @@ def build_ui(a, quality, speed):
         item.pack(fill='x', pady=pady)
         return item
 
-    def setting_row(parent, title, var, values, help_text='', width=178):
+    def setting_row(parent, title, var, values, help_text='', width=178, command=None):
         row = frame(parent)
         row.pack(fill='x', pady=(4, 10))
         text = frame(row)
@@ -234,7 +234,7 @@ def build_ui(a, quality, speed):
             hint = label(text, help_text, muted=True, size=11, wraplength=270)
             hint.pack(fill='x', pady=(2, 0))
             fit_label(hint, 720)
-        widget = menu(row, var, values, width=width)
+        widget = menu(row, var, values, command=command, width=width)
         # A selector gets the full row width; long labels and hints must not
         # take space away from its selected value in the narrow Setup panel.
         widget.pack(fill='x', pady=(6, 0))
@@ -708,6 +708,10 @@ def build_ui(a, quality, speed):
     review_card.pack(fill='x', pady=(0, 7))
     label(review_card, 'Correction Review', size=10, bold=True, text_color=ACCENT).pack(anchor='w', padx=9, pady=(8, 1))
     label(review_card, var=a.correction_review_text, muted=True, size=9, wraplength=248).pack(anchor='w', padx=9, pady=(0, 6))
+    from ProfileIsolation import CORRECTION_BUDGET_CHOICES
+    setting_row(review_card, 'Correction time', a.correction_budget, list(CORRECTION_BUDGET_CHOICES),
+                'Auto uses the normal correction limits. A time limit prioritizes fixes by expected color improvement per second.',
+                width=126, command=a.correction_budget_changed)
     review_actions = frame(review_card)
     review_actions.pack(fill='x', padx=8, pady=(0, 8))
     a.correction_review_button = btn(review_actions, 'Review', a.show_correction_review, width=74, height=30)
@@ -794,6 +798,8 @@ def build_ui(a, quality, speed):
     a.preview_tabs = PreviewDeck(workspace_center, fg_color=PREVIEW, corner_radius=13,
                                  command=lambda:a.schedule_previews(delay=20))
     a.preview_tabs.pack(fill='both', expand=True, padx=14, pady=(0, 9))
+    from PreviewDetailReview import PreviewDetailReview
+    a.detail_review = PreviewDetailReview(workspace_center, a.preview_tabs, a._current_detail_review_plan)
     # Legacy tab source marker retained for older UI compatibility tests: ('Drawing preview', 'result_canvas')
     preview_specs = (
         ('Original', 'original_canvas'), ('Quantized target', 'quantized_target_canvas'),

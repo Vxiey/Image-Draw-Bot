@@ -34,6 +34,17 @@ def gates(min_visual=76.0):
 
 
 class Step15CorrectionReviewRecoveryTests(unittest.TestCase):
+    def test_review_labels_estimate_separately_from_observed_result(self):
+        options = {'post_draw_accuracy_meta': trusted_post(), 'post_draw_correction_meta': {
+            'enabled': True, 'safe': True, 'selection_policy': 'quality_gain_per_second',
+            'predicted_error_reduction_percent': 22.35, 'estimated_seconds': 3.2,
+            'execution_seconds': 2.6, 'budget_seconds': 5, 'executed_paths': 2, 'correction_paths': 2}}
+        review = format_correction_review(build_correction_review_state(options))
+        self.assertIn('less color error in correctable pixels · 3.2 s', review)
+        self.assertIn('execution 2.6 s', review)
+        del options['post_draw_correction_meta']['predicted_error_reduction_percent']
+        self.assertNotIn('Plan estimate', format_correction_review(build_correction_review_state(options)))
+
     def test_no_completed_result_is_safe_and_disabled(self):
         state = build_correction_review_state({}, can_snapshot=True, strict_safety_ready=True, full_start_unlocked=True)
         self.assertEqual(state['state'], 'no_result')

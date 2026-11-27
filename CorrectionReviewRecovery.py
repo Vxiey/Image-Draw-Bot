@@ -148,6 +148,7 @@ def _compact_correction(corr: dict[str, Any]) -> dict[str, Any]:
     keys = (
         "enabled", "safe", "reason", "correction_paths", "selected_correction_pixels", "missing_pixels",
         "wrong_color_pixels", "corrected_colors", "estimated_seconds", "executed_paths", "executed_colors",
+        "budget_seconds", "selection_policy", "predicted_error_reduction_percent", "execution_seconds",
         "stopped_early", "post_correction_visual_accuracy_percent", "post_correction_actual_coverage_percent",
         "post_correction_trust", "post_correction_confidence_percent", "stores_image_data",
     )
@@ -249,7 +250,10 @@ def build_correction_review_state(options: dict[str, Any] | None, *, can_snapsho
         and state in {"corrected_partial", "correction_skipped", "correction_available"}
     )
     correction_reason = "available after current safety gates" if correction_retry_allowed else "not available for the current review state"
-    if correction_retry_allowed and strict_safety_ready is not True:
+    if options.get('post_draw_correction_budget_seconds') == 0:
+        correction_retry_allowed = False
+        correction_reason = 'choose a correction time to enable this action'
+    elif correction_retry_allowed and strict_safety_ready is not True:
         correction_reason = "run the normal setup safety chain first"
     elif correction_retry_allowed and full_start_unlocked is not True:
         correction_reason = "press Unlock full drawing first; correction-only still sends native input"
@@ -296,6 +300,12 @@ def format_correction_review(state: dict[str, Any] | None) -> str:
     reason = str(state.get("reason") or "").strip()
     if reason:
         lines.append("Reason: " + reason)
+    corr = _as_dict(state.get("correction"))
+    if corr.get("selection_policy") == "quality_gain_per_second" and corr.get("enabled") is True:
+        gain = _float(corr.get("predicted_error_reduction_percent"))
+        seconds = _float(corr.get("estimated_seconds"))
+        if gain is not None and seconds is not None:
+            lines.append(f"Plan estimate: {gain:.1f}% less color error in correctable pixels · {seconds:.1f} s")
     real = _as_dict(state.get("real_result"))
     if real:
         bits = []
@@ -309,7 +319,6 @@ def format_correction_review(state: dict[str, Any] | None) -> str:
             bits.append(f"Coverage {float(real.get('actual_coverage_percent') or 0):.1f}%")
         if bits:
             lines.append("Real result: " + " · ".join(bits))
-    corr = _as_dict(state.get("correction"))
     if corr:
         bits = []
         if corr.get("executed_paths") is not None or corr.get("correction_paths") is not None:
@@ -318,8 +327,10 @@ def format_correction_review(state: dict[str, Any] | None) -> str:
             bits.append(f"pixels {int(corr.get('selected_correction_pixels', 0) or 0)}")
         if corr.get("post_correction_visual_accuracy_percent") is not None:
             bits.append(f"post Visual {float(corr.get('post_correction_visual_accuracy_percent') or 0):.1f}%")
+        if corr.get("execution_seconds") is not None:
+            bits.append(f"execution {float(corr['execution_seconds']):.1f} s")
         if corr.get("stopped_early"):
-            bits.append("stopped by reserve")
+            bits.append("stopped early")
         if bits:
             lines.append("Correction: " + " · ".join(bits))
     history = _as_dict(state.get("history"))

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from dataclasses import dataclass
+import heapq
 from typing import Sequence
 import math
 
@@ -693,6 +694,62 @@ def _detail_safe_corrections(pixel_map, current, corrections, desired, *, max_pa
     return safe
 
 
+def _protected_error_zoom(row, cmap, protected, errors, cancelled):
+    """Locate remaining protected errors in one shortlisted component."""
+    x0, y0, x1, y1 = row['bbox']  # Component bounds are inclusive.
+    left, top, right, bottom = x1 + 1, y1 + 1, x0, y0
+    missing = wrong = protected_errors = 0
+    try:
+        for y in range(y0, y1 + 1, 64):
+            for x in range(x0, x1 + 1, 4096):
+                if cancelled():raise InterruptedError()
+                tile = (slice(y, min(y1 + 1, y + 64)), slice(x, min(x1 + 1, x + 4096)))
+                member = cmap[tile] == row['component_id']
+                codes = errors[tile]
+                unpainted = member & (codes == ERROR_MISSING)
+                incorrect = member & (codes == ERROR_WRONG_COLOR)
+                missing += int(np.count_nonzero(unpainted))
+                wrong += int(np.count_nonzero(incorrect))
+                ys, xs = np.nonzero(protected[tile] & (unpainted | incorrect))
+                if xs.size:
+                    protected_errors += int(xs.size)
+                    left, top = min(left, x + int(xs.min())), min(top, y + int(ys[0]))
+                    right, bottom = max(right, x + int(xs.max()) + 1), max(bottom, y + int(ys[-1]) + 1)
+        return dict(row, bbox=(left, top, right, bottom), error_pixels=missing + wrong,
+                    missing_pixels=missing, wrong_color_pixels=wrong, protected_error_pixels=protected_errors)
+    finally:
+        # A retained cancellation traceback must not pin the borrowed label map.
+        cmap = None
+
+
+def _rank_detail_zooms(rows, component_count, cmap, protected, errors, cancelled):
+    """Rank protected errors across all regions, including those beyond the report cap."""
+    ids = flat_ids = None
+    try:
+        flat_ids, flat_detail, flat_errors = (value.ravel() for value in (cmap, protected, errors))
+        counts = np.zeros(component_count, dtype=np.int64)
+        for start in range(0, cmap.size, 262_144):
+            if cancelled():raise InterruptedError()
+            block = slice(start, start + 262_144)
+            codes = flat_errors[block]
+            damaged = flat_detail[block] & ((codes == ERROR_MISSING) | (codes == ERROR_WRONG_COLOR))
+            if np.any(damaged):
+                ids = flat_ids[block][damaged]
+                np.add.at(counts, ids[ids >= 0], 1)
+        if not np.any(counts):
+            return []
+        def candidates():
+            for index, row in enumerate(rows):
+                if index % 256 == 0 and cancelled():raise InterruptedError()
+                cid = row['component_id']
+                if counts[cid]:
+                    yield row['score'], -int(counts[cid]), cid, row
+        return [_protected_error_zoom(row, cmap, protected, errors, cancelled)
+                for _, _, _, row in heapq.nsmallest(3, candidates())]
+    finally:
+        flat_ids = ids = cmap = None
+
+
 def region_accuracy_scores(pixel_map: PixelMap, result: SimulationResult, *, max_regions: int = 64,
                            cancelled=lambda: False, _region_topology=None) -> dict:
     """Measure planned execution accuracy per exact connected target region."""
@@ -760,10 +817,20 @@ def region_accuracy_scores(pixel_map: PixelMap, result: SimulationResult, *, max
         rows.sort(key=lambda row:(float(row['score']),-int(row['area']),int(row['component_id'])))
         limit=max(1,int(max_regions))
         scores=[float(row['score']) for row in rows]
+        zooms = {'size': (pixel_map.width, pixel_map.height), 'regions': []}
+        if rows and result.metrics.get('error_pixels') != 0 and np.any(protected):
+            try:
+                zooms['regions'] = _rank_detail_zooms(rows, component_count, cmap, protected,
+                                                     result.error_map, cancelled)
+            except MemoryError:
+                # The optional crop must not discard the region scores already measured.
+                zooms['unavailable'] = 'Insufficient memory for detail preview.'
+        if cancelled():raise InterruptedError()
         return {'region_count':len(rows),'weighted_score':round(weighted/max(1,weighted_area),4),
                 'mean_score':round(sum(scores)/max(1,len(scores)),4) if rows else 100.0,
                 'minimum_score':round(min(scores),4) if rows else 100.0,
                 'worst_regions':rows[:limit],
+                'preview_detail_regions':zooms,
                 'score_formula':'0.40*color + 0.25*coverage + 0.20*edge + 0.15*protected_detail'}
     finally:
         # Ravel/chunk/record views can otherwise pin the private shared export

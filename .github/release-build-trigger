@@ -13,3 +13,5 @@ Verify the reviewed 1.0.148 replacement scope and combined release hardening; no
 Verify Windows regression fixtures without publication.
 
 Verify Windows input bindings, preview planning, recovery and package contents with canonical Windows test paths.
+
+Verify Pixel Accurate detail review and time-budgeted correction in the Windows package.
