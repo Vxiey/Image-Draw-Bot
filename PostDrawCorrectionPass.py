@@ -151,7 +151,8 @@ def _extract_actual_canvas(*, snapshot: Image.Image | None, actual_canvas: Image
         crop.close()
 
 
-def _limit_mask(mask: np.ndarray, score: np.ndarray, *, max_pixels: int, max_fraction: float) -> tuple[np.ndarray, int, float]:
+def _limit_mask(mask: np.ndarray, score: np.ndarray, *, max_pixels: int, max_fraction: float,
+                cancelled=lambda: False) -> tuple[np.ndarray, int, float]:
     mask = np.asarray(mask, dtype=bool)
     score = np.asarray(score, dtype=np.float32)
     selected = int(np.count_nonzero(mask))
@@ -162,19 +163,82 @@ def _limit_mask(mask: np.ndarray, score: np.ndarray, *, max_pixels: int, max_fra
         return np.zeros_like(mask), 0, 0.0
     if selected <= pixel_cap:
         return mask, selected, 100.0
-    values = score[mask]
-    # Deterministic top-K threshold; keep all pixels above the cutoff then trim
-    # by row-major order if ties still exceed the cap.
-    kth = np.partition(values, max(0, selected - pixel_cap))[selected - pixel_cap]
-    limited = mask & (score > kth)
+    # Keep only the strongest cap values across completed blocks. Once full,
+    # equal or weaker values cannot raise the cutoff, even on flat colour fills.
+    block_size = max(65_536, pixel_cap)
+    retained = np.empty(min(selected, pixel_cap + block_size), dtype=score.dtype)
+    filled = 0
+    kth = -np.inf
+    mask_flat = mask.reshape(-1) if mask.flags.c_contiguous else mask.flat
+    score_flat = score.reshape(-1) if score.flags.c_contiguous else score.flat
+    for start in range(0, mask.size, block_size):
+        if cancelled():raise InterruptedError()
+        block = slice(start, start + block_size)
+        scores = score_flat[block]
+        eligible = mask_flat[block]
+        if filled == pixel_cap:
+            eligible = eligible & (scores > kth)
+        new_values = scores[eligible]
+        if not new_values.size:continue
+        total = filled + new_values.size
+        retained[filled:total] = new_values
+        if total > pixel_cap:
+            cutoff = total - pixel_cap
+            retained[:total].partition(cutoff)
+            kth = retained[cutoff]
+            retained[:pixel_cap] = retained[cutoff:total]
+        elif total == pixel_cap:
+            kth = retained[:total].min()
+        filled = min(total, pixel_cap)
+    del retained
+    limited = np.empty(mask.shape, dtype=bool, order='C')
+    np.greater(score, kth, out=limited)
+    limited &= mask
     remaining = pixel_cap - int(np.count_nonzero(limited))
-    ties = np.flatnonzero(mask & (score == kth))
-    limited.reshape(-1)[ties[:remaining]] = True
-    return limited, int(np.count_nonzero(limited)), round(pixel_cap * 100.0 / max(1, selected), 2)
+    # A large uniformly missing area may have millions of tied pixels. Walk
+    # bounded row-major slices only until the remaining allowance is filled.
+    for start in range(0, mask.size, 65_536):
+        if cancelled():raise InterruptedError()
+        if not remaining:break
+        block = slice(start, start + 65_536)
+        ties = np.flatnonzero(mask_flat[block] & (score_flat[block] == kth))[:remaining]
+        limited.flat[start + ties] = True
+        remaining -= len(ties)
+    return limited, pixel_cap - remaining, round(pixel_cap * 100.0 / max(1, selected), 2)
 
 
 def _runs_from_mask(mask: np.ndarray, cancelled=lambda: False) -> list[tuple[int, int, int, int]]:
     return mask_horizontal_runs(mask, cancelled=cancelled)
+
+
+def _group_candidates(wanted, selected, score, palette_count, *, mean_scores, cancelled):
+    """Collect exact row runs for all selected colours in one tiled scan."""
+    height, width = wanted.shape
+    groups = [[] for _ in range(palette_count)]
+    sums = np.zeros(palette_count, dtype=np.float64) if mean_scores else None
+    counts = np.zeros(palette_count, dtype=np.intp) if mean_scores else None
+    tile_rows = max(1, 65_536 // width)
+    for top in range(0, height, tile_rows):
+        if cancelled():raise InterruptedError()
+        tile = slice(top, top + tile_rows)
+        positions = np.flatnonzero(selected[tile])
+        if not positions.size:
+            continue
+        colors = wanted[tile].flat[positions]
+        ys, xs = np.divmod(positions, width)
+        boundaries = np.flatnonzero((colors[1:] != colors[:-1]) | (ys[1:] != ys[:-1]) |
+                                    (xs[1:] != xs[:-1] + 1)) + 1
+        starts = np.r_[0, boundaries]
+        ends = np.r_[boundaries - 1, len(positions) - 1]
+        for color, y, left, right in zip(colors[starts].tolist(), (ys[starts] + top).tolist(),
+                                         xs[starts].tolist(), xs[ends].tolist()):
+            groups[color].append((left, y, right, y))
+        if mean_scores:
+            np.add.at(sums, colors, score[tile].flat[positions])
+            np.add.at(counts, colors, 1)
+    means = ([(float(sums[i] / counts[i]), int(i)) for i in np.flatnonzero(counts)]
+             if mean_scores else [])
+    return groups, means
 
 
 @dataclass
@@ -436,8 +500,8 @@ def _build_post_draw_correction_plan(*, original_source: Image.Image,
 
     # Missing pixels are always more important than repainting colour drift.
     score = delta + lum * 0.65 + missing.astype(np.float32) * 0.35
-    limited_mask, selected_pixels, selected_ratio = _limit_mask(
-        raw_mask, score, max_pixels=max_pixels, max_fraction=max_area_fraction)
+    limited_mask, selected_pixels, _ = _limit_mask(
+        raw_mask, score, max_pixels=max_pixels, max_fraction=max_area_fraction, cancelled=cancelled)
     if selected_pixels <= 0:
         return {"enabled": False, "safe": True, "reason": "correction pixel cap removed all candidates", "stores_image_data": False}
 
@@ -518,22 +582,9 @@ def _build_post_draw_correction_plan(*, original_source: Image.Image,
             rejected_footprint+=int(np.count_nonzero(reject))
             wanted[reject]=-1
     limited_mask=wanted>=0
-    selected_pixels=int(np.count_nonzero(limited_mask))
-    selected_ratio=100.0*selected_pixels/max(1,limited_mask.size)
 
-    groups: list[list[tuple[int, int, int, int]]] = [[] for _ in palette]
-    color_errors: list[tuple[float, int]] = []
-    for index in np.unique(wanted[wanted >= 0]):
-        index = int(index)
-        if cancelled():
-            raise InterruptedError()
-        cmask = wanted == int(index)
-        pixels = int(np.count_nonzero(cmask))
-        if pixels <= 0:
-            color_errors.append((0.0, index))
-            continue
-        groups[index] = _runs_from_mask(cmask, cancelled)
-        color_errors.append((float(np.mean(score[cmask], dtype=np.float64)), index))
+    groups, color_errors = _group_candidates(wanted, limited_mask, score, len(palette),
+                                              mean_scores=budget is None, cancelled=cancelled)
 
     execution_groups = build_execution_paths(groups, enabled=True, max_rows_per_path=96,
                                              max_points_per_path=520, cancelled=cancelled) or [[] for _ in palette]

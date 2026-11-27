@@ -112,6 +112,32 @@ class SimulationCancellationTests(unittest.TestCase):
             engine._correction_runs(pm, result, 0, pass_number=1, cancelled=cancel)
         self.assertEqual(checks, 3)
 
+    def test_correction_spans_keep_priority_across_tiles_and_skip_non_repaintable_spill(self):
+        indices = np.ones((2, 8200), np.int16)
+        indices[0, 8193:8195] = -1
+        indices[0, 8197:] = 2
+        pm = target(indices)
+        pm.importance_map[:] = .1
+        pm.importance_map[0, 4096] = np.nan
+        pm.importance_map[0, 4097] = .9
+        pm.importance_map[0, 8195] = .8
+        pm.protected_mask[:] = False
+        pm.protected_mask[0, 8198] = True
+        error = np.zeros_like(indices, dtype=np.uint8)
+        error[0, 3:4096] = engine.ERROR_MISSING
+        error[0, 4096:] = engine.ERROR_WRONG_COLOR
+        error[1, :3] = engine.ERROR_MISSING
+        result = engine.SimulationResult(None, None, None, error, {})
+        entries = engine._correction_runs(pm, result, -1, pass_number=2, correction_brush_px=3)
+        self.assertEqual([(e['color_index'], e['path']) for e in entries], [
+            (2, ((8197, 0), (8199, 0))),
+            (1, ((3, 0), (8192, 0))),
+            (1, ((8195, 0), (8196, 0))),
+            (1, ((0, 1), (2, 1))),
+        ])
+        self.assertEqual([e['serial'] for e in entries], list(range(4)))
+        self.assertTrue(all(e['phase'] == 'correction_2' and e['brush_px'] == 3 for e in entries))
+
 
 class RegionScoresTests(unittest.TestCase):
     def test_region_statistics_match_independent_component_pixel_sets(self):

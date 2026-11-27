@@ -8,7 +8,8 @@ from PIL import Image
 from AccuracyEvaluator import _srgb_to_oklab
 from ExecutionCostModel import build_cost_model
 from PostDrawCorrectionPass import (
-    _rank_correction_paths, build_post_draw_correction_plan, compact_correction_meta,
+    _group_candidates, _limit_mask, _rank_correction_paths, _runs_from_mask,
+    build_post_draw_correction_plan, compact_correction_meta,
 )
 from RasterIdentity import canonical_pixels_from_paths
 
@@ -17,6 +18,40 @@ class CorrectionValueBudgetTests(unittest.TestCase):
     def setUp(self):
         self.options = {'gpu_mode': 'CPU', 'brush_px': 1, 'strict_color_verification': False,
                         '_execution_cost_calibration_override': {}}
+
+    def test_cap_preserves_row_major_ties_on_noncontiguous_and_column_major_maps(self):
+        mask = np.ones((300, 300), dtype=bool, order='F')
+        mask[::5, 1::2] = False
+        scores = np.ones(mask.shape, dtype=np.float32, order='F')
+        scores[-1, -1] = 2.0
+        for valid, values in ((mask, scores), (mask.T, scores.T), (mask[::-1, ::-1], scores[::-1, ::-1])):
+            candidates = np.flatnonzero(valid)
+            best = candidates[np.argsort(-values.flat[candidates], kind='stable')[:70_000]]
+            limited, count, _ = _limit_mask(valid, values, max_pixels=70_000, max_fraction=1)
+            self.assertEqual(count, len(best))
+            np.testing.assert_array_equal(np.flatnonzero(limited), np.sort(best))
+
+    def test_all_color_runs_match_per_color_scan_on_existing_raster_and_strided_views(self):
+        asset = Path(__file__).parent / 'assets/image-draw-bot-app-screenshot.webp'
+        with Image.open(asset) as image:
+            rgb = np.asarray(image)
+        labels = (rgb[:, :, 0] // 16).astype(np.int32)
+        scores = rgb[:, :, 2].astype(np.float32) / 255
+        labels[rgb[:, :, 1] < 64] = -1
+        for wanted, values in ((labels, scores), (labels.T[::-1], scores.T[::-1])):
+            valid = wanted >= 0
+            groups, means = _group_candidates(wanted, valid, values, 16, mean_scores=True, cancelled=lambda:False)
+            expected_means = []
+            for color in range(16):
+                mask = wanted == color
+                self.assertEqual(groups[color], _runs_from_mask(mask))
+                if mask.any():
+                    expected_means.append((float(np.mean(values[mask], dtype=np.float64)), color))
+            self.assertEqual(means, expected_means)
+            unpriced, unused_means = _group_candidates(wanted, valid, values, 16, mean_scores=False,
+                                                      cancelled=lambda:False)
+            self.assertEqual(unpriced, groups)
+            self.assertEqual(unused_means, [])
 
     def test_public_budget_prices_real_paths_and_measures_only_selected_pixel_gain(self):
         directory = Path(__file__).parent / 'golden-regression'

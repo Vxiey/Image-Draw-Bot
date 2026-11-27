@@ -576,32 +576,53 @@ def _correction_runs(pixel_map: PixelMap, result: SimulationResult, background_i
     imp=np.asarray(pixel_map.importance_map,dtype=np.float32)
     protected=np.asarray(pixel_map.protected_mask,dtype=bool)
     h,w=error.shape
-    entries=[];serial=0
+    spans = []
     for y in range(h):
-        if y%32==0 and cancelled():raise InterruptedError()
-        x=0
-        while x<w:
-            if x%256==0 and cancelled():raise InterruptedError()
-            # An absent white swatch cannot erase spill. Keep that error in the
-            # report instead of emitting the simulation-only negative sentinel.
-            if not error[y,x] or desired[y,x] < 0:x+=1;continue
-            color=int(desired[y,x]);x0=x;score=float(imp[y,x]);protect=bool(protected[y,x]);x+=1
-            while x<w and error[y,x] and int(desired[y,x])==color:
-                if x%256==0 and cancelled():raise InterruptedError()
-                score=max(score,float(imp[y,x]));protect=protect or bool(protected[y,x]);x+=1
-            x1=x-1
-            path=((x0,y),) if x0==x1 else ((x0,y),(x1,y))
-            entries.append({'color_index':color,'path':path,'phase':f'correction_{pass_number}',
-                            'phase_label':f'accuracy correction {pass_number}','component_id':-100-pass_number,
-                            'orientation':'horizontal','serial':serial,'correction':True,
-                            'brush_px':max(1,int(correction_brush_px)),'brush_reason':'accuracy-correction',
-                            '_priority':(1 if protect else 0,score,x1-x0+1)})
-            serial+=1
-    # Protected/high-importance corrections first; stable coordinate serial breaks ties.
-    entries.sort(key=lambda e:(-e['_priority'][0],-e['_priority'][1],-e['_priority'][2],e['serial']))
-    for serial,e in enumerate(entries):
-        e['serial']=serial;e.pop('_priority',None)
-    return entries
+        for left in range(0, w, 4096):
+            if cancelled():
+                raise InterruptedError()
+            tile = slice(left, left + 4096)
+            colors = desired[y, tile]
+            xs = np.flatnonzero((error[y, tile] != ERROR_CORRECT) & (colors >= 0))
+            if not xs.size:
+                continue
+            # Adjacent error classes can share one correction when they need
+            # the same ink. A correct pixel or absent white splits the run.
+            ink = colors[xs]
+            starts = np.r_[0, np.flatnonzero((np.diff(xs) != 1) | (ink[1:] != ink[:-1])) + 1]
+            ends = np.r_[starts[1:], len(xs)] - 1
+            values = imp[y, tile][xs]
+            scores = np.fmax.reduceat(values, starts)
+            starts_with_nan = np.isnan(values[starts])
+            flags = np.logical_or.reduceat(protected[y, tile][xs], starts)
+            for n, (x0, x1, color, score, keep, first_nan) in enumerate(zip(
+                    (left + xs[starts]).tolist(), (left + xs[ends]).tolist(),
+                    ink[starts].tolist(), scores.tolist(), flags.tolist(), starts_with_nan.tolist())):
+                if n % 256 == 0 and cancelled():
+                    raise InterruptedError()
+                if n == 0 and spans and x0 == left:
+                    previous_y, previous_x, last_x, last_color, last_score, last_keep = spans[-1]
+                    if previous_y == y and last_x + 1 == x0 and last_color == color:
+                        spans[-1] = (y, previous_x, x1, color, max(last_score, score), last_keep or keep)
+                        continue
+                # A NaN is retained only if it starts the complete run, as in
+                # the previous left-to-right max on externally supplied maps.
+                spans.append((y, x0, x1, color, math.nan if first_nan else score, keep))
+    # Stable sorting retains row-major order for equal priority runs.
+    spans.sort(key=lambda span: (-span[5], -span[4], span[1] - span[2]))
+    # Replace each compact span in place so highly textured images do not
+    # retain the entire span list alongside the final execution dictionaries.
+    for serial, (y, x0, x1, color, _, _) in enumerate(spans):
+        if serial % 256 == 0 and cancelled():
+            raise InterruptedError()
+        path = ((x0, y),) if x0 == x1 else ((x0, y), (x1, y))
+        spans[serial] = {'color_index': color, 'path': path, 'phase': f'correction_{pass_number}',
+                         'phase_label': f'accuracy correction {pass_number}', 'component_id': -100-pass_number,
+                         'orientation': 'horizontal', 'serial': serial, 'correction': True,
+                         'brush_px': max(1, int(correction_brush_px)), 'brush_reason': 'accuracy-correction'}
+    if cancelled():
+        raise InterruptedError()
+    return spans
 
 
 def _protected_correction_losses(pixel_map, current, candidate, desired, *, cancelled):
