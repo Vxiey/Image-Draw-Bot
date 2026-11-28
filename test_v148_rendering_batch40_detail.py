@@ -34,7 +34,7 @@ def source_image(*, chromatic=False):
         yield owned.enter_context(closing(source.convert('RGBA')))
 
 
-def luminance_only_signal(rgb):
+def luminance_only_signal(rgb, cancelled=lambda:False):
     with closing(rgb.convert('L')) as gray, \
             closing(gray.filter(ImageFilter.MaxFilter(5))) as hi, \
             closing(gray.filter(ImageFilter.MinFilter(5))) as lo:
@@ -116,6 +116,23 @@ class ChromaticDetailTests(unittest.TestCase):
         with source_image() as source, closing(source.convert('L')) as gray, closing(gray.convert('RGB')) as rgb:
             with closing(luminance_only_signal(rgb)) as expected, closing(detail._detail_signal(rgb)) as actual:
                 self.assertEqual(actual.tobytes(), expected.tobytes())
+
+    def test_tiled_chromatic_range_matches_rank_filters_at_edges_and_seams(self):
+        with Image.open(ROOT / 'assets/image-draw-bot-app-screenshot.png') as source:
+            for width, height in ((1, 8), (20, 1), (2, 2), (514, 301)):
+                with self.subTest(size=(width, height)), ExitStack() as owned:
+                    crop = owned.enter_context(source.crop((60, 110, 60 + width, 110 + height)))
+                    rgb = owned.enter_context(crop.convert('RGB'))
+                    high = owned.enter_context(rgb.filter(ImageFilter.MaxFilter(5)))
+                    low = owned.enter_context(rgb.filter(ImageFilter.MinFilter(5)))
+                    expected = np.max(np.asarray(high) - np.asarray(low), axis=2)
+                    actual = owned.enter_context(detail._detail_signal(rgb))
+                    np.testing.assert_array_equal(np.asarray(actual), expected)
+            with source.convert('RGB') as rgb:
+                checks = iter((False, False, True))
+                with self.assertRaises(InterruptedError):
+                    detail._detail_signal(rgb, cancelled=lambda: next(checks))
+                source.getpixel((0, 0))
 
     def assert_retired(self, images, survivors=()):
         allowed = {id(image) for image in survivors}

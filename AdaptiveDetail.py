@@ -92,19 +92,48 @@ def _settings(effective_mode: str) -> tuple[int, int, int, int]:
     return 255, 1, 1, 0
 
 
-def _detail_signal(rgb):
-    from PIL import ImageChops, ImageFilter
-    # Equal-luminance colours can still form a distinct edge or a tiny mark.
-    # Inspect the largest local channel range so red/green and blue/orange
-    # detail survives smoothing. Uniform colours and grayscale retain their
-    # original range; RGB is already composited against the visible background.
-    with ExitStack() as owned:
-        local_hi = owned.enter_context(closing(rgb.filter(ImageFilter.MaxFilter(5))))
-        local_lo = owned.enter_context(closing(rgb.filter(ImageFilter.MinFilter(5))))
-        ranges = owned.enter_context(closing(ImageChops.subtract(local_hi, local_lo)))
-        red, green, blue = [owned.enter_context(closing(channel)) for channel in ranges.split()]
-        first = owned.enter_context(closing(ImageChops.lighter(red, green)))
-        return ImageChops.lighter(first, blue)
+def _detail_signal(rgb, cancelled=lambda: False):
+    """Largest per-channel range in a 5×5 window, including equal-luminance edges."""
+    import numpy as np
+    from PIL import Image
+    if cancelled():
+        raise InterruptedError()
+    width, height = rgb.size
+    if not width or not height:
+        return Image.new('L', rgb.size)
+    tile_rows = max(1, min(128, 131_072 // width))
+    signal = padded = horizontal_hi = horizontal_lo = high = low = None
+    try:
+        signal = np.empty((height, width), dtype=np.uint8)
+        for top in range(0, height, tile_rows):
+            if cancelled():
+                raise InterruptedError()
+            bottom = min(height, top + tile_rows)
+            rows = bottom - top
+            # Read real neighbouring rows across tile boundaries. Only the
+            # outer image edges repeat their nearest pixel, as in Pillow.
+            with rgb.crop((0, max(0, top-2), width, min(height, bottom+2))) as band:
+                padded = np.pad(np.asarray(band), ((max(0, 2-top), max(0, bottom+2-height)),
+                                                    (2, 2), (0, 0)), mode='edge')
+            horizontal_hi = padded[:, :width].copy()
+            horizontal_lo = horizontal_hi.copy()
+            for offset in range(1, 5):
+                np.maximum(horizontal_hi, padded[:, offset:offset+width], out=horizontal_hi)
+                np.minimum(horizontal_lo, padded[:, offset:offset+width], out=horizontal_lo)
+            high = horizontal_hi[:rows].copy()
+            low = horizontal_lo[:rows].copy()
+            for offset in range(1, 5):
+                np.maximum(high, horizontal_hi[offset:offset+rows], out=high)
+                np.minimum(low, horizontal_lo[offset:offset+rows], out=low)
+            np.subtract(high, low, out=high)
+            np.maximum(high[..., 0], high[..., 1], out=signal[top:bottom])
+            np.maximum(signal[top:bottom], high[..., 2], out=signal[top:bottom])
+        if cancelled():
+            raise InterruptedError()
+        return Image.fromarray(signal)
+    finally:
+        # A retained cancellation/error must release the work buffers too.
+        signal = padded = horizontal_hi = horizontal_lo = high = low = None
 
 
 def _restore_source_alpha(source, visible_rgb, processed_rgb, cancelled):
@@ -179,7 +208,7 @@ def apply_adaptive_detail(image, mode: str = "Auto", *, subject_focus: bool = Fa
         flat.alpha_composite(source)
         rgb = keep(flat.convert("RGB"))
         flat.close()
-        signal = keep(_detail_signal(rgb))
+        signal = keep(_detail_signal(rgb, cancelled))
         complexity = _complexity_from_detail(signal)
         effective = resolve_adaptive_detail(mode, complexity_score=complexity,
                                             drawing_mode=drawing_mode, preview=preview)
