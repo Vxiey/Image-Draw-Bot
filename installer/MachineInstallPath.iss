@@ -13,34 +13,34 @@ type
 function MachineFileAttributes(const Name: String): Cardinal;
   external 'GetFileAttributesW@kernel32.dll stdcall';
 function MachineSecurity(const Name: String; Kind, Info: Cardinal;
-  var Owner: NativeUInt; Group: NativeUInt; var Dacl: NativeUInt; Sacl: NativeUInt;
-  var Descriptor: NativeUInt): Cardinal;
+  var Owner: THandle; Group: THandle; var Dacl: THandle; Sacl: THandle;
+  var Descriptor: THandle): Cardinal;
   external 'GetNamedSecurityInfoW@advapi32.dll stdcall';
-function MachineAclSize(Acl: NativeUInt; var Info: TAclSize; Size, Kind: Cardinal): BOOL;
+function MachineAclSize(Acl: THandle; var Info: TAclSize; Size, Kind: Cardinal): BOOL;
   external 'GetAclInformation@advapi32.dll stdcall';
-function MachineAce(Acl: NativeUInt; Index: Cardinal; var Ace: NativeUInt): BOOL;
+function MachineAce(Acl: THandle; Index: Cardinal; var Ace: THandle): BOOL;
   external 'GetAce@advapi32.dll stdcall';
-procedure ReadMachineAce(var Entry: TAccessEntry; Addr, Size: NativeUInt);
+procedure ReadMachineAce(var Entry: TAccessEntry; Addr, Size: THandle);
   external 'RtlMoveMemory@kernel32.dll stdcall';
-function MachineWellKnownSid(Sid: NativeUInt; Kind: Cardinal): BOOL;
+function MachineWellKnownSid(Sid: THandle; Kind: Cardinal): BOOL;
   external 'IsWellKnownSid@advapi32.dll stdcall';
-function MachineEqualSid(First, Second: NativeUInt): BOOL;
+function MachineEqualSid(First, Second: THandle): BOOL;
   external 'EqualSid@advapi32.dll stdcall';
-function MachineMakeSid(const Text: String; var Sid: NativeUInt): BOOL;
+function MachineMakeSid(const Text: String; var Sid: THandle): BOOL;
   external 'ConvertStringSidToSidW@advapi32.dll stdcall';
-function MachineLocalFree(Address: NativeUInt): NativeUInt;
+function MachineLocalFree(Address: THandle): THandle;
   external 'LocalFree@kernel32.dll stdcall';
 
-function TrustedMachinePrincipal(Sid, TrustedInstaller: NativeUInt): Boolean;
+function TrustedMachinePrincipal(Sid, TrustedInstaller: THandle): Boolean;
 begin
   { WinLocalSystemSid, WinBuiltinAdministratorsSid, TrustedInstaller }
   Result := (Sid <> 0) and (MachineWellKnownSid(Sid, 22) or
     MachineWellKnownSid(Sid, 26) or MachineEqualSid(Sid, TrustedInstaller));
 end;
 
-function ProtectedMachineAccess(const Name: String; TrustedInstaller: NativeUInt): Boolean;
+function ProtectedMachineAccess(const Name: String; TrustedInstaller: THandle): Boolean;
 var
-  Owner, Dacl, Descriptor, Ace, Sid: NativeUInt;
+  Owner, Dacl, Descriptor, Ace, Sid: THandle;
   Acl: TAclSize;
   Index: Cardinal;
   Entry: TAccessEntry;
@@ -77,7 +77,7 @@ begin
 end;
 
 function ProtectedMachineTree(const Name: String; Attributes: Cardinal;
-  TrustedInstaller: NativeUInt; Depth: Integer; var Remaining: Integer): Boolean;
+  TrustedInstaller: THandle; Depth: Integer; var Remaining: Integer): Boolean;
 var
   Item: TFindRec;
 begin
@@ -107,7 +107,7 @@ const
 var
   Root, Expected: String;
   Attributes: Cardinal;
-  TrustedInstaller: NativeUInt;
+  TrustedInstaller: THandle;
   Remaining: Integer;
 begin
   Result := False;

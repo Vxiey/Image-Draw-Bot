@@ -4,6 +4,7 @@ The **Simple** workspace shows the next action for your picture and target. Open
 
 ## Setup and canvas detection
 
+- Resizing the complete workspace on Windows could freeze the app. The scrollbars now repaint after the layout change finishes.
 - The setup panel keeps the selected target, picture, canvas and palette status together. It exposes the current image style, background removal and Undo.
 - Canvas discovery reads the visible window. Confirmation checks the window owner, current screen rectangle, DPI and detected canvas again. **Show canvas** briefly outlines a visible suggestion on Windows. Paint can locate the canvas independently of full color and tool calibration.
 - The browser detector collects connected light areas in runs. A plain white window without canvas boundaries is rejected. When detection is inconclusive, the guide offers manual selection.

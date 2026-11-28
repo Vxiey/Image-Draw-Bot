@@ -64,10 +64,66 @@ def _scoped_scrollable_class(base):
     return ScopedScrollableFrame
 
 
+class _ScrollbarPaint:
+    """Coalesce the app's scrollbar draws outside CTk's nested idle flush."""
+
+    def __init__(self, frame):
+        self.bar = frame._scrollbar
+        self.draw = self.bar._draw
+        self.job = None
+        self.dirty = False
+        self.recolor = False
+        self.painting = False
+        self.bar._draw = self.request
+        # Tk's Canvas invokes the viewport command even for unchanged bounds
+        # while rearranging children. CTk 6 calls _draw on every set.
+        command = 'xscrollcommand' if frame._orientation == 'horizontal' else 'yscrollcommand'
+        frame._parent_canvas.configure(**{command: self.viewport})
+        tk.Misc.bind(self.bar, '<Destroy>', self.dispose, add='+')
+
+    def viewport(self, first, last):
+        if self.bar is not None and self.bar.get() != (float(first), float(last)):
+            self.bar.set(first, last)
+
+    def request(self, no_color_updates=False):
+        if self.bar is None:
+            return
+        self.dirty = True
+        self.recolor |= not no_color_updates
+        if self.job is None and not self.painting:
+            self.job = self.bar.after_idle(self._after_layout)
+
+    def _after_layout(self):
+        # update_idletasks() inside another CTk scrollbar may call this idle
+        # hook. A timer runs in the outer event loop, never in that idle flush.
+        self.job = self.bar.after(0, self._paint)
+
+    def _paint(self):
+        self.job = None
+        recolor = self.recolor
+        self.dirty = self.recolor = False
+        self.painting = True
+        try:
+            self.draw(no_color_updates=not recolor)
+        finally:
+            self.painting = False
+            if self.dirty:
+                self.request(no_color_updates=True)
+
+    def dispose(self, event):
+        if event.widget is not self.bar:
+            return
+        if self.job is not None:
+            self.bar.after_cancel(self.job)
+        self.job = self.draw = self.bar = None
+
+
 def scoped_scrollable_frame(parent, **kwargs):
-    """Create a CTk scroll frame whose root bindings end with its lifetime."""
+    """Create an app-owned scroll frame and retire its callbacks on destruction."""
     import customtkinter as ctk
-    return _scoped_scrollable_class(ctk.CTkScrollableFrame)(parent, **kwargs)
+    frame = _scoped_scrollable_class(ctk.CTkScrollableFrame)(parent, **kwargs)
+    _ScrollbarPaint(frame)
+    return frame
 
 
 def patch_customtkinter_scroll_guard() -> bool:

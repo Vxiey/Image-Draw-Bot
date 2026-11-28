@@ -8,6 +8,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
+from UiCompatibility import scoped_scrollable_frame
 from UiKeyboardNavigation import KeyboardButton, KeyboardOptionMenu, KeyboardSwitch, KeyboardSlider
 from GameProfiles import PROFILES, profile_ui, profile_defaults
 from ProfileEngine import PROFILE_ENGINE_MODES, policy_summary
@@ -476,7 +477,7 @@ def build_ui(a, quality, speed):
     # LEFT: step-by-step workflow.
     sidebar_shell = frame(main, SIDEBAR, border_width=1, border_color=LINE, radius=15)
     sidebar_shell.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
-    sidebar = ctk.CTkScrollableFrame(sidebar_shell, fg_color=SIDEBAR, corner_radius=13,
+    sidebar = scoped_scrollable_frame(sidebar_shell, fg_color=SIDEBAR, corner_radius=13,
                                      width=306, scrollbar_button_color=FIELD,
                                      scrollbar_button_hover_color=FIELD_HOVER)
     sidebar.pack(fill='both', expand=True, padx=5, pady=6)
@@ -876,7 +877,7 @@ def build_ui(a, quality, speed):
     # CENTER: preview workspace and Tools alternate view.
     center_host = frame(main)
     center_host.grid(row=0, column=1, sticky='nsew', padx=(0, 12))
-    workspace_center = ctk.CTkScrollableFrame(center_host,fg_color=PANEL,border_width=1,border_color=LINE,corner_radius=15)
+    workspace_center = scoped_scrollable_frame(center_host,fg_color=PANEL,border_width=1,border_color=LINE,corner_radius=15)
     tools_center = frame(center_host, PANEL, border_width=1, border_color=LINE, radius=15)
 
     preview_head = frame(workspace_center)
@@ -963,7 +964,7 @@ def build_ui(a, quality, speed):
     label(workspace_center, var=a.summary, muted=True, wraplength=760, size=10).pack(fill='x', padx=16, pady=(0, 13))
 
     # Tools alternate center page.
-    tools_scroll = ctk.CTkScrollableFrame(tools_center, fg_color=PANEL, corner_radius=14)
+    tools_scroll = scoped_scrollable_frame(tools_center, fg_color=PANEL, corner_radius=14)
     tools_scroll.pack(fill='both', expand=True, padx=6, pady=6)
     label(tools_scroll, 'Tools & diagnostics', size=21, bold=True).pack(anchor='w', padx=16, pady=(14, 2))
     label(tools_scroll, 'Run isolated tests, inspect the canvas, export previews and collect sanitized diagnostics. Full drawing requires Preflight + Unlock + Start.', muted=True, size=10, wraplength=720).pack(anchor='w', padx=16, pady=(0, 12))
@@ -1083,7 +1084,7 @@ def build_ui(a, quality, speed):
     show_center('workspace')
 
     # RIGHT: readiness + contextual help + error card.
-    right = ctk.CTkScrollableFrame(main,fg_color=SIDEBAR,border_width=1,border_color=LINE,corner_radius=15,width=286)
+    right = scoped_scrollable_frame(main,fg_color=SIDEBAR,border_width=1,border_color=LINE,corner_radius=15,width=286)
     right.grid(row=0, column=2, sticky='nsew')
     label(right, '🛡️  Readiness', size=16, bold=True).pack(anchor='w', padx=15, pady=(15, 2))
     label(right, 'Complete the blocking items before a full drawing.', muted=True, size=9, wraplength=250).pack(anchor='w', padx=15, pady=(0, 9))
