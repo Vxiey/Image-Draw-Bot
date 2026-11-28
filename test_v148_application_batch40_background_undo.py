@@ -119,6 +119,50 @@ class BackgroundUndoTransferTests(unittest.TestCase):
         self.assertEqual(app.original.tobytes(), original.tobytes())
         previous.getpixel((0, 0))
 
+    def test_cancelled_stale_and_failed_adjustments_preserve_accepted_cutout_and_undo(self):
+        for outcome in ('stop', 'stale', 'failure', 'no match'):
+            with self.subTest(outcome=outcome):
+                app = self.app()
+                if outcome == 'no match':
+                    path = Path(__file__).with_name('golden-regression') / 'small-detail-preservation.png'
+                    with Image.open(path) as asset:
+                        app.original = asset.convert('RGBA')
+                    self.fixture.images.append(app.original)
+                original, saved, _, first = self.prepare(app)
+                self.deliver(app, first)
+                cutout, metadata = app.original, app.background_removal_meta
+                selected = 'invalid' if outcome == 'failure' else 'Dark background'
+                self.assertTrue(DrawBot.DrawBotApp.remove_image_background(
+                    app, mode=selected, strength='Conservative', adjust=True))
+                app.worker.join(timeout=10)
+                self.assertFalse(app.worker.is_alive())
+                events = []
+                while not app.events.empty():
+                    events.append(app.events.get_nowait())
+                kinds = [kind for kind, _ in events]
+                if outcome == 'failure':
+                    self.assertEqual(kinds, ['terminal_status', 'done'])
+                else:
+                    self.assertEqual(kinds, ['background_removed', 'done'])
+                    self.assertIs(events[0][1].source, cutout)
+                if outcome == 'stop':
+                    app.stop.set()
+                if outcome == 'stale':
+                    app.original = self.fixture.image('replacement')
+                current = app.original
+                self.deliver(app, events)
+                self.assertIs(app.original, current)
+                self.assertIs(app.background_removal_original, saved)
+                self.assertIs(app.background_removal_meta, metadata)
+                if outcome != 'failure':
+                    self.assert_closed(events[0][1].image)
+                if outcome == 'no match':
+                    self.assertTrue(events[0][1].metadata['no_op_reason'])
+                    self.assertIn('kept the current cutout', app.status.get())
+                if outcome != 'stale':
+                    self.assertTrue(DrawBot.DrawBotApp.undo_background_removal(app))
+                    self.assertEqual(app.original.tobytes(), original.tobytes())
+
     def test_publication_failure_closes_result_and_undo_snapshot_before_reporting_error(self):
         app = self.app()
         original = app.original

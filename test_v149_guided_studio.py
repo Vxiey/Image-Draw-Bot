@@ -109,6 +109,9 @@ class GuidedStudioTests(unittest.TestCase):
         self.wait(lambda: self.guide.request is None)
         self.assertEqual(self.app.guided_setup_state()['stage'], 'canvas')
         self.assertEqual(self.app.corners, [])
+        manual = self.app.guided_manual_canvas_button
+        self.assertIs(manual.master, self.app.guided_action_button.master)
+        self.assertTrue(manual.winfo_ismapped())
         self.app.guided_action_button.invoke()
         self.wait(lambda: self.app.guided_setup_state()['stage'] == 'confirm_canvas')
         self.app.guided_action_button.invoke()

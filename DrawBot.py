@@ -699,6 +699,13 @@ def make_plan(original, area, options, cancelled=lambda: False):
         return _make_plan(original, area, options, cancelled)
 
 
+def _browser_fast_gap_join(value, source_has_transparency):
+    if source_has_transparency:
+        return 0
+    # A missing or blank setting uses the legacy one-pixel shortcut.
+    return 1 if value is None or value == '' else int(value)
+
+
 def _make_plan(original, area, options, cancelled=lambda: False):
     from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageOps
     from AutoDrawing import resolve_drawing
@@ -1575,7 +1582,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
         groups, skribbl_fast_meta = optimize_skribbl_groups(
             groups, tuple(c.RGB for c in allColors),
             max_colors=int(options.get('skribbl_fast_max_colors', 6) or 6),
-            gap_join=0 if source_has_transparency else int(options.get('skribbl_fast_gap_join', 1) or 1),
+            gap_join=_browser_fast_gap_join(options.get('skribbl_fast_gap_join'), source_has_transparency),
             min_run=int(options.get('skribbl_fast_min_run', 2) or 2),
             color_fidelity=str(options.get('color_fidelity','Balanced')))
         plan_options['skribbl_fast_meta'] = skribbl_fast_meta
@@ -1596,7 +1603,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
         groups, gartic_fast_meta = optimize_gartic_phone_groups(
             groups, tuple(c.RGB for c in allColors),
             max_colors=int(options.get('gartic_phone_max_colors', runtime_profile.max_colors) or runtime_profile.max_colors),
-            gap_join=0 if source_has_transparency else int(options.get('gartic_phone_gap_join', 1) or 1),
+            gap_join=_browser_fast_gap_join(options.get('gartic_phone_gap_join'), source_has_transparency),
             min_run=int(options.get('gartic_phone_min_run', 2) or 2),
             color_fidelity=str(options.get('color_fidelity','Faithful')))
         gartic_fast_meta = dict(gartic_fast_meta)
@@ -8389,7 +8396,34 @@ class DrawBotApp:
         if path:
             self.load_source(path,Path(path).name,action=action_for_import(armed=DrawBotApp._manual_drop_in_armed(self)))
 
-    def remove_image_background(self):
+    def adjust_background_removal(self):
+        if not DrawBotApp._profile_action_ready(self):return
+        if self.original is None:
+            self.status.set('Load an image before adjusting background removal.')
+            return
+        from StudioUI import show_background_adjustment
+        source=self.original
+        stop_request=getattr(self,'_last_stop_request',None)
+        stopped_at_open=self.stop.is_set()
+
+        def apply(mode,strength):
+            if self.original is not source or not DrawBotApp._profile_action_ready(self):
+                if not self.closing:self.status.set('Image or operation changed. Reopen Adjust to edit the current image.')
+                return False
+            if stop_request is not getattr(self,'_last_stop_request',None):return False
+            if stopped_at_open:
+                # Applying is an explicit new operation. Opening or dismissing
+                # the dialog keeps Stop intact, as does a fresh Esc during Apply.
+                self.stop.clear()
+                if stop_request is not getattr(self,'_last_stop_request',None):
+                    self.stop.set()
+                    return False
+            return DrawBotApp.remove_image_background(self,mode=mode,strength=strength,adjust=True)
+
+        return show_background_adjustment(self.root,self.background_removal_meta,
+                                         self.background_removal_original is not None,apply)
+
+    def remove_image_background(self, *, mode='Auto', strength='Balanced', adjust=False):
         if self.closing:return False
         if self.activity:
             self.status.set('Finish or stop the current operation before removing the background.')
@@ -8397,10 +8431,15 @@ class DrawBotApp:
         if self.original is None:
             self.status.set('Load an image before removing its background.')
             return False
-        self.stop.clear()
+        if adjust:
+            # Stop during an open adjustment dialog also cancels its handoff.
+            if self.stop.is_set():return False
+        else:
+            self.stop.clear()
         original=self.original
-        source=original.copy()
-        needs_undo=getattr(self,'background_removal_original',None) is None
+        saved=getattr(self,'background_removal_original',None)
+        source=(saved if adjust and saved is not None else original).copy()
+        needs_undo=saved is None
         transferred=False
         source_released=False
         def release_source(failure=None):
@@ -8415,7 +8454,7 @@ class DrawBotApp:
             from BackgroundEdit import BackgroundEditResult
             result=failure=None
             try:
-                result=remove_background(source,mode='Auto',strength='Balanced',cancelled=self.stop.is_set)
+                result=remove_background(source,mode=mode,strength=strength,cancelled=self.stop.is_set)
                 try:
                     undo=source if needs_undo and not result.metadata.get('no_op_reason') else None
                     event=BackgroundEditResult(result.image,result.metadata,original,undo)
@@ -8434,7 +8473,7 @@ class DrawBotApp:
         startup_failure=None
         try:
             self.status.set('Removing border-connected background…')
-            log_event(f'Background removal requested: size={source.size}.')
+            log_event(f'Background removal requested: size={source.size} mode={mode} strength={strength}.')
             started=bool(self.begin_worker('background-remove',work,reset_stop=False,cleanup=release_source))
             if not started and self.stop.is_set() and not self.closing and not self.activity:
                 try:self.status.set('Stopped.')
@@ -10732,6 +10771,7 @@ class DrawBotApp:
 
     def _request_stop(self):
         """Keyboard-thread-safe Stop: no Tk calls or resettable update token."""
+        self._last_stop_request=object()
         guide=getattr(self,'_guided_setup_controller',None)
         if guide:guide.signal_stop()
         self._stopped_detail_generation=getattr(self,'preview_generation',None)
@@ -12162,10 +12202,12 @@ class DrawBotApp:
             else:
                 reason=meta.get('no_op_reason')
                 if reason:
-                    self.background_removal_meta=dict(meta)
+                    has_cutout=self.background_removal_original is not None
+                    if not has_cutout:self.background_removal_meta=dict(meta)
                     if isinstance(result,BackgroundEditResult):result.release()
                     elif image is not self.original:image.close()
-                    self.status.set(f'Background remover kept the original: {reason}.')
+                    kept='the current cutout' if has_cutout else 'the original'
+                    self.status.set(f'Background remover kept {kept}: {reason}.')
                     return
                 prepared=None
                 try:
@@ -12987,6 +13029,15 @@ def _smoke_workspace(source, phase, geometry_events):
             phase('Opening the packaged icon through the guided action')
             app.guided_action_button.invoke()
             settle(lambda: app.original is not None and app.activity is None, 'Image loading failed')
+            phase('Opening and dismissing the background adjustment dialog')
+            loaded_source = app.original
+            adjustment = app.guided_adjust_background_button.invoke()
+            settle(lambda: adjustment.winfo_ismapped() and adjustment.grab_current() == adjustment,
+                   'Background controls did not become available')
+            adjustment.tk.call(adjustment.protocol('WM_DELETE_WINDOW'))
+            settle(lambda: not adjustment.winfo_exists() and root.grab_current() is None,
+                   'Closing background controls did not restore the workspace')
+            assert app.original is loaded_source and app.background_removal_original is None
             phase('Building and displaying the real preview')
             app.guided_preview_button.invoke()
             settle(lambda: app.plan is not None and app.activity is None, 'Preview planning failed')

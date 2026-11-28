@@ -161,6 +161,8 @@ def discover_guided_canvas(profile_key, *, preferred_handle=None, previous=None,
             found = detect_canvas_area(frame, screen_origin=client[:2], cancelled=cancelled)
         else:
             found = detect_browser_canvas(profile_key, frame, screen_origin=client[:2], cancelled=cancelled)
+        if found.get('canvas_box') is None:
+            raise ValueError('Canvas edges could not be verified. Show the entire drawing area or select it manually.')
         box = contained_rect(found.get('canvas_box'), client, min_side=10)
         confidence = bounded_number(found.get('canvas_confidence'), 'Canvas confidence', minimum=.70)
     _cancel(cancelled)

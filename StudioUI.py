@@ -124,6 +124,63 @@ def button(parent, text, command, primary=False, danger=False, **kwargs):
     return KeyboardButton(parent, text=text, command=command, **defaults)
 
 
+def show_background_adjustment(root, previous, has_cutout, apply):
+    from BackgroundRemoval import MODES, STRENGTHS
+    from UiCompatibility import scoped_toplevel
+
+    window = scoped_toplevel(root, fg_color=PANEL)
+    try:
+        window.title('Adjust background removal')
+        window.transient(root)
+        card = ctk.CTkFrame(window, fg_color='transparent')
+        card.pack(fill='both', expand=True, padx=18, pady=16)
+        card.columnconfigure(1, weight=1)
+        hint = ('Adjustments use the original image. Undo restores it.'
+                if has_cutout else 'Choose which border colors to remove. Undo restores the original image.')
+        ctk.CTkLabel(card, text=hint, text_color=TEXT, wraplength=300, justify='left',
+                     anchor='w').grid(row=0, column=0, columnspan=2, sticky='ew', pady=(0, 10))
+        choices = []
+        for row, (label, key, values, default) in enumerate((
+                ('Background', 'mode', MODES, 'Auto'),
+                ('Strength', 'strength', STRENGTHS, 'Balanced')), start=1):
+            ctk.CTkLabel(card, text=label, text_color=TEXT, anchor='w').grid(
+                row=row, column=0, sticky='w', padx=(0, 12), pady=4)
+            selector = ttk.Combobox(card, values=values, state='readonly', takefocus=True,
+                                     width=17, style='ImageDrawBot.TCombobox')
+            selected = (previous or {}).get(key)
+            selector.set(selected if selected in values else default)
+            selector.grid(row=row, column=1, sticky='ew', pady=4)
+            choices.append(selector)
+
+        def commit():
+            mode, strength = (selector.get() for selector in choices)
+            window.destroy()
+            apply(mode, strength)
+
+        actions = ctk.CTkFrame(card, fg_color='transparent')
+        actions.grid(row=3, column=0, columnspan=2, sticky='e', pady=(14, 0))
+        button(actions, 'Cancel', window.destroy, height=34, width=72).pack(side='left', padx=(0, 6))
+        button(actions, 'Replace cutout' if has_cutout else 'Apply', commit,
+               primary=True, height=34, width=104).pack(side='left')
+        def dismiss(_event):
+            window.destroy()
+            return 'break'
+
+        window.bind('<Escape>', dismiss)
+        window.protocol('WM_DELETE_WINDOW', window.destroy)
+
+        def mapped(event):
+            if event.widget is window:
+                window.grab_set()
+                choices[0].focus_set()
+
+        window.bind('<Map>', mapped, add='+')
+        return window
+    except BaseException:
+        window.destroy()
+        raise
+
+
 def show_error_help(app):
     """Explain the current failure without interpreting Help as a drawing request."""
     if getattr(app, 'closing', False):
@@ -169,6 +226,8 @@ def _build_guided_panel(app, sidebar, frame, label):
     fit_label(title, 460).pack(fill='x', padx=12, pady=(0, 2))
     detail = label(action, '', size=12, muted=True)
     fit_label(detail, 460).pack(fill='x', padx=12, pady=(0, 9))
+    app.guided_manual_canvas_button = button(action, 'Select canvas manually…', app.set_boundary,
+                                            height=32, width=1)
 
     inputs = frame(panel, PANEL, border_width=1, border_color=LINE, radius=13)
     inputs.pack(fill='x')
@@ -205,6 +264,9 @@ def _build_guided_panel(app, sidebar, frame, label):
     background.pack(fill='x', pady=(0, 4))
     remove = button(background, 'Remove background', app.remove_image_background, height=32, width=1)
     remove.pack(side='left', fill='x', expand=True, padx=(0, 3))
+    adjust = button(background, 'Adjust…', app.adjust_background_removal, height=32, width=64)
+    adjust.pack(side='left', padx=3)
+    app.guided_adjust_background_button = adjust
     undo = button(background, 'Undo', app.undo_background_removal, height=32, width=58)
     undo.pack(side='left', padx=(3, 0))
     app.guided_remove_background_button, app.guided_undo_background_button = remove, undo
@@ -214,10 +276,9 @@ def _build_guided_panel(app, sidebar, frame, label):
     change.pack(side='left', fill='x', expand=True, padx=(0, 3))
     preview = button(source_actions, 'Build preview', app.request_preview, height=32, width=1)
     preview.pack(side='left', fill='x', expand=True, padx=(3, 0))
-    app.controls.extend(((style, 'readonly'), (remove, 'normal'), (change, 'normal'), (preview, 'normal')))
+    app.controls.extend(((style, 'readonly'), (remove, 'normal'), (adjust, 'normal'),
+                         (change, 'normal'), (preview, 'normal')))
     app.guided_preview_button = preview
-    app.guided_manual_canvas_button = button(more, 'Select canvas manually…', app.set_boundary,
-                                            height=32, width=1)
     app.guided_advanced_button = button(more, 'Advanced controls', lambda: app.ui_mode.set('Advanced'),
                                        height=32, width=1, fg_color='transparent')
     app.guided_advanced_button.pack(fill='x')
@@ -238,7 +299,7 @@ def _build_guided_panel(app, sidebar, frame, label):
         manual = app.guided_manual_canvas_button
         show_manual = app.original is not None and not state.get('primary_selects_canvas', False)
         if show_manual and not manual.winfo_manager():
-            pack_in_order(manual, fill='x', pady=(0, 4), before=app.guided_advanced_button)
+            manual.pack(fill='x', padx=10, pady=(0, 8))
         elif not show_manual and manual.winfo_manager():
             manual.pack_forget()
         _configure_presentation(manual,
@@ -256,7 +317,7 @@ def _build_guided_panel(app, sidebar, frame, label):
             name = app.file_label.get().split(' · ', 1)[0]
             source = f'{name} · {app.original.width:,} × {app.original.height:,} px'
             if not image_actions.winfo_manager():
-                pack_in_order(image_actions, fill='x', pady=(0, 4), before=manual if show_manual else app.guided_advanced_button)
+                pack_in_order(image_actions, fill='x', pady=(0, 4), before=app.guided_advanced_button)
         _configure_presentation(values['image'], text=source)
 
     app.refresh_guided_setup = refresh
@@ -567,9 +628,12 @@ def build_ui(a, quality, speed):
     image_tools = frame(step2); image_tools.pack(fill='x', pady=(7, 0))
     bg_btn=btn(image_tools, '✂  Remove BG', a.remove_image_background, width=104, height=34);bg_btn.pack(side='left',fill='x',expand=True)
     tooltip(bg_btn,'Auto-remove only border-connected background and convert it to transparency. Transparent pixels generate no drawing strokes.')
-    undo_bg=btn(image_tools, '↶  Undo', a.undo_background_removal, width=70, height=34);undo_bg.pack(side='left',padx=(6,0))
+    adjust_bg=btn(image_tools, 'Adjust…', a.adjust_background_removal, width=76, height=34);adjust_bg.pack(side='left',padx=(6,0))
+    tooltip(adjust_bg,'Choose the background color model and removal strength.')
+    image_undo_export=frame(step2);image_undo_export.pack(fill='x',pady=(4,0))
+    undo_bg=btn(image_undo_export, '↶  Undo', a.undo_background_removal, width=70, height=34);undo_bg.pack(side='left',fill='x',expand=True)
     tooltip(undo_bg,'Restore the image from before background removal.')
-    png_btn=btn(image_tools, 'PNG', a.save_png_copy, width=58, height=34);png_btn.pack(side='left',padx=(6,0))
+    png_btn=btn(image_undo_export, 'PNG', a.save_png_copy, width=76, height=34);png_btn.pack(side='left',padx=(6,0))
     tooltip(png_btn,'Export the current image as a lossless RGBA PNG, preserving transparency.')
     url_row = frame(step2)
     url_row.pack(fill='x', pady=(7, 0))

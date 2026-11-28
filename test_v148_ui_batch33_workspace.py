@@ -157,22 +157,53 @@ class NativeStudioWorkspaceTests(unittest.TestCase):
     def test_guided_style_background_and_undo_use_the_current_image(self):
         if self.isolated():
             return
+        from tkinter import ttk
+        from BackgroundRemoval import MODES, STRENGTHS, remove_background
         from DrawingStyleProfiles import DRAWING_STYLES
+        from UiKeyboardNavigation import KeyboardButton
         with self.workspace() as (root, app, _backend, _data):
+            def open_adjustment(button):
+                button.invoke()
+                self.wait(root, lambda: root.grab_current() is not None, 'Adjustment dialog did not take focus')
+                dialog = root.grab_current()
+                self.assertEqual(dialog.title(), 'Adjust background removal')
+                selectors = [item for item in descendants(dialog) if isinstance(item, ttk.Combobox)]
+                self.assertEqual([tuple(item['values']) for item in selectors], [MODES, STRENGTHS])
+                actions = {item.cget('text'): item for item in descendants(dialog) if isinstance(item, KeyboardButton)}
+                return selectors, actions
+
             self.select_profile(root, app, 'Other drawing app')
             self.assertTrue(app.guided_action_button.winfo_ismapped())
             self.assertFalse(app.start.winfo_ismapped())
             self.assertIn(app.start, app.draw_action_bar.overflow)
             self.assertFalse(app.guided_style_selector.winfo_ismapped())
 
-            path = Path(__file__).parent / 'golden-regression' / 'small-detail-preservation.png'
+            path = Path(__file__).parent / 'golden-regression' / 'red-bananas-texture.png'
             self.assertTrue(app.load_source(str(path), path.name))
             self.wait(root, lambda: not app.activity and app.guided_style_selector.winfo_ismapped(),
                       'Image editing controls did not become visible')
             source = app.original.tobytes()
             self.assertEqual(tuple(app.guided_style_selector['values']), tuple(DRAWING_STYLES))
             self.assertTrue(app.guided_remove_background_button.winfo_ismapped())
+            self.assertTrue(app.guided_adjust_background_button.winfo_ismapped())
             self.assertEqual(app.guided_undo_background_button.cget('state'), 'disabled')
+            app._request_stop()
+            selectors, actions = open_adjustment(app.guided_adjust_background_button)
+            self.assertEqual([field.get() for field in selectors], ['Auto', 'Balanced'])
+            self.assertIn('Apply', actions)
+            actions['Cancel'].invoke()
+            self.assertTrue(app.stop.is_set())
+            _selectors, actions = open_adjustment(app.guided_adjust_background_button)
+            clear = app.stop.clear
+            def stop_during_apply():
+                app._request_stop()
+                clear()
+            with patch.object(app.stop, 'clear', side_effect=stop_during_apply):
+                actions['Apply'].invoke()
+            self.assertTrue(app.stop.is_set())
+            self.assertIsNone(app.worker)
+            self.assertIsNone(app.background_removal_original)
+            self.assertEqual(app.original.tobytes(), source)
 
             generation = app.preview_generation
             app.guided_style_selector.set('Pixel Art')
@@ -185,7 +216,33 @@ class NativeStudioWorkspaceTests(unittest.TestCase):
             app.guided_remove_background_button.invoke()
             self.wait(root, lambda: not app.activity and app.guided_undo_background_button.cget('state') == 'normal',
                       'Background removal did not offer Undo for the edited source')
-            self.assertNotEqual(app.original.tobytes(), source)
+            first = app.original
+            saved = app.background_removal_original
+            self.assertNotEqual(first.tobytes(), source)
+            app._request_stop()
+            selectors, actions = open_adjustment(app.guided_adjust_background_button)
+            selectors[0].set('Light background')
+            selectors[1].set('Conservative')
+            actions['Replace cutout'].invoke()
+            self.wait(root, lambda: app.original is not first and not app.activity, 'Did not replace the cutout')
+            expected = remove_background(saved, mode='Light background', strength='Conservative')
+            with expected.image:
+                self.assertEqual(app.original.tobytes(), expected.image.tobytes())
+                self.assertNotEqual(first.tobytes(), expected.image.tobytes())
+            self.assertIs(app.background_removal_original, saved)
+
+            app.ui_mode.set('Advanced')
+            app.workspace_layout.select('Setup')
+            root.update()
+            advanced = next(widget for widget in descendants(root)
+                            if isinstance(widget, KeyboardButton) and widget.cget('text') == 'Adjust…'
+                            and widget.winfo_ismapped())
+            selectors, actions = open_adjustment(advanced)
+            self.assertEqual([field.get() for field in selectors], ['Light background', 'Conservative'])
+            self.assertIn('Replace cutout', actions)
+            actions['Cancel'].invoke()
+            app.ui_mode.set('Simple')
+            root.update()
             app.guided_undo_background_button.invoke()
             self.wait(root, lambda: app.guided_undo_background_button.cget('state') == 'disabled',
                       'Undo did not reset after restoring the source')

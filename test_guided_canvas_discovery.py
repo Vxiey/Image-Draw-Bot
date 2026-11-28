@@ -71,6 +71,12 @@ class GuidedCanvasTests(unittest.TestCase):
             guided.discover_guided_canvas('generic')
         self.grab.assert_not_called()
 
+    def test_unverified_edges_explain_manual_fallback_before_ownership_check(self):
+        self.detect.return_value = dict(canvas_box=None, canvas_confidence=0)
+        with self.assertRaisesRegex(ValueError, 'select it manually'):
+            guided.discover_guided_canvas('skribbl')
+        self.monitor.capture.assert_not_called()
+
     def test_rejects_recycled_window_changed_dpi_canvas_and_occlusion(self):
         candidate = guided.discover_guided_canvas('skribbl')
         for key, changed in (('target_thread', 8), ('dpi', 96), ('target_pid', 120)):
