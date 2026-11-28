@@ -10,15 +10,18 @@ Manual calibration remains a fallback for changed/unknown layouts.
 from __future__ import annotations
 from CalibrationValidation import calibration_screenshot
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from math import sqrt
 from pathlib import Path
+from statistics import median
 from typing import Sequence
 
 from CalibrationAnchors import make_anchor
 from BrowserCanvasComponents import has_canvas_bounds, mask_components
 from Colors import save_calibration
 from PaletteMaps import PRESETS, detect_color_swatches, NoColorSwatchesError
+from SketchfulPalette import find_sketchful_grid, recover_sketchful_black
 from TargetCapabilities import auto_browser_profile_keys
 from CalibrationValidation import (screen_rect, screen_point, contained_rect, screenshot_matches,
                                    finite_confidence, bounded_number, nonnegative_integer)
@@ -186,6 +189,10 @@ def _match_preset(positions, rgbs, preset, *, tolerance: float = 18.0):
     return matches
 
 
+class _UnverifiedPalette(ValueError):
+    """Swatches were visible but did not identify the target's palette."""
+
+
 def _row_cluster(positions, rgbs, *, image_width: int, image_height: int):
     """Choose the longest compact horizontal swatch row from a lower toolbar."""
     items = [(int(x), int(y), tuple(map(int, rgb))) for (x, y), rgb in zip(positions, rgbs)]
@@ -227,7 +234,7 @@ def _row_cluster(positions, rgbs, *, image_width: int, image_height: int):
         if score > old_score:
             best = row
     if len(best) < 6:
-        raise ValueError('Automatic palette detection could not find a stable color row.')
+        raise _UnverifiedPalette('Automatic palette detection could not find a stable color row.')
     # Deduplicate near-identical colors while keeping visual order.
     clean = []
     for item in best:
@@ -235,7 +242,7 @@ def _row_cluster(positions, rgbs, *, image_width: int, image_height: int):
             continue
         clean.append(item)
     if len(clean) < 6:
-        raise ValueError('Automatic palette row contained too few distinct colors.')
+        raise _UnverifiedPalette('Automatic palette row contained too few distinct colors.')
     return clean[:32]
 
 
@@ -279,7 +286,66 @@ def _largest_light_component(image, *, step: int = 4, min_ratio: float = .08, ac
     return None, 0.0
 
 
-def _canvas(profile_key: str, image, palette_local_positions, cancelled=lambda:False):
+def _observed_frame(image, candidate, radius, cancelled):
+    """Localize four unambiguous straight edges near a proposed half-open box."""
+    import numpy as np
+    left, top, right, bottom = candidate
+    sides = ((left, top, bottom, True, True), (top, left, right, False, True),
+             (right, top, bottom, True, False), (bottom, left, right, False, False))
+    found = []
+    for expected, start, end, vertical, low_side in sides:
+        extent = image.width if vertical else image.height
+        lo, hi = max(1, expected - radius), min(extent - 1, expected + radius)
+        if lo > hi or end - start < 20:
+            return None
+        votes = np.zeros(hi - lo + 1, dtype=np.uint8)
+        # Sample the middle 80% of each edge, avoiding corners and resize grips.
+        for i in range(17):
+            if cancelled():
+                raise InterruptedError('Browser canvas scan cancelled.')
+            p = start + (end - start - 1) * (i + 2) // 20
+            strip = (lo - 1, p, hi + 1, p + 1) if vertical else (p, lo - 1, p + 1, hi + 1)
+            with image.crop(strip) as line:
+                pixels = np.asarray(line, dtype=np.int16).reshape(-1, 3)
+                votes += np.max(np.abs(np.diff(pixels, axis=0)), axis=1) >= 24
+        supported = np.flatnonzero(votes >= 14)
+        if not len(supported) or supported[-1] - supported[0] > 4:
+            return None
+        # If a narrow border produces two transitions, keep the interior one.
+        found.append(lo + int(supported[-1] if low_side else supported[0]))
+    return tuple(found)
+
+
+def _skribbl_palette_frame(image, positions, cancelled):
+    """Find an occupied board above two rows of verified Skribbl palette colors."""
+    if len(positions) < 18:
+        return None
+    w, h = image.size
+    top_row = min(y for x, y in positions)
+    bottom_row = max(y for x, y in positions)
+    jitter = max(2, round(h*.004))
+    if not 2*jitter < bottom_row-top_row <= h*.09:
+        return None
+    upper = [x for x, y in positions if y-top_row <= jitter]
+    lower = [x for x, y in positions if bottom_row-y <= jitter]
+    if min(len(upper), len(lower)) < 6 or len(upper) + len(lower) != len(positions):
+        return None
+    # Matching columns support a two-row toolbar rather than unrelated patches
+    # of preset colors somewhere within the palette search area.
+    if sum(any(abs(x-other) <= jitter for other in lower) for x in upper) < 6:
+        return None
+    left = min(min(upper), min(lower))
+    hint = (left, int(h*.18), min(w, left+int(w*.55)), max(int(h*.45), top_row-int(h*.025)))
+    frame = _observed_frame(image, hint, min(96, max(12, round(w*.05))), cancelled)
+    if frame:
+        l, t, r, b = frame
+        if (l <= left <= l + w*.06 and max(max(upper), max(lower)) < r and b < top_row
+                and r-l >= w*.35 and b-t >= h*.30 and 1.05 <= (r-l)/(b-t) <= 2.5):
+            return frame
+    return None
+
+
+def _canvas(profile_key: str, image, palette_local_positions, cancelled=lambda:False, *, side_grid=False):
     if cancelled():raise InterruptedError('Browser canvas scan cancelled.')
     w, h = image.size
     if profile_key == 'gartic-phone':
@@ -308,62 +374,128 @@ def _canvas(profile_key: str, image, palette_local_positions, cancelled=lambda:F
             l,t,r,b = box
             return (has_canvas_bounds(box, (w, h)) and 1.05 <= (r-l)/(b-t) <= 2.5
                     and r-l >= w*.35 and b-t >= h*.30)
-        box, confidence = _largest_light_component(image, step=3, min_ratio=.12,
+        step = 3
+        box, confidence = _largest_light_component(image, step=step, min_ratio=.12,
                                                    accept=plausible, cancelled=cancelled)
         if box:
-            return box, min(1.0, confidence + .08)
-        # A partly drawn canvas may no longer be one connected white region.
-        # Skribbl keeps the color bar directly below the left edge of the canvas,
-        # so use the *verified palette row* as a conservative structural fallback.
-        if len(palette_local_positions) >= 12:
-            xs=[p[0] for p in palette_local_positions];ys=[p[1] for p in palette_local_positions]
-            left=max(0,min(xs));bottom=max(int(h*.45),min(ys)-int(h*.025))
-            top=int(h*.18);right=min(w,int(left+w*.55))
-            if right-left>=w*.35 and bottom-top>=h*.30:
-                return (left,top,right,bottom), max(.74, confidence)
-        return None, confidence
+            # The bounding box covers entire sampled cells. Only the first
+            # pixel of the final cell was observed inside the surface.
+            l, t, r, b = box
+            verified = (l, t, (r-1)//step*step + 1, (b-1)//step*step + 1)
+            return verified, min(1.0, confidence + .08)
+    # A verified palette can locate the search area for an occupied board.
+    # Scan it lazily so the common blank Skribbl path needs no extra capture.
+    if palette_local_positions is None:
+        try:
+            palette = _detect_palette(profile_key, image, (0, 0), cancelled)
+        except (NoColorSwatchesError, _UnverifiedPalette):
+            return None, 0.0
+        palette_local_positions = palette['positions']
+        side_grid = palette['side_grid']
+    if not palette_local_positions:
+        return None, 0.0
+    if profile_key in ('skribbl', 'skribbl-fast'):
+        frame = _skribbl_palette_frame(image, palette_local_positions, cancelled)
+        return (frame, .82) if frame else (None, 0.0)
     if profile_key in ('sketchheads', 'sketchful'):
-        # SketchHeads intentionally uses an almost full-page canvas with controls
-        # overlaid at the top/bottom. Build a conservative safe rectangle from
-        # the detected palette row rather than treating UI controls as drawable.
-        palette_y = min((p[1] for p in palette_local_positions), default=int(h*.86))
-        box = (int(w*.025), int(h*.13), int(w*.975), max(int(h*.55), palette_y-int(h*.065)))
-        return box, .82 if palette_local_positions else .70
+        columns = sorted({x for x, y in palette_local_positions})
+        if len(columns) < 6:
+            return None, 0.0
+        palette_top = min(y for x, y in palette_local_positions)
+        if side_grid:
+            # The right-hand three-row grid borders a roughly 4:3 board. Its
+            # leftmost color sits about one swatch pitch from the paper edge.
+            # The grid establishes search bounds, never the returned rectangle.
+            palette_right = max(columns)
+            pitch = (palette_right - columns[0]) / 12
+            def left_of_grid(box):
+                l, t, r, b = box
+                return (0 < columns[0]-r < 2.5*pitch and t < palette_top < b
+                        and r-l >= w*.35 and b-t >= h*.40 and 1.15 <= (r-l)/(b-t) <= 1.55)
+            box, _ = _largest_light_component(image, step=3, min_ratio=.12,
+                                              accept=left_of_grid, cancelled=cancelled)
+            frame = _observed_frame(image, box, 5, cancelled) if box else None
+            return (frame, .90) if frame else (None, 0.0)
+        # Exclude overlaid toolbars. Allow half a swatch pitch above the first
+        # color center, so the clearance follows the actual controls and zoom.
+        swatch_radius = median(b-a for a, b in zip(columns, columns[1:])) / 2
+        def near_palette(box):
+            l, t, r, b = box
+            return (has_canvas_bounds(box, (w, h)) and l <= columns[0] < columns[-1] <= r
+                    and palette_top - h*.18 <= b <= palette_top - swatch_radius + 3
+                    and r-l >= w*.45 and b-t >= h*.35)
+        box, _ = _largest_light_component(image, step=3, min_ratio=.12,
+                                          accept=near_palette, cancelled=cancelled)
+        frame = _observed_frame(image, box, 4, cancelled) if box else None
+        if frame and frame[3] <= palette_top - swatch_radius:
+            return frame, .82
     return None, 0.0
 
 
-def detect_browser_setup(profile_key: str, image, *, screen_origin=(0,0),cancelled=lambda:False):
-    if cancelled():raise InterruptedError('Browser setup cancelled.')
-    profile_key = str(profile_key or '').lower()
-    if profile_key not in SUPPORTED_BROWSER_PROFILES:
-        raise ValueError('Automatic browser calibration is not available for this profile.')
-    screen_origin=screen_point(screen_origin,'screen origin')
-    image = image if image.mode=='RGB' else image.convert('RGB')
-    w, h = image.size
-    if w<200 or h<120:raise ValueError('Target browser window is too small for automatic calibration.')
-    roi = _roi(profile_key, w, h)
+def _scan_palette_roi(image, roi, screen_origin, cancelled):
     ox, oy = int(screen_origin[0]) + roi[0], int(screen_origin[1]) + roi[1]
     if (roi[2]-roi[0])*(roi[3]-roi[1]) <= 1_000_000:
         with image.crop(roi) as palette_image:
-            positions, rgbs, stats = detect_color_swatches(palette_image, (ox, oy), max_colors=96,cancelled=cancelled)
-    else:
-        # v1.0.115: 144-DPI/4K browser windows can make the normal relative
-        # palette ROI exceed PaletteMaps' deliberate 1M-pixel safety bound.
-        # Keep that bound and scan the ROI in bounded overlapping tiles instead.
-        positions, rgbs, stats = _palette_scan_tiles(image, roi, screen_origin,cancelled=cancelled)
+            return detect_color_swatches(palette_image, (ox, oy), max_colors=96, cancelled=cancelled)
+    return _palette_scan_tiles(image, roi, screen_origin, cancelled=cancelled)
+
+
+def _sketchful_palette(image, origin, cancelled):
+    w, h = image.size
+    # Scan near a plausible paper edge first. Most of the wider right-hand
+    # search area can be a patterned page background in a large browser window.
+    def board_shape(box):
+        l, t, r, b = box
+        return r-l >= w*.35 and b-t >= h*.40 and 1.15 <= (r-l)/(b-t) <= 1.55
+    paper, _ = _largest_light_component(image, step=3, min_ratio=.12, accept=board_shape, cancelled=cancelled)
+    rois = []
+    if paper:
+        l, t, r, b = paper
+        roi = (r, t+int((b-t)*.20), min(w, r+int((r-l)*.32)), t+int((b-t)*.36))
+        if roi[2]-roi[0] >= 8 and roi[3]-roi[1] >= 8:
+            rois.append(roi)
+    # A changed layout or heavily painted board can still expose a valid grid.
+    rois.append((int(w*.64), int(h*.10), w, int(h*.65)))
+    for roi in rois:
+        try:
+            positions, rgbs, stats = _scan_palette_roi(image, roi, origin, cancelled)
+        except NoColorSwatchesError:
+            continue
+        grid = find_sketchful_grid(positions, rgbs)
+        if grid:
+            return grid, stats
+    return None
+
+
+def _detect_palette(profile_key, image, screen_origin, cancelled):
+    w, h = image.size
+    if w<200 or h<120:raise ValueError('Target browser window is too small for automatic calibration.')
+    side_palette = _sketchful_palette(image, screen_origin, cancelled) if profile_key == 'sketchful' else None
+    if side_palette is None:
+        positions, rgbs, stats = _scan_palette_roi(image, _roi(profile_key, w, h), screen_origin, cancelled)
     if cancelled():raise InterruptedError('Browser setup cancelled.')
 
     names = None
     method = 'visual swatch row'
     palette_confidence = 0.0
     preset = PRESETS.get(profile_key)
-    if preset is not None:
+    if side_palette is not None:
+        grid, stats = side_palette
+        cells, centers, ys, pitch = grid
+        recover_sketchful_black(image, cells, centers, ys, pitch, screen_origin)
+        ordered = sorted(cells.items())
+        names = [f'R{row+1}C{column+1}' for (row, column), cell in ordered]
+        positions = [(x, y) for index, (x, y, rgb) in ordered]
+        rgbs = [rgb for index, (x, y, rgb) in ordered]
+        palette_confidence = len(cells) / 39
+        method = 'Sketchful right-hand color grid + screen verification'
+    elif preset is not None:
         matches = _match_preset(positions, rgbs, preset)
         if profile_key=='gartic-phone':
             matches=_verify_gartic_grid(image,matches,preset,screen_origin)
         required = 18 if profile_key.startswith('skribbl') else 36
         if len(matches) < required:
-            raise ValueError(f'Automatic {profile_key} palette detection found only {len(matches)} verified colors; {required} are required for a safe match.')
+            raise _UnverifiedPalette(f'Automatic {profile_key} palette detection found only {len(matches)} verified colors; {required} are required for a safe match.')
         names = [m[0] for m in matches]
         positions = [m[1] for m in matches]
         rgbs = [m[2] for m in matches]
@@ -381,13 +513,6 @@ def detect_browser_setup(profile_key: str, image, *, screen_origin=(0,0),cancell
         palette_confidence = min(.96, .62 + len(row)*.02)
         method = 'toolbar row geometry + solid swatches'
 
-    local_palette_positions = [(x-int(screen_origin[0]), y-int(screen_origin[1])) for x,y in positions]
-    canvas_local, canvas_confidence = _canvas(profile_key, image, local_palette_positions,cancelled=cancelled)
-    canvas_abs = None
-    if canvas_local is not None:
-        l,t,r,b = canvas_local
-        canvas_abs = (l+int(screen_origin[0]), t+int(screen_origin[1]), r+int(screen_origin[0]), b+int(screen_origin[1]))
-
     px = [p[0] for p in positions]; py = [p[1] for p in positions]
     palette_box = (min(px), min(py), max(px)+1, max(py)+1) if positions else None
     if cancelled():raise InterruptedError('Browser setup cancelled.')
@@ -395,13 +520,35 @@ def detect_browser_setup(profile_key: str, image, *, screen_origin=(0,0),cancell
         'positions': positions,
         'rgbs': rgbs,
         'names': names,
-        'canvas_box': canvas_abs,
-        'canvas_confidence': canvas_confidence,
         'palette_confidence': palette_confidence,
         'palette_box': palette_box,
         'method': method,
         'stats': stats,
+        'side_grid': side_palette is not None,
     }
+
+
+def _canvas_result(box, confidence, origin):
+    if box is not None:
+        l, t, r, b = box
+        x, y = origin
+        box = (x+l, y+t, x+r, y+b)
+    return {'canvas_box': box, 'canvas_confidence': confidence}
+
+
+def detect_browser_setup(profile_key: str, image, *, screen_origin=(0,0),cancelled=lambda:False):
+    if cancelled():raise InterruptedError('Browser setup cancelled.')
+    profile_key = str(profile_key or '').lower()
+    if profile_key not in SUPPORTED_BROWSER_PROFILES:
+        raise ValueError('Automatic browser calibration is not available for this profile.')
+    screen_origin = screen_point(screen_origin, 'screen origin')
+    with (nullcontext(image) if image.mode == 'RGB' else image.convert('RGB')) as rgb:
+        palette = _detect_palette(profile_key, rgb, screen_origin, cancelled)
+        ox, oy = screen_origin
+        positions = [(x-ox, y-oy) for x, y in palette['positions']]
+        box, confidence = _canvas(profile_key, rgb, positions, cancelled=cancelled, side_grid=palette.pop('side_grid'))
+    if cancelled():raise InterruptedError('Browser setup cancelled.')
+    return {**palette, **_canvas_result(box, confidence, screen_origin)}
 
 
 def auto_calibrate_browser(profile_key: str, target_metadata: dict, palette_path: Path, *, screenshot=None,
@@ -436,16 +583,18 @@ def auto_calibrate_browser(profile_key: str, target_metadata: dict, palette_path
 
 
 def detect_browser_canvas(profile_key, image, *, screen_origin=(0,0),cancelled=lambda:False):
-    """Read-only canvas detection without requiring a colour palette."""
+    """Return only geometry supported by this profile's visible landmarks."""
     profile_key=str(profile_key or '').lower()
     if profile_key not in SUPPORTED_BROWSER_PROFILES:
         raise ValueError('Automatic canvas detection is not available for this profile.')
     screen_origin=screen_point(screen_origin,'screen origin')
-    box,confidence=_canvas(profile_key,image if image.mode=='RGB' else image.convert('RGB'),[],cancelled=cancelled)
-    if box is not None:
-        l,t,r,b=box;ox,oy=map(int,screen_origin);box=(l+ox,t+oy,r+ox,b+oy)
     if cancelled():raise InterruptedError('Browser canvas scan cancelled.')
-    return {'canvas_box':box,'canvas_confidence':float(confidence)}
+    if image.width < 200 or image.height < 120:
+        return _canvas_result(None, 0.0, screen_origin)
+    with (nullcontext(image) if image.mode == 'RGB' else image.convert('RGB')) as rgb:
+        box, confidence = _canvas(profile_key, rgb, None, cancelled=cancelled)
+    if cancelled():raise InterruptedError('Browser canvas scan cancelled.')
+    return _canvas_result(box, confidence, screen_origin)
 
 
 def _verify_gartic_grid(image,matches,preset,origin):
