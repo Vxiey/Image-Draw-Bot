@@ -24,6 +24,7 @@ class ScrollbarSchedulingTests(unittest.TestCase):
         self.bar = object.__new__(ctk.CTkScrollbar)
         self.bar._start_value, self.bar._end_value = 0., 1.
         self.bar._current_width = 12
+        self.bar._canvas = self.tcl
         self.bar._draw = self.draw
         self.bar.after = self.tcl.after
         self.bar.after_idle = self.tcl.after_idle
@@ -100,6 +101,35 @@ class ScrollbarSchedulingTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name == 'nt' or os.environ.get('DISPLAY'), 'Native Tk display required')
 class NativeScrollbarPaintTests(unittest.TestCase):
+    def test_option_menu_creation_state_and_value_do_not_pump_unrelated_events(self):
+        from UiKeyboardNavigation import KeyboardOptionMenu
+        root = scoped_window_class(ctk.CTk)()
+        root_ref = weakref.ref(root)
+        def retire_owner():
+            gc.collect()
+            self.assertIsNone(root_ref())
+        self.addCleanup(retire_owner)
+        self.addCleanup(root.destroy)
+        root.update()
+        events, values = [], []
+        root.after_idle(lambda: events.append('constructor'))
+        menu = KeyboardOptionMenu(root, values=['Auto', 'Pixel Art'], command=values.append)
+        self.assertEqual(events, [], 'Constructor rendered through a nested Tk event loop')
+        menu.pack()
+        root.update()
+        self.assertEqual(events, ['constructor'])
+        root.after_idle(lambda: events.append('state'))
+        menu.configure(state='disabled')
+        self.assertEqual(menu.cget('state'), 'disabled')
+        menu.configure(state='normal')
+        self.assertEqual(events, ['constructor'])
+        menu._dropdown_menu.invoke(1)
+        self.assertEqual(menu.get(), 'Pixel Art')
+        self.assertEqual(values, ['Pixel Art'])
+        self.assertTrue(menu._canvas.find_withtag('dropdown_arrow'))
+        root.update()
+        self.assertEqual(events, ['constructor', 'state'])
+
     def test_real_ctk_painter_does_not_reenter_from_its_native_canvas(self):
         root = scoped_window_class(ctk.CTk)()
         root_ref = weakref.ref(root)
@@ -118,6 +148,7 @@ class NativeScrollbarPaintTests(unittest.TestCase):
         original_draw = bar._draw
         recorded = []
         depth = 0
+        callback_depths = []
         inject = False
 
         def observed(no_color_updates=False):
@@ -127,9 +158,10 @@ class NativeScrollbarPaintTests(unittest.TestCase):
                 recorded.append((depth, bar.get(), bar._current_width))
                 if inject:
                     inject = False
-                    # This is delivered by CTkScrollbar._draw itself, not by a
-                    # separate test pump, reproducing the hosted Windows stack.
-                    canvas.after_idle(lambda: canvas.yview_moveto(.4))
+                    def move_viewport():
+                        callback_depths.append(depth)
+                        canvas.yview_moveto(.4)
+                    canvas.after_idle(move_viewport)
                     canvas.after_idle(lambda: bar.configure(width=27))
                 original_draw(no_color_updates=no_color_updates)
             finally:
@@ -145,6 +177,7 @@ class NativeScrollbarPaintTests(unittest.TestCase):
         self.assertFalse(recorded)
         root.update()
         self.assertTrue(recorded)
+        self.assertEqual(callback_depths, [0], 'Pending application work ran inside scrollbar paint')
         self.assertTrue(all(call[0] == 1 for call in recorded), recorded)
         self.assertAlmostEqual(canvas.yview()[0], .4, delta=.002)
         self.assertEqual(recorded[-1][1:], (canvas.yview(), 27))

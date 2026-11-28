@@ -6,6 +6,27 @@ from __future__ import annotations
 import tkinter as tk
 
 _PATCHED = False
+_MISSING = object()
+
+
+def _leave_paint_to_tk():
+    pass
+
+
+def draw_without_idle_flush(canvas, draw, *args, **kwargs):
+    """Run the CTk painter without dispatching unrelated pending application callbacks."""
+    # CTk 6 explicitly calls update_idletasks on its private decoration canvas.
+    # Its drawing operations already enqueue real Tk paints. Let the outer
+    # event loop deliver them after the widget has finished its state change.
+    previous = vars(canvas).get('update_idletasks', _MISSING)
+    canvas.update_idletasks = _leave_paint_to_tk
+    try:
+        return draw(*args, **kwargs)
+    finally:
+        if previous is _MISSING:
+            del canvas.update_idletasks
+        else:
+            canvas.update_idletasks = previous
 
 
 def scoped_window_class(base):
@@ -104,7 +125,7 @@ class _ScrollbarPaint:
         self.dirty = self.recolor = False
         self.painting = True
         try:
-            self.draw(no_color_updates=not recolor)
+            draw_without_idle_flush(self.bar._canvas, self.draw, no_color_updates=not recolor)
         finally:
             self.painting = False
             if self.dirty:

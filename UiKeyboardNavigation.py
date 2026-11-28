@@ -13,6 +13,7 @@ import math
 from weakref import WeakSet
 
 import customtkinter as ctk
+from UiCompatibility import draw_without_idle_flush
 
 
 class _KeyboardFocusSupport:
@@ -402,7 +403,7 @@ class KeyboardOptionMenu(_KeyboardFocusSupport, ctk.CTkOptionMenu):
         return super()._keyboard_focus_from_child(force=force)
 
     def _draw(self, *args, **kwargs):
-        super()._draw(*args, **kwargs)
+        draw_without_idle_flush(self._canvas, super()._draw, *args, **kwargs)
         if getattr(self, '_keyboard_ready', False) and not self._keyboard_closed:
             self._keyboard_sync_children()
             self._keyboard_draw_focus()

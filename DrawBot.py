@@ -5229,6 +5229,14 @@ class DrawBotApp:
     @staticmethod
     def _safe_widget_configure(widget, **kwargs):
         try:
+            if len(kwargs)==1 and 'state' in kwargs and isinstance(widget,tk.Frame):
+                from UiKeyboardNavigation import KeyboardOptionMenu
+                # CTk redraws even an unchanged state and flushes Tk's idle work.
+                # A posted menu still needs its normal focus and popup handling.
+                if (isinstance(widget,KeyboardOptionMenu) and widget.cget('state')==kwargs['state']
+                        and widget.winfo_exists() and not widget._close_on_next_click
+                        and not widget._dropdown_menu.is_open()):
+                    return True
             widget.configure(**kwargs)
             return True
         except (tk.TclError,RuntimeError,AttributeError):
@@ -12906,7 +12914,7 @@ def main():
     finally:lock.close()
 
 
-def _smoke_workspace(source, phase):
+def _smoke_workspace(source, phase, geometry_events):
     import tempfile
     import traceback
     from unittest.mock import patch
@@ -12934,6 +12942,8 @@ def _smoke_workspace(source, phase):
 
     phase('Creating the native Tk window and loading TkDND')
     root = create_root()
+    root.bind('<Configure>', lambda event: geometry_events.append(
+        (str(event.widget), event.width, event.height)), add='+')
     root.tk.createcommand('bgerror', lambda message: errors.append(str(message)))
     def settle(ready, description):
         deadline = time.monotonic() + 30
@@ -12960,6 +12970,7 @@ def _smoke_workspace(source, phase):
         try:
             phase('Constructing the default guided workspace')
             app = SmokeWorkspace(root, NoInput(), NoInput())
+            phase('Mapping the guided Setup panel and Stop button')
             app.workspace_layout.select('Setup')
             settle(lambda: app.guided_action_button.winfo_ismapped() and app.stop_button.winfo_ismapped(),
                    'Guided entry and Stop did not become visible')
@@ -13009,6 +13020,7 @@ def _smoke_workspace(source, phase):
 
 
 def self_test(gui=False):
+    from collections import deque
     import faulthandler
     import os
     from AppBranding import ICON_PNG
@@ -13034,16 +13046,21 @@ def self_test(gui=False):
     # A windowed executable has no stderr. Keep the last completed phase and
     # one stack snapshot for a caller supervising the packaged GUI process.
     with (DATA_DIR/'smoke-test-stacks.log').open('w', encoding='utf-8') as report:
+        geometry_events = deque(maxlen=12)
         def phase(message):
             print(message, file=report, flush=True)
-        watchdog = threading.Timer(40, faulthandler.dump_traceback,
-                                   kwargs={'file': report, 'all_threads': True})
+        def report_stall():
+            # Copy primitive values recorded on the Tk thread. The timer must
+            # never call Tk while the main thread is blocked in a native event.
+            phase(f'Recent native window geometry: {tuple(geometry_events)}')
+            faulthandler.dump_traceback(file=report, all_threads=True)
+        watchdog = threading.Timer(40, report_stall)
         watchdog.daemon = True
         watchdog.start()
         try:
             phase('Checking native GPU discovery')
             check_native_gpu()
-            _smoke_workspace(source, phase)
+            _smoke_workspace(source, phase, geometry_events)
             phase('Packaged GUI smoke passed')
         finally:
             watchdog.cancel()

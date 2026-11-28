@@ -88,6 +88,10 @@ jobs:
       - name: Run Extra Fast benchmark smoke
         run: python benchmark_extra_fast.py
 
+      - name: Check native Windows workspace layout before the full suite
+        if: runner.os == 'Windows'
+        run: python -m unittest -v test_v148_ui_batch06_workspace.WindowsCompleteWorkspaceTests
+
       - name: Run complete regressions
         run: python -m unittest discover -v
 

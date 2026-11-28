@@ -43,6 +43,48 @@ def actual_menu_factory(app, replacement=None):
 
 
 class SelectorKeyboardTests(unittest.TestCase):
+    def test_controller_skips_equal_menu_state_and_keeps_other_updates(self):
+        from DrawBot import DrawBotApp
+        configure=DrawBotApp._safe_widget_configure
+        item=selector_without_window()
+        item._keyboard_ready=True
+        item._dropdown_menu.is_open.return_value=False
+        def apply_option(_widget, **options):
+            if 'state' in options:item._state=options['state']
+
+        with patch.object(ctk.CTkOptionMenu,'configure',autospec=True,side_effect=apply_option) as native:
+            self.assertTrue(configure(item,state='normal'))
+            native.assert_not_called()
+            self.assertTrue(configure(item,state='disabled'))
+            self.assertTrue(configure(item,state='disabled'))
+            self.assertEqual(native.call_count,1)
+            self.assertEqual(item.cget('state'),'disabled')
+            item._keyboard_key_press(event('Down'))
+            item._command.assert_not_called()
+            item._close_on_next_click=True
+            item._dropdown_menu.unpost.reset_mock()
+            self.assertTrue(configure(item,state='disabled'))
+            item._dropdown_menu.unpost.assert_called_once()
+            self.assertFalse(item._close_on_next_click)
+            item._dropdown_menu.is_open.return_value=True
+            item._dropdown_menu.unpost.reset_mock()
+            self.assertTrue(configure(item,state='disabled'))
+            item._dropdown_menu.unpost.assert_called_once()
+            item._dropdown_menu.is_open.return_value=False
+            self.assertTrue(configure(item,state='normal'))
+            item._keyboard_key_press(event('Down'))
+            item._command.assert_called_once_with('Aggressive')
+            self.assertTrue(configure(item,state='normal',width=200))
+            native.assert_called_with(item,state='normal',width=200)
+            # An independent controller changed the live widget state.
+            item.configure(state='disabled')
+            self.assertTrue(configure(item,state='normal'))
+            self.assertEqual(item.cget('state'),'normal')
+        other_widget=Mock()
+        self.assertTrue(configure(other_widget,state='normal'))
+        other_widget.configure.assert_called_once_with(state='normal')
+        other_widget.cget.assert_not_called()
+
     def test_existing_setting_help_follows_logical_focus_and_cancels_on_blur(self):
         from test_v148_ui_batch07_keyboard import Scheduler
         item=selector_without_window();item._canvas=Mock()
