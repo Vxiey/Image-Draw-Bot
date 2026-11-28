@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Sequence
 
 from CalibrationAnchors import make_anchor
+from BrowserCanvasComponents import has_canvas_bounds, mask_components
 from Colors import save_calibration
 from PaletteMaps import PRESETS, detect_color_swatches, NoColorSwatchesError
 from TargetCapabilities import auto_browser_profile_keys
@@ -243,7 +244,7 @@ def _near_white(rgb):
     return min(r, g, b) >= 235 and max(r, g, b) - min(r, g, b) <= 24
 
 
-def _largest_light_component(image, *, step: int = 4, min_ratio: float = .08, cancelled=lambda:False):
+def _largest_light_component(image, *, step: int = 4, min_ratio: float = .08, accept=None, cancelled=lambda:False):
     """Return a large near-white component box, or None instead of guessing."""
     if cancelled():raise InterruptedError('Browser canvas scan cancelled.')
     step=nonnegative_integer(step,'Canvas sampling step',maximum=10000)
@@ -256,38 +257,26 @@ def _largest_light_component(image, *, step: int = 4, min_ratio: float = .08, ca
     # sample or allocating a second full-resolution screenshot array.
     import numpy as np
     mask=[]
-    for first in range(0,sh,64):
+    strip_rows = max(1, min(64, 524_288 // max(1, w * step)))
+    for first in range(0,sh,strip_rows):
         if cancelled():raise InterruptedError('Browser canvas scan cancelled.')
-        with image.crop((0,first*step,w,min(h,(first+64)*step))) as strip:
+        with image.crop((0,first*step,w,min(h,(first+strip_rows)*step))) as strip:
             a=np.asarray(strip)[::step,::step]
-            lo=a.min(axis=2);hi=a.max(axis=2)
-            mask.extend(bytearray(row.tobytes()) for row in ((lo>=235)&((hi-lo)<=24)))
-    best = None; best_area = 0
+            red, green, blue = a.transpose(2, 0, 1)
+            # With all byte channels >=235, their spread is at most 20.
+            white = (red >= 235) & (green >= 235) & (blue >= 235)
+            mask.extend(bytearray(row.tobytes()) for row in white)
     min_area = max(40, int(sw * sh * min_ratio))
-    for sy in range(sh):
-        if sy%32==0 and cancelled():raise InterruptedError('Browser canvas scan cancelled.')
-        for sx in range(sw):
-            if not mask[sy][sx]:
-                continue
-            mask[sy][sx] = 0
-            stack = [(sx, sy)]; left = right = sx; top = bottom = sy; area = 0
-            while stack:
-                x, y = stack.pop(); area += 1
-                if area%4096==0 and cancelled():raise InterruptedError('Browser canvas scan cancelled.')
-                left = min(left, x); right = max(right, x); top = min(top, y); bottom = max(bottom, y)
-                for nx, ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
-                    if 0 <= nx < sw and 0 <= ny < sh and mask[ny][nx]:
-                        mask[ny][nx] = 0; stack.append((nx,ny))
-            if area >= min_area and area > best_area:
-                best_area = area; best = (left*step, top*step, min(w,(right+1)*step), min(h,(bottom+1)*step))
-    if best is None:
-        return None, 0.0
-    l,t,r,b = best
-    box_area = max(1, (r-l)*(b-t))
-    density = min(1.0, (best_area * step * step) / box_area)
-    ratio = box_area / max(1, w*h)
-    confidence = max(0.0, min(1.0, .55*density + .45*min(1.0, ratio/.45)))
-    return best, confidence
+    for (left,top,right,bottom), area in mask_components(mask,min_area=min_area,cancelled=cancelled):
+        box = (left*step, top*step, min(w,right*step), min(h,bottom*step))
+        if accept is not None and not accept(box):
+            continue
+        box_area = (box[2]-box[0]) * (box[3]-box[1])
+        density = min(1.0, (area * step * step) / box_area)
+        ratio = box_area / max(1, w*h)
+        confidence = max(0.0, min(1.0, .55*density + .45*min(1.0, ratio/.45)))
+        return box, confidence
+    return None, 0.0
 
 
 def _canvas(profile_key: str, image, palette_local_positions, cancelled=lambda:False):
@@ -315,12 +304,14 @@ def _canvas(profile_key: str, image, palette_local_positions, cancelled=lambda:F
             return None, 0.0
         return None, float(result.confidence)
     if profile_key in ('skribbl', 'skribbl-fast'):
-        box, confidence = _largest_light_component(image, step=3, min_ratio=.12,cancelled=cancelled)
-        if box:
+        def plausible(box):
             l,t,r,b = box
-            aspect = (r-l) / max(1, b-t)
-            if 1.05 <= aspect <= 2.5 and (r-l) >= w*.35 and (b-t) >= h*.30:
-                return box, min(1.0, confidence + .08)
+            return (has_canvas_bounds(box, (w, h)) and 1.05 <= (r-l)/(b-t) <= 2.5
+                    and r-l >= w*.35 and b-t >= h*.30)
+        box, confidence = _largest_light_component(image, step=3, min_ratio=.12,
+                                                   accept=plausible, cancelled=cancelled)
+        if box:
+            return box, min(1.0, confidence + .08)
         # A partly drawn canvas may no longer be one connected white region.
         # Skribbl keeps the color bar directly below the left edge of the canvas,
         # so use the *verified palette row* as a conservative structural fallback.

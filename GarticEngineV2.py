@@ -11,6 +11,7 @@ from contextlib import closing
 import math
 from typing import Iterable, Sequence
 
+from BrowserCanvasComponents import has_canvas_bounds, mask_components as _flood_components
 from GarticPhoneLayout import REFERENCE_CANVAS_ASPECT
 
 Point = tuple[int, int]
@@ -64,55 +65,22 @@ class GarticRuntimeProfile:
         }
 
 
-def _near_white(rgb) -> bool:
-    r, g, b = map(int, rgb[:3])
-    return r >= 242 and g >= 242 and b >= 242 and max(r, g, b) - min(r, g, b) <= 18
+def _white_samples(samples):
+    red, green, blue = samples.transpose(2, 0, 1)
+    # Byte RGB channels >=242 are already within 13 of each other.
+    return (red >= 242) & (green >= 242) & (blue >= 242)
 
 
-def _purple_frame(rgb) -> bool:
-    r, g, b = map(int, rgb[:3])
-    return b >= 95 and r >= 55 and g <= 100 and (b - g) >= 35
+def _frame_samples(samples):
+    import numpy as np
+    red, green, blue = samples.transpose(2, 0, 1)
+    return ((red >= 55) & (green <= 100) & (blue >= 95)
+            & (np.subtract(blue, green, dtype=np.int16) >= 35))
 
 
 def _flood_largest_white(mask: list[bytearray], *, min_area: int) -> tuple[Box | None, int]:
-    h = len(mask)
-    w = len(mask[0]) if h else 0
-    visited = [bytearray(w) for _ in range(h)]
-    best_box: Box | None = None
-    best_area = 0
-    for sy in range(h):
-        row = mask[sy]
-        for sx in range(w):
-            if not row[sx] or visited[sy][sx]:
-                continue
-            visited[sy][sx] = 1
-            stack = [(sx, sy)]
-            left = right = sx
-            top = bottom = sy
-            area = 0
-            while stack:
-                x, y = stack.pop()
-                area += 1
-                if x < left: left = x
-                elif x > right: right = x
-                if y < top: top = y
-                elif y > bottom: bottom = y
-                nx = x - 1
-                if nx >= 0 and mask[y][nx] and not visited[y][nx]:
-                    visited[y][nx] = 1; stack.append((nx, y))
-                nx = x + 1
-                if nx < w and mask[y][nx] and not visited[y][nx]:
-                    visited[y][nx] = 1; stack.append((nx, y))
-                ny = y - 1
-                if ny >= 0 and mask[ny][x] and not visited[ny][x]:
-                    visited[ny][x] = 1; stack.append((x, ny))
-                ny = y + 1
-                if ny < h and mask[ny][x] and not visited[ny][x]:
-                    visited[ny][x] = 1; stack.append((x, ny))
-            if area >= min_area and area > best_area:
-                best_area = area
-                best_box = (left, top, right + 1, bottom + 1)
-    return best_box, best_area
+    components = _flood_components(mask, min_area=min_area, limit=1)
+    return components[0] if components else (None, 0)
 
 
 def _frame_score(image, box: Box, pad: int = 7) -> float:
@@ -121,54 +89,37 @@ def _frame_score(image, box: Box, pad: int = 7) -> float:
             return _frame_score(rgb,box,pad)
     w, h = image.size
     left, top, right, bottom = box
-    samples = []
-    for x in range(max(0, left-pad), min(w, right+pad)):
-        for y in (max(0, top-pad), min(h-1, bottom+pad-1)):
-            samples.append(image.getpixel((x, y)))
-    for y in range(max(0, top-pad), min(h, bottom+pad)):
-        for x in (max(0, left-pad), min(w-1, right+pad-1)):
-            samples.append(image.getpixel((x, y)))
-    if not samples:
+    x0, x1 = max(0, left-pad), min(w, right+pad)
+    y0, y1 = max(0, top-pad), min(h, bottom+pad)
+    if x0 >= x1 or y0 >= y1:
         return 0.0
-    return sum(1 for rgb in samples if _purple_frame(rgb)) / len(samples)
-
-
-
-def _flood_components(mask: list[bytearray], *, min_area: int, limit: int = 48, cancelled=lambda: False) -> list[tuple[Box, int]]:
-    """Return the largest connected mask components without assuming the largest is canvas."""
-    h=len(mask);w=len(mask[0]) if h else 0
-    visited=[bytearray(w) for _ in range(h)]
-    out=[]
-    for sy in range(h):
-        if cancelled():raise InterruptedError()
-        for sx in range(w):
-            if not mask[sy][sx] or visited[sy][sx]:
-                continue
-            visited[sy][sx]=1;stack=[(sx,sy)]
-            left=right=sx;top=bottom=sy;area=0
-            while stack:
-                x,y=stack.pop();area+=1
-                if area%1024==0 and cancelled():raise InterruptedError()
-                left=min(left,x);right=max(right,x);top=min(top,y);bottom=max(bottom,y)
-                for nx,ny in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
-                    if 0<=nx<w and 0<=ny<h and mask[ny][nx] and not visited[ny][nx]:
-                        visited[ny][nx]=1;stack.append((nx,ny))
-            if area>=min_area:
-                out.append(((left,top,right+1,bottom+1),area))
-    out.sort(key=lambda item:item[1],reverse=True)
-    return out[:max(1,int(limit))]
-
+    import numpy as np
+    hits = total = 0
+    for side in ((x0, y0, x1, y0+1), (x0, y1-1, x1, y1),
+                 (x0, y0, x0+1, y1), (x1-1, y0, x1, y1)):
+        with closing(image.crop(side)) as strip:
+            frame = _frame_samples(np.asarray(strip))
+            hits += int(np.count_nonzero(frame))
+            total += frame.size
+    return hits / total
 
 def _sample_white_fraction(image, box: Box, *, step: int = 6) -> float:
     if image.mode != 'RGB':
         with closing(image.convert('RGB')) as rgb:
             return _sample_white_fraction(rgb,box,step=step)
     l,t,r,b=box
+    l, t, r, b = max(0, l), max(0, t), min(image.width, r), min(image.height, b)
+    if l >= r or t >= b:
+        return 0.0
+    import numpy as np
     hit=total=0
     stride=max(2,int(step))
-    for y in range(max(0,t),min(image.height,b),stride):
-        for x in range(max(0,l),min(image.width,r),stride):
-            total+=1;hit+=1 if _near_white(image.getpixel((x,y))) else 0
+    rows = max(1, min(64, 524_288 // ((r-l) * stride)))
+    for y in range(t, b, rows*stride):
+        with closing(image.crop((l, y, r, min(b, y+rows*stride)))) as strip:
+            white = _white_samples(np.asarray(strip)[::stride, ::stride])
+            hit += int(np.count_nonzero(white))
+            total += white.size
     return hit/max(1,total)
 
 def detect_gartic_canvas(image, *, downsample: int = 2, min_canvas_area_ratio: float = 0.08,
@@ -197,15 +148,17 @@ def _detect_gartic_canvas_rgb(image, *, downsample, min_canvas_area_ratio, cance
         return CanvasDetection(False,None,0.0,0.0,0.0,0.0,'image too small')
     step=max(1,int(downsample));sw,sh=(w+step-1)//step,(h+step-1)//step
 
-    def make_mask(predicate):
-        mask=[bytearray(sw) for _ in range(sh)]
-        for yy in range(sh):
-            if yy%8==0 and cancelled():raise InterruptedError()
-            y=min(h-1,yy*step)
-            for xx in range(sw):
-                x=min(w-1,xx*step)
-                if predicate(image.getpixel((x,y))):mask[yy][xx]=1
-        return mask
+    # Sample the exact same top-left grid for both colour predicates in one
+    # pass. Only a strip of full-resolution RGB data is copied at a time.
+    import numpy as np
+    white_mask, structural_mask = [], []
+    strip_rows = max(1, min(64, 524_288 // (w * step)))
+    for first in range(0, sh, strip_rows):
+        if cancelled():raise InterruptedError()
+        with closing(image.crop((0, first * step, w, min(h, (first + strip_rows) * step)))) as strip:
+            samples = np.asarray(strip)[::step, ::step]
+            white_mask.extend(bytearray(row.tobytes()) for row in _white_samples(samples))
+            structural_mask.extend(bytearray(row.tobytes()) for row in ~_frame_samples(samples))
 
     def full_box(small):
         l,t,r,b=small
@@ -213,14 +166,12 @@ def _detect_gartic_canvas_rgb(image, *, downsample, min_canvas_area_ratio, cance
 
     candidates=[]
     # Do not let a larger white page/panel hide a correctly-shaped canvas.
-    white_mask=make_mask(_near_white)
     white_min=max(24,int(sw*sh*min(.035,max(.012,float(min_canvas_area_ratio)*.45))))
     for small,area in _flood_components(white_mask,min_area=white_min,cancelled=cancelled):
         candidates.append(('white',full_box(small),area))
 
     # A drawing can fragment the white background. Gartic's violet frame usually
     # still isolates the entire drawable surface, so rank non-frame components too.
-    structural_mask=make_mask(lambda rgb:not _purple_frame(rgb))
     structural_min=max(36,int(sw*sh*.035))
     for small,area in _flood_components(structural_mask,min_area=structural_min,cancelled=cancelled):
         candidates.append(('frame',full_box(small),area))
@@ -228,6 +179,8 @@ def _detect_gartic_canvas_rgb(image, *, downsample, min_canvas_area_ratio, cance
     best=None;best_eligible=None
     for source,box,component_area in candidates:
         if cancelled():raise InterruptedError()
+        if not has_canvas_bounds(box, (w, h)):
+            continue
         l,t,r,b=box;bw,bh=r-l,b-t
         if bw<max(180,int(w*.22)) or bh<max(105,int(h*.16)):
             continue

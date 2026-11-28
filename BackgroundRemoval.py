@@ -16,7 +16,7 @@ from numbers import Real
 from typing import Any, Callable
 
 import numpy as np
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageFilter, ImageOps
 
 MODES = ("Auto", "Light background", "Dark background", "Corner color")
 STRENGTHS = ("Conservative", "Balanced", "Aggressive")
@@ -158,7 +158,15 @@ def _filter_mode(centers, spreads, weights, mode):
     return (centers[keep], spreads[keep], weights[keep]) if np.any(keep) else (centers, spreads, weights)
 
 
-def _candidate_maps(a, centers, spreads, strength, mode, cancelled=lambda: False):
+def _mode_mask(a, mode):
+    if mode == "Light background":
+        return _luma(a) >= 135
+    if mode == "Dark background":
+        return _luma(a) <= 120
+    return None
+
+
+def _candidate_maps(a, centers, spreads, strength, mode, cancelled=lambda: False, *, mode_mask=None):
     norm_limit = {"Conservative": 1.25, "Balanced": 1.65, "Aggressive": 2.05}[strength]
     abs_limit = {"Conservative": 21., "Balanced": 30., "Aggressive": 42.}[strength]
     best_dist = best_norm = None
@@ -172,20 +180,24 @@ def _candidate_maps(a, centers, spreads, strength, mode, cancelled=lambda: False
             np.minimum(best_dist, distance, out=best_dist)
             np.minimum(best_norm, normalized, out=best_norm)
     candidate = (best_norm <= norm_limit) | (best_dist <= abs_limit)
-    lum = _luma(a)
-    if mode == "Light background":
-        candidate &= lum >= 135
-    elif mode == "Dark background":
-        candidate &= lum <= 120
+    if mode_mask is None:
+        mode_mask = _mode_mask(a, mode)
+    if mode_mask is not None:
+        candidate &= mode_mask
     return candidate, best_dist, best_norm
 
 
 def _grow(a, centers, spreads, strength, mode, edge, cancelled):
     h, w, _ = a.shape
-    candidate, best_dist, best_norm = _candidate_maps(a, centers, spreads, strength, mode, cancelled)
+    mode_mask = _mode_mask(a, mode)
+    candidate, best_dist, best_norm = _candidate_maps(a, centers, spreads, strength, mode,
+                                                      cancelled, mode_mask=mode_mask)
     edge_limit = {"Conservative": 20., "Balanced": 27., "Aggressive": 35.}[strength]
     step_limit = {"Conservative": 14., "Balanced": 20., "Aggressive": 27.}[strength]
     relaxed = {"Conservative": 1.85, "Balanced": 2.40, "Aggressive": 3.00}[strength]
+    relaxed_candidates = best_norm <= relaxed
+    if mode_mask is not None:
+        relaxed_candidates &= mode_mask
     mask = np.zeros((h, w), np.uint8)
     q = deque()
 
@@ -218,7 +230,7 @@ def _grow(a, centers, spreads, strength, mode, edge, cancelled):
                 continue
             # The expensive scalar distance matters only for relaxed growth;
             # a definite candidate already satisfies the model predicate.
-            model_ok = candidate[ny, nx] or (best_norm[ny, nx] <= relaxed and
+            model_ok = candidate[ny, nx] or (relaxed_candidates[ny, nx] and
                        float(_distance(a[ny, nx], src)) <= step_limit)
             if model_ok:
                 mask[ny, nx] = 1
@@ -227,15 +239,16 @@ def _grow(a, centers, spreads, strength, mode, edge, cancelled):
 
 
 def _cleanup(mask, strength):
-    radius = 5 if strength == "Aggressive" else 3
+    # Closing can only expand a binary mask. Intersecting it with the input
+    # therefore returns the input unless the aggressive median also runs.
+    if strength != "Aggressive":
+        return mask
+    radius = 5
     with closing(Image.fromarray(mask * 255)) as image:
         with closing(image.filter(ImageFilter.MaxFilter(radius))) as expanded:
             with closing(expanded.filter(ImageFilter.MinFilter(radius))) as closed:
-                if strength == "Aggressive":
-                    with closing(closed.filter(ImageFilter.MedianFilter(3))) as median:
-                        cleaned = (np.asarray(median, np.uint8) > 127).astype(np.uint8)
-                else:
-                    cleaned = (np.asarray(closed, np.uint8) > 127).astype(np.uint8)
+                with closing(closed.filter(ImageFilter.MedianFilter(3))) as median:
+                    cleaned = (np.asarray(median, np.uint8) > 127).astype(np.uint8)
                 # Morphology may retract a background classification, but it
                 # cannot establish colour/edge evidence or border connectivity.
                 # Do not turn protected thin details into removable background.
@@ -278,20 +291,19 @@ def _alpha(mask, target_size, feather_px):
     if radius <= .05:
         return fg
     try:
-        with closing(fg.filter(ImageFilter.MaxFilter(3))) as outer, \
-             closing(fg.filter(ImageFilter.MinFilter(3))) as inner, \
-             closing(fg.filter(ImageFilter.GaussianBlur(radius))) as blurred:
-            boundary = np.asarray(outer, np.uint8) != np.asarray(inner, np.uint8)
-            soft = np.asarray(blurred, np.uint8)
-            out = np.asarray(fg, np.uint8).copy()
-            values = soft[boundary]
-            out[boundary] = np.where(values < 64, 0, np.where(values > 192, 255, 128)).astype(np.uint8)
-            return Image.fromarray(out)
+        # Only the subject side of the contour may contribute to its matte.
+        # A blurred black/white mask normally makes verified exterior pixels
+        # partly visible again, carrying their original background colour.
+        # Keep narrow features at least half covered and retain the continuous
+        # gradient across the rest of the antialiased edge.
+        with closing(fg.filter(ImageFilter.GaussianBlur(radius))) as blurred:
+            with closing(blurred.point([max(128, value) for value in range(256)])) as soft:
+                return ImageChops.darker(fg, soft)
     finally:
         fg.close()
 
 
-def _multiply_alpha(alpha, old_alpha, cancelled=lambda: False):
+def _multiply_alpha(alpha, old_alpha, cancelled=lambda: False, *, mode_source=None, mode="Auto"):
     """Multiply masks with the existing rounded integer result and bounded scratch."""
     width, height = alpha.size
     rows = max(1, _ALPHA_STRIP_PIXELS // width)
@@ -304,6 +316,17 @@ def _multiply_alpha(alpha, old_alpha, cancelled=lambda: False):
                 new = np.asarray(strip, np.uint16)
                 old = np.frombuffer(old_alpha, np.uint8, count=width*(bottom-top),
                                     offset=width*top).reshape(bottom-top, width).astype(np.uint16)
+                if mode_source is not None:
+                    # Upsampling a proxy cell or feathering its boundary must
+                    # not erase native text or detail outside the chosen mode.
+                    with closing(mode_source.crop((0, top, width, bottom))) as source_strip:
+                        if old.min() == 255:
+                            allowed = _mode_mask(np.asarray(source_strip)[..., :3], mode)
+                        else:
+                            with closing(Image.new('RGBA', source_strip.size, 'white')) as visible:
+                                visible.alpha_composite(source_strip)
+                                allowed = _mode_mask(np.asarray(visible)[..., :3], mode)
+                    new = np.where(allowed, new, 255)
                 pixels = ((new * old + 127) // 255).astype(np.uint8)
                 with closing(Image.fromarray(pixels)) as combined:
                     result.paste(combined, (0, top))
@@ -374,10 +397,19 @@ def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", f
         w, h = source.size; total = max(1, w * h)
         if cancelled(): raise InterruptedError()
         with closing(source.getchannel("A")) as original_alpha:
-            old_alpha = original_alpha.tobytes()
             before = sum(original_alpha.histogram()[9:])
-        if 1.0 - before / total >= .20:
-            return finish(_preserve(source, mode, strength, "image already contains substantial transparency; original alpha preserved", method="existing alpha preserved"))
+            # A transparent outer frame supplies no visible background samples.
+            # White-compositing it and segmenting again erodes antialiased
+            # cutouts with a narrow frame on every successive removal.
+            visible = original_alpha.getbbox()
+            transparent_frame = visible and (visible[0] > 0 and visible[1] > 0
+                                              and visible[2] < w and visible[3] < h)
+            if transparent_frame or 1.0 - before / total >= .20:
+                reason = ("image already has a transparent border" if transparent_frame
+                          else "image already contains substantial transparency")
+                return finish(_preserve(source, mode, strength, reason + "; original alpha preserved",
+                                        method="existing alpha preserved"))
+            old_alpha = original_alpha.tobytes()
 
         # Shrink before RGB conversion; invisible source RGB is not visible evidence.
         proxy_rgba = _proxy(source)
@@ -427,7 +459,9 @@ def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", f
             return finish(_preserve(source, mode, strength, reason + "; original preserved", extra))
 
         with closing(_alpha(mask, (w, h), feather_px)) as foreground_alpha:
-            alpha = own(_multiply_alpha(foreground_alpha, old_alpha, cancelled))
+            mode_source = source if mode in ("Light background", "Dark background") else None
+            alpha = own(_multiply_alpha(foreground_alpha, old_alpha, cancelled,
+                                        mode_source=mode_source, mode=mode))
         after = sum(alpha.histogram()[9:])
         if after / total < .005:
             return finish(_preserve(source, mode, strength, "foreground safety guard rejected the cut; original preserved", extra))

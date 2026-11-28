@@ -152,12 +152,44 @@ def _candidate_cost(paths, model):
     return total
 
 
-def trace_contours(image, cancelled=lambda:False, max_points=160, options=None):
+def _opaque_contour_route(contours, first_dense_path, model, max_points, cancelled):
+    """Join directed gestures at identical vertices and price the actual delivery order."""
+    from StrokeOptimizer import _merge_exact_graph
+    def checked_paths(paths):
+        for i, path in enumerate(paths):
+            if i % 64 == 0 and cancelled():
+                raise InterruptedError()
+            yield path
+
+    chains, joins = _merge_exact_graph(checked_paths(contours), cancelled=cancelled, allow_reverse=False)
+    if not joins:
+        return contours, 0.0
+    candidate = _split_paths(checked_paths(chains), max_points)
+    if len(candidate) >= len(contours):
+        return contours, 0.0
+    candidate.sort(key=lambda path: -_length(path))
+
+    def priced_paths(paths):
+        yield from checked_paths(paths)
+        # The remainder of the dense run schedule is common to both routes.
+        if first_dense_path:
+            yield first_dense_path
+
+    original_cost = model.paths_seconds(priced_paths(contours))
+    joined_cost = model.paths_seconds(priced_paths(candidate))
+    savings = original_cost - joined_cost
+    if savings < max(.002, original_cost * .005):
+        return contours, 0.0
+    return candidate, savings
+
+
+def trace_contours(image, cancelled=lambda:False, max_points=160, options=None, *, fitted_size=None):
     if max_points < 3:
         raise ValueError('max_points must be at least 3')
     if cancelled():
         raise InterruptedError()
-    mask = np.asarray(image.convert('L')) < 128
+    with image.convert('L') as gray:
+        mask = np.asarray(gray) < 128
     runs = mask_horizontal_runs(mask, cancelled=cancelled)
     if not runs:
         return [], {'engine':'Gartic connected contours','ink_pixels':0,'contours':0,
@@ -201,7 +233,7 @@ def trace_contours(image, cancelled=lambda:False, max_points=160, options=None):
         if dense_candidate:
             if model is None:
                 from ExecutionCostModel import build_cost_model
-                model = build_cost_model(dict(options or {}), image.size, image.size)
+                model = build_cost_model(dict(options or {}), image.size, fitted_size or image.size)
             h_paths = _axis_paths(comp_runs, 'horizontal', cancelled, max_points)
             v_paths = _axis_paths(comp_runs, 'vertical', cancelled, max_points, vertical_runs=vertical_runs)
             axis_candidates += int(bool(h_paths)) + int(bool(v_paths))
@@ -249,6 +281,20 @@ def trace_contours(image, cancelled=lambda:False, max_points=160, options=None):
             contour_output.extend(contour_paths)
 
     contour_output.sort(key=lambda path: -_length(path))
+    initial_contours = len(contour_output)
+    contour_savings = 0.0
+    # A translucent stroke can blend twice at a shared endpoint. Only join
+    # when preflight supplies the verified 100% control the executor selects.
+    opacity = (options or {}).get('gartic_opacity_plan') or {}
+    if (initial_contours > 1 and opacity.get('profile_key') in ('gartic-phone','gartic-io')
+            and opacity['profile_key'] == (options or {}).get('profile_key')
+            and opacity.get('selected_percent') == 100
+            and opacity.get('control_verified') and opacity.get('target_position')):
+        if model is None:
+            from ExecutionCostModel import build_cost_model
+            model = build_cost_model(dict(options or {}), image.size, fitted_size or image.size)
+        contour_output, contour_savings = _opaque_contour_route(
+            contour_output, axis_output[0] if axis_output else None, model, max_points, cancelled)
     result = contour_output + axis_output
     return result, {
         'engine': ('Gartic contour + adaptive dense H/V' if axis_components else 'Gartic connected contours'),
@@ -264,6 +310,8 @@ def trace_contours(image, cancelled=lambda:False, max_points=160, options=None):
         'horizontal_axis_components': horizontal_components_used,
         'vertical_axis_components': vertical_components_used,
         'modeled_axis_seconds_saved': round(modeled_saved, 6),
+        'contour_pen_lifts_saved': initial_contours - len(contour_output),
+        'modeled_contour_seconds_saved': round(contour_savings, 6),
         'dense_axis_shortcuts': dense_shortcuts,
         'axis_rule': 'lossless source-mask runs; 1.5% minimum modeled runtime gain',
     }

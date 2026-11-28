@@ -1,7 +1,7 @@
 """Deterministic image-based presets; no AI or changes to native input safeguards."""
 import numpy as np
 from PIL import Image
-from DrawingStyleProfiles import apply_drawing_style
+from DrawingStyleProfiles import apply_drawing_style, has_neutral_ink
 from ExtraFastProfilePolicy import apply_extra_fast_profile_policy
 from ImageGeometry import thumbnail_size
 
@@ -80,7 +80,12 @@ def resolve_drawing(image,options,*,cancelled=lambda: False):
     # Quantized colour occupancy is a texture heuristic, not object recognition.
     white,chroma,dominant=_image_statistics(image)
     if cancelled():raise InterruptedError('Automatic image analysis cancelled.')
-    source_kind='line art' if white>.65 and chroma<.12 else 'flat illustration' if dominant>.90 else 'photo / texture'
+    if white > .65 and has_neutral_ink(white, chroma):
+        source_kind = 'line art'
+    elif dominant > .90:
+        source_kind = 'flat illustration'
+    else:
+        source_kind = 'photo / texture'
     # Step 11: Auto is now an end-to-end quality/speed policy for full-colour
     # images. It composes the existing colour/deadline/calibration engines and
     # leaves explicit Manual/Masterpiece/Extra fast presets untouched. Legacy

@@ -1,14 +1,54 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
 
 import GarticEngineV2 as gartic
+from BrowserCanvasComponents import mask_components
 
 
 class GarticCandidateTests(unittest.TestCase):
+    def test_sampled_evidence_matches_independent_pixel_counts_on_existing_screenshot(self):
+        asset = Path(__file__).resolve().parent / 'assets' / 'image-draw-bot-app-screenshot.webp'
+        with Image.open(asset) as image:
+            for box in [(0, 0, 315, 240), (23, 19, 330, 232), (690, 344, 720, 393)]:
+                l, t, r, b = box
+                pixels = [image.getpixel((x, y)) for y in range(t, b, 7) for x in range(l, r, 7)]
+                expected_white = sum(min(rgb) >= 242 for rgb in pixels) / len(pixels)
+                self.assertEqual(gartic._sample_white_fraction(image, box, step=7), expected_white)
+                x0, x1 = max(0, l-5), min(image.width, r+5)
+                y0, y1 = max(0, t-5), min(image.height, b+5)
+                border = [(x, y) for x in range(x0, x1) for y in (y0, y1-1)]
+                border += [(x, y) for y in range(y0, y1) for x in (x0, x1-1)]
+                frame_hits = sum(r >= 55 and g <= 100 and b >= 95 and b-g >= 35
+                                 for r, g, b in (image.getpixel(point) for point in border))
+                self.assertEqual(gartic._frame_score(image, box, pad=5), frame_hits / len(border))
+
+    def test_scanline_components_match_four_neighbor_connectivity_for_every_3x3_mask(self):
+        for bits in range(1 << 9):
+            pixels = {(x, y) for y in range(3) for x in range(3) if bits & (1 << (3*y+x))}
+            rows = [bytes(127 if (x, y) in pixels else 0 for x in range(3)) for y in range(3)]
+            expected = []
+            while pixels:
+                seed = min(pixels, key=lambda p: (p[1], p[0]))
+                stack = [seed]
+                pixels.remove(seed)
+                members = []
+                while stack:
+                    x, y = stack.pop()
+                    members.append((x, y))
+                    for neighbor in ((x-1, y), (x+1, y), (x, y-1), (x, y+1)):
+                        if neighbor in pixels:
+                            pixels.remove(neighbor)
+                            stack.append(neighbor)
+                xs, ys = zip(*members)
+                expected.append(((min(xs), min(ys), max(xs)+1, max(ys)+1), len(members)))
+            expected.sort(key=lambda item: item[1], reverse=True)
+            self.assertEqual(mask_components(rows, min_area=1), expected, bits)
+
     def detect(self, image, **kwargs):
         white = ((20, 40, 340, 219), 320 * 179)
         unframed = ((90, 60, 448, 260), 358 * 200)

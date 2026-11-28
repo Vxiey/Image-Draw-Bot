@@ -1,4 +1,7 @@
 import unittest
+from pathlib import Path
+
+import numpy as np
 from PIL import Image,ImageDraw
 
 from DrawingStyleProfiles import DRAWING_STYLES,apply_drawing_style,classify_drawing_style,validate_drawing_style
@@ -40,6 +43,51 @@ class DrawingStyleProfileTests(unittest.TestCase):
         style,meta=classify_drawing_style(image)
         self.assertEqual(style,'Pixel Art')
         self.assertIn('unique',meta)
+
+    def test_sparse_colored_artwork_keeps_color_in_the_executable_plan_and_preview(self):
+        import Colors
+        from DrawBot import make_plan
+        from PixelData import closest_color
+        from test_drawbot import options
+        from test_v148_rendering_batch06_canvas import close_plan
+
+        original_palette = Colors.allColors.copy()
+        self.addCleanup(closest_color.cache_clear)
+        self.addCleanup(Colors.allColors.__setitem__, slice(None), original_palette)
+        Colors.reset_palette()
+        asset = Path(__file__).parent / 'assets' / 'paint-tools-reference.png'
+        with Image.open(asset) as image:
+            source = np.asarray(image)[:, :, :3].astype(np.int16)
+            colored = np.ptp(source, axis=2) > 35
+            self.assertGreater(int(colored.sum()), 200)
+            for preset in ('Auto', 'Extra fast'):
+                settings = dict(options(), render_preset=preset, drawing_style='Auto',
+                                gpu_mode='CPU', preview_plan=True, profile_name='Microsoft Paint',
+                                brush_px=1, _execution_cost_calibration_override={})
+                with self.subTest(preset=preset):
+                    plan = make_plan(image, image.size, settings)
+                    try:
+                        self.assertFalse(plan['options']['outline'])
+                        self.assertTrue(any(group and max(rgb) - min(rgb) > 35 for group, rgb in
+                                            zip(plan['execution_groups'], plan['colors'])))
+                        preview = np.asarray(plan['preview'])[:, :, :3].astype(np.int16)
+                        self.assertLess(np.abs(preview - source)[colored].mean(), 45)
+                        self.assertGreater((np.ptp(preview, axis=2)[colored] > 35).mean(), .60)
+                    finally:
+                        close_plan(plan, image)
+
+    def test_explicit_outline_and_physical_brush_survive_colored_paper_detection(self):
+        from AutoDrawing import resolve_drawing
+        asset = Path(__file__).parent / 'tests' / 'fixtures' / 'paint-light-ribbon.png'
+        with Image.open(asset) as image:
+            for preset in ('Auto', 'Extra fast'):
+                for explicit in ({'drawing_style': 'Line Art'}, {'outline': True},
+                                 {'paint_current_color': True}):
+                    with self.subTest(preset=preset, explicit=explicit):
+                        result = resolve_drawing(image, {'render_preset': preset, 'brush_px': 5,
+                                                        **explicit})
+                        self.assertTrue(result['outline'])
+                        self.assertEqual(result['brush_px'], 5)
 
     def test_validation_rejects_unknown(self):
         with self.assertRaises(ValueError):validate_drawing_style('Oil painting')

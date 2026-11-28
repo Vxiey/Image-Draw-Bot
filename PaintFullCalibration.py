@@ -1,6 +1,8 @@
 """Read-only modern Paint setup, verified against ribbon geometry and icons."""
+import math
 import numpy as np
 from PIL import Image,ImageFilter
+from contextlib import ExitStack
 from functools import lru_cache
 from types import MappingProxyType
 from PaletteMaps import detect_color_swatches
@@ -126,9 +128,12 @@ def _detect_visible_canvas(white, *, toolbar_end, w, h, scale, screen_origin, ra
     """Return a safe visible Paint drawing area, including compact/clipped viewports."""
     min_safe_w=max(96,round(160*scale));min_safe_h=max(96,round(120*scale))
     row_fraction=min(.35,max(.06,(min_safe_w/max(1,w))*.72))
-    top,bottom=_run(np.mean(white,axis=1)>row_fraction)
-    if bottom-top<min_safe_h:
+    bands=_significant_runs(np.mean(white,axis=1)>row_fraction,min_safe_h)
+    if not bands:
         raise ValueError('Paint canvas visible area is too small. Enlarge Paint or select the drawing area manually.')
+    if len(bands)>1:
+        raise ValueError('More than one possible Paint canvas is visible. Close overlays or select the drawing area manually.')
+    top,bottom=bands[0]
 
     left,right=_edge_supported_horizontal_span(white,top=top,bottom=bottom,scale=scale,min_safe_w=min_safe_w)
     if right-left<min_safe_w:
@@ -191,17 +196,38 @@ def _reference_templates():
     return MappingProxyType(templates)
 
 
-def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_override=None):
-    if cancelled():raise InterruptedError()
-    if image.width<64 or image.height<64:raise ValueError('Paint screenshot is too small to verify its ribbon.')
-    screen_origin=screen_point(screen_origin,'Paint screen origin')
-    screen_rect((*screen_origin,screen_origin[0]+image.width,screen_origin[1]+image.height),'Paint screenshot')
-    ratio=min(1.,1920/image.width,1200/image.height)
-    work=image if ratio==1 else image.resize((round(image.width*ratio),round(image.height*ratio)))
-    if work.mode!='RGB':work=work.convert('RGB')
-    w,h=work.size;rh=min(h//2,360)
-    with work.crop((0,0,w,rh)) as ribbon:
-        pos,colors,_=detect_color_swatches(ribbon,cancelled=cancelled)
+def _palette_search_box(ribbon, cancelled):
+    """Find a small candidate search window; the complete grid and icons are verified next."""
+    # These saturated red and blue swatches are five pitches apart. A coarse
+    # sample locates their approximate centres even on a 4K display at 100% DPI.
+    # Multiple or missing landmarks fall back to the broad ribbon scan.
+    pixels = np.asarray(ribbon)[::4, ::4]
+    centers = []
+    for rgb in (ROW1[3], ROW1[8]):
+        if cancelled():
+            raise InterruptedError()
+        mask = ((pixels[..., 0] == rgb[0]) & (pixels[..., 1] == rgb[1])
+                & (pixels[..., 2] == rgb[2]))
+        ys, xs = np.nonzero(mask)
+        if not xs.size or xs.max()-xs.min() > 12 or ys.max()-ys.min() > 12:
+            return None
+        centers.append(((int(xs.min()) + int(xs.max()))*2, (int(ys.min()) + int(ys.max()))*2))
+    (red_x, red_y), (blue_x, blue_y) = centers
+    pitch = (blue_x - red_x) / 5
+    if not 12 <= pitch <= 50 or abs(red_y - blue_y) > max(4, pitch*.15):
+        return None
+    anchor = red_x - 3*pitch
+    return (max(0, math.floor(anchor - pitch)), max(0, math.floor(red_y - pitch)),
+            min(ribbon.width, math.ceil(anchor + 10*pitch)), min(ribbon.height, math.ceil(red_y + 2*pitch)))
+
+
+def _ribbon_controls(work, screen_origin, ratio, cancelled, search_box=None):
+    w,rh=work.size
+    if search_box is None:
+        pos,colors,_=detect_color_swatches(work,cancelled=cancelled)
+    else:
+        with work.crop(search_box) as search:
+            pos,colors,_=detect_color_swatches(search,offset=search_box[:2],cancelled=cancelled)
     if cancelled():raise InterruptedError()
     matches=[]
     for expected in ROW1[1:]:
@@ -210,14 +236,17 @@ def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_ove
         matches.append(hits[0])
     pitch,anchor_x=map(float,np.polyfit(np.arange(1,10),[p[0] for p in matches],1))
     scale=pitch/24.;anchor_y=float(np.median([p[1] for p in matches]))
-    if not .55<=scale<=2 or any(abs(p[0]-(anchor_x+(i+1)*pitch))>2.5*scale or abs(p[1]-anchor_y)>2.5*scale for i,p in enumerate(matches)):
+    # At 200% a fitted pitch can exceed 48 by a fraction of a pixel because
+    # the returned centers must be integer sample coordinates.
+    if not .55<=scale<=2.03 or any(abs(p[0]-(anchor_x+(i+1)*pitch))>2.5*scale or abs(p[1]-anchor_y)>2.5*scale for i,p in enumerate(matches)):
         raise ValueError('Paint palette grid is ambiguous. Keep the complete ribbon visible.')
     positions=[];rgbs=[]
     for row,expected_row in enumerate((ROW1,ROW2)):
         for col,expected in enumerate(expected_row):
             x,y=round(anchor_x+col*pitch),round(anchor_y+row*pitch)
             if not (2<=x<w-2 and 2<=y<rh-2):raise ValueError('Paint palette is clipped.')
-            pixels=np.asarray(work.crop((x-1,y-1,x+2,y+2)),dtype=np.int16)
+            with work.crop((x-1,y-1,x+2,y+2)) as patch:
+                pixels=np.asarray(patch,dtype=np.int16)
             rgb=tuple(int(v) for v in np.median(pixels.reshape(-1,3),axis=0))
             if max(abs(a-b) for a,b in zip(rgb,expected))>10 or np.max(np.ptp(pixels.reshape(-1,3),axis=0))>10:
                 raise ValueError('Paint colour cells are covered or changed. Close menus and try again.')
@@ -227,13 +256,18 @@ def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_ove
     for name,rx,ry in (('Pencil',268,88),('Fill',308,88),('Eraser',268,128)):
         if cancelled():raise InterruptedError()
         cx=anchor_x+(rx-794)*scale;cy=anchor_y+(ry-83)*scale;radius=12*scale
-        if cx-radius<0 or cy-radius<0:raise ValueError('Paint tools are clipped.')
+        if cx-radius<0 or cy-radius<0 or cx+radius>w or cy+radius>rh:raise ValueError('Paint tools are clipped.')
         ee,em,ed=references[name];best=(float('inf'),cx,cy)
         for dx in (-2,0,2):
             for dy in (-2,0,2):
                 x,y=cx+dx*scale,cy+dy*scale
-                actual=work.crop((round(x-radius),round(y-radius),round(x+radius),round(y+radius))).resize((24,24))
-                aa=np.asarray(actual,dtype=np.int16);am=np.min(aa,axis=2)<170
+                bounds=round(x-radius),round(y-radius),round(x+radius),round(y+radius)
+                if bounds[0]<0 or bounds[1]<0 or bounds[2]>w or bounds[3]>rh:
+                    continue
+                with work.crop(bounds) as patch:
+                    with patch.resize((24,24)) as actual:
+                        aa=np.asarray(actual,dtype=np.int16)
+                am=np.min(aa,axis=2)<170
                 ad=np.asarray(Image.fromarray(am.astype('uint8')*255).filter(ImageFilter.MaxFilter(3)))>0
                 overlap=min(float(np.sum(am&ed))/max(1,int(am.sum())),float(np.sum(em&ad))/max(1,int(em.sum())))
                 difference=float(np.mean(np.abs(aa-ee))) if overlap>=.75 else float('inf')
@@ -242,21 +276,81 @@ def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_ove
         if difference>32:raise ValueError(f'Paint {name} icon could not be verified. Close menus or use manual tool calibration.')
         tools[name]=(round(cx/ratio)+screen_origin[0],round(cy/ratio)+screen_origin[1])
     if cancelled():raise InterruptedError()
-    toolbar_end=min(h,round(anchor_y+100*scale))
-    if canvas_box_override is not None:
-        box=_validate_canvas_override(canvas_box_override,screen_origin=screen_origin,w=w,h=h,ratio=ratio,toolbar_end=toolbar_end,scale=scale,original_size=image.size)
-        clipped_edges=();compact=False;visibility='manual-selected';confidence=.96
-    else:
-        a=np.asarray(work);white=np.min(a,axis=2)>=253;white[:toolbar_end]=False
-        box,clipped_edges,compact=_detect_visible_canvas(white,toolbar_end=toolbar_end,w=w,h=h,scale=scale,
-                                                          screen_origin=screen_origin,ratio=ratio)
-        clipped=bool(clipped_edges);visibility='viewport-compact' if compact else ('viewport-clipped' if clipped else 'full')
-        confidence=.85 if compact else (.87 if clipped else .90)
+    return tools, positions, rgbs, anchor_y, scale
+
+
+def _blank_canvas_mask(work, toolbar_end, cancelled):
+    # Only the viewport contributes to canvas evidence. Process bounded bands
+    # and compare channels directly instead of reducing over interleaved RGB.
+    white = np.zeros((work.height, work.width), dtype=bool)
+    for y in range(toolbar_end, work.height, 128):
+        if cancelled():
+            raise InterruptedError()
+        with work.crop((0, y, work.width, min(y + 128, work.height))) as band:
+            pixels = np.asarray(band)
+            white[y:y+len(pixels)] = ((pixels[..., 0] >= 253) & (pixels[..., 1] >= 253)
+                                      & (pixels[..., 2] >= 253))
+    return white
+
+
+def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_override=None):
+    if cancelled():raise InterruptedError()
+    if image.width<64 or image.height<64:raise ValueError('Paint screenshot is too small to verify its ribbon.')
+    screen_origin=screen_point(screen_origin,'Paint screen origin')
+    screen_rect((*screen_origin,screen_origin[0]+image.width,screen_origin[1]+image.height),'Paint screenshot')
+    ratio=min(1.,1920/image.width,1200/image.height)
+    work_size = (max(1, round(image.width*ratio)), max(1, round(image.height*ratio)))
+    with ExitStack() as owned:
+        # Read ribbon landmarks in physical pixels independently of canvas
+        # downsampling. Native controls on a large display can otherwise shrink
+        # below the 5x5 solid-cell verification size.
+        ribbon_height = min(image.height//2, 360)
+        controls = None
+        if ribbon_height*image.width <= 4_000_000:
+            ribbon = owned.enter_context(image.crop((0,0,image.width,ribbon_height)))
+            if ribbon.mode != 'RGB':
+                ribbon = owned.enter_context(ribbon.convert('RGB'))
+            box = _palette_search_box(ribbon, cancelled)
+            if box is not None:
+                try:
+                    controls = _ribbon_controls(ribbon, screen_origin, 1., cancelled, box)
+                except ValueError:
+                    # Decorative colors sometimes resemble the two landmarks.
+                    # Use the established full-grid verifier in that case.
+                    pass
+        work = image if work_size == image.size else owned.enter_context(image.resize(work_size))
+        if work.mode != 'RGB':
+            work = owned.enter_context(work.convert('RGB'))
+        w,h=work.size
+        if controls is None:
+            with work.crop((0,0,w,min(h//2,360))) as ribbon:
+                tools,positions,rgbs,anchor_y,scale = _ribbon_controls(ribbon, screen_origin, ratio, cancelled)
+        else:
+            tools,positions,rgbs,anchor_y,scale = controls
+            anchor_y *= ratio
+            scale *= ratio
+        toolbar_end=min(h,round(anchor_y+100*scale))
+        if canvas_box_override is not None:
+            box=_validate_canvas_override(canvas_box_override,screen_origin=screen_origin,w=w,h=h,ratio=ratio,toolbar_end=toolbar_end,scale=scale,original_size=image.size)
+            clipped_edges=();compact=False;visibility='manual-selected';confidence=.96
+        else:
+            white = _blank_canvas_mask(work, toolbar_end, cancelled)
+            box,clipped_edges,compact=_detect_visible_canvas(white,toolbar_end=toolbar_end,w=w,h=h,scale=scale,
+                                                              screen_origin=screen_origin,ratio=ratio)
+            clipped=bool(clipped_edges);visibility='viewport-compact' if compact else ('viewport-clipped' if clipped else 'full')
+            confidence=.85 if compact else (.87 if clipped else .90)
     if cancelled():raise InterruptedError()
     return {'tools':tools,'positions':positions,'rgbs':rgbs,'canvas_box':box,'palette_count':len(rgbs),
             'confidence':confidence,'method':'modern-paint-grid-and-icons-v7',
             'canvas_visibility':visibility,'canvas_clipped_edges':list(clipped_edges),
             'canvas_source':'manual-selection' if canvas_box_override is not None else 'auto-detected'}
+
+
+def detect_canvas_area(image, screen_origin=(0, 0), cancelled=lambda: False):
+    """Inspect a captured Paint client and return only verified canvas geometry."""
+    result = detect_setup(image, screen_origin=screen_origin, cancelled=cancelled)
+    return {key: result[key] for key in ('canvas_box', 'canvas_visibility', 'canvas_clipped_edges',
+                                         'canvas_source', 'method')} | {'canvas_confidence': result['confidence']}
 
 
 def save_setup(result,meta,palette_path,tool_path=None):

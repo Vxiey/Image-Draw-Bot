@@ -56,11 +56,18 @@ def _metrics(image: Image.Image | None) -> dict[str,float]:
                 'chroma':chroma,'alpha_empty':alpha_empty}
 
 
+def has_neutral_ink(white_fraction: float, chromatic_fraction: float) -> bool:
+    """Count strongly coloured pixels relative to the visible marks on white paper."""
+    # The chroma threshold excludes every near-white pixel in both samplers.
+    # Using the whole canvas as a denominator erases sparse coloured subjects.
+    return chromatic_fraction <= 0.12 * (1.0 - white_fraction)
+
+
 def classify_drawing_style(image: Image.Image | None) -> tuple[str,dict[str,float]]:
     m=_metrics(image)
     if isinstance(image,Image.Image) and max(image.size)<=320 and m['unique']<=.35 and m['edge']>=.05:
         style='Pixel Art'
-    elif m['white']>=.68 and m['chroma']<=.14:
+    elif m['white']>=.68 and has_neutral_ink(m['white'], m['chroma']):
         style='Line Art'
     elif m['unique']<=.25 and (m['alpha_empty']>=.05 or m['edge']>=.035):
         style='Logo / Flat Graphic'
