@@ -2,6 +2,7 @@ import unittest
 from AdaptiveRegionHybrid import RegionChoice,_schedule
 from ExecutionCostModel import build_cost_model
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 def choice(cid,color,cost=.01,gain=.1,phase='structure',protected=0,importance=.3):
     return RegionChoice(cid,color,'test',phase,100,importance,.2,protected,cost,gain,gain/(cost*1000),1,2,True,'test')
@@ -49,6 +50,6 @@ class ExtraFastBudgetAccountingRc25Tests(unittest.TestCase):
         self.assertGreaterEqual(meta['brush_switches'],1)
         self.assertGreater(meta['selected_operation_cost']['brush_seconds'],0)
 
-    def test_version_stays_rc25(self): self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version_stays_rc25(self): self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 if __name__=='__main__':unittest.main()

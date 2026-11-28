@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from DeadlineScheduler import DeadlineScheduler, NORMAL, CATCH_UP, PANIC
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 def entry(i, *, phase='structure', importance=.5, structural=.5, optional=False, color=0, brush=4, cost=1.0):
@@ -50,6 +51,6 @@ class Rc8DynamicReplannerTests(unittest.TestCase):
         self.assertIn('deadline_scheduler.replan_in_place(execution_sequence,_execution_index+1)',src)
 
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 if __name__=='__main__':unittest.main()

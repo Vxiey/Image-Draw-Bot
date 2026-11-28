@@ -9,12 +9,13 @@ from TimeBudget import (TIME_BUDGET_MODES, TARGET_STROKE_COUNTS, apply_target_pa
 from DrawBot import make_plan
 from test_skribbl_fast_renderer_v1017 import base_options
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class TimeBudgetV1020Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_modes_validate_and_resolve(self):
         self.assertIn('90 sec', TIME_BUDGET_MODES)

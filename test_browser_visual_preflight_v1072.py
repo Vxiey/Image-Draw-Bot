@@ -5,6 +5,7 @@ from BrowserAutoCalibration import detect_browser_setup
 from BrowserVisualPreflight import verify_browser_visual_preflight, _sample_indices
 from PaletteMaps import GARTIC_PHONE
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class BrowserVisualPreflightTests(unittest.TestCase):
@@ -28,8 +29,8 @@ class BrowserVisualPreflightTests(unittest.TestCase):
         return detected,entries,meta
 
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_verified_canvas_and_palette_pass(self):
         im=self._gartic_image();detected,entries,meta=self._setup(im)

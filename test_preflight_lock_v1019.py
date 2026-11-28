@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from DrawBot import DrawBotApp
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 class Value:
     def __init__(self,value=None): self.value=value
@@ -45,8 +46,8 @@ class PreflightLockV1019Tests(unittest.TestCase):
         return app
 
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_small_test_is_optional(self):
         app=self.make_app(test_passed=False)

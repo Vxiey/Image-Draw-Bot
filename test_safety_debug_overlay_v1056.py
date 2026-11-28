@@ -3,6 +3,7 @@ import unittest
 from PreviewSafety import build_preview_safety_plan
 from SafetyDebugOverlay import render_safety_debug_overlay
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 BASE_OPTIONS = {
@@ -19,8 +20,8 @@ BASE_OPTIONS = {
 
 class SafetyDebugOverlayV1056Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_debug_marks_hard_clipped_stroke(self):
         plan = build_preview_safety_plan((10, 10), (20, 20), [[(0, 5, 9, 5)]], None, dict(BASE_OPTIONS))

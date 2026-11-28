@@ -5,6 +5,7 @@ from unittest.mock import patch
 from BrowserAutoRecalibration import make_layout_state, compare_layout_states
 from DrawBot import DrawBotApp
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Value:
@@ -15,8 +16,8 @@ class Value:
 
 class BrowserAutoRecalibrationTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_window_translation_is_not_layout_reflow(self):
         old=make_layout_state((100,100,1100,800),96,(200,180,900,650),[(150,700),(180,700),(210,700)])

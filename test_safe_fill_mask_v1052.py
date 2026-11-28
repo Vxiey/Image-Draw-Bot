@@ -8,12 +8,13 @@ from SafeFillMask import (
     choose_safe_background_seed,
 )
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class SafeFillMaskIntegrationTests(unittest.TestCase):
     def test_version_metadata_v1052(self):
-        assert APP_VERSION == '1.0.148'
-        assert FILE_VERSION == '1.0.148'
+        assert APP_VERSION == EXPECTED_APP_VERSION
+        assert FILE_VERSION == EXPECTED_FILE_VERSION
 
 
     def test_source_fill_mask_rejects_edge_region(self):

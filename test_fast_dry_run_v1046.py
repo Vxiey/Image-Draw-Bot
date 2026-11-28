@@ -3,6 +3,7 @@ from pathlib import Path
 from FastDryRun import sample_indices, sample_plan, DRY_RUN_PLANNING_SECONDS, DRY_RUN_EXECUTION_SECONDS
 from PlanningWatchdog import build_planning_attempts
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 class FastDryRunV1046Tests(unittest.TestCase):
     def test_even_sampling_keeps_edges(self):
@@ -42,7 +43,7 @@ class FastDryRunV1046Tests(unittest.TestCase):
         self.assertIn('Fast Dry run · ≤12s',text)
 
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
 if __name__=='__main__':unittest.main()

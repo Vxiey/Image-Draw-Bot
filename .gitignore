@@ -35,6 +35,7 @@ correction-history-*.json
 layout-fingerprints-v2*.json
 hardware-performance-profile-v1.json
 real-speed-profiles.json
+/*.json.lock
 performance-auto-tuner-v1.json
 profiles.json
 *.dmp

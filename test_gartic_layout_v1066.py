@@ -5,6 +5,7 @@ from GarticPhoneLayout import (PALETTE_COLUMNS, PALETTE_ROWS, PALETTE_COLOR_COUN
                                REFERENCE_CANVAS_ASPECT, assess_canvas_size)
 from PaletteMaps import GARTIC_PHONE, detect_preset, sample_grid, detect_color_swatches
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class GarticLayout1066Tests(unittest.TestCase):
@@ -59,8 +60,8 @@ class GarticLayout1066Tests(unittest.TestCase):
         self.assertEqual(len(rows),72)
 
     def test_current_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
 
 if __name__=='__main__':

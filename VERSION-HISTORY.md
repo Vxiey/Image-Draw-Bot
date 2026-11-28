@@ -1,3 +1,7 @@
+# Image Draw Bot v1.0.149
+
+A guided setup for new drawings, faster canvas detection, and improved background removal. [Release notes](RELEASE-NOTES-v1.0.149.md)
+
 # Image Draw Bot v1.0.148
 
 Pixel Accurate can show missed details side by side and prioritize post-draw corrections within a time limit. This version includes the 900 registered improvements across drawing, calibration, performance and reliability. See the [release notes](RELEASE-NOTES-v1.0.148.md) and [Windows downloads](README.md#download-image-draw-bot-for-windows).

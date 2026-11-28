@@ -6,6 +6,7 @@ from RenderResume import checkpoint_before_path, items_fingerprint, resolve_resu
 from SmartRecovery import classify_interruption
 from StrokeDeliveryVerification import StrokeDeliveryVerificationError
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 from DrawBot import execute_plan
 from test_drawbot import Mouse, NoWait
@@ -49,7 +50,7 @@ def plan():
 
 class SmartRecoveryV1079Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148');self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION);self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_path_checkpoint_resumes_same_unfinished_path(self):
         p=plan();items=p['execution_groups'][0]

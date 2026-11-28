@@ -6,6 +6,7 @@ from unittest.mock import patch
 from DropInStart import DROP_IN_ACTION, action_for_import, can_arm, normalize_action
 from DrawBot import DrawBotApp
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Value:
@@ -43,8 +44,8 @@ def make_app(profile='Gartic Phone', image=None):
 
 class ManualDropInStartV1067Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_policy_accepts_only_new_explicit_action(self):
         self.assertEqual(action_for_import(armed=True), DROP_IN_ACTION)

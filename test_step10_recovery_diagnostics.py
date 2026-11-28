@@ -6,11 +6,12 @@ from PIL import Image
 import SessionRecovery as SR
 import DiagnosticsPackage as DP
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 class Step10Tests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_recovery_snapshot_never_restores_armed_state(self):
         with tempfile.TemporaryDirectory() as tmp:

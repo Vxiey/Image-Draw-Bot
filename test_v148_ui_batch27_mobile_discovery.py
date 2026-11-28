@@ -402,8 +402,11 @@ class NativeMobileDiscoveryTests(unittest.TestCase):
         import DrawBot
         import RuntimePaths
         import SessionRecovery
+        # Run after the mock call histories, dialogs, and fixture app have been
+        # released. Destroyed CTk widgets still have Python reference cycles.
+        self.addCleanup(self.release_tcl_owner)
         self.stack = self.enterContext(ExitStack())
-        self.stack.enter_context(patch('DrawBot.messagebox.askyesno', return_value=True))
+        self.stack.enter_context(patch('DrawBot.messagebox.askyesno', new=lambda *_a, **_k: True))
         self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
         for name, path in (('RECOVERY_DIR', self.directory),
                 ('STATE_FILE', self.directory / 'recovery.json'),
@@ -419,6 +422,7 @@ class NativeMobileDiscoveryTests(unittest.TestCase):
             side_effect=lambda message, **_kwargs: self.errors.append(str(message))))
         self.browser = self.stack.enter_context(patch('webbrowser.open', return_value=True))
         self.root = DrawBot.create_root()
+        self.root_ref = weakref.ref(self.root)
         self.root.geometry('400x220')
         self.root.report_callback_exception = lambda typ, error, _trace: self.errors.append(
             typ.__name__ + ': ' + str(error))
@@ -461,6 +465,11 @@ class NativeMobileDiscoveryTests(unittest.TestCase):
             return real_add(qr, value, *args, **kwargs)
         self.stack.enter_context(patch.object(ImageTk, 'PhotoImage', photo))
         self.stack.enter_context(patch.object(qrcode.QRCode, 'add_data', qr_data))
+
+    def release_tcl_owner(self):
+        gc.collect()
+        if hasattr(self, 'root_ref'):
+            self.assertIsNone(self.root_ref(), 'A later worker could collect this native Tcl interpreter')
 
     def close_native(self):
         if self.resolver is not None:self.resolver.close()

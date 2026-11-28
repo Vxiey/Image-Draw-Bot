@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from ExecutionCostModel import build_cost_model,EXECUTION_MODEL_VERSION
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 def opts():
@@ -59,7 +60,7 @@ class Rc22LearnedCursorTravelTests(unittest.TestCase):
 
     def test_version(self):
         self.assertEqual(EXECUTION_MODEL_VERSION,7)
-        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

@@ -5,6 +5,7 @@ from pathlib import Path
 from DrawTimeCalibration import record_sample, correction_for
 from DrawTimeEstimate import _operation_calibration_adjustment
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 class Rc12EtaCalibrationTests(unittest.TestCase):
@@ -46,6 +47,6 @@ class Rc12EtaCalibrationTests(unittest.TestCase):
         self.assertGreater(a['confidence'],b['confidence'])
 
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 if __name__=='__main__':unittest.main()

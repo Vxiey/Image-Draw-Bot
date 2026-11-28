@@ -2,24 +2,14 @@
 
 Use a simple image with clear outlines and a few flat colors. Keep default quality and hardware settings initially.
 
-## Microsoft Paint
+## Guided setup
 
-1. Open one Paint window with an empty canvas fully visible.
-2. Choose **Microsoft Paint** in Image Draw Bot, then **Select image**.
-3. Open **Get started** if you want explanations. Build preview or run a small test if useful; these are optional in the Paint workflow.
-4. Press **Prepare Paint & draw** when ready. This prepares Paint and starts drawing; it is not a setup-only button.
-5. Leave the mouse alone. **Esc** stops; **F6** pauses/resumes.
+1. In **Simple**, choose **Target app**, open the drawing app or game, and make its canvas visible.
+2. Choose an image. Leave **Image style** on **Auto** or pick a style. **Remove background** and **Undo** are available beside the image controls.
+3. For a supported target, the guide looks for its canvas. Use **Show canvas** to inspect the proposed outline, then choose **Use detected canvas** to confirm. **Find canvas** retries the search. **Select canvas manually…** lets you mark the area yourself.
+4. Use **Build preview** to check the result. In Paint, **Prepare Paint & draw** calibrates tools and colors and starts drawing after confirmation. For a browser profile, follow the displayed palette verification, unlock and start actions.
+5. Press **Esc** to stop or **F6** to pause. Open **Advanced controls** for target-specific settings.
 
-If preparation reports a problem, read the status and correct it before retrying. See [Paint setup](Microsoft-Paint).
-
-## Browser games
-
-1. Open a drawable canvas and choose the matching profile.
-2. For a manual first attempt, turn **Browser One-Click Mode off** and leave drop-start modes unarmed before adding the image. Enabled automatic modes can start drawing after import.
-3. Select a local image and run **One-click Setup + Verify** or **Auto setup browser** where supported.
-4. Confirm the canvas excludes browser controls. Check a fresh preview.
-5. Use **Unlock full drawing → Start drawing**, following any remaining setup message and the countdown.
-
-For Gartic Phone, first follow its [Chrome/Artist Tools setup](Gartic-Phone). [Skribbl.io setup](Skribbl-io) has its own profile.
+If two windows match, bring the intended drawing window to the front. If the window moves, its DPI changes or a different tab covers the canvas, repeat the canvas check. A suggested canvas grants no permission to draw.
 
 Keep **Auto clear target canvas** off unless you want existing artwork erased. A **Small test** also draws on the real canvas.

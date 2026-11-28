@@ -1,3 +1,9 @@
+# Image Draw Bot release history
+
+See the [version history](../VERSION-HISTORY.md) for v1.0.149 and v1.0.148 and links to their release notes.
+
+## Historical development checkpoints
+
 # Image Draw Bot v1.0.148 — Development in progress
 
 - Carry forward the first 100 reviewed reliability and security improvements.

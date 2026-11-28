@@ -1,12 +1,13 @@
 import unittest
 from DrawBot import preview_safe_options, PREVIEW_PLAN_TIMEOUT_SECONDS, PREVIEW_FALLBACK_TIMEOUT_SECONDS
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class PreviewStabilityV1030Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_extreme_preview_is_bounded_and_cancellable(self):
         options = {

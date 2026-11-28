@@ -7,6 +7,7 @@ from GpuAcceleration import (AccelerationInfo,gpu_memory_recovery_steps,gpu_scor
 from ResourceScheduler import memory_pressure_profile,resolve_resource_schedule
 from UniversalGpuAcceleration import RouteInfo,_mark_failed,backend_health_snapshot,reset_runtime_backend_health
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 class Rc15CpuGpuPerformanceTests(unittest.TestCase):
@@ -64,7 +65,7 @@ class Rc15CpuGpuPerformanceTests(unittest.TestCase):
         self.assertIn('gpu_memory_recovery_steps',src);self.assertIn('score_tile_rows',src)
         self.assertIn('score_vram_retries',src);self.assertNotIn('CUDA accuracy scoring exceeds allocation budget; using CPU scoring.',src)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

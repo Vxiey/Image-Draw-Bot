@@ -66,7 +66,8 @@ class StrokeOptimizerV1037Tests(unittest.TestCase):
 
     def test_release_metadata_and_ui_control(self):
         from Version import APP_VERSION,FILE_VERSION
-        self.assertEqual(APP_VERSION,'1.0.148');self.assertEqual(FILE_VERSION,'1.0.148')
+        from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION);self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
         ui=Path('StudioUI.py').read_text(encoding='utf-8')
         bot=Path('DrawBot.py').read_text(encoding='utf-8')
         self.assertIn("'Stroke optimizer'",ui)

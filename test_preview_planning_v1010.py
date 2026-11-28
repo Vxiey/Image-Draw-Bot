@@ -6,12 +6,13 @@ from PIL import Image
 from DrawBot import preview_area_for, make_plan, PREVIEW_MAX_PIXELS, PREVIEW_PLAN_TIMEOUT_SECONDS
 from PreviewLayers import build_auxiliary_previews
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class PreviewPlanningV1010Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_preview_area_downscales_large_canvas(self):
         area = preview_area_for((4000, 2200))

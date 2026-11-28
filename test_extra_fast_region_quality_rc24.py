@@ -5,6 +5,7 @@ from pathlib import Path
 from AutoDrawing import resolve_drawing
 from BrowserBrushSize import POLICIES
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 class ExtraFastRegionQualityRc24Tests(unittest.TestCase):
@@ -56,7 +57,7 @@ class ExtraFastRegionQualityRc24Tests(unittest.TestCase):
         self.assertIn("'target_skipped_paths':0",source)
 
     def test_version_stays_rc24_for_hotfix_branch(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':

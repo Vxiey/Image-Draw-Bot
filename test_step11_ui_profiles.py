@@ -5,12 +5,13 @@ from AppTools import capability
 from GameProfiles import PROFILES, PROFILE_DEFAULTS, PROFILE_UI, profile_defaults, profile_ui
 from UIState import compute_workspace_state
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Step11UIProfileTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_every_standard_profile_has_ui_metadata_and_defaults(self):
         self.assertEqual(set(PROFILES), set(PROFILE_UI))

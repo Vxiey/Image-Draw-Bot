@@ -5,6 +5,7 @@ from PIL import Image
 from CanvasGuard import CanvasGuard, CanvasModel, CanvasSafetyStop, normalize_canvas_polygon, point_in_polygon
 from DrawBot import execute_plan
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Stop:
@@ -42,8 +43,8 @@ def base_plan():
 
 class CanvasPolygonV1048Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_normalized_polygon_becomes_screen_polygon(self):
         poly=normalize_canvas_polygon([(0,0),(1,0),(1,1),(0,1)], area=(100,200,21,11), coordinate_space='normalized')

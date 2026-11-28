@@ -89,7 +89,8 @@ class AdaptiveColorV1035Tests(unittest.TestCase):
 
     def test_release_version_and_ui_status_hook(self):
         from Version import APP_VERSION,FILE_VERSION
-        self.assertEqual(APP_VERSION,'1.0.148');self.assertEqual(FILE_VERSION,'1.0.148')
+        from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION);self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
         ui=Path('StudioUI.py').read_text(encoding='utf-8');bot=Path('DrawBot.py').read_text(encoding='utf-8')
         self.assertIn('color_plan_text',ui);self.assertIn("elif kind=='color_plan'",bot)
         self.assertIn("'adaptive_color_verification':bool(paint_profile",bot)

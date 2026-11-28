@@ -4,6 +4,7 @@ import unittest
 from UpdateCenter import (check_for_updates, is_newer_version, normalize_tag,
                           parse_version, select_best_release)
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class _Response:
@@ -20,8 +21,8 @@ class _Response:
 
 class UpdateCenterTests(unittest.TestCase):
     def test_version_metadata(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_version_parser_orders_beta_and_stable(self):
         self.assertTrue(is_newer_version('1.0.59', '1.0.59-beta'))

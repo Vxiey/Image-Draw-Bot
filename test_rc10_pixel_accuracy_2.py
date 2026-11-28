@@ -4,6 +4,7 @@ import numpy as np
 from PixelAccuratePlanner import PixelMap
 from PixelAccuracyEngine import simulate_strokes,refine_with_corrections,region_accuracy_scores
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 PALETTE=((255,255,255),(0,0,0),(255,0,0))
 
@@ -83,6 +84,6 @@ class Rc10PixelAccuracy2Tests(unittest.TestCase):
         self.assertLess(row['protected_detail_percent'],100.0)
         self.assertLess(row['edge_accuracy_percent'],100.0)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 if __name__=='__main__':unittest.main()

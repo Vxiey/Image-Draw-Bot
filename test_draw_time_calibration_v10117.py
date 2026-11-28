@@ -4,6 +4,7 @@ from pathlib import Path
 
 from DrawTimeCalibration import record_sample, correction_for
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class DrawTimeCalibrationV10117Tests(unittest.TestCase):
@@ -32,8 +33,8 @@ class DrawTimeCalibrationV10117Tests(unittest.TestCase):
             self.assertFalse(result['recorded'])
 
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
 
 if __name__ == '__main__':

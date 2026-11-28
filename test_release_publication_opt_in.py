@@ -59,11 +59,30 @@ class ReleasePublicationOptInTests(unittest.TestCase):
         text = WORKFLOW.read_text()
         for name in ('Run complete regressions and self-test',
                      'Validate packaged GUI and native drag and drop',
-                     'Validate silent installer round-trip', 'Upload workflow artifacts'):
+                     'Validate silent installer round-trip',
+                     'Verify upgrade from the published stable release preserves profile settings',
+                     'Upload workflow artifacts'):
             with self.subTest(name=name):
                 self.assertNotIn('        if:', step(text, name))
         self.assertIn('    branches:\n      - main\n', text)
         self.assertIn("    tags:\n      - 'v*'\n", text)
+
+    def test_upgrade_uses_pinned_published_installer_before_running_it(self):
+        build = WORKFLOW.read_text()
+        upgrade = step(build, 'Verify upgrade from the published stable release preserves profile settings')
+        self.assertIn('RELEASE_VERSION: ${{ steps.release_version.outputs.version }}', upgrade)
+        self.assertIn('-CandidateInstaller "release/ImageDrawBot-${env:RELEASE_VERSION}-Windows-x64-Setup.exe"', upgrade)
+        script = WORKFLOW.parents[1] / 'scripts' / 'test-release-upgrade.ps1'
+        self.assertIn('./.github/scripts/' + script.name, upgrade)
+        text = script.read_text()
+        self.assertIn('https://github.com/Vxiey/Image-Draw-Bot/releases/download/v${baselineVersion}/$baselineName', text)
+        self.assertRegex(text, r"(?m)^\$baselineHash = '[a-f0-9]{64}'$")
+        download = text.index('Invoke-WebRequest -Uri $baselineUrl')
+        verify = text.index('if ((Get-FileHash -LiteralPath $baselineInstaller -Algorithm SHA256).Hash -ne $baselineHash)')
+        refuse = text.index('throw ', verify)
+        install = text.index('Run-Checked $baselineInstaller')
+        self.assertLess(download, verify)
+        self.assertLess(refuse, install)
 
     def test_install_and_both_uploads_select_only_the_verified_version(self):
         text = WORKFLOW.read_text()

@@ -9,6 +9,7 @@ from RenderResume import (checkpoint_after_batch, checkpoint_sequence_progress, 
                           sequence_entry_key, validate_progress)
 from SmartRecovery import classify_interruption
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 def seq_plan(sequence=None, resume=None):
@@ -68,7 +69,7 @@ class Rc14SequenceResumeTests(unittest.TestCase):
         self.assertIn('SequenceCheckpointSession',src);self.assertIn('sequence_completed_counts',src)
         self.assertIn('sequence_new_completed%25==0',src);self.assertIn('Dynamic Replanner may safely reorder only the remaining work',src)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

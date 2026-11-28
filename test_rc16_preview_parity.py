@@ -6,6 +6,7 @@ from unittest.mock import patch
 from DrawBot import DrawBotApp
 from PreviewQuality import full_preview_options
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 class Value:
@@ -51,7 +52,7 @@ class Rc16PreviewParityTests(unittest.TestCase):
         options={'ram_budget_mb':1024,'cpu_workers':'8','color_layers':'All'}
         before=dict(options);full_preview_options(options,(800,500));self.assertEqual(options,before)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

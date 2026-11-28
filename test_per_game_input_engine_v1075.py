@@ -1,12 +1,13 @@
 import unittest
 from StrokeDelivery import resolve_stroke_delivery
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class PerGameInputEngineV1075Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_three_games_have_distinct_policies(self):
         g=resolve_stroke_delivery({'profile_name':'Gartic Phone','stroke_step_px':8})

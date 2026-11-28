@@ -11,12 +11,13 @@ from ProfileStorage import (profile_layout_cache_file, profile_palette_file,
                             profile_verified_color_file)
 from TargetCapabilities import capability_for_key
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Step28MoreTargetsTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_new_profiles_are_first_class(self):
         self.assertEqual(PROFILES['Kleki'][0],'kleki')

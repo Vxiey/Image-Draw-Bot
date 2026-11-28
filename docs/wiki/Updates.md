@@ -1,6 +1,6 @@
 # Updates and release history
 
-Version 1.0.148 adds a side-by-side review of missed Pixel Accurate details and per-profile correction time limits. See the [release notes](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.148) for the Windows downloads and changes.
+Version 1.0.149 adds guided setup, quicker canvas detection and improvements to background removal and drawing styles. [Release notes and Windows downloads](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.149)
 
 ## Update the installed app
 

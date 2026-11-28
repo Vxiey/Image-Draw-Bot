@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from ExecutionCostModel import build_cost_model,EXECUTION_MODEL_VERSION
 from ExtraFast2 import build_fast_paths
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 class Rc19ExtraFastExecutionCostTests(unittest.TestCase):
@@ -38,7 +39,7 @@ class Rc19ExtraFastExecutionCostTests(unittest.TestCase):
         self.assertFalse(meta['downstream_plan_accepted'])
         self.assertEqual(meta['ordered_cost_after_seconds'],meta['ordered_cost_before_seconds'])
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

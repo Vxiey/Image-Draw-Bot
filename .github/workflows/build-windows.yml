@@ -147,26 +147,15 @@ jobs:
           Write-Host "Uninstaller exit code: $($uninstallProcess.ExitCode)"
           if ($uninstallProcess.ExitCode -ne 0) { throw "Silent uninstall failed: $($uninstallProcess.ExitCode)" }
 
-      # Do not substitute an unverified download when the pinned artifact expires.
-      # Before expiry, preserve the exact Setup.exe through an approved, immutable
-      # source; future source changes must retain the pinned SHA-256 check.
-      - name: Download pinned 1.0.148 test build
-        if: steps.release_version.outputs.version == '1.0.148'
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          artifact-ids: '14093456018'
-          run-id: '43542884608'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: ${{ runner.temp }}/idb-upgrade-baseline
-
-      - name: Verify same-version upgrade preserves profile settings
-        if: steps.release_version.outputs.version == '1.0.148'
+      - name: Verify upgrade from the published stable release preserves profile settings
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
-          ./.github/scripts/test-same-version-upgrade.ps1 `
-            -BaselineInstaller (Join-Path $env:RUNNER_TEMP 'idb-upgrade-baseline/ImageDrawBot-1.0.148-Windows-x64-Setup.exe') `
-            -CandidateInstaller 'release/ImageDrawBot-1.0.148-Windows-x64-Setup.exe' `
-            -CandidateExe 'dist/ImageDrawBot/ImageDrawBot.exe'
+          ./.github/scripts/test-release-upgrade.ps1 `
+            -CandidateInstaller "release/ImageDrawBot-${env:RELEASE_VERSION}-Windows-x64-Setup.exe" `
+            -CandidateExe 'dist/ImageDrawBot/ImageDrawBot.exe' `
+            -CandidateVersion $env:RELEASE_VERSION
 
       - name: Upload workflow artifacts
         id: release_artifact

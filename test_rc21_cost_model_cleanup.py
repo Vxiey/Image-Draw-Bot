@@ -6,6 +6,7 @@ from unittest.mock import patch
 from RegionFillEngine import _legacy_region_cost,_seal_cost_seconds
 from ExecutionCostModel import build_cost_model
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 def region():
@@ -40,7 +41,7 @@ class Rc21CostModelCleanupTests(unittest.TestCase):
         self.assertIn('model.sequence_cost(',src)
         self.assertNotIn('from HybridCostModel import build_cost_model',src)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

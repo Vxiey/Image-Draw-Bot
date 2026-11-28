@@ -8,6 +8,7 @@ from BrowserAutoRecalibration import (
 )
 from CalibrationHealth import summarize_calibration_health
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 class Rc13CalibrationRecoveryTests(unittest.TestCase):
@@ -76,7 +77,7 @@ class Rc13CalibrationRecoveryTests(unittest.TestCase):
         self.assertIn("'recalibration_plan':recalibration_plan.as_dict()", src)
 
     def test_version(self):
-        self.assertEqual(APP_VERSION, '1.0.148')
+        self.assertEqual(APP_VERSION, EXPECTED_APP_VERSION)
 
 
 if __name__ == '__main__':

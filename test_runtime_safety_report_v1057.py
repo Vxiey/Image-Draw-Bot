@@ -7,12 +7,13 @@ from CanvasGuard import CanvasGuard, CanvasSafetyStop
 from EdgeBehavior import apply_edge_behavior
 from RuntimeSafetyReport import RuntimeSafetySession, safe_save
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class RuntimeSafetyReportV1057Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_counts_actual_edge_decisions(self):
         guard = CanvasGuard.from_area((100, 100, 20, 20), brush_px=3, edge_margin_px=2)

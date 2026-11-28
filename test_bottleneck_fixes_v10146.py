@@ -6,6 +6,7 @@ from ExtraFast import select_fast_regions
 from RegionFillEngine import _decision_fill_cost, estimate_fill_execution_seconds
 from StatefulFillSimulation import filter_stateful_fill_regions
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 def closed_region(x0=20, y0=20, x1=60, y1=60, color=1):
@@ -54,7 +55,7 @@ def entry(phase='foundation', *, width=100, height=100, area=10000, importance=.
 
 class BottleneckFixesV10146Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual((APP_VERSION,FILE_VERSION),('1.0.148','1.0.148'))
+        self.assertEqual((APP_VERSION,FILE_VERSION),(EXPECTED_APP_VERSION,EXPECTED_FILE_VERSION))
 
     def test_fill_simulation_uses_bounded_roi_not_full_canvas_per_region(self):
         regions=[closed_region(40,40,80,80),closed_region(160,140,205,185,color=2)]

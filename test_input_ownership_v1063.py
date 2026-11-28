@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 from ScreenGuard import GuardedMouse
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 class Mouse:
     def __init__(self, positions): self.positions=list(positions);self.position=self.positions[-1] if self.positions else (0,0);self.moves=[]
@@ -15,7 +16,7 @@ class Monitor:
 
 class InputOwnershipV1063Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148');self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION);self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_one_transient_position_read_does_not_false_stop(self):
         mouse=Mouse([(105,100),(100,100),(110,100)])

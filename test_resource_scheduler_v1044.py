@@ -9,12 +9,13 @@ from ResourceAllocation import resolve_allocation
 from DrawBot import make_plan
 from PIL import Image, ImageDraw
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class ResourceSchedulerV1044Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_modes_validate(self):
         for mode in RESOURCE_SCHEDULER_MODES:

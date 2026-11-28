@@ -1,6 +1,6 @@
 # Getting started
 
-Use this alongside the app. For Paint-specific start instructions see [First Use](First-Use); the browser instructions below describe a manual first attempt.
+Use this alongside the app. For Paint-specific start instructions see [First Use](First-Use); the browser instructions below follow the Simple workspace.
 
 ## Your first drawing
 
@@ -24,7 +24,7 @@ Select Microsoft Paint, Gartic Phone, Skribbl.io or the profile for your target 
 
 ### First browser attempt
 
-Open a drawable canvas. Turn Browser One-Click Mode off and leave Drop-In Start unarmed before importing: these automation features can start drawing after an image is added when enabled.
+Open a drawing round in the browser. In Simple view, choose the matching target and load an image. The guide searches for a visible canvas and asks you to confirm the area.
 
 ### Keep the layout stable
 
@@ -38,7 +38,7 @@ Select image opens a local file. Paste uses an image from your clipboard. Load U
 
 ### Setup and drawing area
 
-Browser profiles: use One-click Setup + Verify or Auto setup browser. If detection fails, Select drawing area should cover only the drawable canvas, excluding toolbars. Paint includes preparation in Prepare Paint & draw.
+Choose **Show canvas** to check the proposed outline, then **Use detected canvas**. If the guide cannot find it, use **Select canvas manually…** and mark two opposite corners inside the drawable area. Browser profiles can then **Verify canvas & palette**. Paint calibrates its controls during **Prepare Paint & draw**.
 
 ### Palette and custom colors
 
@@ -66,7 +66,7 @@ Leave hardware settings on Auto initially. The GPU accelerates supported image p
 
 ### Browser and manual start
 
-Complete setup, then use Unlock full drawing and Start drawing when available. Read missing-setup messages. Keep the target visible and follow the countdown. Browser One-Click and armed drop modes can use an automatic start path.
+Complete setup, choose **Unlock drawing**, then **Start drawing** and confirm. Keep the target visible during the countdown. Advanced view also supports explicitly armed import actions.
 
 ### Optional checks
 

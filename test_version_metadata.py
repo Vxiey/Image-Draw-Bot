@@ -3,6 +3,10 @@ from pathlib import Path
 from Version import APP_VERSION,FILE_VERSION
 
 
+EXPECTED_APP_VERSION = '1.0.149'
+EXPECTED_FILE_VERSION = EXPECTED_APP_VERSION.split('-', 1)[0]
+
+
 class VersionMetadataTests(unittest.TestCase):
     def test_runtime_report_version_has_single_source(self):
         self.assertTrue(APP_VERSION.startswith(FILE_VERSION))

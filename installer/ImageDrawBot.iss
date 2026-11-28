@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-#define MyAppVersion "1.0.148"
+#define MyAppVersion "1.0.149"
 #endif
 
 [Setup]
@@ -10,9 +10,9 @@ SignedUninstaller=yes
 AppId={{6A4AD303-4F16-4ED7-A9AF-5B912352D83E}
 AppName=Image Draw Bot
 AppVersion={#MyAppVersion}
-VersionInfoVersion=1.0.148.0
+VersionInfoVersion=1.0.149.0
 AppPublisher=Image Draw Bot
-DefaultDirName={localappdata}\Programs\Image Draw Bot
+DefaultDirName={autopf}\Image Draw Bot
 DefaultGroupName=Image Draw Bot
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -46,6 +46,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Filename: "{app}\ImageDrawBot.exe"; Description: "Launch Image Draw Bot"; Flags: nowait postinstall; Check: ShouldLaunchImageDrawBot
 
 [Code]
+#include "MachineInstallPath.iss"
 function HasCommandLineParam(const Value: String): Boolean;
 var
   I: Integer;

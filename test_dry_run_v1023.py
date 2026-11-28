@@ -7,6 +7,7 @@ from PIL import Image
 
 from DrawBot import DrawBotApp, execute_plan, make_plan
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 from test_drawbot import Mouse, NoWait, options
 
 
@@ -26,8 +27,8 @@ class Root:
 
 class DryRunV1023Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_execute_plan_dry_run_moves_but_never_clicks(self):
         plan=make_plan(Image.new('RGBA',(4,2),'black'),(40,20),options())

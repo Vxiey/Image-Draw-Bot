@@ -6,6 +6,7 @@ from CanvasAnchorDetection import detect_canvas_anchors, detect_triangle_anchors
 from CanvasGuard import CanvasModel, normalize_canvas_anchors
 from DrawBot import execute_plan
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Stop:
@@ -57,8 +58,8 @@ def base_plan_with_anchors(options):
 
 class CanvasAnchorDetectionV1049Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_blank_canvas_still_produces_corner_anchors(self):
         result=detect_canvas_anchors(Image.new('RGB',(80,50),'white'))

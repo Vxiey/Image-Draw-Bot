@@ -503,7 +503,7 @@ def validate_windows_release(release_dir: Path, *, app_version: str | None = Non
 
 
 def validate_release_scope(root: Path) -> dict:
-    """Publication-only gate; normal candidate builds may remain incomplete."""
+    """Verify the original v1.0.148 scope before publishing this or a later build."""
     from Version import APP_VERSION
     path = Path(root) / 'docs' / 'v148-improvements.json'
     try:
@@ -514,11 +514,11 @@ def validate_release_scope(root: Path) -> dict:
         data = json.loads(raw)
     except (OSError, ValueError, RecursionError) as error:
         raise ReleaseGateError('Cannot verify the release scope registry.') from error
-    if not isinstance(data, dict) or data.get('version') != APP_VERSION:
-        raise ReleaseGateError('Release scope version does not match the application.')
+    if not isinstance(data, dict) or data.get('version') != '1.0.148':
+        raise ReleaseGateError('Scope registry must identify the reviewed v1.0.148 release.')
     # The owner set 900 distinct groups for v1.0.148. Lowering a JSON target
     # must not silently bypass the agreed publication requirement.
-    if APP_VERSION != '1.0.148' or type(data.get('target')) is not int or data['target'] != 900:
+    if type(data.get('target')) is not int or data['target'] != 900:
         raise ReleaseGateError('Release scope requires the reviewed 900-group v1.0.148 target.')
     rows = data.get('improvements')
     if not isinstance(rows, list):
@@ -533,14 +533,15 @@ def validate_release_scope(root: Path) -> dict:
     if (type(data.get('implemented')) is not int or data['implemented'] != len(rows)
             or sorted(ids) != list(range(1, 901))):
         raise ReleaseGateError(f'Release scope incomplete or inconsistent: {len(rows)}/900 groups; publication blocked.')
-    return {'version': APP_VERSION, 'target': 900, 'implemented': 900, 'passed': True}
+    return {'version': data['version'], 'release_version': APP_VERSION,
+            'target': 900, 'implemented': 900, 'passed': True}
 
 
 def main(argv: list[str] | None = None) -> int:
     import argparse
     parser = argparse.ArgumentParser(description="Image Draw Bot release-candidate gates")
     parser.add_argument("--source-gate", action="store_true")
-    parser.add_argument("--scope-gate", action="store_true", help="Require completed 900-group scope before publication")
+    parser.add_argument("--scope-gate", action="store_true", help="Verify the v1.0.148 registry of 900 completed groups before publication")
     parser.add_argument("--release-dir")
     parser.add_argument("--strict-inventory", action="store_true",
                         help="Require exactly this variant's files in the release directory")

@@ -265,6 +265,19 @@ def _build_guided_panel(app, sidebar, frame, label):
 
 def build_ui(a, quality, speed):
     root = a.root
+    # Tcl variable traces outlive destroyed widgets and retain their callbacks.
+    traces = []
+
+    def watch(variable, callback):
+        traces.append((variable, variable.trace_add('write', callback)))
+
+    def retire_traces(event):
+        if event.widget is root:
+            for variable, token in traces:
+                variable.trace_remove('write', token)
+            traces.clear()
+
+    root.bind('<Destroy>', retire_traces, add='+')
     ctk.set_appearance_mode('dark')
     # Transparent CTk frames inherit fg_color, not Tk's background option.
     # Replace the launcher's light surface before constructing the dark UI.
@@ -1033,7 +1046,7 @@ def build_ui(a, quality, speed):
         box = frame(row); box.pack(side='left', padx=(0, 10))
         label(box, text, muted=True, size=9).pack(anchor='w')
         entry(box, var, 155).pack(anchor='w', pady=(3, 0))
-        var.trace_add('write', lambda *_: a.update_guesses())
+        watch(var, lambda *_: a.update_guesses())
     btn(row, 'Import word list', a.import_words, width=140, height=34).pack(side='right', anchor='s')
     label(word_card, var=a.word_source, muted=True, size=9).pack(anchor='w', padx=14, pady=(8, 3))
     a.guess_list = tk.Listbox(word_card, height=5, exportselection=False, bg=FIELD, fg=TEXT,
@@ -1159,7 +1172,7 @@ def build_ui(a, quality, speed):
         if cancel and a.ui_mode.get() != 'Simple':
             cancel()
         root.after_idle(apply_ui_mode)
-    a.ui_mode.trace_add('write', mode_changed)
+    watch(a.ui_mode, mode_changed)
     apply_ui_mode()
 
     # ---- Safe state renderer --------------------------------------------
@@ -1350,12 +1363,8 @@ def build_ui(a, quality, speed):
         try: ui_state_job['id'] = root.after_idle(_apply_ui_state)
         except (tk.TclError, RuntimeError): ui_state_job['id'] = None
 
-    a.status.trace_add('write', refresh_ui_state)
-    a.file_label.trace_add('write', refresh_ui_state)
-    a.area_text.trace_add('write', refresh_ui_state)
-    a.palette_text.trace_add('write', refresh_ui_state)
-    a.paint_tool_text.trace_add('write', refresh_ui_state)
-    a.summary.trace_add('write', refresh_ui_state)
+    for variable in (a.status, a.file_label, a.area_text, a.palette_text, a.paint_tool_text, a.summary):
+        watch(variable, refresh_ui_state)
     from ProfileIsolation import register_controls
     register_controls(a,[(custom_profile_actions,'custom'),(a.paint_tool_menu,'paint'),(a.paint_tool_label,'paint'),
         (a.paint_auto_button,'paint'),(a.paint_tool_button,'paint'),(a.picture_palette_button,'paint'),

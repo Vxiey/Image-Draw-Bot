@@ -5,6 +5,7 @@ from PIL import Image
 from CanvasGuard import CanvasGuard, CanvasSafetyStop, clip_path_to_polygon, clip_segment_to_polygon, point_in_polygon
 from DrawBot import execute_plan
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Stop:
@@ -40,8 +41,8 @@ def plan_with_group(group):
 
 class StrokeClipV1053Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_clip_segment_to_polygon_keeps_only_inside_part(self):
         poly=((100,100),(120,100),(120,120),(100,120))

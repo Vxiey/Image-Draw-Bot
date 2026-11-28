@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from RegionFillEngine import _batchable_tool_cost, _region_cost, evaluate_region_candidates
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 class FakeModel:
@@ -57,7 +58,7 @@ class Rc18UnifiedRegionFillCostTests(unittest.TestCase):
             {'speed':'Fast','brush_px':2,'fill_aggressiveness':'Balanced','fill_tool_available':True})
         self.assertEqual(meta['execution_cost_model'],'ExecutionCostModel stateful v2')
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

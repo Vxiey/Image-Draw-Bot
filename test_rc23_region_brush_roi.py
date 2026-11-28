@@ -6,6 +6,7 @@ import numpy as np
 from AdaptiveRegionHybrid import _brush_pack_candidate,_paint_path
 from ExecutionCostModel import build_cost_model
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 def options():
@@ -56,7 +57,7 @@ class Rc23RegionBrushRoiTests(unittest.TestCase):
         used=set(packed['used_brush_sizes'])
         self.assertIn(28,used);self.assertGreaterEqual(len(used),2);self.assertNotIn(1,used)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

@@ -4,12 +4,13 @@ from PIL import Image, ImageDraw
 from BrowserBrushSize import GARTIC_LEVELS, plan_browser_brush_size
 from BrowserAutoCalibration import _row_cluster
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class AutomaticBrushSizeV1074Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def _gartic_image(self):
         size=(1000,700);client=(0,0,*size);canvas=(200,140,800,500)

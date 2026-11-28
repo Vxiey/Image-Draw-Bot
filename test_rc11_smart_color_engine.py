@@ -2,6 +2,7 @@ import unittest
 from SmartColorEngine import smart_color_weights, should_keep_color_candidate
 from AdaptivePaletteFidelity import select_adaptive_palette
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 class Rc11SmartColorEngineTests(unittest.TestCase):
     def test_local_unique_accent_receives_relative_priority(self):
@@ -31,6 +32,6 @@ class Rc11SmartColorEngineTests(unittest.TestCase):
         self.assertAlmostEqual(meta['smart_color_switch_cost_seconds'],.12,places=5)
 
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 if __name__=='__main__':unittest.main()

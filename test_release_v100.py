@@ -6,12 +6,13 @@ from unittest import mock
 
 import ReleaseState as rs
 from Version import APP_VERSION, BUILD_CHANNEL, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class ReleaseTests(unittest.TestCase):
     def test_release_metadata(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
         self.assertEqual(BUILD_CHANNEL,'stable')
 
     def test_first_run_state_roundtrip(self):

@@ -1,6 +1,7 @@
 import unittest
 from ProgressiveRenderer import build_progressive_sequence
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 class Rc9ProgressiveDrawingTests(unittest.TestCase):
     def test_spatial_seeding_spreads_foundation_early(self):
@@ -28,6 +29,6 @@ class Rc9ProgressiveDrawingTests(unittest.TestCase):
             self.assertGreaterEqual(e['importance'],0.0);self.assertLessEqual(e['importance'],1.0)
             self.assertIn('structural_score',e);self.assertIn('optional',e)
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 if __name__=='__main__':unittest.main()

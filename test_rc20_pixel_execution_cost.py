@@ -8,6 +8,7 @@ from PixelStrokeEngine import build_pixel_stroke_plan
 from PixelAccuracyEngine import simulate_strokes
 from ExecutionCostModel import build_cost_model, EXECUTION_MODEL_VERSION
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 PALETTE=((255,255,255),(0,0,0),(255,0,0),(0,0,255))
 
@@ -57,7 +58,7 @@ class Rc20PixelExecutionCostTests(unittest.TestCase):
         self.assertFalse(plan['metadata']['cost_aware'])
         self.assertEqual(plan['metadata']['cost_policy'],'legacy geometry scheduler')
 
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 
 if __name__=='__main__':unittest.main()

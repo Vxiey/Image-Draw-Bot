@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest import mock
 
 from Version import APP_NAME, APP_TAGLINE, APP_VERSION, FILE_VERSION, EXECUTABLE_NAME
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 import UpdateCenter
 
 ROOT = Path(__file__).resolve().parent
@@ -12,8 +13,8 @@ class ImageDrawBotIdentityV10144Tests(unittest.TestCase):
     def test_public_identity(self):
         self.assertEqual(APP_NAME, 'Image Draw Bot')
         self.assertEqual(APP_TAGLINE, 'Automatic Image Drawing')
-        self.assertEqual(APP_VERSION, '1.0.148')
-        self.assertEqual(FILE_VERSION, '1.0.148')
+        self.assertEqual(APP_VERSION, EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION, EXPECTED_FILE_VERSION)
         self.assertEqual(EXECUTABLE_NAME, 'ImageDrawBot.exe')
         self.assertEqual(UpdateCenter.GITHUB_REPOSITORY, 'Vxiey/Image-Draw-Bot')
 

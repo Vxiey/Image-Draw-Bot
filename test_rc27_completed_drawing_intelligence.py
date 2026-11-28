@@ -6,9 +6,10 @@ from GarticOpacity import choose_opacity_percent,validate_opacity,plan_gartic_op
 from AutoBrushWidth import resolve_brush_width
 from BrowserBrushSize import plan_browser_brush_size
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 class Rc27Tests(unittest.TestCase):
-    def test_version(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
     def test_gartic_auto_brush_never_exceeds_level_five(self):
         im=Image.new('RGB',(3000,1800),'white')
         self.assertLessEqual(resolve_brush_width(im,target_size=im.size,profile_key='gartic-phone',render_preset='Extra fast').brush_px,5)

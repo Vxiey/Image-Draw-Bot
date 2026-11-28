@@ -3,11 +3,12 @@ from PIL import Image, ImageDraw
 from BrowserAutoCalibration import detect_browser_setup
 from PaletteMaps import GARTIC_PHONE
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 class BrowserHighDpiTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_gartic_large_144dpi_style_client_does_not_hit_one_million_guard(self):
         # Reproduces the field-log scale closely: 3862x2110 target client.

@@ -4,6 +4,7 @@ from PIL import Image, ImageDraw
 from GarticEngineV2 import detect_gartic_canvas, choose_runtime_profile, stroke_graph_order
 from GarticPhoneFastRenderer import build_gartic_execution_paths
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class GarticEngineV2Tests(unittest.TestCase):
@@ -41,8 +42,8 @@ class GarticEngineV2Tests(unittest.TestCase):
         self.assertLess(abs(paths[1][0][0] - paths[0][-1][0]), 20)
 
     def test_current_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
 
 if __name__ == '__main__':

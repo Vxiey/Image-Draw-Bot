@@ -5,6 +5,7 @@ from unittest.mock import patch
 from AnchorTransform import rebase_canvas_area, area_inside_client
 from DrawBot import DrawBotApp
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Value:
@@ -45,8 +46,8 @@ def anchor_options():
 
 class AnchorTransformV1050Tests(unittest.TestCase):
     def test_version_bumped(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_rebase_translation_uses_anchor_evidence(self):
         area, transform = rebase_canvas_area((100,200,500,300), (8,31,1008,731), (28,41,1028,741), anchor_options())

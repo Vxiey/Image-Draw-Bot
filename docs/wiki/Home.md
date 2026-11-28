@@ -2,7 +2,7 @@
 
 Image Draw Bot is a Windows desktop app that recreates existing pictures using mouse strokes, colors and suitable fills in Microsoft Paint and supported drawing canvases. Image processing runs locally; it does not generate AI artwork.
 
-**Published release: [v1.0.148](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.148)** · [Windows downloads](Installation) · [Get started](Getting-Started)
+**Published release: [v1.0.149](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.149)** · [Windows downloads](Installation) · [Get started](Getting-Started)
 
 Formerly **Draw Studio**. Current Windows packages run **ImageDrawBot.exe**.
 
@@ -28,4 +28,4 @@ For Gartic Phone, the supported workflow uses Google Chrome with **Artist Tools 
 
 **Get started** opens a six-section guide that stays open beside the app. Use Back/Next or select a topic. **?** beside settings opens a readable explanation; hovering shows tooltips. **Setup wizard** reports the selected profile's current requirements.
 
-[Repository and source](https://github.com/Vxiey/Image-Draw-Bot) · [Release notes](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.148) · [Documentation index](https://github.com/Vxiey/Image-Draw-Bot/blob/main/README-INDEX.md) · [Report a reproducible problem](https://github.com/Vxiey/Image-Draw-Bot/issues)
+[Repository and source](https://github.com/Vxiey/Image-Draw-Bot) · [Release notes](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.149) · [Documentation index](https://github.com/Vxiey/Image-Draw-Bot/blob/main/README-INDEX.md) · [Report a reproducible problem](https://github.com/Vxiey/Image-Draw-Bot/issues)

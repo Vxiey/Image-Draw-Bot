@@ -2,24 +2,25 @@ import unittest
 from pathlib import Path
 
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class V10146Rc2ReleaseRollupTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION, "1.0.148")
-        self.assertEqual(FILE_VERSION, "1.0.148")
+        self.assertEqual(APP_VERSION, EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION, EXPECTED_FILE_VERSION)
 
-    def test_installer_metadata_matches_rc_line(self):
+    def test_installer_metadata_matches_current_release(self):
         text=Path("installer/ImageDrawBot.iss").read_text(encoding="utf-8")
-        self.assertIn('#define MyAppVersion "1.0.148"', text)
-        self.assertIn('VersionInfoVersion=1.0.148.0', text)
+        self.assertIn(f'#define MyAppVersion "{APP_VERSION}"', text)
+        self.assertIn(f'VersionInfoVersion={FILE_VERSION}.0', text)
 
     def test_release_notes_and_public_index(self):
-        self.assertTrue(Path("RELEASE-NOTES-v1.0.148.md").is_file())
+        self.assertTrue(Path(f"RELEASE-NOTES-v{APP_VERSION}.md").is_file())
         readme=Path("README.md").read_text(encoding="utf-8")
         index=Path("README-INDEX.md").read_text(encoding="utf-8")
-        self.assertIn("v1.0.148", readme)
-        self.assertIn("(RELEASE-NOTES-v1.0.148.md)", index)
+        self.assertIn(f"v{APP_VERSION}", readme)
+        self.assertIn(f"(RELEASE-NOTES-v{APP_VERSION}.md)", index)
 
     def test_rc2_rolls_up_both_validated_fixes(self):
         self.assertTrue(Path("BackgroundRemoval.py").is_file())

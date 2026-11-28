@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from ReleaseCandidateHardening import ReleaseGateError, validate_release_scope
+from Version import APP_VERSION
 
 
 def complete():
@@ -23,7 +24,7 @@ class ReleaseScopeGateTests(unittest.TestCase):
 
     def test_complete_registry_can_pass_without_claiming_actual_work_is_complete(self):
         self.assertEqual(self.validate(complete()), {'version': '1.0.148',
-            'target': 900, 'implemented': 900, 'passed': True})
+            'release_version': APP_VERSION, 'target': 900, 'implemented': 900, 'passed': True})
 
     def test_missing_groups_false_count_duplicates_and_reduced_target_fail(self):
         for kind in ('missing', 'false-count', 'duplicate', 'reduced-target',

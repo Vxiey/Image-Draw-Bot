@@ -8,6 +8,7 @@ from pathlib import Path
 from DrawBot import DrawBotApp
 from ResourceAllocation import resolve_cpu_workers, choose_parallel_backend, logical_cpu_count
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Value:
@@ -29,8 +30,8 @@ class Button:
 
 class PreviewStartSafetyV1018Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def make_app(self, *, palette=True, tool=True, armed=False):
         return SimpleNamespace(

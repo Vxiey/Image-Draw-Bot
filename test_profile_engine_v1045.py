@@ -4,6 +4,7 @@ from pathlib import Path
 from EdgeBehavior import EDGE_BEHAVIOR_MODES
 from ProfileEngine import PROFILE_ENGINE_MODES, policy_for, policy_summary, resolve_profile_policy, validate_profile_engine
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class ProfileEngineV1045Tests(unittest.TestCase):
@@ -77,8 +78,8 @@ class ProfileEngineV1045Tests(unittest.TestCase):
         self.assertIn("'profile_policy_meta':profile_policy_meta",bot)
 
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
         self.assertIn('Profile Engine v2',policy_summary('Microsoft Paint'))
 
 if __name__=='__main__':unittest.main()

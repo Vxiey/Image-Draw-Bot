@@ -1,11 +1,13 @@
 """Drive the Simple setup through real widgets, workers and event adoption."""
 from contextlib import ExitStack
+import gc
 import os
 from pathlib import Path
 import sys
 import threading
 import time
 import unittest
+import weakref
 from unittest.mock import patch
 
 
@@ -21,6 +23,7 @@ class GuidedStudioTests(unittest.TestCase):
             def remove_hotkey(self, *args): pass
             def get_position(self): return (0, 0)
 
+        self.addCleanup(self.retire_native_fixture)
         self.stack = self.enterContext(ExitStack())
         for name in ('read_settings', 'refresh_runtime_safety_ui', 'refresh_auto_tuner_ui',
                      'maybe_auto_hardware_benchmark', 'offer_safe_session_recovery',
@@ -36,6 +39,7 @@ class GuidedStudioTests(unittest.TestCase):
         fixture = Path(__file__).parent / 'golden-regression/red-bananas-texture.png'
         self.stack.enter_context(patch('DrawBot.filedialog.askopenfilename', return_value=str(fixture)))
         self.root = scoped_window_class(ctk.CTk)()
+        self.root_ref = weakref.ref(self.root)
         self.addCleanup(self.root.destroy)
         self.app = DrawBot.DrawBotApp(self.root, NoInput(), NoInput())
         self.guide = self.app._guided_setup_controller
@@ -44,6 +48,15 @@ class GuidedStudioTests(unittest.TestCase):
         self.root.geometry('720x560')
         self.root.update()
         self.assertEqual(self.app.ui_mode.get(), 'Simple')
+
+    def retire_native_fixture(self):
+        # The test has finished using its CTk graph and callback histories.
+        # Release them on the interpreter's owner thread before another worker.
+        self.errors = self.input = self.discovery = None
+        self.app = self.guide = self.root = None
+        gc.collect()
+        if hasattr(self, 'root_ref'):
+            self.assertIsNone(self.root_ref(), 'The native guide test retained its Tcl interpreter')
 
     def wait(self, completed):
         deadline = time.monotonic() + 12

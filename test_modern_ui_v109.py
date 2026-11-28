@@ -5,12 +5,13 @@ from PIL import Image
 from UIState import compute_workspace_state, classify_error
 from PreviewLayers import build_auxiliary_previews
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class ModernUIV109Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_not_ready_state(self):
         state=compute_workspace_state(image_loaded=False,target_name='Microsoft Paint',paint_tools_ready=False,

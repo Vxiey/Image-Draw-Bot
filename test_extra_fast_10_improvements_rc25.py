@@ -8,6 +8,7 @@ from AdaptiveRegionHybrid import RegionChoice
 from ExecutionCostModel import build_cost_model
 from TimeBudgetEngine import automatic_reserve
 from Version import APP_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION
 
 
 def opts(limit=60.0):
@@ -140,6 +141,6 @@ class ExtraFastTenImprovementTests(unittest.TestCase):
         self.assertIn(1,ids);self.assertIn(3,ids);self.assertNotIn(2,ids)
         self.assertGreaterEqual(meta['budget_swapped_components'],1)
 
-    def test_version_stays_rc25(self):self.assertEqual(APP_VERSION,'1.0.148')
+    def test_version_stays_rc25(self):self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
 
 if __name__=='__main__':unittest.main()

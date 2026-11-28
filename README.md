@@ -24,15 +24,15 @@ It uses local image processing, deterministic render planning and safe mouse aut
 
 ## Download Image Draw Bot for Windows
 
-**Image Draw Bot v1.0.148** runs on 64-bit Windows 10 and 11. The installer and the portable ZIP both include Python.
+**Image Draw Bot v1.0.149** runs on 64-bit Windows 10 and 11. The installer and the portable ZIP both include Python.
 
 | Download | How to use it |
 | --- | --- |
-| [Windows installer — 1.0.148](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.148/ImageDrawBot-1.0.148-Windows-x64-Setup.exe) | Run Setup, then open Image Draw Bot. |
-| [Portable Windows ZIP — 1.0.148](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.148/ImageDrawBot-1.0.148-Windows-x64.zip) | Extract the complete ZIP and run `ImageDrawBot/ImageDrawBot.exe`. |
-| [SHA-256 checksums — 1.0.148](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.148/ImageDrawBot-1.0.148-SHA256.txt) | Verify the published files. |
+| [Windows installer — 1.0.149](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.149/ImageDrawBot-1.0.149-Windows-x64-Setup.exe) | Run Setup, then open Image Draw Bot. |
+| [Portable Windows ZIP — 1.0.149](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.149/ImageDrawBot-1.0.149-Windows-x64.zip) | Extract the complete ZIP and run `ImageDrawBot/ImageDrawBot.exe`. |
+| [SHA-256 checksums — 1.0.149](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.149/ImageDrawBot-1.0.149-SHA256.txt) | Verify the published files. |
 
-[All releases](https://github.com/Vxiey/Image-Draw-Bot/releases) · [Release notes](RELEASE-NOTES-v1.0.148.md) · [Getting started](docs/GETTING-STARTED.md) · [FAQ](docs/FAQ.md) · [Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
+[All releases](https://github.com/Vxiey/Image-Draw-Bot/releases) · [Release notes](RELEASE-NOTES-v1.0.149.md) · [Getting started](docs/GETTING-STARTED.md) · [FAQ](docs/FAQ.md) · [Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
 
 ## AutoDraw for Microsoft Paint, Gartic Phone and Skribbl.io
 
@@ -71,22 +71,19 @@ Requires **Windows 10/11, 64-bit**. Run Image Draw Bot and the target applicatio
 
 ## Microsoft Paint AutoDraw quick start
 
-1. Open Image Draw Bot and choose **Microsoft Paint**.
-2. Load, paste or drop an image.
-3. Keep one Paint window with a blank, fully visible canvas.
-4. Press **Prepare Paint & draw**.
-
-Before drawing, Image Draw Bot prepares the drawing tool, detects the canvas and palette, and calibrates Paint's RGB controls. Use **Prepare Paint automatically** if you want to prepare the target without starting a draw.
+1. Open Paint with its canvas visible. In Image Draw Bot's **Simple** view, choose **Microsoft Paint** and load a picture.
+2. Check the suggested canvas and press **Use detected canvas**, or use **Select canvas manually…**.
+3. Choose **Image style** or leave it on **Auto**. Use **Remove background** and **Undo** if needed.
+4. Choose **Build preview** to inspect the plan. When ready, choose **Prepare Paint & draw** and confirm.
 
 Automatic preparation currently targets supported Swedish/English modern Paint layouts and stops instead of guessing when the canvas or controls cannot be verified. [Paint setup details](docs/PAINT-AUTOMATIC-PREPARATION.md)
 
 ## Gartic Phone and Skribbl.io drawing-bot quick start
 
-1. Open the target and choose its matching Image Draw Bot profile.
-2. Load an image and run automatic setup or manual calibration.
-3. Select only the drawable canvas and keep toolbars outside the area.
-4. Choose a drawing mode and time budget.
-5. Start the draw and keep browser zoom/window geometry unchanged.
+1. Open a drawing round in your browser. In **Simple** view, choose the matching target and load your picture.
+2. Check the suggested area with **Show canvas**, then choose **Use detected canvas**. If needed, choose **Select canvas manually…** and mark the two corners inside the drawing area.
+3. Follow **Verify canvas & palette** if the game still needs calibration. Keep its toolbar visible.
+4. Choose an image style and build a preview. Choose **Unlock drawing**, then **Start drawing** when ready. Esc stops the draw.
 
 **Gartic Phone:** the supported workflow requires Google Chrome with **Artist Tools for Gartic Phone** installed and enabled.
 

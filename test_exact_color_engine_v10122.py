@@ -1,5 +1,6 @@
 import unittest
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 import numpy as np
 from ExactColorEngine import analyze_region_pixels, score_candidate, best_candidate
 from ColorFidelity import delta_e2000, mapping_pair_metrics
@@ -8,7 +9,7 @@ from ShadowToneMapper import shadow_candidate_cost
 
 class ExactColorEngineV10122Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148');self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION);self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_deltae2000_identity_and_ordering(self):
         self.assertAlmostEqual(delta_e2000((120,90,200),(120,90,200)),0.0,places=7)

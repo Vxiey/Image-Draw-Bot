@@ -4,6 +4,7 @@ from PIL import Image
 
 from DrawBot import execute_plan
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class Clock:
@@ -90,8 +91,8 @@ def make_plan():
 
 class DryRunBudgetV1061Tests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_budget_expiry_is_normal_dry_run_completion(self):
         clock = Clock()
