@@ -1,5 +1,10 @@
 """Responsive full-workspace layout, with native Windows controls and no input."""
+from collections import deque
 from contextlib import ExitStack
+import _tkinter
+import os
+from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import sys
 import time
@@ -218,12 +223,23 @@ class ActionBarTests(unittest.TestCase):
             self.assertTrue(all(button.command.call_count==0 for button in buttons))
 
 
-@unittest.skipUnless(sys.platform=='win32','Actual complete Windows Tk workspace layout')
+@unittest.skipUnless(sys.platform == 'win32' or os.environ.get('DISPLAY'), 'Native Tk display required')
 class WindowsCompleteWorkspaceTests(unittest.TestCase):
+    def drain(self, root, description, deadline=None):
+        # update() waits for an empty queue, so an endless Configure/idle loop
+        # previously prevented the enclosing four-second assertion from running.
+        if deadline is None:
+            deadline = time.monotonic() + 12
+        while root.tk.dooneevent(_tkinter.ALL_EVENTS | _tkinter.DONT_WAIT):
+            self.assertFalse(self.tk_errors, self.tk_errors)
+            if time.monotonic() >= deadline:
+                self.fail(f'{description}: native events never settled; geometry={root.geometry()}; '
+                          f'recent configure events={list(self.recent_configures)}')
+
     def wait_for_native_layout(self, root, predicate, description):
-        deadline=time.monotonic()+4
+        deadline=time.monotonic()+8
         while True:
-            root.update()
+            self.drain(root, description, deadline)
             if predicate():return
             if time.monotonic()>=deadline:
                 self.fail(description+'; actual geometry='+root.geometry()+
@@ -260,6 +276,22 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
                 'actions':[describe(item) for item in (*app.draw_action_bar.visible,app.draw_action_bar.menu_button)]}
 
     def test_advanced_studio_keeps_start_stop_and_all_panels_inside_compact_windows(self):
+        # Previous Tk roots in the suite share an OS event queue. Exercise this
+        # whole workspace in a fresh process, as an ordinary launch does.
+        case = f'{Path(__file__).stem}.{type(self).__name__}.{self._testMethodName}'
+        if os.environ.get('IDB_NATIVE_LAYOUT_CASE') != case:
+            command = [sys.executable, '-X', 'faulthandler', '-m', 'unittest', '-v', case]
+            try:
+                child = subprocess.run(command, cwd=Path(__file__).resolve().parent,
+                    env={**os.environ, 'IDB_NATIVE_LAYOUT_CASE': case}, capture_output=True,
+                    text=True, encoding='utf-8', errors='replace', timeout=100)
+            except subprocess.TimeoutExpired as error:
+                self.fail(f'Native layout process stopped responding: {error.stdout!r} {error.stderr!r}')
+            self.assertEqual(child.returncode, 0, child.stdout + child.stderr)
+            return
+        import faulthandler
+        faulthandler.dump_traceback_later(45, repeat=True, file=sys.__stderr__)
+        self.addCleanup(faulthandler.cancel_dump_traceback_later)
         import customtkinter as ctk
         from DrawBot import DrawBotApp
 
@@ -268,22 +300,31 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
             def remove_hotkey(self,*args):pass
             def get_position(self):return (0,0)
 
-        errors=[]
+        self.tk_errors = []
+        self.recent_configures = deque(maxlen=8)
         with ExitStack() as stack:
             for name in ('read_settings','refresh_runtime_safety_ui','refresh_auto_tuner_ui','refresh_palette',
                          'refresh_tool_calibration','refresh_app_tool_calibration','maybe_auto_hardware_benchmark',
                          'offer_safe_session_recovery','show_welcome','_schedule_recovery_checkpoint'):
                 stack.enter_context(patch.object(DrawBotApp,name))
             stack.enter_context(patch.object(DrawBotApp,'save_settings',return_value=True))
-            stack.enter_context(patch.object(DrawBotApp,'report_tk_callback_exception',side_effect=lambda *args:errors.append(args)))
+            stack.enter_context(patch.object(DrawBotApp,'report_tk_callback_exception',side_effect=lambda *args:self.tk_errors.append(args)))
             stack.enter_context(patch('DrawBot.previous_run_unclean',return_value=False))
             stack.enter_context(patch('ReleaseState.should_show_welcome',return_value=False))
             from UiCompatibility import scoped_window_class
             root=scoped_window_class(ctk.CTk)()
+            # Report a Tcl background error as a test failure. Tk's default
+            # handler can otherwise open a blocking dialog on a hosted desktop.
+            root.tk.createcommand('bgerror', self.tk_errors.append)
+            root.bind('<Configure>', lambda event: self.recent_configures.append(
+                (str(event.widget), event.width, event.height)), add='+')
             try:
                 app=DrawBotApp(root,NoInput(),NoInput());root.minsize(500,400)
                 app.ui_mode.set('Advanced')
-                root.update()
+                # Use CTk's real first-window mapping and then pump all event types.
+                root.after(0, root.quit)
+                root.mainloop()
+                self.drain(root, 'Opening Advanced workspace')
                 def inside(widget):
                     if not widget.winfo_ismapped():self.fail(str(self.layout_diagnostics(root,app,widget)))
                     self.assertGreaterEqual(widget.winfo_rootx(),root.winfo_rootx())
@@ -291,6 +332,7 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
                     self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(),root.winfo_rootx()+root.winfo_width()+1)
                     self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),root.winfo_rooty()+root.winfo_height()+1)
                 for scale,width,height in ((1,1024,700),(1,650,500),(1.5,1024,700),(1.5,650,500),(1,1560,960)):
+                    print(f'Advanced workspace at {width}×{height}, widget scale {scale}', flush=True)
                     ctk.set_widget_scaling(scale);self.resize_native(root,app,width,height)
                     with self.subTest(scale=scale,width=width,height=height):
                         inside(app.start);inside(app.stop_button)
@@ -302,24 +344,28 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
                             for index,button in enumerate(bar.overflow):
                                 self.assertEqual(bar.menu.entrycget(index,'state'),button.cget('state'))
                         for button in bar.visible:inside(button)
-                        app.pause_button.configure(state='normal',text='Resume · F6');bar.schedule();root.update()
+                        app.pause_button.configure(state='normal',text='Resume · F6');bar.schedule();self.drain(root, 'Updating action bar')
                         inside(app.pause_button)
-                        app.pause_button.configure(state='disabled');bar.schedule();root.update()
+                        app.pause_button.configure(state='disabled');bar.schedule();self.drain(root, 'Updating action bar')
                         self.assertEqual(app.start.cget('state'),'disabled')
                         self.assertEqual(app.stop_button.cget('state'),'normal')
                         if app.workspace_layout.compact:
                             inside(app.workspace_layout.selector)
                             for name,panel in app.workspace_layout.panels.items():
-                                app.workspace_layout.select(name);root.update()
+                                app.workspace_layout.select(name);self.drain(root, 'Selecting '+name)
                                 outer=getattr(panel,'_parent_frame',panel)
                                 inside(outer)
                                 self.assertGreaterEqual(outer.winfo_height(),round(48*scale),
                                     str(self.layout_diagnostics(root,app,outer)))
-                            app.show_tools();root.update()
+                            app.show_tools();self.drain(root, 'Opening Tools')
                             self.assertEqual(app.workspace_layout.selected,'Workspace')
-                self.assertFalse(errors,errors)
             finally:
-                root.destroy();ctk.set_widget_scaling(1.0)
+                try:
+                    root.destroy()
+                finally:
+                    root.tk.deletecommand('bgerror')
+                    ctk.set_widget_scaling(1.0)
+            self.assertFalse(self.tk_errors, self.tk_errors)
 
 
 if __name__=='__main__':unittest.main()

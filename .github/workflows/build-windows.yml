@@ -67,14 +67,6 @@ jobs:
           python ReleaseCandidateHardening.py --source-gate --soak-cycles 5000
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Run complete regressions and self-test
-        shell: pwsh
-        run: |
-          python -u .github/scripts/run-regressions.py discover -v
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python DrawBot.py --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
@@ -156,6 +148,14 @@ jobs:
             -CandidateInstaller "release/ImageDrawBot-${env:RELEASE_VERSION}-Windows-x64-Setup.exe" `
             -CandidateExe 'dist/ImageDrawBot/ImageDrawBot.exe' `
             -CandidateVersion $env:RELEASE_VERSION
+
+      - name: Run complete regressions and self-test
+        shell: pwsh
+        run: |
+          python -u .github/scripts/run-regressions.py discover -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python DrawBot.py --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload workflow artifacts
         id: release_artifact
