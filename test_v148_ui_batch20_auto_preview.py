@@ -127,21 +127,6 @@ class AutoPreviewHandoffTests(PlanStatusFixture):
             kind = 'pasted'
         return self.take_worker_events(app, kind)
 
-    def deliver(self, app, *events):
-        for event in events:
-            app.events.put(event)
-        # A real poll yields after 15 ms; adopting one image may use that slice
-        # before its queued done. Workers are joined before delivery, so drain
-        # only this finite queue without running scheduled preview/clear jobs.
-        remaining = app.events.qsize()
-        while True:
-            DrawBot.DrawBotApp.poll(app)
-            self.assertNotIn('UI event error contained:', app.status.get())
-            pending = app.events.qsize()
-            if not pending:break
-            self.assertLess(pending, remaining, 'Each poll must consume a queued fixture event')
-            remaining = pending
-
     def assert_preview(self, app):
         token = app.preview_after
         self.assertIn(token, app.root.jobs, 'Accepted automatic source must queue a preview when idle')

@@ -1,5 +1,6 @@
 """The accepted preview presents the estimate its real worker already prepared."""
 from copy import deepcopy
+from itertools import count
 from contextlib import contextmanager
 from pathlib import Path
 import queue
@@ -201,11 +202,10 @@ class PreviewEstimateFixture(PlanStatusFixture):
         return plan, events[1]
 
     def adopt(self, app, plan, done):
-        app.events.put(('planned', plan))
-        app.events.put(done)
-        DrawBot.DrawBotApp.poll(app)
+        self.deliver(app, ('planned', plan), done)
         self.assertIs(app.plan, plan)
-        self.assertNotIn('UI event error contained:', app.status.get())
+        self.assertIsNone(app.activity)
+        self.assertIsNone(app.worker)
         self.assertEqual(app.draw_time_text.get(), DrawTimeEstimate.status_line(plan))
 
 
@@ -312,7 +312,10 @@ class PreviewEstimateHandoffTests(PreviewEstimateFixture):
             recorded = DrawTimeCalibration.record_sample(plan['options'], 10, 20,
                                                          completed_paths=plan['count'])
             self.assertTrue(recorded['recorded'])
-        with observe_estimates() as records:
+        # Spend the first poll's 15 ms budget on the result. The real planner
+        # can start again only after the following tick delivers its completion.
+        with observe_estimates() as records, patch.object(DrawBot, 'time', wraps=time) as clock:
+            clock.monotonic.side_effect = count(step=.025)
             self.adopt(app, plan, done)
         self.assertFalse(records)
         self.assertEqual(plan['draw_time_estimate'], prepared)
