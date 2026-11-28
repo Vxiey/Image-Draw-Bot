@@ -8,6 +8,7 @@ import tempfile
 import time
 import math
 from WindowsSystem import system_directory
+from GameProfiles import PAINT_WINDOW_TITLE
 from CalibrationValidation import LONG_MIN,LONG_MAX,nonnegative_integer
 
 # Kept inline so frozen builds need no PowerShell resource or Python COM package.
@@ -356,7 +357,7 @@ def ensure_paint(enumerate_windows, *, cancelled=lambda:False, launch=None, wait
     from PaintFullCalibration import choose_paint_window
     from threading import Event
     wait=wait or Event().wait
-    def candidates():return [n for n in enumerate_windows() if re.search(r'(?:^|[–—-]\s*)Paint\s*$',str(n.get('title','')),re.I)]
+    def candidates():return [n for n in enumerate_windows() if PAINT_WINDOW_TITLE.search(str(n.get('title','')))]
     if cancelled():raise InterruptedError()
     found=candidates()
     if found:return choose_paint_window(found)

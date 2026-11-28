@@ -14,6 +14,7 @@ import uuid
 MAX_CUSTOM_PROFILE_BYTES = 1024 * 1024
 MAX_CUSTOM_PROFILES = 1000
 CUSTOM_PROFILE_LOCK = threading.RLock()
+PAINT_WINDOW_TITLE = re.compile(r'(?:^|[–—-]\s*)(?:Paint|ペイント)\s*$', re.I)
 
 PROFILES={
  'Microsoft Paint':('microsoft-paint','#087e8b','Desktop Paint profile. Keep the toolbar visible, use the final window size, calibrate tools/colors and select only the canvas.'),

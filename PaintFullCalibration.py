@@ -6,8 +6,10 @@ from contextlib import ExitStack
 from functools import lru_cache
 from types import MappingProxyType
 from PaletteMaps import detect_color_swatches
+from PaintCanvasGrips import verified_grip_depth
+from GameProfiles import PAINT_WINDOW_TITLE
 from RuntimePaths import resource_path
-from CalibrationValidation import (screen_rect,screen_point,contained_rect,nonnegative_integer,
+from CalibrationValidation import (calibration_screenshot,screen_rect,screen_point,contained_rect,nonnegative_integer,
                                    finite_confidence)
 
 ROW1=((0,0,0),(127,127,127),(136,0,21),(237,28,36),(255,127,39),(255,242,0),(34,177,76),(0,162,232),(63,72,204),(163,73,164))
@@ -124,8 +126,8 @@ def _border_band_has_workspace(white, side, *, left, right, top, bottom, width, 
     return density>=.14 or separator_support>=.80
 
 
-def _detect_visible_canvas(white, *, toolbar_end, w, h, scale, screen_origin, ratio):
-    """Return a safe visible Paint drawing area, including compact/clipped viewports."""
+def _visible_canvas_frame(white, *, toolbar_end, w, h, scale):
+    """Find the blank document edges before applying a drawable inset."""
     min_safe_w=max(96,round(160*scale));min_safe_h=max(96,round(120*scale))
     row_fraction=min(.35,max(.06,(min_safe_w/max(1,w))*.72))
     bands=_significant_runs(np.mean(white,axis=1)>row_fraction,min_safe_h)
@@ -164,6 +166,12 @@ def _detect_visible_canvas(white, *, toolbar_end, w, h, scale, screen_origin, ra
            for side in visible_sides):
         raise ValueError('Paint canvas border is ambiguous or covered. Clear Paint or select the drawing area manually.')
 
+    return (left,top,right,bottom),tuple(clipped)
+
+
+def _detect_visible_canvas(white, *, toolbar_end, w, h, scale, screen_origin, ratio):
+    """Return a safe visible Paint drawing area, including compact/clipped viewports."""
+    (left,top,right,bottom),clipped=_visible_canvas_frame(white,toolbar_end=toolbar_end,w=w,h=h,scale=scale)
     # A pure-white Paint shadow is visually indistinguishable from the document
     # in a screenshot. Keep a conservative inward margin on auto-detected visible
     # borders so a few pixels of shadow/resize chrome can never become drawable.
@@ -346,9 +354,56 @@ def detect_setup(image,screen_origin=(0,0),cancelled=lambda:False,canvas_box_ove
             'canvas_source':'manual-selection' if canvas_box_override is not None else 'auto-detected'}
 
 
+def _guided_document_box(image, screen_origin, cancelled):
+    # Limit the viewport pass, but keep the small grip samples in physical
+    # pixels. A native 3-pixel handle can disappear on a downsampled 4K client.
+    ratio = min(1., 1920 / image.width, 1200 / image.height)
+    size = (max(1, round(image.width * ratio)), max(1, round(image.height * ratio)))
+    with ExitStack() as owned:
+        work = image if size == image.size else owned.enter_context(image.resize(size))
+        mask = _blank_canvas_mask(work, 0, cancelled)
+        try:
+            edges, clipped = _visible_canvas_frame(mask, toolbar_end=0, w=work.width,
+                                                    h=work.height, scale=ratio)
+        except ValueError:
+            return None
+    if clipped:
+        return None
+    # Integer resizing can produce different horizontal/vertical scale factors.
+    factors = (image.width / size[0], image.height / size[1]) * 2
+    frame = tuple(round(coordinate * factor) for coordinate, factor in zip(edges, factors))
+    depth = verified_grip_depth(image, frame, cancelled)
+    if not depth:
+        return None
+    inset = max(10, depth + 3, math.ceil(2 / ratio))
+    left, top, right, bottom = frame
+    if right - left - 2 * inset < 96 or bottom - top - 2 * inset < 80:
+        return None
+    ox, oy = screen_origin
+    return left + inset + ox, top + inset + oy, right - inset + ox, bottom - inset + oy
+
+
 def detect_canvas_area(image, screen_origin=(0, 0), cancelled=lambda: False):
     """Inspect a captured Paint client and return only verified canvas geometry."""
-    result = detect_setup(image, screen_origin=screen_origin, cancelled=cancelled)
+    if cancelled():
+        raise InterruptedError()
+    screen_origin = screen_point(screen_origin, 'Paint screen origin')
+    client = (*screen_origin, screen_origin[0] + image.width, screen_origin[1] + image.height)
+    with calibration_screenshot(image, client) as rgb:
+        box = _guided_document_box(rgb, screen_origin, cancelled)
+        if cancelled():
+            raise InterruptedError()
+        if box is not None:
+            return {'canvas_box': box, 'canvas_confidence': .89, 'canvas_visibility': 'full',
+                    'canvas_clipped_edges': [], 'canvas_source': 'auto-detected',
+                    'method': 'paint-document-frame-and-grips'}
+        # A clipped document or Paint version without recognizable grips can still
+        # be identified by the established ribbon and icon verifier.
+        try:
+            result = detect_setup(rgb, screen_origin=screen_origin, cancelled=cancelled)
+        except ValueError as exc:
+            raise ValueError('Paint canvas could not be verified. Show the whole blank canvas and its resize handles, '
+                             'expand the Paint ribbon, or mark the canvas manually.') from exc
     return {key: result[key] for key in ('canvas_box', 'canvas_visibility', 'canvas_clipped_edges',
                                          'canvas_source', 'method')} | {'canvas_confidence': result['confidence']}
 
@@ -383,7 +438,6 @@ def save_setup(result,meta,palette_path,tool_path=None):
 
 
 def choose_paint_window(windows):
-    import re
-    matches=[m for m in windows if re.search(r'(?:^|[–—-]\s*)Paint\s*$',str(m.get('title','')),re.I)]
+    matches=[m for m in windows if PAINT_WINDOW_TITLE.search(str(m.get('title','')))]
     if len(matches)!=1:raise ValueError('Keep exactly one Paint window open and visible, then try Auto setup again.')
     return matches[0]

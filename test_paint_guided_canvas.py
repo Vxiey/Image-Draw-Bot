@@ -6,9 +6,51 @@ import numpy as np
 from PIL import Image
 
 import PaintFullCalibration as paint
+import PaintCanvasGrips as grips
 
 
 class GuidedPaintCanvasTests(unittest.TestCase):
+    def test_measured_paint_resize_grips_on_two_edges_and_corner(self):
+        # Contrast counts from a real 1039x775 Paint window. Its status bar
+        # reports 597x311, matching the measured document rectangle exactly.
+        along = [0] * 87 + [6, 6, 2, 2, 2, 6, 6] + [0] * 87
+        across = [0] * 24 + [7, 4, 4, 4, 4, 7] + [0] * 19
+        right = grips._grip_dimensions(along, across, 90, 24)
+        bottom = grips._grip_dimensions(along, across, 90, 24)
+        self.assertEqual(right, (7, 6))
+        self.assertTrue(grips._matching_grips(right, bottom))
+        corner = [6, 2, 2, 2, 2, 6] + [0] * 14
+        self.assertTrue(grips._square_corner(corner, corner, 6))
+        self.assertTrue(grips._neutral_workspace([(247, 241, 243), (247, 243, 235),
+                                                  (245, 243, 241), (247, 243, 239)]))
+
+    def test_grid_or_scrollbar_signals_are_insufficient_for_guided_geometry(self):
+        self.assertIsNone(grips._grip_dimensions([0] * 80, [0] * 25, 40, 12))
+        self.assertIsNone(grips._grip_dimensions([0] * 15 + [2] * 5 + [0] * 61,
+                                                  [0] * 12 + [5] * 3, 40, 12))
+        self.assertFalse(grips._matching_grips((25, 5), (7, 6)))
+        self.assertFalse(grips._matching_grips(None, (7, 6)))
+        self.assertFalse(grips._square_corner([0] * 20, [0] * 20, 6))
+        self.assertFalse(grips._square_corner([2] * 6, [2] * 6, 6))
+        self.assertFalse(grips._neutral_workspace([(255, 255, 255)] * 4))
+        self.assertFalse(grips._neutral_workspace([(242, 240, 243), (53, 53, 53)]))
+
+    def test_toolbar_without_document_does_not_publish_geometry(self):
+        path = Path(__file__).parent / 'tests/fixtures/paint-light-ribbon.png'
+        with Image.open(path) as ribbon:
+            original = ribbon.getpixel((300, 40))
+            with self.assertRaisesRegex(ValueError, 'mark the canvas manually'):
+                paint.detect_canvas_area(ribbon)
+            self.assertEqual(ribbon.getpixel((300, 40)), original)
+
+    def test_geometry_checks_screenshot_bounds_before_converting_pixels(self):
+        class OversizedFrame:
+            width, height = 9000, 8000
+            size = (width, height)
+
+        with self.assertRaisesRegex(ValueError, 'too large'):
+            paint.detect_canvas_area(OversizedFrame())
+
     def test_original_ribbon_pixels_survive_independent_viewport_scaling(self):
         # A 4K window at 100% retains these exact native swatches. Reducing
         # the entire screenshot to 1920 first makes their pitch too small.

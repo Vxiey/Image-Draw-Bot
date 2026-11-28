@@ -167,6 +167,16 @@ class PaintPreparationTests(unittest.TestCase):
         paint={'title':'Namnlös - Paint','handle':4}
         self.assertEqual(ensure_paint(lambda:[paint],launch=lambda:self.fail('must not launch')),paint)
 
+    def test_japanese_window_is_selected_by_preparation_and_regular_setup(self):
+        from PaintFullCalibration import choose_paint_window
+        target = {'title': 'タイトルなし - ペイント', 'handle': 4}
+        others = [{'title': title, 'handle': 5 + i} for i, title in enumerate(
+            ('ペイント - Browser', 'タイトルなし - ペイント 3D', 'メモ帳ペイント', 'Paint tutorial'))]
+        self.assertEqual(choose_paint_window([*others, target]), target)
+        self.assertEqual(ensure_paint(lambda: [*others, target], launch=lambda: self.fail('already open')), target)
+        with self.assertRaises(ValueError):
+            choose_paint_window(others)
+
     def test_missing_window_launches_once(self):
         paint={'title':'Untitled - Paint','handle':4};calls=[];windows=iter([[],[],[paint]])
         self.assertEqual(ensure_paint(lambda:next(windows),launch=lambda:calls.append('launch'),wait=lambda _:None),paint)

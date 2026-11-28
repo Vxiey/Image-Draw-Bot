@@ -8,13 +8,14 @@ import re
 
 from BrowserAutoCalibration import SUPPORTED_BROWSER_PROFILES, detect_browser_canvas
 from BrowserOneClick import _enumerate_windows, _foreground_window_handle
+from GameProfiles import PAINT_WINDOW_TITLE
 from CalibrationValidation import calibration_screenshot, bounded_number, contained_rect, screen_rect
 from ScreenGuard import WindowMonitor
 from WindowsSystem import private_system_library
 
 
 _TITLES = {
-    'microsoft-paint': re.compile(r'(?:^|[–—-]\s*)Paint\s*$', re.I),
+    'microsoft-paint': PAINT_WINDOW_TITLE,
     'gartic-phone': re.compile(r'\bgartic[\s-]*phone\b', re.I),
     'skribbl': re.compile(r'\bskribbl(?:\.io)?\b', re.I),
     'skribbl-fast': re.compile(r'\bskribbl(?:\.io)?\b', re.I),

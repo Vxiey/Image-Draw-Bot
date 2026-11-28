@@ -116,6 +116,18 @@ class GuidedCanvasTests(unittest.TestCase):
         self.row['title'] = 'Gartic Phone - Google Chrome'
         self.assertEqual(guided.discover_guided_canvas('gartic-phone')['canvas_box'], self.box)
 
+    def test_japanese_paint_title_still_requires_the_paint_owner_and_suffix(self):
+        self.row['title'] = 'タイトルなし - ペイント'
+        select = lambda: guided._select_window('microsoft-paint', None, lambda: False)
+        with self.assertRaises(ValueError):
+            select()
+        self.exe.return_value = 'mspaint.exe'
+        self.assertEqual(select(), self.row)
+        for title in ('ペイント - Browser', 'タイトルなし - ペイント 3D', 'メモ帳ペイント'):
+            self.row['title'] = title
+            with self.subTest(title=title), self.assertRaises(ValueError):
+                select()
+
     def test_same_paint_window_switching_documents_before_reuse_is_rejected(self):
         self.exe.return_value = 'mspaint.exe'
         self.row['title'] = 'Original.png – Paint'
