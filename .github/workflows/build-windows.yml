@@ -77,12 +77,6 @@ jobs:
           python build_release.py --installer --skip-tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Validate packaged GUI and native drag and drop
-        shell: pwsh
-        run: |
-          python -c "import subprocess; subprocess.run(['dist/ImageDrawBot/ImageDrawBot.exe', '--smoke-test'], check=True, timeout=90)"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Validate packaged release
         shell: pwsh
         run: |
@@ -149,10 +143,34 @@ jobs:
             -CandidateExe 'dist/ImageDrawBot/ImageDrawBot.exe' `
             -CandidateVersion $env:RELEASE_VERSION
 
+      - name: Validate packaged GUI and native drag and drop
+        shell: pwsh
+        run: |
+          $previousAppData = $env:LOCALAPPDATA
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ('idb-gui-smoke-' + [guid]::NewGuid())
+          New-Item -ItemType Directory -Path $smokeRoot -ErrorAction Stop | Out-Null
+          try {
+            $env:LOCALAPPDATA = $smokeRoot
+            python -c "import subprocess; subprocess.run(['dist/ImageDrawBot/ImageDrawBot.exe', '--smoke-test'], check=True, timeout=90)"
+            if ($LASTEXITCODE -ne 0) { throw "Packaged GUI smoke failed (exit $LASTEXITCODE)." }
+          } catch {
+            foreach ($file in 'smoke-test-error.log', 'smoke-test-stacks.log') {
+              $diagnostic = Join-Path (Join-Path $smokeRoot 'ImageDrawBot') $file
+              if (Test-Path -LiteralPath $diagnostic -PathType Leaf) {
+                Write-Host "Packaged GUI diagnostic ($file)"
+                Get-Content -LiteralPath $diagnostic -Tail 180
+              }
+            }
+            throw
+          } finally {
+            $env:LOCALAPPDATA = $previousAppData
+            Remove-Item -LiteralPath $smokeRoot -Recurse -Force -ErrorAction Continue
+          }
+
       - name: Run complete regressions and self-test
         shell: pwsh
         run: |
-          python -u .github/scripts/run-regressions.py discover -v
+          python -m unittest discover -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python DrawBot.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

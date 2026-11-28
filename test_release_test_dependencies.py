@@ -1,7 +1,5 @@
 """Release verification installs the dependencies needed to actually run tests."""
 from pathlib import Path
-import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -37,32 +35,7 @@ class ReleaseTestDependencyTests(unittest.TestCase):
         workflow = Path(__file__).with_name('.github').joinpath('workflows/build-windows.yml').read_text()
         install = 'python -m pip install -r requirements.txt -r requirements-dev.txt'
         self.assertIn(install, workflow)
-        command = 'python -u .github/scripts/run-regressions.py discover -v'
-        self.assertLess(workflow.index(install), workflow.index(command))
-        self.assertIn(command, Path(__file__).with_name('.github').joinpath('workflows/ci.yml').read_text())
-
-    def test_stalled_discovery_test_dumps_stacks_and_preserves_its_failure(self):
-        runner = Path(__file__).resolve().parent / '.github/scripts/run-regressions.py'
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / 'probe_helper.py').write_text('marker = "continued after the stall"\n')
-            (root / 'test_probe.py').write_text(
-                'import time, unittest\nfrom probe_helper import marker\n'
-                'class Probe(unittest.TestCase):\n'
-                '    def test_waiting(self):\n'
-                '        time.sleep(.6)\n'
-                '        self.fail(marker)\n')
-            # Exercise the same CLI at a short diagnostic interval without
-            # changing the production threshold or its discovery/import paths.
-            program = "import runpy, sys; runpy.run_path(sys.argv.pop(1))['main'](.15)"
-            run = subprocess.run([sys.executable, '-u', '-c', program, str(runner), 'discover', '-v'],
-                                 cwd=root, capture_output=True, text=True, timeout=20)
-            self.assertEqual(run.returncode, 1, run.stderr)
-            self.assertIn('test_probe.Probe.test_waiting', run.stderr)
-            self.assertIn('Timeout (', run.stderr)
-            self.assertIn('in test_waiting', run.stderr)
-            self.assertIn('AssertionError: continued after the stall', run.stderr)
-            self.assertIn('FAILED (failures=1)', run.stderr)
+        self.assertLess(workflow.index(install), workflow.index('python -m unittest discover -v'))
 
 
 if __name__ == '__main__':

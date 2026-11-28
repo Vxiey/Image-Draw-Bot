@@ -12906,35 +12906,148 @@ def main():
     finally:lock.close()
 
 
-def self_test(gui=False):
-    # Windows CI runs these modes without hooks, clicks, capture or network.
-    import os
-    from PIL import Image
-    if os.name == 'nt':
-        # Exercise the native ABI in source, frozen and installed builds. A
-        # headless machine may have no hardware adapters; API failures must
-        # still fail this gate instead of being hidden by the CPU fallback.
-        from WindowsGpuDiscovery import enumerate_adapters
-        enumerate_adapters()
-    plan=make_plan(Image.new('RGBA',(8,4),'black'),(80,40),
-                   dict(detail=10,delay=.01,lines=True,skip_white=True,contrast=1,outline=False))
-    assert plan['count']>0
-    if gui:
-        class NoInput:
-            def add_hotkey(self,*args):return len(args)
-            def remove_hotkey(self,*args):pass
-            def get_position(self):return (0,0)
-        root=create_root()
+def _smoke_workspace(source, phase):
+    import tempfile
+    import traceback
+    from unittest.mock import patch
+    import SessionRecovery
+    from PreviewViews import VIEW_SPECS
+    from tkinterdnd2 import DND_FILES, DND_TEXT
+
+    class NoInput:
+        def add_hotkey(self, *args, **kwargs): return len(args)
+        def remove_hotkey(self, *args): pass
+        def get_position(self): return (0, 0)
+
+    errors = []
+
+    class SmokeWorkspace(DrawBotApp):
+        # Exercise the first-launch defaults without reading or saving a user's
+        # profile, displaying onboarding/recovery, or starting a benchmark.
+        def read_settings(self): pass
+        def save_settings(self): return True
+        def offer_safe_session_recovery(self): pass
+        def show_welcome(self): pass
+        def maybe_auto_hardware_benchmark(self): pass
+        def report_tk_callback_exception(self, kind, error, tb):
+            errors.append(''.join(traceback.format_exception(kind, error, tb)))
+
+    phase('Creating the native Tk window and loading TkDND')
+    root = create_root()
+    root.tk.createcommand('bgerror', lambda message: errors.append(str(message)))
+    def settle(ready, description):
+        deadline = time.monotonic() + 30
+        while True:
+            root.update()
+            if errors:
+                raise RuntimeError('Native UI callback failed: ' + errors[0])
+            if ready():
+                return
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f'{description}: {app.status.get()}; activity={app.activity}')
+            time.sleep(.01)
+
+    with tempfile.TemporaryDirectory(prefix='ImageDrawBot-smoke-') as temporary, ExitStack() as scope:
+        # Import and preview use the real worker and result-adoption paths.
+        # Any automatic recovery checkpoint belongs only to this smoke session.
+        recovery = Path(temporary)
+        scope.enter_context(patch.multiple(SessionRecovery, RECOVERY_DIR=recovery,
+            STATE_FILE=recovery/'session-recovery.json', IMAGE_FILE=recovery/'last-image.png',
+            RENDER_FILE=recovery/'render-resume.json'))
+        # Supply a real packaged image at the file dialog boundary.
+        scope.enter_context(patch.object(filedialog, 'askopenfilename', return_value=str(source)))
+        app = None
         try:
-            app=DrawBotApp(root,NoInput(),NoInput())
-            assert hasattr(root,'drop_target_register')
-            app.original=Image.new('RGBA',(120,80),'orange');app.plan=plan
+            phase('Constructing the default guided workspace')
+            app = SmokeWorkspace(root, NoInput(), NoInput())
+            app.workspace_layout.select('Setup')
+            settle(lambda: app.guided_action_button.winfo_ismapped() and app.stop_button.winfo_ismapped(),
+                   'Guided entry and Stop did not become visible')
+            assert app.ui_mode.get() == 'Simple' and app.guided_setup_state()['stage'] == 'image'
+
+            phase('Checking native file/text drop registrations')
+            assert root.tk.call('package', 'present', 'tkdnd')
+            types = set(root.tk.splitlist(root.tk.call('tkdnd::platform_specific_types',
+                                                       (DND_FILES, DND_TEXT))))
+            for target in (root, *(getattr(app, attr) for _, attr, _, _ in VIEW_SPECS)):
+                registered = root.tk.splitlist(root.tk.call('bind', str(target), '<<DropTargetTypes>>'))
+                assert types and types.issubset(registered) and root.tk.call('bind', str(target), '<<Drop>>'), str(target)
+
+            phase('Opening the packaged icon through the guided action')
+            app.guided_action_button.invoke()
+            settle(lambda: app.original is not None and app.activity is None, 'Image loading failed')
+            phase('Building and displaying the real preview')
+            app.guided_preview_button.invoke()
+            settle(lambda: app.plan is not None and app.activity is None, 'Preview planning failed')
+            assert app.plan['count'] > 0
             app.workspace_layout.select('Workspace')
-            root.update_idletasks();root.update();app.show_previews();root.update_idletasks()
-            assert app.start.winfo_ismapped()
-            assert app.original_canvas.winfo_width()>100
-            assert app.activity is None
-        finally:root.destroy()
+            app.preview_tabs.set('Original')
+            settle(lambda: app.original_canvas.winfo_ismapped() and app.original_canvas.winfo_width() > 100,
+                   'Original preview canvas did not become visible')
+            app.show_previews()
+            assert any(app.original_canvas.type(item) == 'image' for item in app.original_canvas.find_all())
+
+            phase('Checking Stop and the Advanced drawing controls')
+            app.stop_button.invoke()
+            assert app.stop.is_set() and app.activity is None
+            app.workspace_layout.select('Setup')
+            app.guided_advanced_button.invoke()
+            settle(lambda: app.start.winfo_ismapped() and app.stop_button.winfo_ismapped(),
+                   'Advanced Start and Stop did not become visible')
+            assert app.ui_mode.get() == 'Advanced'
+        finally:
+            phase('Closing the native workspace')
+            if app is not None:
+                app.closing = True
+                app.stop.set()
+                worker = app.worker
+                if worker is not None and worker.is_alive(): worker.join(3)
+                job = DrawBotApp._cancel_recovery_image_job(app)
+                if job is not None and job.is_alive(): job.wait_idle(3)
+            root.destroy()
+            root.tk.deletecommand('bgerror')
+
+
+def self_test(gui=False):
+    import faulthandler
+    import os
+    from AppBranding import ICON_PNG
+    from RuntimePaths import resource_path
+    from AutoSketchBudget import _release_trial
+
+    source = resource_path(ICON_PNG)
+    def check_native_gpu():
+        if os.name == 'nt':
+            # Exercise the native ABI even on a headless Windows runner.
+            from WindowsGpuDiscovery import enumerate_adapters
+            enumerate_adapters()
+
+    if not gui:
+        check_native_gpu()
+        with load_image(str(source)) as image:
+            options = dict(detail=10, delay=.01, lines=True, skip_white=True, contrast=1, outline=False)
+            plan = make_plan(image, (80, 80), options)
+            try: assert plan['count'] > 0
+            finally: _release_trial(plan, image, options)
+        return
+
+    # A windowed executable has no stderr. Keep the last completed phase and
+    # one stack snapshot for a caller supervising the packaged GUI process.
+    with (DATA_DIR/'smoke-test-stacks.log').open('w', encoding='utf-8') as report:
+        def phase(message):
+            print(message, file=report, flush=True)
+        watchdog = threading.Timer(40, faulthandler.dump_traceback,
+                                   kwargs={'file': report, 'all_threads': True})
+        watchdog.daemon = True
+        watchdog.start()
+        try:
+            phase('Checking native GPU discovery')
+            check_native_gpu()
+            _smoke_workspace(source, phase)
+            phase('Packaged GUI smoke passed')
+        finally:
+            watchdog.cancel()
+            watchdog.join()
 
 
 if __name__=='__main__':
