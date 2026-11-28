@@ -89,7 +89,7 @@ jobs:
         run: python benchmark_extra_fast.py
 
       - name: Run complete regressions
-        run: python -m unittest discover -v
+        run: python -u .github/scripts/run-regressions.py discover -v
 
       - name: Run Image Draw Bot Windows self-test
         if: runner.os == 'Windows'

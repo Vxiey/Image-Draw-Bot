@@ -70,7 +70,7 @@ jobs:
       - name: Run complete regressions and self-test
         shell: pwsh
         run: |
-          python -m unittest discover -v
+          python -u .github/scripts/run-regressions.py discover -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python DrawBot.py --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
