@@ -2,6 +2,12 @@
 
 Click **?** next to a setting for help that stays open while you read, or hover for a tooltip. Start with defaults, change one setting at a time and build a fresh preview.
 
+## Background removal
+
+Choose **Adjust…** beside the background-removal button. **Auto** samples the image border. **Light background** and **Dark background** restrict removal to light or dark areas. **Corner color** uses the dominant color at the image corners. Start with **Balanced** strength. Use **Conservative** if a fine outline disappears, or **Aggressive** if too much of the background remains.
+
+Choose **Apply** for the first cutout or **Replace cutout** to try another setting on the original. **Cancel** dismisses the controls. **Undo** restores the original image.
+
 ## Quality preset
 
 Start with Balanced or the default. Extra Fast suits short rounds and simple shapes. Pixel Accurate emphasizes detail and can take longer. Build a new preview after changing the preset.

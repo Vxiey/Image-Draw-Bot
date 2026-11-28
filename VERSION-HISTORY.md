@@ -1,3 +1,7 @@
+# Image Draw Bot v1.0.150
+
+Version 1.0.150 updates canvas verification for Paint and browser targets. It also adds controls for background removal and preserves deliberate gaps in fast browser drawing plans. [Release notes](RELEASE-NOTES-v1.0.150.md)
+
 # Image Draw Bot v1.0.149
 
 A guided setup for new drawings, faster canvas detection, and improved background removal. [Release notes](RELEASE-NOTES-v1.0.149.md)

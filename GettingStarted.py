@@ -48,6 +48,10 @@ PAGES = [
       [
         "Palette and custom colors",
         "Calibration tells the app where tools, colors and canvas are. Read colors calibrates the target palette. In Paint, Custom color palette for picture analyzes this image and enters RGB colors: this operates Paint controls, so keep Paint visible and leave the mouse alone."
+      ],
+      [
+        "Remove a background",
+        "Choose Remove background for an automatic cutout. Open Adjust… to choose a background mode and strength. Replace cutout tries the new settings on your original image. Undo restores the original."
       ]
     ]
   ],

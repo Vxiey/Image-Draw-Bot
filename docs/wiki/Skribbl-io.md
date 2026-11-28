@@ -7,6 +7,8 @@
 5. Build a fresh preview. Choose a time budget that leaves room before the round ends.
 6. Follow the setup messages, then **Unlock full drawing → Start drawing**.
 
+If the board already contains drawing, the detector can use the palette to locate the board and check its four edges. Keep the perimeter visible. Use **Show canvas** to inspect the suggestion or **Select canvas manually…** to mark the corners yourself.
+
 If the palette or layout changes, verify calibration again. **Esc** stops immediately. Use automation only in sessions where it is permitted.
 
 [First Use](First-Use) · [Drawing Modes](Drawing-Modes)

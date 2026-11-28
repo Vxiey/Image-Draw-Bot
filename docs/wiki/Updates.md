@@ -1,6 +1,6 @@
 # Updates and release history
 
-Version 1.0.149 adds guided setup, quicker canvas detection and improvements to background removal and drawing styles. [Release notes and Windows downloads](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.149)
+Version 1.0.150 updates canvas verification for Paint and browser targets. It also adds controls for background removal and preserves deliberate gaps in fast browser drawing plans. [Release notes and Windows downloads](https://github.com/Vxiey/Image-Draw-Bot/releases/tag/v1.0.150)
 
 ## Update the installed app
 

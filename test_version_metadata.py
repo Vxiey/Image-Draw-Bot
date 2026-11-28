@@ -3,7 +3,7 @@ from pathlib import Path
 from Version import APP_VERSION,FILE_VERSION
 
 
-EXPECTED_APP_VERSION = '1.0.149'
+EXPECTED_APP_VERSION = '1.0.150'
 EXPECTED_FILE_VERSION = EXPECTED_APP_VERSION.split('-', 1)[0]
 
 

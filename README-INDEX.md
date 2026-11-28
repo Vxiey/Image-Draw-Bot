@@ -5,6 +5,7 @@
 - [README and downloads](README.md)
 - [First drawing](docs/GETTING-STARTED.md)
 - [Image Draw Bot Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
+- [v1.0.150 release notes](RELEASE-NOTES-v1.0.150.md)
 - [v1.0.149 release notes](RELEASE-NOTES-v1.0.149.md)
 - [Drawing approaches and experiments](docs/DRAWING-APPROACHES-v1.0.149.md)
 - [v1.0.148 release notes](RELEASE-NOTES-v1.0.148.md)

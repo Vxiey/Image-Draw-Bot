@@ -7,8 +7,8 @@ $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or -not $IsWindows) {
   throw 'Run only on a disposable GitHub-hosted Windows runner.'
 }
-$baselineVersion = '1.0.148'
-$baselineHash = '5bcd5bf5b9ff822600c3f05d9f358e8b33c1762ce05cfa23afb1a2868bd0d65c'
+$baselineVersion = '1.0.149'
+$baselineHash = 'c60c45979b2ae30beb75d5374c355e0b432c29d350a6924897f90710769edf43'
 $baselineName = "ImageDrawBot-${baselineVersion}-Windows-x64-Setup.exe"
 $baselineUrl = "https://github.com/Vxiey/Image-Draw-Bot/releases/download/v${baselineVersion}/$baselineName"
 $CandidateInstaller = (Resolve-Path -LiteralPath $CandidateInstaller).Path

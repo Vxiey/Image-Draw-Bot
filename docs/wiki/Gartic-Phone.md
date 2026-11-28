@@ -11,6 +11,8 @@ The supported workflow requires Google Chrome with **Artist Tools for Gartic Pho
 5. Run **Auto setup browser** or **One-click Setup + Verify**. Check canvas, palette and brush controls; calibrate manually if requested.
 6. Build a preview, choose a time budget with room before the round ends, then **Unlock full drawing → Start drawing**.
 
+Use **Show canvas** to inspect the suggested area. The detector checks each edge and can move a boundary inward to exclude decoration. If it cannot verify an area, choose **Select canvas manually…** and mark two opposite corners inside the paper.
+
 Extra Fast may help short rounds but sacrifices some detail. Keep the round timer visible if using timer detection. If detection is uncertain, use a manual time budget.
 
 Automatic one-click/drop modes can start after image import when enabled; learn the manual path first. Use automation only in sessions where it is permitted and other participants know what is being used.

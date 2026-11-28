@@ -1,6 +1,6 @@
 # Image Draw Bot release history
 
-See the [version history](../VERSION-HISTORY.md) for v1.0.149 and v1.0.148 and links to their release notes.
+See the [version history](../VERSION-HISTORY.md) for v1.0.150, v1.0.149 and v1.0.148, with links to their release notes.
 
 ## Historical development checkpoints
 

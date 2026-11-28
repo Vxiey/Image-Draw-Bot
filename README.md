@@ -24,15 +24,15 @@ It uses local image processing, deterministic render planning and safe mouse aut
 
 ## Download Image Draw Bot for Windows
 
-**Image Draw Bot v1.0.149** runs on 64-bit Windows 10 and 11. The installer and the portable ZIP both include Python.
+**Image Draw Bot v1.0.150** runs on 64-bit Windows 10 and 11. The installer and the portable ZIP both include Python.
 
 | Download | How to use it |
 | --- | --- |
-| [Windows installer — 1.0.149](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.149/ImageDrawBot-1.0.149-Windows-x64-Setup.exe) | Run Setup, then open Image Draw Bot. |
-| [Portable Windows ZIP — 1.0.149](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.149/ImageDrawBot-1.0.149-Windows-x64.zip) | Extract the complete ZIP and run `ImageDrawBot/ImageDrawBot.exe`. |
-| [SHA-256 checksums — 1.0.149](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.149/ImageDrawBot-1.0.149-SHA256.txt) | Verify the published files. |
+| [Windows installer — 1.0.150](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.150/ImageDrawBot-1.0.150-Windows-x64-Setup.exe) | Run Setup, then open Image Draw Bot. |
+| [Portable Windows ZIP — 1.0.150](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.150/ImageDrawBot-1.0.150-Windows-x64.zip) | Extract the complete ZIP and run `ImageDrawBot/ImageDrawBot.exe`. |
+| [SHA-256 checksums — 1.0.150](https://github.com/Vxiey/Image-Draw-Bot/releases/download/v1.0.150/ImageDrawBot-1.0.150-SHA256.txt) | Verify the published files. |
 
-[All releases](https://github.com/Vxiey/Image-Draw-Bot/releases) · [Release notes](RELEASE-NOTES-v1.0.149.md) · [Getting started](docs/GETTING-STARTED.md) · [FAQ](docs/FAQ.md) · [Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
+[All releases](https://github.com/Vxiey/Image-Draw-Bot/releases) · [Release notes](RELEASE-NOTES-v1.0.150.md) · [Getting started](docs/GETTING-STARTED.md) · [FAQ](docs/FAQ.md) · [Wiki](https://github.com/Vxiey/Image-Draw-Bot/wiki)
 
 ## AutoDraw for Microsoft Paint, Gartic Phone and Skribbl.io
 
@@ -73,7 +73,7 @@ Requires **Windows 10/11, 64-bit**. Run Image Draw Bot and the target applicatio
 
 1. Open Paint with its canvas visible. In Image Draw Bot's **Simple** view, choose **Microsoft Paint** and load a picture.
 2. Check the suggested canvas and press **Use detected canvas**, or use **Select canvas manually…**.
-3. Choose **Image style** or leave it on **Auto**. Use **Remove background** and **Undo** if needed.
+3. Choose **Image style** or leave it on **Auto**. Use **Remove background** to make a cutout, **Adjust…** to change the mode or strength, and **Undo** to restore the original.
 4. Choose **Build preview** to inspect the plan. When ready, choose **Prepare Paint & draw** and confirm.
 
 Automatic preparation currently targets supported Swedish/English modern Paint layouts and stops instead of guessing when the canvas or controls cannot be verified. [Paint setup details](docs/PAINT-AUTOMATIC-PREPARATION.md)

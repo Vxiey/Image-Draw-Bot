@@ -36,6 +36,10 @@ Keep the canvas and toolbar visible. Changes to browser zoom, display scaling, c
 
 Select image opens a local file. Paste uses an image from your clipboard. Load URL needs a direct image address, not a search-results page. A local file is the simplest starting point.
 
+### Remove a background
+
+Choose **Remove background** for automatic removal, or use **Adjust…** to select a background mode and strength. **Undo** restores the original. [Background removal settings](Settings-and-Tooltips#background-removal)
+
 ### Setup and drawing area
 
 Choose **Show canvas** to check the proposed outline, then **Use detected canvas**. If the guide cannot find it, use **Select canvas manually…** and mark two opposite corners inside the drawable area. Browser profiles can then **Verify canvas & palette**. Paint calibrates its controls during **Prepare Paint & draw**.

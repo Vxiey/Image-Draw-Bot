@@ -4,6 +4,8 @@
 
 Open one Paint window with a blank, fully visible canvas. Select **Microsoft Paint**, load an image and press **Prepare Paint & draw**. The app prepares the canvas, Pencil size, palette and RGB controls before drawing. Tests and previews are optional.
 
+In Simple, **Find canvas** can recognize the blank page by its surrounding workspace and the resize handles halfway down the right side, halfway across the bottom and at the lower-right corner. Use **Show canvas** to inspect the inset. If the page is clipped or the handles are hidden, show the full page, expand the ribbon, or choose **Select canvas manually…**. Choosing the area leaves pencil and palette setup to **Prepare Paint & draw**.
+
 Keep Paint and Image Draw Bot at the same Windows privilege level, normally without administrator rights. Preparation can stop when multiple Paint windows, covered controls or ambiguous fields make detection unreliable.
 
 ## Custom color palette for picture
