@@ -11,8 +11,10 @@ class GettingStartedTests(unittest.TestCase):
         browser = str(guide_pages('Gartic Phone'))
         self.assertIn('Prepare Paint & draw', paint)
         self.assertIn('optional', paint)
-        self.assertIn('Turn Browser One-Click Mode off', browser)
-        self.assertIn('Unlock full drawing and Start drawing', browser)
+        self.assertIn('Verify canvas & palette', browser)
+        self.assertIn('Use detected canvas', paint)
+        self.assertIn('Use detected canvas', browser)
+        self.assertIn('Unlock drawing, then Start drawing and confirm', browser)
         for text in (paint, browser):
             self.assertIn('Esc', text)
             self.assertIn('F6', text)

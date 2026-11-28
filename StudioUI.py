@@ -152,6 +152,117 @@ def _configure_presentation(widget, **values):
     return True
 
 
+def _build_guided_panel(app, sidebar, frame, label):
+    """Simple mode uses the same profile, source and controller as the full workspace."""
+    from UICompactLayout import pack_in_order
+
+    panel = frame(sidebar, SIDEBAR)
+    action = frame(panel, PANEL_ALT, border_width=1, border_color=LINE, radius=13)
+    action.pack(fill='x', pady=(0, 10))
+    app.guided_action_button = button(action, 'Choose image…', app.run_guided_action,
+                                      primary=True, height=42, width=1)
+    app.guided_action_button.pack(fill='x', padx=10, pady=(4, 5))
+    app.guided_show_canvas_button = button(action, 'Show canvas', lambda: app.show_guided_canvas(),
+                                          height=30, width=1)
+    title = label(action, 'Drawing setup', size=18, bold=True)
+    fit_label(title, 460).pack(fill='x', padx=12, pady=(0, 2))
+    detail = label(action, '', size=12, muted=True)
+    fit_label(detail, 460).pack(fill='x', padx=12, pady=(0, 9))
+
+    inputs = frame(panel, PANEL, border_width=1, border_color=LINE, radius=13)
+    inputs.pack(fill='x')
+    label(inputs, 'Target app', bold=True).pack(anchor='w', padx=14, pady=(12, 3))
+    selector = ttk.Combobox(inputs, textvariable=app.game, state='readonly', takefocus=True,
+                            values=list(PROFILES), width=12, style='ImageDrawBot.TCombobox')
+    selector.configure(postcommand=lambda: selector.configure(values=list(PROFILES)))
+    selector.bind('<<ComboboxSelected>>', lambda _event: app.change_profile())
+    selector.pack(fill='x', padx=14, pady=(0, 4))
+    app.guided_profile_selector = selector
+    app.controls.append((selector, 'readonly'))
+    values = {}
+    target = label(inputs, '', muted=True, size=11)
+    fit_label(target, 460).pack(fill='x', padx=14, pady=(0, 8))
+    for key, name in (('image', 'Image'), ('canvas_text', 'Canvas'), ('palette_text', 'Colors')):
+        row = frame(inputs)
+        row.pack(fill='x', padx=14, pady=(0, 6))
+        label(row, name, size=11, bold=True, width=52).pack(side='left', anchor='n')
+        values[key] = label(row, '', size=11)
+        fit_label(values[key], 400).pack(side='left', fill='x', expand=True)
+
+    more = frame(panel)
+    more.pack(fill='x', pady=(9, 0))
+    image_actions = frame(more)
+    style_row = frame(image_actions)
+    style_row.pack(fill='x', pady=(0, 5))
+    label(style_row, 'Image style', size=11, bold=True).pack(side='left', padx=(0, 6))
+    style = ttk.Combobox(style_row, textvariable=app.drawing_style, values=DRAWING_STYLES,
+                         state='readonly', takefocus=True, width=10, style='ImageDrawBot.TCombobox')
+    style.pack(side='left', fill='x', expand=True)
+    style.bind('<<ComboboxSelected>>', lambda _event: app.options_changed())
+    app.guided_style_selector = style
+    background = frame(image_actions)
+    background.pack(fill='x', pady=(0, 4))
+    remove = button(background, 'Remove background', app.remove_image_background, height=32, width=1)
+    remove.pack(side='left', fill='x', expand=True, padx=(0, 3))
+    undo = button(background, 'Undo', app.undo_background_removal, height=32, width=58)
+    undo.pack(side='left', padx=(3, 0))
+    app.guided_remove_background_button, app.guided_undo_background_button = remove, undo
+    source_actions = frame(image_actions)
+    source_actions.pack(fill='x')
+    change = button(source_actions, 'Change image…', app.open_file, height=32, width=1)
+    change.pack(side='left', fill='x', expand=True, padx=(0, 3))
+    preview = button(source_actions, 'Build preview', app.request_preview, height=32, width=1)
+    preview.pack(side='left', fill='x', expand=True, padx=(3, 0))
+    app.controls.extend(((style, 'readonly'), (remove, 'normal'), (change, 'normal'), (preview, 'normal')))
+    app.guided_preview_button = preview
+    app.guided_manual_canvas_button = button(more, 'Select canvas manually…', app.set_boundary,
+                                            height=32, width=1)
+    app.guided_advanced_button = button(more, 'Advanced controls', lambda: app.ui_mode.set('Advanced'),
+                                       height=32, width=1, fg_color='transparent')
+    app.guided_advanced_button.pack(fill='x')
+
+    def refresh():
+        if app.closing or app.ui_mode.get() != 'Simple':
+            return
+        state = app.guided_setup_state()
+        _configure_presentation(title, text=state['title'])
+        _configure_presentation(detail, text=state['detail'])
+        _configure_presentation(app.guided_action_button, text=state['action_label'],
+                                state='normal' if state['enabled'] else 'disabled')
+        show_canvas = state['stage'] == 'confirm_canvas' and state.get('show_canvas_enabled', False)
+        if show_canvas and not app.guided_show_canvas_button.winfo_manager():
+            pack_in_order(app.guided_show_canvas_button, fill='x', padx=12, pady=(0, 6), before=title)
+        elif not show_canvas and app.guided_show_canvas_button.winfo_manager():
+            app.guided_show_canvas_button.pack_forget()
+        manual = app.guided_manual_canvas_button
+        show_manual = app.original is not None and not state.get('primary_selects_canvas', False)
+        if show_manual and not manual.winfo_manager():
+            pack_in_order(manual, fill='x', pady=(0, 4), before=app.guided_advanced_button)
+        elif not show_manual and manual.winfo_manager():
+            manual.pack_forget()
+        _configure_presentation(manual,
+                                state='normal' if state['manual_canvas_enabled'] else 'disabled')
+        _configure_presentation(target, text=state['target_text'])
+        _configure_presentation(values['canvas_text'], text=state['canvas_text'])
+        _configure_presentation(values['palette_text'], text=state['palette_text'])
+        _configure_presentation(undo, state='normal' if app.background_removal_original is not None
+                                and not app.activity else 'disabled')
+        if app.original is None:
+            source = 'No image loaded'
+            if image_actions.winfo_manager():
+                image_actions.pack_forget()
+        else:
+            name = app.file_label.get().split(' · ', 1)[0]
+            source = f'{name} · {app.original.width:,} × {app.original.height:,} px'
+            if not image_actions.winfo_manager():
+                pack_in_order(image_actions, fill='x', pady=(0, 4), before=manual if show_manual else app.guided_advanced_button)
+        _configure_presentation(values['image'], text=source)
+
+    app.refresh_guided_setup = refresh
+    app.guided_setup_panel = panel
+    return panel
+
+
 def build_ui(a, quality, speed):
     root = a.root
     ctk.set_appearance_mode('dark')
@@ -357,10 +468,17 @@ def build_ui(a, quality, speed):
                                      scrollbar_button_hover_color=FIELD_HOVER)
     sidebar.pack(fill='both', expand=True, padx=5, pady=6)
 
+    a.ui_mode = tk.StringVar(master=root, value='Simple')
+    guide = _build_guided_panel(a, sidebar, frame, label)
+    setup_steps = frame(sidebar, SIDEBAR)
+    back_to_guide = button(setup_steps, 'Back to guided setup', lambda: a.ui_mode.set('Simple'),
+                           height=34, width=1)
+    back_to_guide.pack(fill='x', padx=6, pady=(1, 4))
+
     step_dots = {}
     step_headers = {}
     def step_card(number, title_text, subtitle='', icon='•'):
-        card = frame(sidebar, PANEL, border_width=1, border_color=LINE, radius=13)
+        card = frame(setup_steps, PANEL, border_width=1, border_color=LINE, radius=13)
         card.pack(fill='x', padx=6, pady=6)
         head = frame(card)
         head.pack(fill='x', padx=12, pady=(11, 7))
@@ -510,7 +628,6 @@ def build_ui(a, quality, speed):
     label(step3, var=a.target_lock_text, muted=True, wraplength=270, size=9).pack(anchor='w', pady=(7, 0))
 
     step4 = step_card(4, 'Configure drawing', 'Simple shows essentials; Advanced/Developer reveal tuning and diagnostics.', '⚙️')
-    a.ui_mode = tk.StringVar(value='Simple')
     mode_switch = ctk.CTkSegmentedButton(step4, values=['Simple', 'Advanced', 'Developer'],
                                          variable=a.ui_mode, selected_color=ACCENT_DARK,
                                          selected_hover_color='#2d6756', unselected_color=FIELD,
@@ -679,16 +796,6 @@ def build_ui(a, quality, speed):
                           ('Enable Windows .dmp', a.enable_crash_dumps)):
         btn(dev_card, text, command, height=32).pack(fill='x', pady=3)
 
-    def apply_ui_mode(*_):
-        mode = a.ui_mode.get()
-        advanced_host.pack_forget(); developer_host.pack_forget()
-        if mode in ('Advanced', 'Developer'):
-            advanced_host.pack(fill='x', pady=(5, 0))
-        if mode == 'Developer':
-            developer_host.pack(fill='x', pady=(5, 0))
-    a.ui_mode.trace_add('write', lambda *_: root.after_idle(apply_ui_mode))
-    apply_ui_mode()
-
     step5 = step_card(5, 'Safety & draw', 'Build preview when wanted, then pass each safety gate before full drawing.', '▶️')
     wizard_status=label(step5, var=a.setup_wizard_text, fg_color=FIELD, corner_radius=8, text_color=ACCENT, size=9, wraplength=260)
     wizard_status.pack(fill='x', pady=(0, 6), ipady=5)
@@ -762,11 +869,11 @@ def build_ui(a, quality, speed):
     preview_head = frame(workspace_center)
     preview_head.pack(fill='x', padx=16, pady=(15, 8))
     text = frame(preview_head); text.pack(fill='x', expand=True)
-    label(text, '👁️  Preview workspace', size=18, bold=True).pack(anchor='w')
-    fit_label(label(text, 'Manual preview prevents lag while configuring/profile switching. Build only when you want to refresh it.', muted=True, size=10,wraplength=560),560).pack(fill='x', pady=(2, 0))
-    fit_label(label(text, var=a.draw_time_text, size=11, bold=True, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x', pady=(7, 0))
-    fit_label(label(text, var=a.draw_live_time_text, size=10, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x', pady=(5, 0))
-    fit_label(label(text, var=a.total_draw_time_text, size=11, bold=True, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x', pady=(5, 0))
+    label(text, 'Preview', size=18, bold=True).pack(anchor='w')
+    times = frame(text)
+    fit_label(label(times, var=a.draw_time_text, size=11, bold=True, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x')
+    fit_label(label(times, var=a.draw_live_time_text, size=10, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x', pady=(4, 0))
+    fit_label(label(times, var=a.total_draw_time_text, size=11, bold=True, fg_color=FIELD, corner_radius=8, wraplength=560),560).pack(fill='x', pady=(4, 0))
     a.preview_zoom = tk.DoubleVar(value=0.0)
     a.preview_show_background = tk.BooleanVar(value=True)
     a.preview_show_fill = tk.BooleanVar(value=True)
@@ -1007,6 +1114,54 @@ def build_ui(a, quality, speed):
         window=root,footer=footer,footer_row=footer_row,
         header_actions=(about_btn,guide_btn,wizard_btn,tools_button),on_change=lambda:a.schedule_previews(delay=20))
 
+    refresh_guide = a.refresh_guided_setup
+
+    def refresh_current_guide():
+        simple = a.ui_mode.get() == 'Simple'
+        show_times = not simple or bool(a.plan) or a.activity in ('draw', 'dry-run')
+        if show_times and not times.winfo_manager():
+            times.pack(fill='x', pady=(6, 0))
+        elif not show_times and times.winfo_manager():
+            times.pack_forget()
+        refresh_guide()
+    a.refresh_guided_setup = refresh_current_guide
+
+    def apply_ui_mode(*_):
+        if a.closing:return
+        mode = a.ui_mode.get()
+        simple = mode == 'Simple'
+        previous = setup_steps if simple else guide
+        visible = guide if simple else setup_steps
+        if not visible.winfo_manager():
+            try:
+                focus = root.focus_get()
+            except (tk.TclError, KeyError):
+                focus = None
+            while focus is not None and focus is not previous:
+                focus = getattr(focus, 'master', None)
+            previous.pack_forget()
+            visible.pack(fill='x', padx=5, pady=0 if simple else 5)
+            sidebar._parent_canvas.yview_moveto(0)
+            if focus is previous:
+                (a.guided_profile_selector if simple else back_to_guide).focus_set()
+        advanced_host.pack_forget(); developer_host.pack_forget()
+        if mode in ('Advanced', 'Developer'):
+            advanced_host.pack(fill='x', pady=(5, 0))
+        if mode == 'Developer':
+            developer_host.pack(fill='x', pady=(5, 0))
+        a.draw_action_bar.prefer_actions((a.stop_button,) if simple else None)
+        a.help_action_bar.prefer_actions((tools_button,) if simple else None)
+        a.workspace_layout.set_guided(simple)
+        a.refresh_guided_setup()
+
+    def mode_changed(*_):
+        cancel = getattr(a, '_cancel_guided_canvas_discovery', None)
+        if cancel and a.ui_mode.get() != 'Simple':
+            cancel()
+        root.after_idle(apply_ui_mode)
+    a.ui_mode.trace_add('write', mode_changed)
+    apply_ui_mode()
+
     # ---- Safe state renderer --------------------------------------------
     ui_state_job = {'id': None}
     ui_state_running = {'value': False}
@@ -1180,6 +1335,8 @@ def build_ui(a, quality, speed):
             # controls pass; callbacks also recheck the live operation state.
             word_results=getattr(a,'_word_helper_results',None)
             if word_results is not None:word_results.refresh_controls()
+            guided_refresh=getattr(a,'refresh_guided_setup',None)
+            if guided_refresh is not None:guided_refresh()
             action_bar=getattr(a,'draw_action_bar',None)
             if action_bar is not None:action_bar.schedule()
             workspace_layout=getattr(a,'workspace_layout',None)

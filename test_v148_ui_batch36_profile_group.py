@@ -25,6 +25,8 @@ class NativeProfileGroupTests(unittest.TestCase):
             add_custom_profile(name, data / 'profiles.json')
             app.profile_selector.configure(values=list(PROFILES))
             self.select_profile(root, app, name)
+            app.ui_mode.set('Advanced')
+            root.update()
             group = next(group for group in app._compact_ui_layout.groups
                          if group.title == 'Profile & ink options')
             row = next(widget for widget, scope, _options in app._scoped_profile_controls

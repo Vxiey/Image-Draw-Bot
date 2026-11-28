@@ -26,7 +26,7 @@ PAGES = [
       ],
       [
         "First browser attempt",
-        "Open a drawable canvas. Turn Browser One-Click Mode off and leave Drop-In Start unarmed before importing: these automation features can start drawing after an image is added when enabled."
+        "In Simple view, choose the browser target, open a drawing round and load your picture. The guide looks for the visible canvas and offers you the area to confirm."
       ],
       [
         "Keep the layout stable",
@@ -43,7 +43,7 @@ PAGES = [
       ],
       [
         "Setup and drawing area",
-        "Browser profiles: use One-click Setup + Verify or Auto setup browser. If detection fails, Select drawing area should cover only the drawable canvas, excluding toolbars. Paint includes preparation in Prepare Paint & draw."
+        "Choose Show canvas to see the suggested outline, then Use detected canvas. If needed, choose Select canvas manually and mark two opposite corners inside the drawing area. Follow Verify canvas & palette when a browser profile needs calibration."
       ],
       [
         "Palette and custom colors",
@@ -77,7 +77,7 @@ PAGES = [
     [
       [
         "Browser and manual start",
-        "Complete setup, then use Unlock full drawing and Start drawing when available. Read missing-setup messages. Keep the target visible and follow the countdown. Browser One-Click and armed drop modes can use an automatic start path."
+        "Complete setup, choose Unlock drawing, then Start drawing and confirm. Keep the target visible during the countdown. Advanced controls also offer explicitly armed import actions."
       ],
       [
         "Optional checks",
@@ -152,7 +152,8 @@ def guide_pages(profile, *, prepare_on_start=True):
     pages = [(title, list(cards)) for title, cards in PAGES]
     if profile == 'Microsoft Paint' and prepare_on_start:
         pages[1][1][1] = ('Prepare Paint', 'Open Paint with an empty canvas and keep its toolbar visible. Choose the Microsoft Paint profile. Prepare Paint & draw prepares the canvas, pencil size and RGB controls before drawing.')
-        pages[4][1][0] = ('Start in Paint', 'Load an image, then press Prepare Paint & draw. This performs setup and then draws; it is not just a calibration button. Preview and small tests are optional but useful for a first attempt.')
+        pages[2][1][1] = ('Setup and drawing area', 'Load an image. Use Show canvas to check the suggestion and Use detected canvas to accept it. You can also mark opposite corners manually.')
+        pages[4][1][0] = ('Start in Paint', 'After choosing the canvas, press Prepare Paint & draw and confirm. Paint calibrates its controls and then starts drawing. Preview and small tests are optional.')
     elif profile == 'Microsoft Paint':
         pages[1][1][1] = ('Manual Paint tool', 'Keep your selected Paint tool and size. Calibrate its required controls, read colors when needed and select only the drawable canvas. Start preserves this manual tool choice.')
         pages[2][1][1] = ('Setup and drawing area', 'Use Calibrate Paint tools for the selected tool, Read colors when the tool uses palette colors, and Select drawing area around only the canvas. Auto (recommended) is the separate automatic Paint preparation mode.')

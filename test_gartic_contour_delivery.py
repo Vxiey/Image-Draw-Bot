@@ -61,3 +61,23 @@ class GarticContourDeliveryTests(unittest.TestCase):
         self.assertLess(len(joined), len(paths))
         self.assertTrue(all(len(path) <= 4 for path in joined))
         self.assertEqual(canonical_pixels_from_paths(paths), canonical_pixels_from_paths(joined))
+
+    def test_projected_edge_keeps_its_separate_gesture_with_auto_outline(self):
+        from CanvasGuard import CanvasGuard
+        from EdgeBehavior import apply_edge_behavior
+        options = dict(profile_key='gartic-phone', edge_behavior='Auto', outline=True, brush_px=5,
+                       _execution_cost_calibration_override={'samples': 0})
+        guard = CanvasGuard.from_area_or_polygon((0, 0, 80, 60), brush_px=5)
+        paths = [((15, 1), (35, 1)), ((35, 1), (35, 26)),
+                 ((12, 32), (23, 32)), ((23, 32), (29, 35))]
+        model = build_cost_model(options, (80, 60), (80, 60))
+        joined, _ = _opaque_contour_route(paths, None, model, 160, lambda: False)
+        self.assertIn(paths[0], joined)
+        self.assertLess(len(joined), len(paths))
+        def output(route):
+            return [segment for path in route for segment in
+                    apply_edge_behavior(guard, path, behavior='Auto', outline=True).subpaths]
+        self.assertEqual(canonical_pixels_from_paths(output(paths)), canonical_pixels_from_paths(output(joined)))
+        polygon = [(1, 1), (12, 10), (20, 2)]
+        custom = build_cost_model(dict(options, canvas_polygon=polygon), (80, 60), (80, 60))
+        self.assertEqual(_opaque_contour_route(paths, None, custom, 160, lambda: False), (paths, 0.))

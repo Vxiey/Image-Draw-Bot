@@ -972,7 +972,7 @@ def _make_plan(original, area, options, cancelled=lambda: False):
             if ink:groups[black_index(tuple(c.RGB for c in allColors))]=ink
         if options.get('profile_key') in ('gartic-phone','gartic-io') or options.get('profile_name') in ('Gartic Phone','Gartic.io'):
             from GarticSketchPaths import trace_contours
-            paths,sketch_meta=trace_contours(image,cancelled)
+            paths,sketch_meta=trace_contours(image,cancelled,options=plan_options,fitted_size=fitted)
             execution=[[] for _ in groups]
             index=0 if options.get('paint_current_color') else black_index(tuple(c.RGB for c in allColors)) if ink else 0
             if execution:execution[index]=paths
@@ -4718,6 +4718,8 @@ class DrawBotApp:
         capture_defaults(self)
         apply_profile_defaults(self,self.game.get())
         self.read_settings()
+        from GuidedSetupController import GuidedSetupController
+        self._guided_setup_controller=GuidedSetupController(self,PROFILES)
         from StudioUI import build_ui
         build_ui(self,QUALITY,SPEED)
         from ProfileIsolation import restore_extra
@@ -5682,6 +5684,8 @@ class DrawBotApp:
             widget = getattr(self, name, None)
             if widget is not None:
                 DrawBotApp._safe_widget_configure(widget, text=unlock_text)
+        guide=getattr(self,'_guided_setup_controller',None)
+        if guide:guide.refresh()
 
     def _disarm_full_draw(self, reason='', update_text=True):
         was_unlocked = DrawBotApp._full_draw_unlocked(self)
@@ -6275,8 +6279,10 @@ class DrawBotApp:
             palette = () if bypasses_palette(self) else tuple((c.x, c.y) for c in allColors)
             from ScreenGuard import GuardedMouse, WindowMonitor
             runtime_palette_guard = runtime_palette_guard_colors(profile_key, palette, allColors)
+            guided=getattr(self,'_guided_setup_controller',None)
             guarded = GuardedMouse(self.mouse, WindowMonitor(), self.target_window, runtime_palette_guard,
-                                   live_target_check=self._make_live_target_check() if (strict and DrawBotApp._target_lock_valid(self)) else None)
+                                   live_target_check=self._make_live_target_check() if (strict and DrawBotApp._target_lock_valid(self)) else None,
+                                   identity_check=guided.browser_identity_check() if guided else None)
         except (OSError, ValueError, InterruptedError) as error:
             self.status.set(f'Correction-only retry preflight stopped: {error}')
             return
@@ -6475,8 +6481,62 @@ class DrawBotApp:
         """Backward compatible alias: old UI/tests route here, but it is now locked."""
         return DrawBotApp.start_full_drawing(self)
 
+    def guided_setup_state(self):
+        return self._guided_setup_controller.state()
+
+    def run_guided_action(self):
+        return self._guided_setup_controller.run()
+
+    def show_guided_canvas(self):
+        return self._guided_setup_controller.show_canvas()
+
+    def _queue_guided_canvas_discovery(self):
+        guide=getattr(self,'_guided_setup_controller',None)
+        return bool(guide and guide.queue())
+
+    def _cancel_guided_canvas_discovery(self):
+        guide=getattr(self,'_guided_setup_controller',None)
+        if guide:guide.cancel()
+
+    def _finish_guided_canvas_discovery(self,request,result,error):
+        guide=getattr(self,'_guided_setup_controller',None)
+        return bool(guide and guide.finish(request,result,error))
+
+    @staticmethod
+    def _guided_canvas_payload(value):
+        meta,box=_validated_setup_payload(value,require_canvas=True)
+        if (any(type(meta.get(k)) is not int or not 0<meta[k]<2**32 for k in ('target_pid','target_thread'))
+                or type(meta.get('dpi')) is not int or not 48<=meta['dpi']<=768):
+            raise ValueError('The window identity or display scale could not be verified. Find the canvas again.')
+        return meta,box
+
+    def _apply_guided_canvas(self,key,meta,box):
+        from BrowserAutoCalibration import SUPPORTED_BROWSER_PROFILES
+        from BrowserDrawingRegion import BrowserDrawingRegion
+        region=(BrowserDrawingRegion.capture(key,meta,box).with_canvas(key,meta,box)
+                if key in SUPPORTED_BROWSER_PROFILES else None)
+        self.corners=[box[:2],box[2:]]
+        self.saved_area=list(self.corners)
+        self.browser_drawing_region=region
+        self.canvas_anchor_detection=None
+        self.target_window=(meta['handle'],meta['rect'])
+        self.target_client_rect=meta['client_rect']
+        self.target_dpi=meta.get('dpi')
+        self.color_session_cache.clear()
+        self.area_text.set(f'✓ {box[2]-box[0]} × {box[3]-box[1]} px · confirmed canvas')
+        self._mark_plan_stale('Canvas confirmed. Build a preview or continue setup.')
+        self.save_settings()
+        self._schedule_recovery_checkpoint(delay=100)
+        self.set_busy(None)
+        self.show_previews()
+        self.status.set('Canvas confirmed. Continue setup or build a preview.')
+
     def set_busy(self,activity):
         self.activity=activity
+        guide=getattr(self,'_guided_setup_controller',None)
+        if guide and activity:
+            guide.cancel(refresh=False)
+            if activity=='capture':guide.accepted=None
         from ProfileIsolation import update_visibility
         update_visibility(self,PROFILES.get(self.game.get(),('generic',))[0])
         for widget,state in list(self.controls):
@@ -7166,6 +7226,8 @@ class DrawBotApp:
                 }
         except (TypeError,ValueError,OverflowError):
             selected_canvas_state=None
+        guide=getattr(self,'_guided_setup_controller',None)
+        guided_canvas=guide.accepted_canvas() if guide else None
         def work():
             try:
                 from TargetCapture import probe_handle_isolated
@@ -7174,7 +7236,13 @@ class DrawBotApp:
                 from ScreenGuard import WindowMonitor
                 from PIL import ImageGrab
                 from PaintPreparation import ensure_paint,prepare_tool_controls,calibrate_rgb_controls
-                candidate=ensure_paint(_enumerate_windows,cancelled=self.stop.is_set,wait=self.stop.wait)
+                if guided_canvas:
+                    from GuidedCanvasDiscovery import discover_guided_canvas
+                    checked=discover_guided_canvas('microsoft-paint',previous=guided_canvas,
+                                                  cancelled=self.stop.is_set)
+                    candidate=checked['target_meta']
+                else:
+                    candidate=ensure_paint(_enumerate_windows,cancelled=self.stop.is_set,wait=self.stop.wait)
                 target=(int(candidate['handle']),tuple(candidate['rect']))
                 monitor=WindowMonitor()
                 if not monitor.activate(target):
@@ -7212,6 +7280,8 @@ class DrawBotApp:
                     manual_canvas=resolve_manual_canvas_override(
                         selected_canvas_state['corners'],selected_canvas_state['handle'],
                         selected_canvas_state['client_rect'],int(candidate['handle']),rect)
+                if guided_canvas and manual_canvas!=tuple(guided_canvas['canvas_box']):
+                    raise ValueError('The confirmed Paint canvas changed. Select the canvas again.')
                 # Exact RGB controls are independent from canvas detection. Save
                 # them as soon as Edit colors has been identified, so a clipped
                 # Paint canvas can fall back to manual area selection without
@@ -7434,6 +7504,9 @@ class DrawBotApp:
             if getattr(self,'_settings_protected_path',None)!=Path(self.settings_path):
                 self.status.set('Profile change stopped because the current settings could not be saved.')
             return
+        DrawBotApp._cancel_guided_canvas_discovery(self)
+        guide=getattr(self,'_guided_setup_controller',None)
+        if guide:guide.accepted=None
         DrawBotApp._cancel_browser_one_click(self,'profile changed')
         DrawBotApp._disarm_manual_drop_in(self,'profile changed')
         DrawBotApp._clear_render_resume(self,'profile changed by user')
@@ -7517,6 +7590,9 @@ class DrawBotApp:
             self._active_profile_name=selected
         finally:
             self.profile_change_in_progress=False
+        if not DrawBotApp._queue_guided_canvas_discovery(self):
+            guide=getattr(self,'_guided_setup_controller',None)
+            if guide:guide.refresh()
 
     def read_settings(self):
         from RuntimePaths import read_json
@@ -8722,6 +8798,8 @@ class DrawBotApp:
         DrawBotApp._cancel_after_attr(self,'preview_after')
         DrawBotApp._cancel_after_attr(self,'preview_render_after')
         from ScreenTaskWindow import ScreenTaskWindow, SCREEN_ACTIVITIES
+        guide=getattr(self,'_guided_setup_controller',None)
+        if guide:guide.cancel(refresh=False)
         screen_window=ScreenTaskWindow(getattr(self,'root',None))
         def work():
             started=time.monotonic()
@@ -9225,7 +9303,7 @@ class DrawBotApp:
                     if im is None:
                         is_original=canvas is self.original_canvas
                         if is_original:
-                            title='Drop your image here';hint='PNG, JPG, WEBP · drop on canvas to auto-start when setup is ready'
+                            title='Open or drop an image';hint='Click to choose a file, paste an image, or drop it here.'
                         elif canvas is getattr(self,'quantized_target_canvas',None):
                             title='Quantized target';hint='Palette-mapped target before physical brush/execution simulation.'
                         elif canvas is getattr(self,'delta_e_canvas',None):
@@ -10065,6 +10143,13 @@ class DrawBotApp:
         if self.target_window is None:raise ValueError('Select the drawing area again to lock the correct window.')
         from TargetCapture import probe_handle_isolated
         handle=self.target_window[0];meta=probe_handle_isolated(handle)
+        guide=getattr(self,'_guided_setup_controller',None)
+        accepted=guide.accepted_canvas() if guide else None
+        if accepted:
+            expected=accepted['target_meta']
+            if (meta.get('target_pid')!=expected['target_pid'] or tuple(meta['rect'])!=expected['rect'] or
+                    tuple(meta['client_rect'])!=expected['client_rect'] or meta.get('dpi')!=expected['dpi']):
+                raise ValueError('The confirmed drawing window changed. Select the canvas again before drawing.')
         current=tuple(meta['client_rect'])
         current_dpi=meta.get('dpi')
         selected_dpi=getattr(self,'target_dpi',None)
@@ -10411,7 +10496,10 @@ class DrawBotApp:
         runtime_palette_guard=runtime_palette_guard_colors(profile_key,palette,allColors)
         if palette and not runtime_palette_guard:
             log_event(f"Runtime palette guard delegated to Browser Visual Preflight: profile={profile_key!r} swatches={len(palette)}.")
-        guarded=GuardedMouse(self.mouse,WindowMonitor(),self.target_window,runtime_palette_guard,live_target_check=self._make_live_target_check() if (not test and DrawBotApp._strict_safety_required(self) and DrawBotApp._target_lock_valid(self)) else None)
+        guided=getattr(self,'_guided_setup_controller',None)
+        guarded=GuardedMouse(self.mouse,WindowMonitor(),self.target_window,runtime_palette_guard,
+            live_target_check=self._make_live_target_check() if (not test and DrawBotApp._strict_safety_required(self) and DrawBotApp._target_lock_valid(self)) else None,
+            identity_check=guided.browser_identity_check() if guided else None)
         if test:
             if options.get('erase_mode'):
                 prompt='This erases one short line in the selected drawing area. Put a visible mark under the test area first so you can confirm the Eraser works. Continue?'
@@ -10636,6 +10724,8 @@ class DrawBotApp:
 
     def _request_stop(self):
         """Keyboard-thread-safe Stop: no Tk calls or resettable update token."""
+        guide=getattr(self,'_guided_setup_controller',None)
+        if guide:guide.signal_stop()
         self._stopped_detail_generation=getattr(self,'preview_generation',None)
         consent=getattr(self,'mobile_preview_start_consent',None)
         if consent is not None:consent.set()
@@ -10653,6 +10743,7 @@ class DrawBotApp:
 
     def cancel(self):
         DrawBotApp._request_stop(self)
+        DrawBotApp._cancel_guided_canvas_discovery(self)
         review=getattr(self,'detail_review',None)
         if review is not None and not self.closing:review.clear()
         self.paint_start_request=None
@@ -11550,6 +11641,8 @@ class DrawBotApp:
             candidate.close()
 
     def _handle_event(self,kind,value):
+        if kind=='guided_canvas_complete':
+            return DrawBotApp._finish_guided_canvas_discovery(self,*value)
         recheck_done_request=None
         if (kind=='done' and isinstance(value,tuple) and len(value)==2 and value[0]=='result-recheck'):
             _,recheck_done_request=value
@@ -12123,7 +12216,9 @@ class DrawBotApp:
             # releases the UI, exactly like file/URL imports.
             queued=DrawBotApp._queue_drop_in_start(self,action,source_label='pasted image')
             if not queued and action is None:
-                DrawBotApp._queue_browser_one_click_after_import(self,'pasted image')
+                guide=getattr(self,'_guided_setup_controller',None)
+                if guide and guide.simple_mode():guide.queue()
+                else:DrawBotApp._queue_browser_one_click_after_import(self,'pasted image')
         elif kind=='loaded':
             DrawBotApp._cancel_browser_one_click(self,'source image replaced')
             self._suppress_recovery=False
@@ -12144,7 +12239,9 @@ class DrawBotApp:
             DrawBotApp._clear_source_time_feedback(self)
             DrawBotApp._queue_drop_in_start(self,_action,source_label=str(label))
             if normalize_drop_in_action(_action)!=DROP_IN_ACTION:
-                DrawBotApp._queue_browser_one_click_after_import(self,str(label),force=bool(_one_click_force))
+                guide=getattr(self,'_guided_setup_controller',None)
+                if guide and guide.simple_mode() and not _one_click_force:guide.queue()
+                else:DrawBotApp._queue_browser_one_click_after_import(self,str(label),force=bool(_one_click_force))
             if bool(_one_click_force):
                 self.status.set('Game-canvas image loaded. Verifying browser canvas/palette, then drawing will start automatically.')
             elif normalize_drop_in_action(_action)==DROP_IN_ACTION and self.drop_action_pending==DROP_IN_ACTION:
@@ -12666,6 +12763,8 @@ class DrawBotApp:
 
     def poll(self):
         self.poll_after=None
+        guide=getattr(self,'_guided_setup_controller',None)
+        if guide:guide.consume_stop()
         review=getattr(self,'detail_review',None)
         if review is not None and not self.closing and DrawBotApp._current_detail_review_plan(self) is None:
             review.clear()

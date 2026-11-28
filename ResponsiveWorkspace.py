@@ -29,6 +29,7 @@ class ResponsiveWorkspace:
         self.compact_height=False;self._chrome_signature=None;self._window_binding=None
         self.on_change=on_change;self.closed=False;self.job=None
         self.compact=None;self._signature=None;self._header_signature=None
+        self.guided=False
         self.selected=next(iter(self.panels));self.variable=tk.StringVar(master=main,value=self.selected)
         self.navigation=ttk.Frame(main,style='TFrame')
         ttk.Label(self.navigation,text='Workspace panel').pack(side='left',padx=(0,8))
@@ -38,7 +39,11 @@ class ResponsiveWorkspace:
         self.selector.bind('<<ComboboxSelected>>',lambda _event:self.select(self.variable.get()))
         bind_widget_event(main,'<Configure>',self.schedule)
         bind_widget_event(main,'<Destroy>',self.dispose)
-        if header is not None:bind_widget_event(header,'<Configure>',self.schedule)
+        if header is not None:
+            bind_widget_event(header,'<Configure>',self.schedule)
+            # The root destroys the header before main. A CTk teardown can run
+            # an idle layout between them, when the header no longer exists.
+            bind_widget_event(header,'<Destroy>',lambda event: self.dispose() if event.widget is header else None)
         if window is not None:self._window_binding=bind_widget_event(window,'<Configure>',self.schedule)
         self.schedule()
 
@@ -68,6 +73,14 @@ class ResponsiveWorkspace:
             self.panels[name].grid(row=1,column=0,columnspan=3,sticky='nsew')
             if focus is not None and focus!=name:self.selector.focus_set()
             if callable(self.on_change):self.on_change()
+        elif changed and self.guided:
+            self.schedule()
+
+    def set_guided(self, enabled):
+        """Give the preview the space normally used by the full readiness checklist."""
+        if self.guided!=enabled:
+            self.guided=enabled
+            self.schedule()
 
     def schedule(self,event=None):
         if self.closed or (event is not None and event.widget not in (self.main,self.header,self.window)):return
@@ -141,8 +154,9 @@ class ResponsiveWorkspace:
         scale=self._scale();self._layout_window_chrome(scale);self._layout_header(scale)
         width=self.main.winfo_width()
         if width<=1:return
-        compact=width<math.ceil(1120*scale)
-        signature=(compact,scale)
+        compact=width<math.ceil((800 if self.guided else 1120)*scale)
+        guided_page='Readiness' if self.selected=='Readiness' else 'Workspace'
+        signature=(compact,scale,self.guided,guided_page if self.guided and not compact else None)
         if signature==self._signature:return
         focus=self._focused_panel()
         if compact and focus is not None:
@@ -155,6 +169,12 @@ class ResponsiveWorkspace:
             self.main.grid_columnconfigure(0,weight=1)
             self.navigation.grid(row=0,column=0,columnspan=3,sticky='ew',pady=(0,8))
             self.panels[self.selected].grid(row=1,column=0,columnspan=3,sticky='nsew')
+        elif self.guided:
+            self.navigation.grid_forget()
+            self.main.grid_columnconfigure(0,minsize=math.ceil(310*scale))
+            self.main.grid_columnconfigure(1,weight=1)
+            self.panels['Setup'].grid(row=1,column=0,sticky='nsew',padx=(0,12))
+            self.panels[guided_page].grid(row=1,column=1,columnspan=2,sticky='nsew')
         else:
             self.navigation.grid_forget()
             for column,(panel,minimum) in enumerate(zip(self.panels.values(),(330,480,286))):

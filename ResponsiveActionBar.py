@@ -11,6 +11,7 @@ class ResponsiveActionBar:
     def __init__(self,parent,buttons,*,essential=(),promote_when_enabled=(),menu_text='More actions'):
         self.parent=parent;self.buttons=tuple(buttons);self.essential=tuple(essential)
         self.promoted=tuple(promote_when_enabled);self.visible=();self.overflow=()
+        self.preferred=None
         self.job=None;self.closed=False;self.signature=None
         self.menu_button=ttk.Menubutton(parent,text=menu_text,takefocus=True)
         self.menu=tk.Menu(self.menu_button,tearoff=False,postcommand=self.populate)
@@ -25,6 +26,13 @@ class ResponsiveActionBar:
         for button in self.overflow:
             self.menu.add_command(label=str(button.cget('text')),
                 state='disabled' if button.cget('state')=='disabled' else 'normal',command=button.invoke)
+
+    def prefer_actions(self, buttons=None):
+        """Keep secondary actions in the keyboard-accessible menu even on wide layouts."""
+        preferred=None if buttons is None else tuple(buttons)
+        if preferred!=self.preferred:
+            self.preferred=preferred
+            self.schedule()
 
     def schedule(self,event=None):
         if self.closed or (event is not None and event.widget is not self.parent):return
@@ -41,10 +49,11 @@ class ResponsiveActionBar:
         # Native ttk padding is already physical; CTk buttons scale grid kwargs.
         gap=math.ceil(6*scale)
         widths={id(button):button.winfo_reqwidth() for button in self.buttons}
-        if sum(widths.values())+gap*len(self.buttons)<=width:
+        if self.preferred is None and sum(widths.values())+gap*len(self.buttons)<=width:
             visible=self.buttons;overflow=();items=visible;columns=len(items)
         else:
-            visible=tuple(button for button in self.buttons if button in self.essential or
+            essential=self.essential if self.preferred is None else self.preferred
+            visible=tuple(button for button in self.buttons if button in essential or
                           (button in self.promoted and button.cget('state')!='disabled'))
             overflow=tuple(button for button in self.buttons if button not in visible)
             items=(*visible,self.menu_button)

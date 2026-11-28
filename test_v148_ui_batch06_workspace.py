@@ -68,6 +68,28 @@ class WorkspaceLayoutTests(unittest.TestCase):
             self.assertEqual([main.columns[n]['minsize'] for n in range(3)],[330,480,286])
             self.assertEqual(layout.selected,'Readiness')
 
+    def test_guided_layout_shares_setup_and_preview_then_restores_the_full_workspace(self):
+        with ExitStack() as stack:
+            main, panels, layout, _ = self.create(stack, 1280)
+            layout.set_guided(True)
+            main.flush()
+            self.assertFalse(layout.compact)
+            self.assertEqual([key for key, panel in panels.items() if panel.layout], ['Setup', 'Workspace'])
+            layout.select('Readiness')
+            main.flush()
+            self.assertEqual([key for key, panel in panels.items() if panel.layout], ['Setup', 'Readiness'])
+            main.scale = 2
+            layout.schedule()
+            main.flush()
+            self.assertTrue(layout.compact)
+            self.assertEqual([key for key, panel in panels.items() if panel.layout], ['Readiness'])
+            layout.select('Setup')
+            self.assertTrue(panels['Setup'].layout)
+            main.scale = 1
+            layout.set_guided(False)
+            main.flush()
+            self.assertTrue(all(panel.layout for panel in panels.values()))
+
     def test_shrink_preserves_the_panel_containing_focus_and_accounts_for_scaling(self):
         with ExitStack() as stack:
             main,panels,layout,_=self.create(stack,1800,1.5)
@@ -159,6 +181,24 @@ class ActionBarTests(unittest.TestCase):
             buttons[1].command.assert_called_once()
             buttons[0].command.assert_not_called();buttons[3].command.assert_not_called()
 
+    def test_guided_actions_keep_stop_and_enabled_pause_visible_even_on_wide_windows(self):
+        with ExitStack() as stack:
+            row, buttons, bar = self.create(stack)
+            row.width = 1600
+            bar.prefer_actions((buttons[3],))
+            row.flush()
+            self.assertEqual(bar.visible, (buttons[3],))
+            buttons[4].configure(state='normal')
+            bar.schedule()
+            row.flush()
+            self.assertEqual(bar.visible, (buttons[3], buttons[4]))
+            bar.populate()
+            self.assertEqual([entry['label'] for entry in bar.menu.entries], ['Start', 'Unlock', 'Dry run'])
+            bar.prefer_actions()
+            row.flush()
+            self.assertEqual(bar.visible, buttons)
+            self.assertFalse(bar.overflow)
+
     def test_enabled_pause_is_promoted_and_hidden_button_focus_moves_to_menu(self):
         with ExitStack() as stack:
             row,buttons,bar=self.create(stack)
@@ -219,7 +259,7 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
                 'ancestors':ancestors,'root_packed':[describe(item) for item in root.pack_slaves()],
                 'actions':[describe(item) for item in (*app.draw_action_bar.visible,app.draw_action_bar.menu_button)]}
 
-    def test_actual_studio_keeps_start_stop_and_all_panels_inside_compact_windows(self):
+    def test_advanced_studio_keeps_start_stop_and_all_panels_inside_compact_windows(self):
         import customtkinter as ctk
         from DrawBot import DrawBotApp
 
@@ -242,6 +282,7 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
             root=scoped_window_class(ctk.CTk)()
             try:
                 app=DrawBotApp(root,NoInput(),NoInput());root.minsize(500,400)
+                app.ui_mode.set('Advanced')
                 root.update()
                 def inside(widget):
                     if not widget.winfo_ismapped():self.fail(str(self.layout_diagnostics(root,app,widget)))

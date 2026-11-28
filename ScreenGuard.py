@@ -343,7 +343,7 @@ class WindowMonitor:
 
 
 class GuardedMouse:
-    def __init__(self,mouse,monitor,target,palette_colors=None,live_target_check=None):
+    def __init__(self,mouse,monitor,target,palette_colors=None,live_target_check=None,*,identity_check=None):
         self.mouse,self.monitor,self.target=mouse,monitor,target
         self.last=None
         self.palette_colors=palette_colors or {}
@@ -355,6 +355,7 @@ class GuardedMouse:
         # GuardedMouse remains generic; the callback may check DPI, client rect,
         # drawing-area lock, palette/tool fingerprint and other app-specific gates.
         self.live_target_check=live_target_check
+        self.identity_check=identity_check
         self.manual_movement_confirm_seconds=0.014
         self.transient_cover_retry_seconds=0.08
 
@@ -378,10 +379,12 @@ class GuardedMouse:
         if callable(lock_target):
             lock_target(self.target)
         if stop.is_set():raise InterruptedError()
+        if self.identity_check:self.identity_check(self.monitor,force=True)
         self.monitor.activate(self.target)
         for attempt in range(81):
             if stop.is_set():raise InterruptedError()
             if self.monitor.active(self.target):
+                if self.identity_check:self.identity_check(self.monitor,force=True)
                 if stop.is_set():raise InterruptedError()
                 # This is the only transition that arms the native mouse backend,
                 # and prepare_target is called only by explicit test/draw actions.
@@ -419,6 +422,7 @@ class GuardedMouse:
 
     def check(self,point=None):
         self._check_stop()
+        if self.identity_check:self.identity_check(self.monitor)
         current=self.mouse.get_position()
         if self.live_target_check is not None:
             self.live_target_check(self.monitor,self.target,current if point is None else point)
@@ -513,6 +517,7 @@ class GuardedMouse:
     def _check_modal_geometry(self,point=None):
         """Keep modal color-picker sampling tied to the originally locked target."""
         self._check_stop()
+        if self.identity_check:self.identity_check(self.monitor)
         handle,rectangle=self.target
         if self.monitor.rectangle(handle)!=rectangle:
             raise InterruptedError('Stopped: target window geometry changed while the custom-color dialog was open.')

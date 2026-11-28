@@ -154,6 +154,7 @@ def _candidate_cost(paths, model):
 
 def _opaque_contour_route(contours, first_dense_path, model, max_points, cancelled):
     """Join directed gestures at identical vertices and price the actual delivery order."""
+    from EdgeBehavior import resolve_edge_behavior
     from StrokeOptimizer import _merge_exact_graph
     def checked_paths(paths):
         for i, path in enumerate(paths):
@@ -161,10 +162,38 @@ def _opaque_contour_route(contours, first_dense_path, model, max_points, cancell
                 raise InterruptedError()
             yield path
 
-    chains, joins = _merge_exact_graph(checked_paths(contours), cancelled=cancelled, allow_reverse=False)
+    options = model.options
+    if options.get('canvas_polygon') or options.get('canvas_safe_polygon'):
+        return contours, 0.0
+    mergeable, preserved = contours, []
+    if resolve_edge_behavior(options.get('edge_behavior'), outline=options.get('outline', False)) != 'Hard Clip':
+        # Edge projection is decided for a whole path. Joining one projected
+        # edge stroke to an interior stroke could otherwise discard the former.
+        from BrowserBrushSize import conservative_brush_guard
+        from CanvasGuard import BrushInset
+        from Precision import CanvasTransform
+        width, height = model.fitted_size
+        brush = max(int(options.get('canvas_guard_brush_px') or 1), int(options.get('brush_px') or 3))
+        brush_plan = options.get('browser_brush_plan') or {}
+        if brush_plan:
+            brush = max(brush, int(brush_plan.get('effective_px') or 1),
+                        conservative_brush_guard(brush_plan.get('profile_key') or options.get('profile_key'), brush))
+        margin = BrushInset(brush).total_px + 1  # allow for half-pixel letterboxing
+        transform = CanvasTransform(*model.source_size, model.fitted_size, 0, 0)
+        mergeable = []
+        for path in checked_paths(contours):
+            points = (transform.point(x, y) for x, y in path)
+            inside = all(margin <= x < width-margin and margin <= y < height-margin for x, y in points)
+            if inside:
+                mergeable.append(path)
+            else:
+                preserved.append(path)
+        if len(mergeable) < 2:
+            return contours, 0.0
+    chains, joins = _merge_exact_graph(checked_paths(mergeable), cancelled=cancelled, allow_reverse=False)
     if not joins:
         return contours, 0.0
-    candidate = _split_paths(checked_paths(chains), max_points)
+    candidate = _split_paths(checked_paths(chains), max_points) + preserved
     if len(candidate) >= len(contours):
         return contours, 0.0
     candidate.sort(key=lambda path: -_length(path))

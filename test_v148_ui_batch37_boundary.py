@@ -193,18 +193,20 @@ class BoundaryAdoptionTests(unittest.TestCase):
     def test_stop_inside_real_gartic_analysis_restores_prior_target_and_region(self):
         app = self.application()
         before = self.snapshot(app)
-        near_white = GarticEngineV2._near_white
-        observed = []
+        detector = GarticEngineV2.detect_gartic_canvas
+        polls = []
 
-        def stop_while_scanning(pixel):
-            if not observed:
-                observed.append(tuple(pixel))
-                DrawBot.DrawBotApp._request_stop(app)
-            return near_white(pixel)
+        def stop_while_scanning(image, *, cancelled):
+            def during_analysis():
+                polls.append(None)
+                if len(polls) == 3:
+                    DrawBot.DrawBotApp._request_stop(app)
+                return cancelled()
+            return detector(image, cancelled=during_analysis)
 
-        with patch.object(GarticEngineV2, '_near_white', side_effect=stop_while_scanning):
+        with patch.object(GarticEngineV2, 'detect_gartic_canvas', side_effect=stop_while_scanning):
             failures, native = self.select(app)
-        self.assertTrue(observed, 'The real Gartic detector must enter its pixel scan.')
+        self.assertGreaterEqual(len(polls), 3)
         self.assert_previous(app, before)
         self.assertEqual(len(failures), 1)
         self.assertIsInstance(failures[0], InterruptedError)

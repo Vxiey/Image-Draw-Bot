@@ -154,6 +154,44 @@ class NativeStudioWorkspaceTests(unittest.TestCase):
         app.workspace_layout.select('Setup')
         root.update()
 
+    def test_guided_style_background_and_undo_use_the_current_image(self):
+        if self.isolated():
+            return
+        from DrawingStyleProfiles import DRAWING_STYLES
+        with self.workspace() as (root, app, _backend, _data):
+            self.select_profile(root, app, 'Other drawing app')
+            self.assertTrue(app.guided_action_button.winfo_ismapped())
+            self.assertFalse(app.start.winfo_ismapped())
+            self.assertIn(app.start, app.draw_action_bar.overflow)
+            self.assertFalse(app.guided_style_selector.winfo_ismapped())
+
+            path = Path(__file__).parent / 'golden-regression' / 'small-detail-preservation.png'
+            self.assertTrue(app.load_source(str(path), path.name))
+            self.wait(root, lambda: not app.activity and app.guided_style_selector.winfo_ismapped(),
+                      'Image editing controls did not become visible')
+            source = app.original.tobytes()
+            self.assertEqual(tuple(app.guided_style_selector['values']), tuple(DRAWING_STYLES))
+            self.assertTrue(app.guided_remove_background_button.winfo_ismapped())
+            self.assertEqual(app.guided_undo_background_button.cget('state'), 'disabled')
+
+            generation = app.preview_generation
+            app.guided_style_selector.set('Pixel Art')
+            app.guided_style_selector.event_generate('<<ComboboxSelected>>')
+            root.update()
+            self.assertEqual(app.drawing_style.get(), 'Pixel Art')
+            self.assertGreater(app.preview_generation, generation)
+            self.assertIsNone(app.activity)
+
+            app.guided_remove_background_button.invoke()
+            self.wait(root, lambda: not app.activity and app.guided_undo_background_button.cget('state') == 'normal',
+                      'Background removal did not offer Undo for the edited source')
+            self.assertNotEqual(app.original.tobytes(), source)
+            app.guided_undo_background_button.invoke()
+            self.wait(root, lambda: app.guided_undo_background_button.cget('state') == 'disabled',
+                      'Undo did not reset after restoring the source')
+            self.assertEqual(app.original.tobytes(), source)
+            self.assertEqual(app.drawing_style.get(), 'Pixel Art')
+
     def test_setting_labels_selectors_and_disclosures_fit_the_real_scaled_workspace(self):
         if self.isolated():
             return
@@ -220,7 +258,8 @@ class NativeStudioWorkspaceTests(unittest.TestCase):
                 self.select_profile(root, app, name)
                 self.assertEqual(app.ui_mode.get(), 'Simple')
                 self.assertFalse(app.paint_tool_menu.winfo_ismapped())
-                self.assertEqual(bool(app.gartic_opacity_row.winfo_ismapped()), name == 'Gartic Phone')
+                self.assertFalse(app.gartic_opacity_row.winfo_ismapped())
+                self.assertTrue(app.guided_profile_selector.winfo_ismapped())
                 app.ui_mode.set(mode)
                 app.brush_px.set(brush)
             for name, mode, brush in (('Microsoft Paint', 'Developer', '7'), ('Gartic Phone', 'Advanced', '4')):

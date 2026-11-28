@@ -3,16 +3,18 @@ import unittest
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-from BrowserAutoCalibration import detect_browser_setup, auto_calibrate_browser, SUPPORTED_BROWSER_PROFILES
+from BrowserAutoCalibration import detect_browser_canvas, detect_browser_setup, auto_calibrate_browser, SUPPORTED_BROWSER_PROFILES
+from BrowserAutoCalibration import _largest_light_component
 from PaletteMaps import SKRIBBL, GARTIC_PHONE
 from Colors import calibration_metadata
 from Version import APP_VERSION, FILE_VERSION
+from test_version_metadata import EXPECTED_APP_VERSION, EXPECTED_FILE_VERSION
 
 
 class BrowserAutoCalibrationTests(unittest.TestCase):
     def test_release_version(self):
-        self.assertEqual(APP_VERSION,'1.0.148')
-        self.assertEqual(FILE_VERSION,'1.0.148')
+        self.assertEqual(APP_VERSION,EXPECTED_APP_VERSION)
+        self.assertEqual(FILE_VERSION,EXPECTED_FILE_VERSION)
 
     def test_supported_profiles(self):
         self.assertIn('gartic-phone', SUPPORTED_BROWSER_PROFILES)
@@ -62,11 +64,33 @@ class BrowserAutoCalibrationTests(unittest.TestCase):
         self.assertGreaterEqual(r['palette_confidence'],.75)
         self.assertIsNotNone(r['canvas_box'])
 
+    def test_largest_ineligible_component_does_not_hide_a_smaller_one(self):
+        with self._skribbl_image() as scene:
+            box, _ = _largest_light_component(scene, step=1, min_ratio=0,
+                                               accept=lambda bounds: bounds[1] > 610)
+        self.assertEqual(box, (190, 650, 211, 671))
+
     def test_gartic_palette_and_canvas(self):
         r=detect_browser_setup('gartic-phone',self._gartic_image())
         self.assertEqual(len(r['positions']),72)
         self.assertGreaterEqual(r['palette_confidence'],.95)
         self.assertIsNotNone(r['canvas_box'])
+
+    def test_canvas_only_finds_bounded_surfaces_at_a_negative_monitor_origin(self):
+        layouts = (
+            ('skribbl', self._skribbl_image, (190, 140, 901, 611), (-1008, 191, -297, 662)),
+            ('gartic-phone', self._gartic_image, (480, 290, 1410, 810), (-720, 340, 212, 862)),
+        )
+        for profile, fixture, canvas_interior, expected in layouts:
+            with self.subTest(profile=profile), fixture() as scene:
+                found = detect_browser_canvas(profile, scene, screen_origin=(-1200, 50))
+                self.assertEqual(found['canvas_box'], expected)
+                self.assertGreater(found['canvas_confidence'], .9)
+                l, t, r, b = canvas_interior
+                for top in (t, t-20):
+                    with scene.crop((l, top, r, b)) as unbounded:
+                        self.assertEqual(detect_browser_canvas(profile, unbounded),
+                                         {'canvas_box': None, 'canvas_confidence': 0.0})
 
     def test_sketchheads_palette_and_safe_canvas(self):
         r=detect_browser_setup('sketchheads',self._sketchheads_image())
