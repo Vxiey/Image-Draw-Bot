@@ -1,5 +1,9 @@
 // This installer never grants additional file permissions. For an all-users
 // update, verify the existing installation before Inno writes into it.
+const
+  MissingFile = 2;
+  TrustedInstallerSid = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464';
+
 type
   TAccessEntry = record
     Kind, Flags: Byte;
@@ -101,9 +105,6 @@ begin
 end;
 
 function SafeMachineDestination(const Name: String): Boolean;
-const
-  MissingFile = 2;
-  TrustedInstallerSid = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464';
 var
   Root, Expected: String;
   Attributes: Cardinal;
