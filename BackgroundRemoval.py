@@ -18,6 +18,8 @@ from typing import Any, Callable
 import numpy as np
 from PIL import Image, ImageChops, ImageFilter, ImageOps
 
+from BinaryMaskComponents import mask_components
+
 MODES = ("Auto", "Light background", "Dark background", "Corner color")
 STRENGTHS = ("Conservative", "Balanced", "Aggressive")
 _PROXY_MAX_PIXELS = 900_000
@@ -257,27 +259,15 @@ def _cleanup(mask, strength):
 
 
 def _largest_component(mask, cancelled):
-    h, w = mask.shape
-    seen = np.zeros((h, w), np.uint8)
-    best = 0; bbox = None; checked = 0
-    for y0 in range(h):
-        if y0 % 32 == 0 and cancelled(): raise InterruptedError()
-        for x0 in np.flatnonzero((mask[y0] != 0) & (seen[y0] == 0)):
-            if seen[y0, x0]:
-                continue
-            q = deque([(int(x0), y0)]); seen[y0, x0] = 1
-            size = 0; minx = maxx = int(x0); miny = maxy = y0
-            while q:
-                x, y = q.popleft(); size += 1; checked += 1
-                if checked % _CANCEL_INTERVAL == 0 and cancelled():
-                    raise InterruptedError()
-                minx = min(minx, x); maxx = max(maxx, x); miny = min(miny, y); maxy = max(maxy, y)
-                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-                    if 0 <= nx < w and 0 <= ny < h and mask[ny, nx] and not seen[ny, nx]:
-                        seen[ny, nx] = 1; q.append((nx, ny))
-            if size > best:
-                best, bbox = size, (minx, miny, maxx + 1, maxy + 1)
-    return best, bbox
+    # The shared span walker reads one byte per pixel. Preserve nonzero
+    # semantics for callers supplying wider numeric masks.
+    if mask.dtype.itemsize != 1:
+        mask = mask != 0
+    largest = mask_components(mask, min_area=1, limit=1, cancelled=cancelled)
+    if largest:
+        bounds, area = largest[0]
+        return area, bounds
+    return 0, None
 
 
 def _alpha(mask, target_size, feather_px):
@@ -432,7 +422,7 @@ def remove_background(image: Image.Image, *, mode="Auto", strength="Balanced", f
         mask = _cleanup(mask, strength)
 
         n = max(1, mask.size); bg_fraction = np.count_nonzero(mask) / n
-        fg = (mask == 0).astype(np.uint8); largest, bbox_proxy = _largest_component(fg, cancelled)
+        largest, bbox_proxy = _largest_component(mask == 0, cancelled)
         largest_fraction = largest / n; fg_fraction = 1.0 - bg_fraction
         definite_bg = mask.astype(bool)
         uncertain = (~definite_bg) & (best_norm <= 1.25) & (edge <= edge_limit * 1.35)

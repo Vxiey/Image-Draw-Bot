@@ -52,18 +52,21 @@ class BackgroundWorkTests(unittest.TestCase):
         self.assertTrue(np.all(mask))
         self.assertTrue(all(call.args[0].ndim>1 for call in distance.call_args_list))
 
-    def test_largest_component_uses_bounded_row_seeds_and_row_major_ties(self):
+    def test_largest_component_keeps_row_major_ties_on_borrowed_byte_and_wide_masks(self):
         mask=np.zeros((50,70),np.uint8)
         mask[2:7,3:9]=1;mask[20:25,40:46]=1
-        original=np.flatnonzero
-        observed=[]
-        def seeds(values):
-            observed.append(values.shape)
-            return original(values)
-        with patch.object(br.np,'flatnonzero',side_effect=seeds):
-            size,box=br._largest_component(mask,lambda:False)
-        self.assertEqual((size,box),(30,(3,2,9,7)))
-        self.assertTrue(all(shape==(70,) for shape in observed))
+        mask.setflags(write=False)
+        expected_first=(3,2,9,7)
+        expected_second=(40,20,46,25)
+        self.assertEqual(br._largest_component(mask,lambda: False),(30,expected_first))
+        self.assertEqual(br.mask_components(mask,min_area=1,limit=2),
+                         [(expected_first,30),(expected_second,30)])
+        # A nonzero value can have a zero low byte. The transposed view is
+        # also noncontiguous; both retain the caller's numeric pixel semantics.
+        wide=mask.astype(np.int32)*-256
+        wide.setflags(write=False)
+        self.assertEqual(br._largest_component(wide.T,lambda:False),(30,(2,3,7,9)))
+        self.assertEqual(br._largest_component(mask[:,1::2],lambda:False),(15,(1,2,4,7)))
 
     def test_empty_component_scan_can_be_cancelled_without_a_flood_queue(self):
         calls=0
