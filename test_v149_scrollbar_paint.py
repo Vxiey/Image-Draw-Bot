@@ -1,9 +1,11 @@
 """A Canvas scrollbar report must never paint inside another Tk idle flush."""
+import gc
 import os
 from types import SimpleNamespace
 import tkinter as tk
 import unittest
 from unittest.mock import Mock, patch
+import weakref
 
 import customtkinter as ctk
 
@@ -100,6 +102,11 @@ class ScrollbarSchedulingTests(unittest.TestCase):
 class NativeScrollbarPaintTests(unittest.TestCase):
     def test_real_ctk_painter_does_not_reenter_from_its_native_canvas(self):
         root = scoped_window_class(ctk.CTk)()
+        root_ref = weakref.ref(root)
+        def retire_owner():
+            gc.collect()
+            self.assertIsNone(root_ref(), 'A later worker could release the native test interpreter')
+        self.addCleanup(retire_owner)
         self.addCleanup(root.destroy)
         root.geometry('250x240')
         bar = ctk.CTkScrollbar(root, orientation='vertical', width=17)

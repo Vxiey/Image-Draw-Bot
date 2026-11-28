@@ -16,17 +16,17 @@ function MachineSecurity(const Name: String; Kind, Info: Cardinal;
   var Owner: THandle; Group: THandle; var Dacl: THandle; Sacl: THandle;
   var Descriptor: THandle): Cardinal;
   external 'GetNamedSecurityInfoW@advapi32.dll stdcall';
-function MachineAclSize(Acl: THandle; var Info: TAclSize; Size, Kind: Cardinal): BOOL;
+function MachineAclSize(Acl: THandle; var Info: TAclSize; Size, Kind: Cardinal): LongInt;
   external 'GetAclInformation@advapi32.dll stdcall';
-function MachineAce(Acl: THandle; Index: Cardinal; var Ace: THandle): BOOL;
+function MachineAce(Acl: THandle; Index: Cardinal; var Ace: THandle): LongInt;
   external 'GetAce@advapi32.dll stdcall';
 procedure ReadMachineAce(var Entry: TAccessEntry; Addr, Size: THandle);
   external 'RtlMoveMemory@kernel32.dll stdcall';
-function MachineWellKnownSid(Sid: THandle; Kind: Cardinal): BOOL;
+function MachineWellKnownSid(Sid: THandle; Kind: Cardinal): LongInt;
   external 'IsWellKnownSid@advapi32.dll stdcall';
-function MachineEqualSid(First, Second: THandle): BOOL;
+function MachineEqualSid(First, Second: THandle): LongInt;
   external 'EqualSid@advapi32.dll stdcall';
-function MachineMakeSid(const Text: String; var Sid: THandle): BOOL;
+function MachineMakeSid(const Text: String; var Sid: THandle): LongInt;
   external 'ConvertStringSidToSidW@advapi32.dll stdcall';
 function MachineLocalFree(Address: THandle): THandle;
   external 'LocalFree@kernel32.dll stdcall';
@@ -34,8 +34,8 @@ function MachineLocalFree(Address: THandle): THandle;
 function TrustedMachinePrincipal(Sid, TrustedInstaller: THandle): Boolean;
 begin
   { WinLocalSystemSid, WinBuiltinAdministratorsSid, TrustedInstaller }
-  Result := (Sid <> 0) and (MachineWellKnownSid(Sid, 22) or
-    MachineWellKnownSid(Sid, 26) or MachineEqualSid(Sid, TrustedInstaller));
+  Result := (Sid <> 0) and ((MachineWellKnownSid(Sid, 22) <> 0) or
+    (MachineWellKnownSid(Sid, 26) <> 0) or (MachineEqualSid(Sid, TrustedInstaller) <> 0));
 end;
 
 function ProtectedMachineAccess(const Name: String; TrustedInstaller: THandle): Boolean;
@@ -50,10 +50,10 @@ begin
   if MachineSecurity(Name, 1, 5, Owner, 0, Dacl, 0, Descriptor) <> 0 then Exit;
   try
     if (Dacl = 0) or not TrustedMachinePrincipal(Owner, TrustedInstaller) then Exit;
-    if not MachineAclSize(Dacl, Acl, SizeOf(Acl), 2) then Exit;
+    if MachineAclSize(Dacl, Acl, SizeOf(Acl), 2) = 0 then Exit;
     Index := 0;
     while Index < Acl.Count do begin
-      if not MachineAce(Dacl, Index, Ace) then Exit;
+      if MachineAce(Dacl, Index, Ace) = 0 then Exit;
       { Read only ACE_HEADER until the native ACE is known to contain a mask and SID. }
       ReadMachineAce(Entry, Ace, 4);
       if (Entry.Kind > 1) or (Entry.Size < 16) then Exit;
@@ -63,7 +63,7 @@ begin
         if (Entry.Mask and $5FEDFF56) <> 0 then begin
           Sid := Ace + SizeOf(Entry);
           if not TrustedMachinePrincipal(Sid, TrustedInstaller) then
-            if not (((Entry.Flags and $08) <> 0) and MachineWellKnownSid(Sid, 3)) then Exit;
+            if not (((Entry.Flags and $08) <> 0) and (MachineWellKnownSid(Sid, 3) <> 0)) then Exit;
           { The inherit-only CREATOR OWNER template takes effect on a child's }
           { actual owner, which we verify independently on each existing item. }
         end;
@@ -114,7 +114,7 @@ begin
   Root := ExpandConstant('{commonpf}');
   Expected := AddBackslash(Root) + 'Image Draw Bot';
   if CompareText(RemoveBackslashUnlessRoot(Name), Expected) <> 0 then Exit;
-  if not MachineMakeSid(TrustedInstallerSid, TrustedInstaller) then Exit;
+  if MachineMakeSid(TrustedInstallerSid, TrustedInstaller) = 0 then Exit;
   try
     Attributes := MachineFileAttributes(Root);
     if (Attributes = $FFFFFFFF) or ((Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0) or
