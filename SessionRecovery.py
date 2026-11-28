@@ -20,7 +20,7 @@ import warnings
 from contextlib import contextmanager
 from pathlib import Path
 
-from RuntimePaths import atomic_write_text, data_dir, file_transaction, read_json
+from RuntimePaths import _replace_with_retry, atomic_write_text, data_dir, file_transaction, read_json
 
 SCHEMA = 3
 SUPPORTED_SCHEMAS = (1, 2, 3)
@@ -232,7 +232,7 @@ def _store_image(image=None, *, legacy_path=None):
             stream.flush()
             os.fsync(stream.fileno())
         digest = _file_digest(temporary)
-        temporary.replace(_image_path(digest))
+        _replace_with_retry(temporary, _image_path(digest))
         return digest
     except BaseException as failure:
         primary_failure = failure
@@ -306,7 +306,7 @@ def _save_snapshot(*, profile, options, saved_area, image, clear_render_resume, 
         if not isinstance(prepared_image, PreparedImage) or not _valid_digest(prepared_image.digest):
             raise ValueError('Invalid prepared recovery image.')
         digest = prepared_image.digest
-        prepared_image.path.replace(_image_path(digest))
+        _replace_with_retry(prepared_image.path, _image_path(digest))
     elif image is not None:
         digest = _store_image(image)
     elif old_path is not None and old_path.is_file() and old_digest is None:

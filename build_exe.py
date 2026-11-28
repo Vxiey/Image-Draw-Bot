@@ -317,8 +317,11 @@ def build_application(base: Path, builder: Builder, *, onefile=False, gpu_build=
     # Stage filtered help as one tree: per-file arguments can exceed Windows'
     # command-line limit in a long checkout path. The docs destination also
     # avoids flattening help files over the application's root README/history.
-    with tempfile.TemporaryDirectory(prefix='ImageDrawBot-help-') as staging:
+    # The generated spec is disposable too. Keep it on the checkout's volume
+    # so PyInstaller can resolve paths in it even if TEMP is on another drive.
+    with tempfile.TemporaryDirectory(prefix='pyi-', dir=base / 'build') as staging:
         staging_root = Path(staging)
+        command.extend(['--specpath', str(staging_root)])
         for source, destination in documentation_data(base):
             target = staging_root / destination / source.name
             target.parent.mkdir(parents=True, exist_ok=True)

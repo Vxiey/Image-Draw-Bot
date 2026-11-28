@@ -346,22 +346,24 @@ def file_transaction(path: Path, *, timeout: float = 5.0):
             yield
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.with_name(path.name + '.lock').open('a+b') as stream:
+        sidecar = path.with_name(path.name + '.lock')
+        # Windows permits locking past EOF. A first writer must acquire byte
+        # zero before touching it, even when a competing opener saw an empty file.
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, 'O_BINARY', 0)
+        descriptor = os.open(sidecar, flags, 0o666)
+        try:
             if os.name == 'nt':
                 import msvcrt
-                stream.seek(0, os.SEEK_END)
-                if stream.tell() == 0:
-                    stream.write(b'\0'); stream.flush()
                 def acquire():
-                    stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                    msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
                 def release():
-                    stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+                    msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
             else:
                 import fcntl
                 def acquire():
-                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 def release():
-                    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
             while True:
                 try:
                     acquire()
@@ -387,6 +389,8 @@ def file_transaction(path: Path, *, timeout: float = 5.0):
                     if failure is None:
                         raise
                     failure.add_note(f'File lock cleanup also failed: {type(error).__name__}.')
+        finally:
+            os.close(descriptor)
     finally:
         lock.release()
 

@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import traceback
 import tracemalloc
 import unittest
 from pathlib import Path
@@ -29,8 +30,8 @@ def _concurrent_snapshot(directory, color, barrier, queue):
         for _ in range(3):
             SR.save_snapshot(profile=color, options={}, image=Image.new('RGBA', (8, 7), color))
         queue.put(None)
-    except BaseException as error:
-        queue.put(repr(error))
+    except BaseException:
+        queue.put(traceback.format_exc())
 
 
 class SessionRecoveryIntegrityTests(unittest.TestCase):
@@ -236,6 +237,73 @@ class SessionRecoveryIntegrityTests(unittest.TestCase):
         SR.save_snapshot(profile='Paint', options={}, clear_render_resume=True)
         self.assertTrue(SR.STATE_FILE.exists())
         self.assertFalse(SR.RENDER_FILE.exists())
+
+    def test_first_snapshot_contends_on_an_empty_locked_sidecar(self):
+        from RuntimePaths import file_transaction
+        transaction = self.root / '.snapshot'
+        sidecar = self.root / '.snapshot.lock'
+        # Raw native owner deliberately keeps this file empty. A competing
+        # opener must wait for the lock even before the first image is written.
+        with sidecar.open('x+b') as owner:
+            if os.name == 'nt':
+                import msvcrt
+                msvcrt.locking(owner.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            source = (
+                "from RuntimePaths import file_transaction\n"
+                "import sys\n"
+                "try:\n"
+                "    with file_transaction(sys.argv[1], timeout=0):\n"
+                "        raise AssertionError('Entered a transaction owned by another process')\n"
+                "except TimeoutError:\n"
+                "    pass\n"
+            )
+            subprocess.run([sys.executable, '-c', source, str(transaction)],
+                           cwd=Path(__file__).parent, check=True, timeout=15)
+        with file_transaction(transaction, timeout=0):
+            self.assertEqual(sidecar.stat().st_size, 0)
+        sidecar.write_bytes(b'\x00')  # Previously initialized sidecar.
+        with file_transaction(transaction, timeout=0):
+            pass
+        self.assertEqual(sidecar.read_bytes(), b'\x00')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows destination sharing semantics')
+    def test_image_publication_survives_a_reader_closing_after_a_sharing_violation(self):
+        from RecoveryImagePreparation import prepare_image
+        original_replace = os.replace
+        fixture = Path(__file__).parent / 'assets/paint-tools-reference.png'
+        with Image.open(fixture) as source:
+            SR.save_snapshot(profile='initial', options={}, image=source)
+            digest = SR.load_snapshot()['image_sha256']
+            destination = SR._image_path(digest)
+            for prepared in (False, True):
+                with self.subTest(prepared=prepared), destination.open('rb') as reader:
+                    observed = []
+                    def replace(source_path, target):
+                        if Path(target) == destination and not reader.closed:
+                            try:
+                                return original_replace(source_path, target)
+                            except PermissionError as error:
+                                observed.append(error.winerror)
+                                raise
+                            finally:
+                                reader.close()
+                        return original_replace(source_path, target)
+
+                    staging = prepare_image(source) if prepared else None
+                    try:
+                        with patch.object(os, 'replace', side_effect=replace):
+                            SR.save_snapshot(profile='next', options={}, image=None if prepared else source,
+                                             prepared_image=staging)
+                    finally:
+                        if staging is not None:staging.close()
+                    self.assertEqual(len(observed), 1)
+                    self.assertIn(observed[0], (5, 32, 33))
+                    self.assertEqual(SR.load_snapshot()['image_sha256'], digest)
+                    with SR.load_cached_image(expected_sha256=digest) as restored:
+                        self.assertEqual(restored.size, source.size)
 
     def test_simultaneous_process_saves_publish_matching_bounded_images(self):
         context = multiprocessing.get_context('spawn')

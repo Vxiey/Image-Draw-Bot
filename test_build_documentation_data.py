@@ -9,11 +9,13 @@ import build_exe
 
 
 class BuildDocumentationDataTests(unittest.TestCase):
-    def build_command(self, root, *, gpu=False):
+    def build_command(self, root, *, gpu=False, on_pyinstaller=None):
         bundled_help = {}
 
         def record_run(command, **kwargs):
             if 'PyInstaller' in command:
+                if on_pyinstaller is not None:
+                    on_pyinstaller(command, **kwargs)
                 for index, value in enumerate(command):
                     if value != '--add-data':
                         continue
@@ -89,6 +91,34 @@ class BuildDocumentationDataTests(unittest.TestCase):
     def test_missing_optional_documentation_is_supported(self):
         with tempfile.TemporaryDirectory() as temporary:
             self.assertEqual(build_exe.documentation_data(Path(temporary)), [])
+
+    def test_generated_spec_is_removed_on_success_and_failure(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                specs = []
+
+                def write_spec(command, *, cwd, **kwargs):
+                    spec_dir = Path(command[command.index('--specpath') + 1])
+                    self.assertEqual(spec_dir.parent, root / 'build')
+                    self.assertEqual(cwd, root)
+                    self.assertEqual(Path(command[-1]), root / 'DrawBot.py')
+                    self.assertEqual(Path(command[command.index('--icon') + 1]),
+                                     root / 'assets/image-draw-bot-icon.ico')
+                    spec = spec_dir / 'ImageDrawBot.spec'
+                    spec.touch()
+                    specs.append(spec)
+                    if fail:
+                        raise RuntimeError('packager failed')
+
+                if fail:
+                    with self.assertRaisesRegex(RuntimeError, 'packager failed'):
+                        self.build_command(root, on_pyinstaller=write_spec)
+                else:
+                    self.build_command(root, on_pyinstaller=write_spec)
+                self.assertEqual(len(specs), 1)
+                self.assertFalse(specs[0].parent.exists())
+                self.assertFalse((root / 'ImageDrawBot.spec').exists())
 
     def test_local_credentials_cannot_be_staged_as_help(self):
         with tempfile.TemporaryDirectory() as temporary:

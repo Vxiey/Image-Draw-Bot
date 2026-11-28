@@ -88,9 +88,12 @@ jobs:
       - name: Run Extra Fast benchmark smoke
         run: python benchmark_extra_fast.py
 
-      - name: Check native Windows workspace layout before the full suite
+      - name: Check native Windows workspace layout and concurrent recovery
         if: runner.os == 'Windows'
-        run: python -m unittest -v test_v148_ui_batch06_workspace.WindowsCompleteWorkspaceTests
+        run: >-
+          python -m unittest -v
+          test_v148_ui_batch06_workspace.WindowsCompleteWorkspaceTests
+          test_rc4_session_recovery_integrity.SessionRecoveryIntegrityTests
 
       - name: Run complete regressions
         run: python -m unittest discover -v
