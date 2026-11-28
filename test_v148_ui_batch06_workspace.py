@@ -321,9 +321,20 @@ class WindowsCompleteWorkspaceTests(unittest.TestCase):
             try:
                 app=DrawBotApp(root,NoInput(),NoInput());root.minsize(500,400)
                 app.ui_mode.set('Advanced')
-                # Use CTk's real first-window mapping and then pump all event types.
-                root.after(0, root.quit)
+                # CTk pumps Tk while applying the initial Windows title bar.
+                # A quit consumed there cannot stop the subsequent mainloop.
+                mapped_in_loop = False
+                def finish_first_map():
+                    nonlocal mapped_in_loop
+                    if root._window_exists and root.winfo_ismapped():
+                        mapped_in_loop = True
+                        root.quit()
+                    else:
+                        root.after(15, finish_first_map)
+
+                root.after(0, finish_first_map)
                 root.mainloop()
+                self.assertTrue(mapped_in_loop, 'The initial CTk window did not map')
                 self.drain(root, 'Opening Advanced workspace')
                 def inside(widget):
                     if not widget.winfo_ismapped():self.fail(str(self.layout_diagnostics(root,app,widget)))
